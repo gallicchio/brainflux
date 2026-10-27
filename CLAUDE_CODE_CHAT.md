@@ -505,3 +505,83 @@ test lists.
 
 Phase space became a page of its own rather than a view in the 1D demo.  That way it can show a
 classical ensemble flowing beside the Wigner function without crowding the 1D demo.
+
+
+## Prompt 5
+
+> Set the remote to https://github.com/gallicchio/brainflux and I'll push and test the site.
+>
+> The origin should be through ssh: git@github.com:gallicchio/brainflux.git
+
+### Response 5 (2026-10-27)
+
+`origin` is `git@github.com:gallicchio/brainflux.git`.  Push `main` only; the agents' branches
+are unfinished demos.
+
+## Prompt 6
+
+> I have look at the first ones.
+>
+> On the 2D FFT app, you have buttons to select "1" "-1" "i" and "-1" but selecting exactly
+> zero is the most useful. Even though that's the same as the eraser, it would be a good
+> button to have. You should make the magnitude and angle not a display, but something you can
+> input. You should also have real and imaginary text inputs. The "Disk" preset at 128 pixel
+> resolution looks more like an octagon. Maybe it needs to be bigger.
+>
+> On the 1D Scrhrodinger, For the Harmonic potential, change Ground to "n=0". The Swueezed
+> initial state is both squeezed and displaced. Make it only squeezed (set k0 and x0 to zero
+> when the button is pressed). The momentum-space plot should have text on the top left that
+> says "Momentum" and should be labeled as phi(p) not psi(p). When I click "Infinite Well" it
+> goes too fast -- make k0 2 rather than 5. Also, it would be nice to see the gray bands on
+> the sides of the plot to visually see the difference between "Free" and "Infinite well".
+> Maybe change the range of the plot to go from -1 to 11 or something. The "(x>-1)(x<1)" as an
+> initial typed state doesn't make much sense, since it goes nuts quickly. Pick a more
+> reasonable "Typed" state to start with for each potential. The red dot and red dotted line
+> don't make much sense. (What even is that?) Oh, i see, it's "Classical". Start with the
+> Classical button turned off. Presumably the black triangle is the expectation value, but
+> maybe showing that with +-1sigma bars would be good. The initial wave function buttons are a
+> bit confusing. For the Harmonic potential, for example, if I click "Coherent", why isn't the
+> Coherent button highlighted? The default initial wave function for each potential should
+> look like it was selected, and I should be able to select others. The distinction between
+> the preset options and the buttons like "Packet", "Stationary", "Two states", and "Typed" is
+> a bit confusing. The section called "Measure" Should be called "Make a Measurement" because
+> otherwise it just sounds like you're asking the interface to add a measurement to the plot
+> rather than to do a quantum mechanical measurement. For the Finite well, it might be nice to
+> show a version of "Packet passing" that resonates with the well and one that does not.
+>
+> Put the "Scattering in two dimensions" as the 3rd one, on the top right of the app selection
+> page. The Weak bump is so weak that its affect is not that different from having no bump at
+> all.  Maybe make V0=1 unless there is a compelling reason to make it less. For the Double
+> slit, why can't the prediction go at least to +- 90? For the Crystal, I was expecting some
+> interesting Bragg stuff. Maybe make the initial parameters show interesting scattering.
+> Maybe you need another parameter for the incoming position and momentum angle or something.
+>
+> "The principle of least action" one is not ready for prime time. List that one later in the
+> page of apps. On the x vs t plot, how do you set the velocity?  If the idea was that the
+> dots were equally spaced in time, you should be able to drag them left and right too, such
+> that you reach those dots eariler or later. Initially, you should have all plots come up at
+> their classical solution for the given boundary conditions, and dragging should only make
+> things worse. For things like the pendulum or harmonic oscillator, how do are we supposed to
+> indicate a closed path in phase space?
+>
+> For the Diffraction, the "z (mm)" slider should slide far enough out that you can see
+> basically the same pattern as you see when you press "Far field". In fact, pressing "Far
+> Field" should just move the slider to the end of the range. As i change the slider, things
+> don't always make sense in the plots. I don't know if this is a resolution effect or what,
+> but deeply investigate this. Often you get really crazy looking patterns for large z that
+> are not anything like the Far field. The "Zone plate" does not look great, again probably
+> because of a resolution issue.
+
+### Response 6 (2026-10-27; in progress)
+
+The 2D FFT changes and the landing page order are done here.  Four agents are revising the 1D
+Schrödinger, 2D scattering, least action and diffraction demos, each in its own worktree, with
+your notes verbatim in its brief.
+
+**2D FFT.**  A `0` button.  Under the wheel, the paint is now four boxes you can type in:
+Re and Im, and magnitude and angle in degrees; typing in one pair updates the other.  The disk
+was a pixelated circle of radius 9 pixels at 128.  It is now sampled 4 × 4 times per pixel, so
+its edge is a ramp of greys, and its radius is 0.1 of the image (13 pixels at 128).  The disk
+and its Airy rings are now round.  A test checks its area against $\pi R^2$.
+
+**Landing page.**  Scattering in 2D is third, at the top right; Least Action is last.
