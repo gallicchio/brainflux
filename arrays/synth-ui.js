@@ -8,8 +8,8 @@ import {
 import { makeSky, typedSky, SKIES } from './sky.js';
 import { loadImage, imageData } from '../fft2d/presets.js';
 import { colorize, autoBrightness } from '../lib/complexcolor.js';
-import { el, $, slider, segmented, toggle, exprField, fmt } from '../lib/ui.js';
-import { fitCanvas, themeColors } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, exprField, fmt, setSlots } from '../lib/ui.js';
+import { fitCanvas, themeColors, fillSlots, slotsWidth } from '../lib/plot.js';
 
 const DEG = Math.PI / 180;
 const N = 256;                         // the image and uv grids
@@ -25,6 +25,18 @@ export function fmtAngle(r) {
 const fmtLen = (m) => (m >= 1000 ? `${fmt(m / 1000, 3)} km` : `${fmt(m, 3)} m`);
 const fmtWaves = (x) => (x >= 1e9 ? `${fmt(x / 1e9, 3)} Gλ` : x >= 1e6 ? `${fmt(x / 1e6, 3)} Mλ` : x >= 1e3 ? `${fmt(x / 1e3, 3)} kλ` : `${fmt(x, 3)} λ`);
 const fmtLambda = (m) => (m >= 1 ? `${fmt(m, 3)} m` : m >= 0.01 ? `${fmt(m * 100, 3)} cm` : `${fmt(m * 1000, 3)} mm`);
+// The same for the notes, as parts for setSlots: the number in a slot of its own (to a tenth of
+// the unit chosen for its size), so that nothing moves as it changes; the unit is part of the words.
+function angleParts(r) {
+  const a = Math.abs(r);
+  const [u, s] = a >= DEG ? UNITS.deg : a >= DEG / 60 ? UNITS.arcmin : a >= DEG / 3600 ? UNITS.arcsec : a >= DEG / 3.6e6 ? UNITS.mas : UNITS.uas;
+  return [{ v: r / u, dec: 1, w: 5, tiny: true }, s];
+}
+const lenParts = (m) => (m >= 1000 ? [{ v: m / 1000, dec: 1, w: 7 }, ' km'] : [{ v: m, dec: 1, w: 5 }, ' m']);
+function wavesParts(x) {
+  const [d, s] = x >= 1e9 ? [1e9, ' Gλ'] : x >= 1e6 ? [1e6, ' Mλ'] : x >= 1e3 ? [1e3, ' kλ'] : [1, ' λ'];
+  return [{ v: x / d, dec: 1, w: 5 }, s];
+}
 
 export const S = {
   preset: 'y', dishes: [], names: null, refLon: 0,
@@ -136,12 +148,14 @@ function maxAbs(a) { let m = 0; for (let i = 0; i < a.length; i++) { const v = M
 
 // ------------------------------------------------------------------ drawing
 
+/** A label on a dark box: text, or parts for fillSlots (live numbers in slots that keep still). */
 function label(ctx, text, x, y, align = 'left') {
   ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  const w = ctx.measureText(text).width, x0 = align === 'left' ? x - 3 : align === 'right' ? x - w - 3 : x - w / 2 - 3;
+  const w = Array.isArray(text) ? slotsWidth(ctx, text) : ctx.measureText(text).width, x0 = align === 'left' ? x - 3 : align === 'right' ? x - w - 3 : x - w / 2 - 3;
   ctx.fillRect(x0, y - 12, w + 6, 16);
-  ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillText(text, x, y);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  if (Array.isArray(text)) fillSlots(ctx, text, x, y); else ctx.fillText(text, x, y);
 }
 
 /** A scale bar for an image of angular width S.fov drawn w pixels wide, and a compass. */
@@ -181,7 +195,7 @@ function drawBeam() {
   beamZoom = fit && !fit.stripes ? Math.min(N, Math.max(32, 2 * Math.round(fit.major * 12.5))) : N;
   const { ctx, width, height } = blitImage($('#beam'), beam, 1, { zoom: beamZoom });
   angularBar(ctx, width, height, (S.fov * beamZoom) / N);
-  if (beamZoom < N) label(ctx, `the middle ${fmt((100 * beamZoom) / N, 2)}% of the field`, 10, 20);
+  if (beamZoom < N) label(ctx, ['the middle ', { v: (100 * beamZoom) / N, dec: 0, w: 2 }, '% of the field'], 10, 20);
 }
 function drawSky() {
   const m = maxAbs(skyImg);
@@ -350,27 +364,33 @@ function uvTracks(ctx, width, height, half) {
   ctx.fillText('u', width - 6, height / 2 - 6); ctx.textAlign = 'left'; ctx.fillText('v', width / 2 + 6, 14);
 }
 
+// The notes: each number in a slot of its own (setSlots), so that nothing moves as they change.
 function notes() {
   const [lo, hi] = baselineRange(pos), nb = (S.dishes.length * (S.dishes.length - 1)) / 2;
-  $('#map-note').textContent = `${S.dishes.length} dishes, ${nb} baseline${nb === 1 ? '' : 's'}`;
-  $('#uv-note').textContent = S.hours > 0 ? `${fmt(S.hours, 3)} h at declination ${fmt(S.dec, 3)}°` : `a snapshot at declination ${fmt(S.dec, 3)}°`;
-  $('#beam-note').textContent = !fit ? '' : fit.stripes ? 'stripes: no single peak to fit'
-    : `${fmtAngle(fit.major * pix())} × ${fmtAngle(fit.minor * pix())} at half power`;
-  $('#sky-note').textContent = `${SKIES[S.sky]}${S.sky === 'point' || S.sky === 'typed' ? '' : `, ${fmtAngle(S.size)}`}; field ${fmtAngle(S.fov)}`;
+  setSlots($('#map-note'), [{ v: S.dishes.length, dec: 0, w: 2 }, ' dishes, ', { v: nb, dec: 0, w: 3 }, ` baseline${nb === 1 ? '' : 's'}`]);
+  const decl = [{ v: S.dec, dec: 1, w: 5 }, '°'];
+  setSlots($('#uv-note'), S.hours > 0 ? [{ v: S.hours, dec: 1, w: 4 }, ' h at declination ', ...decl] : ['a snapshot at declination ', ...decl]);
+  setSlots($('#beam-note'), !fit ? [] : fit.stripes ? ['stripes: no single peak to fit']
+    : [...angleParts(fit.major * pix()), ' × ', ...angleParts(fit.minor * pix()), ' at half power']);
+  setSlots($('#sky-note'), [SKIES[S.sky], ...(S.sky === 'point' || S.sky === 'typed' ? [] : [', ', ...angleParts(S.size)]), '; field ', ...angleParts(S.fov)]);
   let up = 0;
   for (let k = 0; k < tr.nt; k++) { let n = 0; for (let a = 0; a < pos.length; a++) n += tr.up[a * tr.nt + k]; if (n >= 2) up++; }
   const total = grid.samples + grid.dropped;
   const lines = [
-    `Longest baseline ${fmtLen(hi)} = ${fmtWaves(hi / S.lambda)}: λ/B = ${fmtAngle(S.lambda / hi)}`,
-    `Shortest ${fmtLen(lo)}: nothing larger than about λ/B = ${fmtAngle(S.lambda / lo)} is seen`,
-    S.hours > 0 ? `Two or more dishes see the source (above 10°) for ${fmt((S.hours * (up - (up ? 1 : 0))) / Math.max(1, tr.nt - 1), 3)} of the ${fmt(S.hours, 3)} hours` : (up ? 'The source is up' : 'The source is below the horizon'),
+    ['Longest baseline ', ...lenParts(hi), ' = ', ...wavesParts(hi / S.lambda), ': λ/B = ', ...angleParts(S.lambda / hi)],
+    ['Shortest ', ...lenParts(lo), ': nothing larger than about λ/B = ', ...angleParts(S.lambda / lo), ' is seen'],
+    S.hours > 0 ? ['Two or more dishes see the source (above 10°) for ', { v: (S.hours * (up - (up ? 1 : 0))) / Math.max(1, tr.nt - 1), dec: 1, w: 4 }, ' of the ', { v: S.hours, dec: 1, w: 4 }, ' hours']
+      : [up ? 'The source is up' : 'The source is below the horizon'],
   ];
-  if (total === 0) lines.push('<span class="warn">No samples: the source is never above 10° for two dishes at once.</span>');
-  else if (grid.dropped) lines.push(`<span class="warn">${fmt((100 * grid.dropped) / total, 2)}% of the samples are beyond the grid: make the field smaller</span>`);
-  $('#obs-note').innerHTML = lines.join('<br>');
+  if (total === 0) lines.push(['No samples: the source is never above 10° for two dishes at once.']);
+  else if (grid.dropped) lines.push([{ v: (100 * grid.dropped) / total, dec: 1, w: 5 }, '% of the samples are beyond the grid: make the field smaller']);
+  // A line each, the fourth a warning.
+  const box = $('#obs-note');
+  if (box.children.length !== lines.length) box.replaceChildren(...lines.map((_, i) => el('div', { class: i === 3 ? 'warn' : undefined })));
+  lines.forEach((parts, i) => setSlots(box.children[i], parts));
   if (cs) {
     const flux = cs.model.reduce((a, v) => a + v, 0);
-    $('#clean-note').textContent = cs.iterations ? `${cs.iterations} steps, ${cs.components} components, ${fmt(flux, 3)} Jy of 1` : '';
+    setSlots($('#clean-note'), cs.iterations ? [{ v: cs.iterations, dec: 0, w: 5 }, ' steps, ', { v: cs.components, dec: 0, w: 4 }, ' components, ', { v: flux, dec: 3, w: 5 }, ' Jy of 1'] : []);
   }
 }
 
