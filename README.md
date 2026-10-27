@@ -41,9 +41,10 @@ To publish it: push to GitHub and turn on Pages for the `main` branch, root fold
   explanations (`mathml.js`), and a few DOM helpers (`ui.js`, `style.css`).
 - **Each demo** is a folder with an `index.html` (the page and its experiments), an `app.js`
   (the interface) and the physics in modules that don't touch the page, so they can be tested.
-- **Links to set-ups**: the address bar keeps the state that matters (e.g.
-  `fft2d/#preset=jacket&n=512`), and `#setup=<name>` opens a guided experiment, so a set-up
-  can be linked from a homework.
+- **Links to set-ups**: the address bar keeps the set-up as you change it (the preset, a typed
+  potential and its parameters, the initial state, a path you drew...), so copying the address
+  gives students exactly what you see; and `#setup=<name>` opens one of the guided experiments
+  (the names are the `setups` in each `app.js`), e.g. `schrodinger1d/#setup=revival`.
 
 ## Tests
 
