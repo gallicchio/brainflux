@@ -132,7 +132,7 @@ function polyline(ctx, f, xs, ys, clipY = true) {
   ctx.stroke();
 }
 
-function vline(ctx, f, x, color, dash = [4, 4], label = '', labelAt = 'top') {
+function vline(ctx, f, x, color, dash = [4, 4], label = '', labelAt = 'top', row = 0) {
   const px = Math.round(f.X(x)) + 0.5;
   if (px < f.left - 1 || px > f.right + 1) return;
   ctx.save();
@@ -142,7 +142,7 @@ function vline(ctx, f, x, color, dash = [4, 4], label = '', labelAt = 'top') {
     ctx.setLineDash([]); ctx.fillStyle = color; ctx.font = '11px system-ui, sans-serif';
     const w = ctx.measureText(label).width, right = px + 4 + w > f.right;
     ctx.textAlign = right ? 'right' : 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(label, right ? px - 4 : px + 4, labelAt === 'top' ? f.top + 3 : f.bottom - 15);
+    ctx.fillText(label, right ? px - 4 : px + 4, labelAt === 'top' ? f.top + 3 + 14 * row : f.bottom - 15 - 14 * row);
   }
   ctx.restore();
 }
@@ -681,7 +681,7 @@ function measure(d, z) {
   const out = { energy: m.energy / m0.energy, ng: cache.ng0, predicted: z * (cache.ng0 - 1) - tc, predictedVac: z * (cache.ng0 - 1) };
   if (sh !== 'step') {
     const pk = peakTime(t, mr, mi), pv = peakTime(t, vr, vi);
-    out.peak = pk.t; out.peakVac = pk.t + tc; out.height = pk.peak / pv.peak;
+    out.peak = pk.t; out.peakVac = pk.t + tc; out.height = pk.peak / pv.peak; out.stretch = m.rms / m0.rms;
   }
   if (sh !== 'gauss') {
     const front = (sh === 'front' ? state.pulse.tf : 0) - tc, margin = 12 * d.P.dt;
@@ -821,7 +821,7 @@ function drawPulse() {
   if (sh === 'step' && z > 0) {
     const n0 = optics(resp, Float64Array.of(1e-6 * state.wmax)).n[0];
     lastPulse.brillouin = z * (n0 - 1) - tc;
-    vline(ctx, f, at(lastPulse.brillouin), colors.im, [6, 3], 'n(0) z/c', 'bottom');
+    vline(ctx, f, at(lastPulse.brillouin), colors.im, [6, 3], 'n(0) z/c', 'bottom', 1);
     if (Number.isFinite(ms.predicted) && ms.predicted > 0) vline(ctx, f, at(ms.predicted), colors.ng, [6, 3], 'z/v_g', 'bottom');
   }
   ctx.restore();
@@ -914,13 +914,16 @@ function readout() {
       (causal ? 'causal.' : '<span class="warn">not causal: the medium responds before it is kicked.</span>'));
     const sr = sumRule();
     parts.push(`Sum rule: ∫<sub>0</sub><sup>∞</sup> ω Im χ dω = (π/2) × ${fmt(sr.integral / (Math.PI / 2), 4)}, so ω<sub>p</sub>² = ${fmt(sr.integral / (Math.PI / 2), 4)} · the medium is ${state.source === 'drawn' ? 'drawn by hand' : state.source === 'typed' ? 'typed' : 'the oscillators'}`);
+    // Lines narrower than the grid cannot survive being drawn on.
+    const dw = kkGrid().dw, thin = state.source === 'osc' ? state.oscs.filter((o) => o.w0 > 0 && o.wp > 0 && o.g < 2 * dw) : [];
+    if (thin.length) parts.push(`<span class="warn">${thin.length === 1 ? 'A line is' : 'Some lines are'} narrower than the grid (γ < 2Δω = ${fmt(2 * dw, 2)}): drawing would lose ${thin.length === 1 ? 'it' : 'them'}.</span>`);
   }
   if (state.view === 'pulse' && lastPulse) {
     const L = lastPulse, sh = state.pulse.shape;
     let s = `z = <b>${zz(L.z)}</b> · n<sub>g</sub>(ω₀) = ${fmt(L.ng, 4)}`;
     if (sh !== 'step') {
       s += ` · after z/c, the group velocity predicts the peak at z(n<sub>g</sub> − 1)/c = <b>${tt(L.predictedVac)}</b>; it arrives at <b>${tt(L.peakVac)}</b>,` +
-        ` ${fmt(L.height, 3)} as high as in vacuum, with ${fmt(L.energy * 100, 3)}% of the energy`;
+        ` ${fmt(L.height, 3)} as high as in vacuum, with ${fmt(L.energy * 100, 3)}% of the energy, ${fmt(L.stretch, 3)} times as long (r.m.s.)`;
     } else {
       s += ` · after z/c: the Sommerfeld precursor at once, the Brillouin precursor near n(0)z/c, <b>${tt(lastPulse.brillouin ?? 0)}</b>`;
       if (L.ng > 1) s += `, the signal near z(n<sub>g</sub> − 1)/c = <b>${tt(L.predictedVac)}</b>`;
@@ -1072,9 +1075,10 @@ function rebuildOscUI() {
   if (!o) return;
   const W = state.wmax, set = (k) => (v) => { const q = state.oscs[state.sel]; if (q) { q[k] = v; rebuild(); } };
   oscSliders = {
-    w0: slider({ label: '<math><msub><mi>ω</mi><mn>0</mn></msub></math>', labelHTML: true, min: 0.01 * W, max: W, value: o.w0, title: 'Where the line is', onInput: set('w0') }),
-    g: slider({ label: '<math><mi>γ</mi></math>', labelHTML: true, min: 1e-4 * W, max: W, log: true, value: Math.max(o.g, 1e-4 * W), title: 'Its width (the damping rate)', onInput: set('g') }),
-    wp: slider({ label: '<math><msub><mi>ω</mi><mi>p</mi></msub></math>', labelHTML: true, min: 0, max: 1.5 * W, value: o.wp, title: 'Its strength: ω_p² = f ω_p(total)² = N e²/ε0 m for this kind of charge', onInput: set('wp') }),
+    // (Each track covers the present value: glass has lines 1e-4 wide and far above the plot.)
+    w0: slider({ label: '<math><msub><mi>ω</mi><mn>0</mn></msub></math>', labelHTML: true, min: 0.01 * W, max: Math.max(W, o.w0), value: o.w0, title: 'Where the line is', onInput: set('w0') }),
+    g: slider({ label: '<math><mi>γ</mi></math>', labelHTML: true, min: Math.min(1e-4 * W, Math.max(o.g, 1e-9)), max: Math.max(W, o.g), log: true, value: Math.max(o.g, 1e-9), title: 'Its width (the damping rate)', onInput: set('g') }),
+    wp: slider({ label: '<math><msub><mi>ω</mi><mi>p</mi></msub></math>', labelHTML: true, min: 0, max: Math.max(1.5 * W, 1.2 * o.wp), value: o.wp, title: 'Its strength: ω_p² = f ω_p(total)² = N e²/ε0 m for this kind of charge', onInput: set('wp') }),
   };
   oscSliders.w0.hidden = o.w0 === 0;
   box.append(oscSliders.w0, oscSliders.g, oscSliders.wp);
@@ -1360,6 +1364,7 @@ window.__app = {
   drawn: () => drawn,
   pulse: () => lastPulse,
   pulseAt: (z) => measure(pulseAt(z), z),
+  chiT: (ts) => Array.from(chiTAt(Float64Array.from(ts))),
   acausal: () => acausalFraction(),
   sumRule: () => sumRule(),
   handles: () => handles.map((h) => ({ ...h })),

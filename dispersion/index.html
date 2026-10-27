@@ -81,28 +81,33 @@
   $e^{i(\tilde n\omega z/c-\omega t)}$ with $\tilde n=n+i\kappa=\sqrt{\varepsilon}$: $n$ sets its speed,
   $\kappa$ its absorption, and $R=|(\tilde n-1)/(\tilde n+1)|^2$ is the fraction reflected at normal
   incidence.  Drag the round handles to move a resonance or change its strength, the small ones
-  to change its width.  The three views: the <em>medium</em>, <em>Kramers–Kronig</em> (draw
-  $\mathrm{Im}\,\chi$ or $\mathrm{Re}\,\chi$ and get the other, and the response in time), and
-  <em>pulses</em> sent through it, computed exactly frequency by frequency.</p>
+  to change its width; point at a plot (or tap it) to read the numbers at one frequency.  The
+  three views: the <em>medium</em>, <em>Kramers–Kronig</em> (draw $\mathrm{Im}\,\chi$ or
+  $\mathrm{Re}\,\chi$ and get the other, and the response in time), and <em>pulses</em> sent
+  through it, computed exactly frequency by frequency.  With $c=1$, a frequency unit $\omega_u$
+  makes $1/\omega_u$ the unit of time and $c/\omega_u$ that of distance; the real materials are
+  in eV, MHz or THz, with times and distances to match.</p>
 
   <article class="exp" data-setup="one">
     <h3>1. One resonance</h3>
     <p>One line at $\omega_0=2$.  $\varepsilon''$ (orange) is the absorption line, a peak of width
     $\gamma$.  $\varepsilon'$ (blue) rises towards the line from both sides: that is normal
     dispersion, $dn/d\omega>0$, where light is not absorbed.  Inside the line it falls: anomalous
-    dispersion, and only where the medium absorbs.  Just above the line $\varepsilon'$ goes
-    negative, $n$ drops below 1 and the medium reflects strongly.  Drag the line about, make it
-    wider, stronger, add a second one.</p>
+    dispersion, and only where the medium absorbs.  Just above the line $\varepsilon'$ dips below
+    zero and $n$ below 1, and there the reflectance peaks (21% at $\omega=2.1$).  Drag the line
+    about, make it wider or stronger, add a second one, switch to $n$ and $\kappa$.</p>
   </article>
 
   <article class="exp" data-setup="delay">
     <h3>2. A pulse is late: the group velocity</h3>
-    <p>A pulse with its spectrum (the grey hump) below the line, sent through $z=200$ of the
-    medium, against the same pulse through vacuum (dashed).  It arrives late by
-    $z(n_g-1)/c$, where $n_g=n+\omega\,dn/d\omega=c\,dk/d\omega$ is the group index (green): the read-out
-    compares the prediction with the measured peak.  The crests inside travel at $c/n$, faster
-    than the pulse.  Drag the carrier (the vertical line) closer to the line: $n_g$ grows, the
-    pulse is later, and it spreads, because its two sides see different $n_g$.</p>
+    <p>A pulse with its spectrum (the grey hump) well below the line, sent through $z=120$ of
+    the medium, against the same pulse through vacuum (dashed).  It arrives late by
+    $z(n_g-1)/c$, where $n_g=n+\omega\,dn/d\omega=c\,dk/d\omega$ is the group index (green):
+    $n_g=1.25$, so 30.0 late, and the peak comes at 29.8.  The crests inside travel at $c/n$
+    ($n=1.15$), faster than the pulse.  The tail of the line still absorbs a little
+    ($\kappa=0.005$): by $z=120$ the peak is down to 54%.  Drag the carrier (the vertical line)
+    towards the line: $n_g$ grows, the pulse is later, and it spreads, because its two sides see
+    different $n_g$; its front turns red (lower frequencies go faster here).</p>
   </article>
 
   <article class="exp" data-setup="spread">
@@ -110,9 +115,11 @@
     <p>A 10 fs pulse at 800 nm through fused silica, in the frame moving with the pulse.  In the
     visible and near infrared glass has normal dispersion, so red light (lower $\omega$, lower
     $n_g$) runs ahead of blue: the pulse spreads and is <em>chirped</em>, red at its front and blue
-    at its back (the colour of the envelope is the local frequency).  After 5 mm it is about
-    five times longer: a 10 fs pulse doubles in length in under 2 mm of glass, which is why
-    femtosecond lasers need prism or grating compressors.</p>
+    at its back (the colour of the envelope is the local frequency).  Its length (r.m.s., in the
+    read-out) grows by $\sqrt2$ in 1 mm, doubles in 1.73 mm and is 5.1 times its start after
+    5 mm, just as $\sqrt{1+(z/L)^2}$ with $L=T_0^2/\beta_2=1.0$ mm says, for
+    $\beta_2=d^2k/d\omega^2=36\ \mathrm{fs^2/mm}$.  This is why femtosecond lasers need prism or
+    grating compressors.  Meanwhile the whole pulse is 7.8 ps behind light in vacuum.</p>
   </article>
 
   <article class="exp" data-setup="glass">
@@ -194,19 +201,22 @@
     <h3>11. Faster than light? The peak exits early</h3>
     <p>A long pulse tuned to the middle of a weak absorption line, where $dn/d\omega<0$ so steeply
     that $n_g$ is negative ($-0.98$).  The peak of what comes out leaves the medium <em>before</em>
-    the peak of a pulse through vacuum arrives: 7 time units early at $z=5$, 13 at $z=10$.  But
-    it is mostly absorbed: by $z=10$ the peak is 18% as high (the curve is scaled up to be seen).
-    Nothing is going faster than light: the medium absorbs the back of the pulse more than its
-    front, and the front was already there, in the smooth Gaussian, long before the peak.</p>
+    the peak of a pulse through vacuum arrives: 6.7 time units early at $z=5$, 12.9 at $z=10$
+    (the group velocity alone would say 9.9 and 19.7; the absorption reshapes the pulse too).
+    But it is mostly absorbed: by $z=10$ the peak is 18% as high (the curve is scaled up to be
+    seen).  Nothing is going faster than light: the medium absorbs the back of the pulse more
+    than its front, and the front was already there, in the smooth Gaussian, long before the
+    peak.</p>
   </article>
 
   <article class="exp" data-setup="front">
     <h3>12. ...and a front never arrives early</h3>
-    <p>The same pulse, cut off sharply in front (before the cut there is no field at all).  Now
-    the output piles up behind the front, and the front itself arrives at exactly $t=z/c$:
-    before it the field is zero, at the level of the arithmetic ($10^{-10}$ on the logarithmic
-    scale).  Information travels with fronts, and fronts travel at $c$: as $\omega\to\infty$ every
-    medium has $n\to1$.  The cut is smoothed over a few time steps of the computation.</p>
+    <p>The same pulse, cut off sharply in front: before the cut, 24 before its peak, there is no
+    field at all.  Now what comes out piles up just behind the front, and the front itself
+    arrives exactly when light through vacuum would: before it the field is below $10^{-9}$ of
+    the peak (the read-out; switch on <em>log |E|</em> to see it).  Information travels with
+    fronts, and fronts travel at $c$: as $\omega\to\infty$ every medium has $n\to1$.  (The cut is
+    smoothed over a couple of time steps of the computation, a small fraction of a period.)</p>
   </article>
 
   <article class="exp" data-setup="precursors">
@@ -214,9 +224,11 @@
     <p>A carrier switched on suddenly at $t=0$ into a dense medium (Brillouin's own numbers,
     1914).  The first thing to arrive, exactly at $t=z/c$, is the Sommerfeld precursor: the
     highest frequencies, which see $n\approx1$, wiggling slower and slower.  Next comes the
-    Brillouin precursor, the lowest frequencies, near $t=n(0)z/c$, and only then the signal at
-    the carrier frequency, much later and weaker.  Move the carrier above the line, into the
-    band where it is absorbed, and only the precursors get through.</p>
+    Brillouin precursor, the lowest frequencies, a slow swing near $t=n(0)z/c$ ($n(0)=1.5$), and
+    only then does the field settle into the signal at the carrier frequency, weakened by
+    absorption.  Move the carrier above the line, into the band where it is absorbed (at
+    $\omega=5$, $e^{-\kappa\omega z/c}=e^{-53}$ by $z=10$), and only the precursors get through.
+    Frequencies are in units of $10^{16}\ \mathrm{s^{-1}}$, so $z=10$ is 0.3 µm.</p>
   </article>
 
   <article class="exp" data-setup="typed">
@@ -225,8 +237,12 @@
     <code>wp^2/(w0^2 - w^2 - i g w)</code>).  Its pole is at $\omega=-i\gamma/2\pm\ldots$, in the
     lower half-plane, and $\chi(t)$ is causal.  Change $-i$ to $+i$: the pole moves to the upper
     half-plane, $\chi(t)$ lives entirely in the past, and $\mathrm{Im}\,\chi<0$, which is gain.
-    (With $e^{+i\omega t}$, the engineers' convention, the signs are the other way round.)  Try a
-    constant (an instantaneous response, $\delta(t)$) or <code>i s/w</code> (a conductor).</p>
+    (With $e^{+i\omega t}$, the engineers' convention, the signs are the other way round.)  Try
+    the others: a constant is an instantaneous response, $\delta(t)$; absorption with no
+    dispersion is not causal.  A conductor, $i\sigma/\omega$ (<code>i s/w</code>), comes out not
+    quite causal either: $\chi(t)=\frac{\sigma}{2}\,\mathrm{sgn}\,t$.  The causal one is
+    $i\sigma/(\omega+i0)$, whose real part has a $\pi\sigma\,\delta(\omega)$ that no formula
+    sampled on a grid can show; with it, $\chi(t)=\sigma$ for $t>0$ and 0 before.</p>
   </article>
 
   <p>Approximations: the medium is linear and its response local (no spatial dispersion); the
