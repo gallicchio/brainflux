@@ -425,6 +425,24 @@ export function createCavity(app) {
     state.L = Math.max(5, +cframe.invX(x).toPrecision(4));
     syncControls(); changed(true);
   });
+  // Keys: arrows move the point in the stability diagram (shift: farther); in the picture, the
+  // left and right arrows change L.
+  stab.addEventListener('keydown', (ev) => {
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[ev.key];
+    if (!d) return;
+    ev.preventDefault();
+    const step = ev.shiftKey ? 0.1 : 0.02, [g1, g2] = gParams(state.L, state.R1, state.R2);
+    const clamp = (g) => Math.max(-G, Math.min(G, Math.round((g) / 0.01) * 0.01));
+    state.R1 = toR(clamp(g1 + d[0] * step)); state.R2 = toR(clamp(g2 + d[1] * step));
+    syncControls(); changed(true);
+  });
+  cv.addEventListener('keydown', (ev) => {
+    const d = { ArrowLeft: -1, ArrowRight: 1 }[ev.key];
+    if (!d) return;
+    ev.preventDefault();
+    state.L = Math.max(5, +(state.L * (1 + d * (ev.shiftKey ? 0.05 : 0.01))).toPrecision(4));
+    syncControls(); changed(true);
+  });
   const stop = () => { if (dragging === 'L') { frozen = null; draw(); } dragging = null; };
   for (const c of [stab, cv]) { c.addEventListener('pointerup', stop); c.addEventListener('pointercancel', stop); }
 

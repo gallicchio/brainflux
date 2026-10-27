@@ -75,13 +75,11 @@ function setView(v) {
   app.hashSoon();
 }
 
+// Space: play or pause whatever moves in this view (the bench's canvas handles it itself).
 document.addEventListener('keydown', (e) => {
-  if (e.key !== ' ' || e.target.closest('input, textarea, button, select, canvas')) return;
-  // Space: play or pause whatever moves in this view.
-  const s = state[state.view];
+  if (e.key !== ' ' || e.target.closest('input, textarea, button, select, #bench')) return;
   const btn = $(`.view-controls[data-view="${state.view}"] button.primary`);
   if (btn) { btn.click(); e.preventDefault(); }
-  void s;
 });
 
 // ------------------------------------------------------------------- experiments

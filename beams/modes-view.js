@@ -1,8 +1,7 @@
 // The modes: Hermite-Gauss and Laguerre-Gauss beams, their cross-sections, their side view and
 // their Gouy phase; and a check that the angular spectrum method agrees.
 
-import { fillMode, modeAt, order, overlap } from './modes.js';
-import { propagate } from '../diffraction/optics.js';
+import { fillMode, modeAt, order, overlap, spectrum, fromSpectrum } from './modes.js';
 import { colorize, drawWheel } from '../lib/complexcolor.js';
 import { texToMathML } from '../lib/mathml.js';
 import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
@@ -29,19 +28,21 @@ export function createModes(app) {
 
   // ------------------------------------------------------------------- the cross-section
 
-  let wheel = null;
+  let wheel = null, buf = null;
   function drawCross() {
     const { ctx, width } = fitCanvas(cross);
-    const n = Math.max(64, Math.min(320, Math.round(width)));
-    const re = new Float64Array(n * n), im = new Float64Array(n * n);
+    const n = Math.max(64, Math.min(256, Math.round(width)));
+    if (!buf || buf.n !== n) {
+      const off = document.createElement('canvas'); off.width = n; off.height = n;
+      buf = { n, off, re: new Float64Array(n * n), im: new Float64Array(n * n), img: new ImageData(n, n) };
+    }
+    const { re, im, img, off } = buf;
     const z = state.zeta, w = Math.sqrt(1 + z * z), half = extent() * w;
     let peak;
     if (state.fft) peak = fftView(re, im, n, half);
     else peak = fillMode(re, im, n, n, half, mode(), z);
-    const img = new ImageData(n, n);
     if (state.cross === 'phase') colorize(re, im, img.data, 0.5 * peak, 'complex');
     else colorize(re, im, img.data, 0.6 * peak, 'intensity');
-    const off = document.createElement('canvas'); off.width = n; off.height = n;
     off.getContext('2d').putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(off, 0, 0, width, width);
@@ -65,21 +66,29 @@ export function createModes(app) {
 
   // ------------------------------------------------------------------- the numerical check
 
-  /** Propagate the mode from its waist by the angular spectrum method (exact kz), resample. */
+  /**
+   * Propagate the mode from its waist by the angular spectrum method (exact kz): the mode's
+   * spectrum is computed once, then each z costs one inverse FFT.  Compared with the formula.
+   */
+  let spec = null;
+  const FHALF = (FN * FDX) / 2;
+  const F = { R: new Float64Array(FN * FN), I: new Float64Array(FN * FN), A: new Float64Array(FN * FN), B: new Float64Array(FN * FN) };
   function computeFFT() {
-    const key = JSON.stringify([mode(), state.zeta]);
+    const mkey = JSON.stringify(mode()), key = JSON.stringify([mkey, state.zeta]);
     if (fft && fft.key === key) return fft;
-    const re = new Float64Array(FN * FN), im = new Float64Array(FN * FN), half = (FN * FDX) / 2;
-    fillMode(re, im, FN, FN, half, mode(), 0);
-    const R = Float64Array.from(re), I = Float64Array.from(im);
-    propagate(R, I, FN, FDX, FLAMBDA, state.zeta * FZR, false);
+    if (!spec || spec.key !== mkey) {
+      const re = new Float64Array(FN * FN), im = new Float64Array(FN * FN);
+      fillMode(re, im, FN, FN, FHALF, mode(), 0);
+      spec = { key: mkey, S: spectrum(re, im, FN, FDX, FLAMBDA) };
+    }
+    const { R, I, A, B } = F;
+    fromSpectrum(spec.S, state.zeta * FZR, R, I);
     // Against the formula at z.
-    const A = new Float64Array(FN * FN), B = new Float64Array(FN * FN);
-    const peak = fillMode(A, B, FN, FN, half, mode(), state.zeta);
+    const peak = fillMode(A, B, FN, FN, FHALF, mode(), state.zeta);
     let err = 0;
-    for (let k = 0; k < FN * FN; k++) err = Math.max(err, Math.hypot(R[k] - A[k], I[k] - B[k]));
+    for (let k = 0; k < FN * FN; k++) { const dr = R[k] - A[k], di = I[k] - B[k], e2 = dr * dr + di * di; if (e2 > err) err = e2; }
     const o = overlap(A, B, R, I, FDX * FDX);
-    fft = { key, R, I, half, err: err / peak, mag: Math.hypot(o.re, o.im), ph: Math.atan2(o.im, o.re) };
+    fft = { key, R, I, half: FHALF, err: Math.sqrt(err) / peak, mag: Math.hypot(o.re, o.im), ph: Math.atan2(o.im, o.re) };
     return fft;
   }
 
@@ -103,10 +112,13 @@ export function createModes(app) {
 
   function fftNote() {
     const box = $('#fft-note');
-    if (!state.fft) { box.textContent = 'Compute the beam at z from the one at the waist with the angular spectrum method of the diffraction demo (exact, not paraxial: w₀ = 20λ), instead of the formula.'; return; }
-    const f = computeFFT(), N = order(mode()), psi = Math.atan(state.zeta);
-    const measured = (N + 1) * psi - f.ph;
-    box.textContent = `Largest difference from the formula: ${(100 * f.err).toPrecision(2)}% of the peak. Overlap with the formula's mode: ${f.mag.toFixed(5)}. Gouy phase of the computed beam: ${fmtPi(measured, 4)} (formula: (N+1) atan(z/z_R) = ${fmtPi((N + 1) * psi, 4)}).`;
+    let text = 'Compute the beam at z from the one at the waist with the angular spectrum method of the diffraction demo (exact, not paraxial: w₀ = 20λ), instead of the formula.';
+    if (state.fft) {
+      const f = computeFFT(), N = order(mode()), psi = Math.atan(state.zeta);
+      const measured = (N + 1) * psi - f.ph;
+      text = `Largest difference from the formula: ${(100 * f.err).toPrecision(2)}% of the peak. Overlap with the formula's mode: ${f.mag.toFixed(5)}. Gouy phase of the computed beam: ${fmtPi(measured, 4)} (formula: (N+1) atan(z/z_R) = ${fmtPi((N + 1) * psi, 4)}).`;
+    }
+    if (box.textContent !== text) box.textContent = text;
   }
 
   // ------------------------------------------------------------------- the side view
@@ -311,19 +323,25 @@ export function createModes(app) {
     for (const [k, s] of Object.entries(idx)) s.value = state[k];
   }
 
+  // The formula and the mode's name change only with the mode (MathML is slow to lay out);
+  // the numbers change with z, in place.
+  let shownMode = '';
+  const nameSpan = el('b'), orderSpan = el('span'), whereSpan = el('span');
+  $('#modes-readout').append(el('span', {}, nameSpan, orderSpan), whereSpan);
   function formula() {
+    const key = JSON.stringify(mode());
+    if (key === shownMode) return;
+    shownMode = key;
     const N = order(mode());
     const tex = state.family === 'hg' ? `N=m+n=${N}` : state.family === 'lg' ? `N=2p+|l|=${N}` : 'N=1+0=1';
     $('#mode-formula').innerHTML = `Order ${texToMathML(tex)}; Gouy phase ${texToMathML(`(N+1)\\psi=${N + 1}\\arctan(z/z_R)`)}`;
+    nameSpan.textContent = name(); orderSpan.textContent = `: order N = ${N}`;
   }
 
   function readout() {
     const z = state.zeta, w = Math.sqrt(1 + z * z), N = order(mode());
     const R = z === 0 ? '∞' : `${fmt(z + 1 / z, 3)} z_R`;
-    $('#modes-readout').replaceChildren(
-      el('span', {}, el('b', {}, name()), `: order N = ${N}`),
-      el('span', {}, `at z = ${fmt(z, 3)} z_R: w = ${fmt(w, 3)} w₀, R = ${R}, Gouy phase ${N + 1}ψ = ${fmtPi((N + 1) * Math.atan(z), 3)}`),
-    );
+    whereSpan.textContent = `at z = ${fmt(z, 3)} z_R: w = ${fmt(w, 3)} w₀, R = ${R}, Gouy phase ${N + 1}ψ = ${fmtPi((N + 1) * Math.atan(z), 3)}`;
   }
 
   function changed(rebuildSide = true) {
@@ -389,5 +407,5 @@ export function createModes(app) {
   function show() { buildIndex(); syncControls(); buildGallery(); sideField = null; draw(); }
   window.addEventListener('resize', () => { if (app.state.view === 'modes') { sideField = null; draw(); } });
 
-  return { show, draw, tick, toHash, fromHash, set, computeFFT, get mode() { return mode(); } };
+  return { show, draw, tick, toHash, fromHash, set, computeFFT, drawCross, drawSide, drawGouy, get mode() { return mode(); } };
 }

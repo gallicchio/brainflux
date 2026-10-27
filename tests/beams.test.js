@@ -4,7 +4,7 @@ import {
   envelope, lensLaw, coupling, gouyThrough, hermite,
 } from '../beams/gauss.js';
 import { gParams, isStable, roundTrip, eigenmode, closedForms, modeLines, bounce, afterRoundTrip } from '../beams/cavity.js';
-import { fillMode, hg1d, laguerre, order, overlap, modeAt } from '../beams/modes.js';
+import { fillMode, hg1d, laguerre, order, overlap, modeAt, spectrum, fromSpectrum } from '../beams/modes.js';
 import { propagate } from '../diffraction/optics.js';
 
 const LAMBDA = 633e-6; // mm
@@ -103,37 +103,43 @@ test('beams: a slab moves a focus back by t (1 - 1/n); the Gouy phase through a 
   close(beamAt(fl, 1e5).gouy - at, Math.PI, 0.03, 'nearly pi');
 });
 
-test('beams: the analytic field is the field the angular spectrum method computes (through a lens)', () => {
-  // A round Gaussian beam, a lens, a focus: the envelope from q, segment by segment, against
-  // the FFT propagator of the diffraction demo applied step by step (lens = phase screen).
+test('beams: the bench\'s field is the field the angular spectrum method computes (through a lens)', () => {
+  // A round beam (HG00, then HG20), a lens, a focus: the field drawn on the bench (from q,
+  // segment by segment, with the Gouy phase (m+1) psi accumulated) against the FFT propagator of
+  // the diffraction demo applied step by step, the lens as a phase screen.  The waist starts
+  // 30 mm before the bench, so the Gouy phase doesn't start at zero.
   const n = 256, dx = 0.01, lambda = 6.33e-4, w0 = 0.25, f = 120;
   const k0 = (2 * Math.PI) / lambda;
-  const tr = traceBench({ lambda, w0, z0: 0 }, [{ type: 'lens', z: 20, f }], 0, 300);
-  const re = new Float64Array(n * n), im = new Float64Array(n * n);
+  const tr = traceBench({ lambda, w0, z0: -30 }, [{ type: 'lens', z: 20, f }], 0, 300);
   const xs = (i) => (i - n / 2) * dx;
-  const b0 = beamAt(tr, 0);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const r = Math.hypot(xs(i), xs(j)), [a, b] = envelope(tr, b0, r, 0, w0);
-    re[j * n + i] = a; im[j * n + i] = b;
+  // HG_m0 in 2D: the bench's x profile times the fundamental's y profile.
+  const field2d = (b, m, x, y) => {
+    const [a, c] = envelope(tr, b, x, m, w0), g = Math.exp(-(y * y) / (b.w * b.w)), p = 0.5 * k0 * y * y * b.curv;
+    return [g * (a * Math.cos(p) - c * Math.sin(p)), g * (a * Math.sin(p) + c * Math.cos(p))];
+  };
+  const notes = [];
+  for (const m of [0, 2]) {
+    const re = new Float64Array(n * n), im = new Float64Array(n * n);
+    const b0 = beamAt(tr, 0);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) [re[j * n + i], im[j * n + i]] = field2d(b0, m, xs(i), xs(j));
+    propagate(re, im, n, dx, lambda, 20, true);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const r2 = xs(i) ** 2 + xs(j) ** 2, ph = (-k0 * r2) / (2 * f), o = j * n + i;
+      const c = Math.cos(ph), s = Math.sin(ph), a = re[o];
+      re[o] = a * c - im[o] * s; im[o] = a * s + im[o] * c;
+    }
+    const z = 20 + 112;                      // near the focus
+    propagate(re, im, n, dx, lambda, z - 20, true);
+    const b = beamAt(tr, z);
+    let err = 0, peak = 0;
+    for (let j = n / 2 - 40; j <= n / 2 + 40; j += 8) for (let i = 0; i < n; i++) {
+      const [a, c] = field2d(b, m, xs(i), xs(j)), o = j * n + i;
+      err = Math.max(err, Math.hypot(re[o] - a, im[o] - c)); peak = Math.max(peak, Math.hypot(a, c));
+    }
+    assert(err < 2e-3 * peak, `HG${m}0: max |FFT - analytic| = ${err.toExponential(2)} of peak ${peak.toFixed(3)}`);
+    notes.push(`HG${m}0 ${(err / peak).toExponential(1)}`);
   }
-  propagate(re, im, n, dx, lambda, 20, true);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const r2 = xs(i) ** 2 + xs(j) ** 2, ph = (-k0 * r2) / (2 * f), o = j * n + i;
-    const c = Math.cos(ph), s = Math.sin(ph), a = re[o];
-    re[o] = a * c - im[o] * s; im[o] = a * s + im[o] * c;
-  }
-  const z = 20 + 105;                      // near the focus
-  propagate(re, im, n, dx, lambda, z - 20, true);
-  const b = beamAt(tr, z);
-  let err = 0, peak = 0;
-  for (let i = 0; i < n; i++) {
-    const [a, c] = envelope(tr, b, xs(i), 0, w0), o = (n / 2) * n + i;
-    err = Math.max(err, Math.hypot(re[o] - a, im[o] - c)); peak = Math.max(peak, Math.hypot(a, c));
-  }
-  // The FFT carries the overall phase exp(-i psi) relative to the start, the analytic form the
-  // accumulated psi: both are measured from the same start (psi(0) is part of both).
-  assert(err < 2e-3 * peak, `max |FFT - analytic| = ${err.toExponential(2)} of peak ${peak.toFixed(3)}`);
-  return `max difference ${(err / peak).toExponential(1)} of the peak, w = ${(b.w * 1000).toFixed(1)} um`;
+  return `max difference from the FFT, as a fraction of the peak: ${notes.join(', ')}`;
 });
 
 test('beams: mode matching efficiency', () => {
@@ -263,31 +269,55 @@ test('modes: HG10 + i HG01 is the Laguerre-Gauss donut LG01', () => {
   assert(order(md) === 4, 'order 2p + |l|');
 });
 
-test('modes: propagated by the angular spectrum method, an HG mode keeps its shape and gains (m+n+1) atan(z/zR)', () => {
-  // Units of w0; lambda = 0.05 w0 so zR = 20 pi w0.  Exact kz (not the paraxial approximation).
-  const n = 256, dx = 0.1, lambda = 0.05, zR = Math.PI / lambda, half = (n * dx) / 2;
+test('modes: the split angular spectrum propagator is the diffraction demo\'s propagate()', () => {
+  // A tight, off-centre, tilted spot, so that evanescent components matter too.
+  const n = 64, dx = 0.02, lambda = 0.05, re = new Float64Array(n * n), im = new Float64Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = (i - 30) * dx, y = (j - 34) * dx, g = Math.exp(-(x * x + y * y) / 0.002);
+    re[j * n + i] = g * Math.cos(40 * x); im[j * n + i] = g * Math.sin(40 * x);
+  }
+  const S = spectrum(re, im, n, dx, lambda);
   let worst = 0;
+  for (const z of [0, 0.01, 0.3, 2]) {
+    const R = Float64Array.from(re), I = Float64Array.from(im);
+    propagate(R, I, n, dx, lambda, z, false);
+    const [A, B] = fromSpectrum(S, z);
+    for (let k = 0; k < n * n; k++) worst = Math.max(worst, Math.abs(A[k] - R[k]), Math.abs(B[k] - I[k]));
+  }
+  assert(worst < 1e-12, `largest difference ${worst}`);
+  return `largest difference ${worst.toExponential(1)}`;
+});
+
+test('modes: propagated by the angular spectrum method, an HG mode keeps its shape and gains (m+n+1) atan(z/zR)', () => {
+  // Units of w0; lambda = 0.05 w0 so zR = 20 pi w0.  With the paraxial propagator the modes are
+  // exact; with the exact kz they pick up the non-paraxial phase, about z k_perp^4 / 8k^3:
+  // a few milliradians here, for k_perp^2 ~ 2(N+1)/w0^2.
+  const n = 256, dx = 0.1, lambda = 0.05, zR = Math.PI / lambda, half = (n * dx) / 2;
+  const worst = { paraxial: 0, exact: 0 };
   const notes = [];
   for (const [m, k] of [[0, 0], [1, 0], [2, 1], [3, 3]]) {
     const md = { family: 'hg', m, n: k };
     const re = new Float64Array(n * n), im = new Float64Array(n * n);
     fillMode(re, im, n, n, half, md, 0);
     for (const zeta of [0.5, 1, 2]) {
-      const R = Float64Array.from(re), I = Float64Array.from(im);
-      propagate(R, I, n, dx, lambda, zeta * zR, false);
-      const R2 = new Float64Array(n * n), I2 = new Float64Array(n * n);
-      fillMode(R2, I2, n, n, half, md, zeta);
-      // The overlap with the analytic mode at z: magnitude 1 (same shape), phase 0 (the
-      // analytic mode carries exp(-i (N+1) atan(z/zR))).
-      const o = overlap(R2, I2, R, I, dx * dx);
-      const mag = Math.hypot(o.re, o.im), ph = Math.atan2(o.im, o.re);
-      close(mag, 1, 1e-4, `HG${m}${k} at z = ${zeta} zR: |overlap|`);
-      close(ph, 0, 2e-3, `HG${m}${k} at z = ${zeta} zR: phase`);
-      // The Gouy phase measured from the FFT field: the phase it lacks against the mode's
-      // shape without its Gouy factor, (N+1) psi - arg(overlap).
-      worst = Math.max(worst, Math.abs(ph));
-      if (zeta === 1) notes.push(`HG${m}${k}: ${((m + k + 1) - ph / Math.atan(zeta)).toFixed(4)}`);
+      for (const paraxial of [true, false]) {
+        const R = Float64Array.from(re), I = Float64Array.from(im);
+        propagate(R, I, n, dx, lambda, zeta * zR, paraxial);
+        const R2 = new Float64Array(n * n), I2 = new Float64Array(n * n);
+        fillMode(R2, I2, n, n, half, md, zeta);
+        // The overlap with the analytic mode at z: magnitude 1 (same shape), phase 0 (the
+        // analytic mode carries exp(-i (N+1) atan(z/zR))).
+        const o = overlap(R2, I2, R, I, dx * dx);
+        const mag = Math.hypot(o.re, o.im), ph = Math.atan2(o.im, o.re), what = `HG${m}${k} at z = ${zeta} zR, ${paraxial ? 'paraxial' : 'exact'} kz`;
+        close(mag, 1, paraxial ? 1e-8 : 1e-4, `${what}: |overlap|`);
+        close(ph, 0, paraxial ? 1e-8 : 5e-3, `${what}: phase`);
+        const key = paraxial ? 'paraxial' : 'exact';
+        worst[key] = Math.max(worst[key], Math.abs(ph));
+        // The Gouy phase measured from the FFT field, in units of atan(z/zR): the phase it lacks
+        // against the mode's shape without its Gouy factor, (N+1) psi - arg(overlap).
+        if (zeta === 1 && !paraxial) notes.push(`HG${m}${k}: ${((m + k + 1) - ph / Math.atan(zeta)).toFixed(4)}`);
+      }
     }
   }
-  return `Gouy phase at z = zR in units of pi/4: ${notes.join(', ')}; largest phase error ${worst.toExponential(1)}`;
+  return `Gouy phase at z = zR in units of pi/4 (exact kz): ${notes.join(', ')}; largest phase error ${worst.paraxial.toExponential(1)} (paraxial), ${worst.exact.toExponential(1)} (exact kz)`;
 });

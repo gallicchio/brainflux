@@ -136,6 +136,14 @@ with Browser('beams/index.html', size=SIZE) as b:
         check(abs(g1 - t1) < 0.05 and abs(g2 - t2) < 0.05 and has == stable,
               f'dragging the point to (g1, g2) = ({g1:.2f}, {g2:.2f}): R1 = {st["R1"]:.0f}, R2 = {st["R2"]:.0f} mm, g1 g2 = {g1 * g2:.2f}, {"a mode" if has else "no mode"}')
     b.screenshot(f'build/beams{TAG}-cav-dragged.png')
+    # The keyboard: arrows move the point.
+    b.eval('__app.setups.stability()'); b.sleep(0.2)
+    b.eval("document.querySelector('#stability').focus()")
+    b.key('ArrowLeft'); b.key('ArrowLeft'); b.key('ArrowUp')
+    st = b.eval('__app.state.cavity')
+    g1, g2 = 1 - st['L'] / st['R1'], 1 - st['L'] / st['R2']
+    check(abs(g1 - 0.71) < 1e-3 and abs(g2 - 0.52) < 1e-3, f'arrow keys move the point: (0.75, 0.5) -> ({g1:.3f}, {g2:.3f})')
+    b.eval("document.querySelector('#bench')?.blur()")
     b.eval('__app.setups.rays()'); b.sleep(0.2)
     b.eval('__app.state.cavity.play = false; __app.cavity.launch(); for (let k = 0; k < 400; k++) __app.cavity.step();')
     rr = b.eval("(() => { const s = __app.state.cavity, L = s.L, sc = Math.sqrt(633e-6 * L / Math.PI); return __app.cavity.rays.map(r => ({ lost: r.lost, big: Math.max(...r.hits.map(Math.abs)) / sc })); })()")
