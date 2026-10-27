@@ -938,7 +938,8 @@ function readout() {
         ` ${fmt(L.height, 3)} as high as in vacuum, with ${fmt(L.energy * 100, 3)}% of the energy, ${fmt(L.stretch, 3)} times as long (r.m.s.)`;
     } else {
       s += ` · after z/c: the Sommerfeld precursor at once, the Brillouin precursor near n(0)z/c, <b>${tt(lastPulse.brillouin ?? 0)}</b>`;
-      if (L.ng > 1) s += `, the signal near z(n<sub>g</sub> − 1)/c = <b>${tt(L.predictedVac)}</b>`;
+      // (In so dense a medium the carrier sets in before the group delay: Brillouin's signal velocity is not v_g.)
+      if (L.ng > 1) s += `; the group delay at the carrier would be z(n<sub>g</sub> − 1)/c = <b>${tt(L.predictedVac)}</b>`;
     }
     parts.push(s);
     if (sh !== 'gauss') parts.push(`Largest field before the front arrives (t < ${sh === 'front' ? 't_f + ' : ''}z/c): <b>${L.before > 0 ? L.before.toExponential(1) : '0'}</b> of the peak.`);
