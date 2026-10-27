@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { solve, field, rt, absorbedByLayer, makeWorkspace, sweepLayer, incidentE2, phaseDifference } from '../thinfilms/tmm.js';
+import { solve, rtBoth, field, rt, absorbedByLayer, makeWorkspace, sweepLayer, incidentE2, phaseDifference } from '../thinfilms/tmm.js';
 import { MATERIALS } from '../thinfilms/materials.js';
 import { cmf, colorimeter, wavelengths, chromaticity, toDisplay } from '../thinfilms/color.js';
 import { parseDesign, expandDesign, drainingThickness } from '../thinfilms/design.js';
@@ -209,6 +209,21 @@ test('reciprocity: T is the same in both directions, even through absorbing laye
     const b = solve(ns, ...arrays(rev), [n0, 0], 520, beta, pol);
     close(f.T, b.T, 1e-13, `${pol} ${th}`);
   }
+});
+
+test('the fast path for curves (s and p together) gives the same R and T as solve()', () => {
+  const rand = rng(7), out = new Float64Array(4);
+  let worst = 0;
+  for (let trial = 0; trial < 200; trial++) {
+    const L = Math.floor(rand() * 6), n0 = 1 + rand();
+    const layers = Array.from({ length: L }, () => (rand() < 0.2 ? [0.1 + rand(), 2 + 3 * rand(), 60 * rand()] : [1 + 1.6 * rand(), 0.05 * rand(), 500 * rand()]));
+    const ns = rand() < 0.2 ? [0.2, 3.5] : [1 + rand(), 0];
+    const [nr, ni, d] = arrays(layers), beta = n0 * Math.sin(89 * rand() * deg), lam = 400 + 400 * rand();
+    rtBoth(n0, nr, ni, d, ns, lam, beta, out);
+    const s = solve(n0, nr, ni, d, ns, lam, beta, 's'), p = solve(n0, nr, ni, d, ns, lam, beta, 'p');
+    worst = Math.max(worst, Math.abs(out[0] - s.R), Math.abs(out[1] - s.T), Math.abs(out[2] - p.R), Math.abs(out[3] - p.T));
+  }
+  assert(worst < 1e-13, `max difference ${worst}`);
 });
 
 test('sweeping one layer gives the same R and T as solving each stack', () => {

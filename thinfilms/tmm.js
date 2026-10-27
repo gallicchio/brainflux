@@ -30,18 +30,25 @@
 // replaced by k0^2 (N^2 - beta^2).  Total internal reflection is a classically forbidden
 // region, and frustrated TIR is tunnelling.
 
-/** Normal component q = sqrt(N^2 - beta^2) with Im q >= 0 (and q > 0 when real), as [re, im]. */
-export function normalComponent(nr, ni, beta) {
+// The hot loops write their complex intermediate results into these instead of returning new
+// arrays (which the garbage collector would then have to sweep up, thousands per frame).
+const Q = new Float64Array(2);
+
+// q = sqrt(N^2 - beta^2) into Q, with Im q >= 0 (and q > 0 when real).  For a passive medium
+// (Im N^2 >= 0) the principal root already has Im q >= 0, so the wave decays in +z; with gain
+// (Im N^2 < 0) the root with Re q > 0, which carries energy forward, is kept.
+function qInto(nr, ni, beta) {
   const ar = nr * nr - ni * ni - beta * beta, ai = 2 * nr * ni;
   const m = Math.hypot(ar, ai);
-  let qr = Math.sqrt(Math.max(0, (m + ar) / 2)), qi = Math.sqrt(Math.max(0, (m - ar) / 2));
+  const qr = Math.sqrt(Math.max(0, (m + ar) / 2));
+  let qi = Math.sqrt(Math.max(0, (m - ar) / 2));
   if (ai < 0) qi = -qi;
-  // The passive root decays in +z; with gain (ai < 0) keep the one that carries energy forward.
-  if (qi < 0 && ai >= 0) { qr = -qr; qi = -qi; }
   // q = 0 exactly (grazing, or exactly at a critical angle) makes eta_p infinite: nudge it.
-  if (qr * qr + qi * qi < 1e-24) qi = 1e-12;
-  return [qr, qi];
+  Q[0] = qr; Q[1] = qr * qr + qi * qi < 1e-24 ? 1e-12 : qi;
 }
+
+/** Normal component q = sqrt(N^2 - beta^2) with Im q >= 0 (and q > 0 when real), as [re, im]. */
+export function normalComponent(nr, ni, beta) { qInto(nr, ni, beta); return [Q[0], Q[1]]; }
 
 /** Tilted admittance eta for polarisation pol ('s' or 'p'), as [re, im]. */
 export function admittance(nr, ni, qr, qi, pol) {
@@ -237,11 +244,10 @@ export function absorbedByLayer(ws, pointsPerLayer = 400) {
   return out;
 }
 
-// The scaled characteristic matrix of one layer into m[0..7] (re, im of m00, m01, m10, m11);
-// returns the scale exponent |Im delta| (the true matrix is m e^scale).
-function layerMatrix(nr, ni, d, k0, beta, pol, m) {
-  const [qr, qi] = normalComponent(nr, ni, beta);
-  const [hr, hi] = admittance(nr, ni, qr, qi, pol);
+// The scaled characteristic matrix of a layer with normal component q, admittance eta and
+// thickness d into m[0..7] (re, im of m00, m01, m10, m11); returns the scale exponent |Im delta|
+// (the true matrix is m e^scale).
+function layerMatrixQ(qr, qi, hr, hi, d, k0, m) {
   const b = k0 * qi * d;
   scaledCosSin(k0 * qr * d, b, cs);
   const isr = -cs[3], isi = cs[2], hh = hr * hr + hi * hi;
@@ -251,6 +257,11 @@ function layerMatrix(nr, ni, d, k0, beta, pol, m) {
   // -i eta sin
   m[4] = -(hr * isr - hi * isi); m[5] = -(hr * isi + hi * isr);
   return Math.abs(b);
+}
+function layerMatrix(nr, ni, d, k0, beta, pol, m) {
+  qInto(nr, ni, beta);
+  const [hr, hi] = admittance(nr, ni, Q[0], Q[1], pol);
+  return layerMatrixQ(Q[0], Q[1], hr, hi, d, k0, m);
 }
 
 // a <- a b for 2 x 2 complex matrices stored as above.
@@ -290,8 +301,11 @@ export function sweepLayer(n0, nr, ni, d, ns, lambda, beta, pol, jSel, thickness
     const Cr = m[4] * vBr - m[5] * vBi + m[6] * vCr - m[7] * vCi, Ci = m[4] * vBi + m[5] * vBr + m[6] * vCi + m[7] * vCr;
     vBr = Br; vBi = Bi; vCr = Cr; vCi = Ci;
   }
+  // The swept layer's q and eta do not depend on its thickness.
+  qInto(nr[jSel], ni[jSel], beta);
+  const qr = Q[0], qi = Q[1], [hr, hi] = admittance(nr[jSel], ni[jSel], qr, qi, pol);
   for (let t = 0; t < thicknesses.length; t++) {
-    const s = layerMatrix(nr[jSel], ni[jSel], thicknesses[t], k0, beta, pol, m);
+    const s = layerMatrixQ(qr, qi, hr, hi, thicknesses[t], k0, m);
     const Br = m[0] * vBr - m[1] * vBi + m[2] * vCr - m[3] * vCi, Bi = m[0] * vBi + m[1] * vBr + m[2] * vCi + m[3] * vCr;
     const Cr = m[4] * vBr - m[5] * vBi + m[6] * vCr - m[7] * vCi, Ci = m[4] * vBi + m[5] * vBr + m[6] * vCi + m[7] * vCr;
     const B2r = pre[0] * Br - pre[1] * Bi + pre[2] * Cr - pre[3] * Ci, B2i = pre[0] * Bi + pre[1] * Br + pre[2] * Ci + pre[3] * Cr;
@@ -302,6 +316,59 @@ export function sweepLayer(n0, nr, ni, d, ns, lambda, beta, pol, jSel, thickness
     outR[t] = (nRe * nRe + nIm * nIm) / dd;
     if (outT) outT[t] = ((4 * eta0 * esr) / dd) * Math.exp(-2 * (sPre + s + sPost));
   }
+}
+
+// One layer's effect on (Y, P) stored at st[o..o+3] = Yr, Yi, Pr, Pi, for a layer of admittance
+// (hr, hi) whose scaled cos and sin are in cs: Y <- C / B, P <- P B, [B; C] = M [1; Y].
+function stepY(st, o, hr, hi) {
+  const Yr = st[o], Yi = st[o + 1], hh = hr * hr + hi * hi;
+  const yr = (Yr * hr + Yi * hi) / hh, yi = (Yi * hr - Yr * hi) / hh;
+  const isr = -cs[3], isi = cs[2];
+  const Br = cs[0] - (yr * isr - yi * isi), Bi = cs[1] - (yr * isi + yi * isr);
+  const Cr = -(hr * isr - hi * isi) + (Yr * cs[0] - Yi * cs[1]);
+  const Ci = -(hr * isi + hi * isr) + (Yr * cs[1] + Yi * cs[0]);
+  const bb = Br * Br + Bi * Bi;
+  st[o] = (Cr * Br + Ci * Bi) / bb; st[o + 1] = (Ci * Br - Cr * Bi) / bb;
+  const Pr = st[o + 2], Pi = st[o + 3];
+  st[o + 2] = Pr * Br - Pi * Bi; st[o + 3] = Pr * Bi + Pi * Br;
+}
+// r and T from (Y, P) at st[o..]: writes R, T into out[k], out[k + 1].
+function finish(st, o, eta0, esr, scale, out, k) {
+  const Yr = st[o], Yi = st[o + 1];
+  const nr = eta0 - Yr, ni = -Yi, dr = eta0 + Yr, di = Yi, dd = dr * dr + di * di;
+  const rr = (nr * dr + ni * di) / dd, ri = (ni * dr - nr * di) / dd;
+  const Pr = st[o + 2], Pi = st[o + 3], pp = Pr * Pr + Pi * Pi, f = Math.exp(-scale);
+  const tr = (((1 + rr) * Pr + ri * Pi) / pp) * f, ti = ((ri * Pr - (1 + rr) * Pi) / pp) * f;
+  out[k] = rr * rr + ri * ri; out[k + 1] = (esr * (tr * tr + ti * ti)) / eta0;
+}
+const ST = new Float64Array(8);
+
+/**
+ * R and T for s and p at once, the fast path for curves: the two polarisations share each
+ * layer's normal component and its sines and cosines.  Writes out[0..3] = Rs, Ts, Rp, Tp, the
+ * same numbers solve() gives.
+ */
+export function rtBoth(n0, nr, ni, d, ns, lambda, beta, out) {
+  const L = nr.length, k0 = (2 * Math.PI) / lambda;
+  const q0 = Math.sqrt(Math.max(n0 * n0 - beta * beta, 1e-24)), e0s = q0, e0p = (n0 * n0) / q0;
+  qInto(ns[0], ns[1], beta);
+  const qsr = Q[0], qsi = Q[1];
+  let er = ns[0] * ns[0] - ns[1] * ns[1], ei = 2 * ns[0] * ns[1], dq = qsr * qsr + qsi * qsi;
+  const epr = (er * qsr + ei * qsi) / dq, epi = (ei * qsr - er * qsi) / dq;
+  ST[0] = qsr; ST[1] = qsi; ST[2] = 1; ST[3] = 0; ST[4] = epr; ST[5] = epi; ST[6] = 1; ST[7] = 0;
+  let scale = 0;
+  for (let j = L - 1; j >= 0; j--) {
+    qInto(nr[j], ni[j], beta);
+    const qr = Q[0], qi = Q[1], b = k0 * qi * d[j];
+    scaledCosSin(k0 * qr * d[j], b, cs);
+    stepY(ST, 0, qr, qi);
+    er = nr[j] * nr[j] - ni[j] * ni[j]; ei = 2 * nr[j] * ni[j]; dq = qr * qr + qi * qi;
+    stepY(ST, 4, (er * qr + ei * qi) / dq, (ei * qr - er * qi) / dq);
+    scale += Math.abs(b);
+  }
+  finish(ST, 0, e0s, qsr, scale, out, 0);
+  finish(ST, 4, e0p, epr, scale, out, 2);
+  return out;
 }
 
 /**
