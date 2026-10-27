@@ -2,7 +2,7 @@
 """Drive the thin-films demo like a student: every experiment, checking its physics read-outs
 against closed forms; dragging a layer's edge, the plots and the film; links that keep the
 set-up; the time each update takes; the phone layout and the dark theme."""
-import json, math, os, sys
+import json, math, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
 
@@ -22,6 +22,30 @@ def typed_number(b, selector, value):
     b.eval(f"(() => {{ const e = document.querySelector({json.dumps(selector)}); e.value = {value}; e.dispatchEvent(new Event('change')); }})()")
 
 deg = math.pi / 180
+
+# The words of a readout with its numbers taken out: the readouts may move when these change, not
+# when only the numbers do.
+def phrase(text):
+    return re.sub(r'[−+-]?\d[\d.]*(?:e[−+-]?\d+)?', '#', text)
+
+def keeps_still(b, sel, steps, settle=0.3):
+    """Run steps (callables that change the numbers shown) and compare the boxes of the elements
+    matching sel, after every step, with those first seen with the same words.  Returns (the
+    largest shift in px, the steps compared, the distinct texts seen)."""
+    texts = f"[...document.querySelectorAll({json.dumps(sel)})].map((e) => e.textContent).join(' | ')"
+    t0 = b.eval(texts)
+    first = {phrase(t0): b.rects(sel)}
+    worst, compared, seen = 0.0, 0, {t0}
+    for step in steps:
+        step(); b.sleep(settle)
+        r, t = b.rects(sel), b.eval(texts)
+        seen.add(t)
+        r0 = first.setdefault(phrase(t), r)
+        if r0 is r or len(r) != len(r0):
+            continue
+        compared += 1
+        worst = max([worst] + [abs(x - y) for a, c in zip(r0, r) for x, y in zip(a, c)])
+    return worst, compared, seen
 
 with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1.0)
@@ -169,8 +193,8 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     setup(b, 'bragg'); Rs = []
     for N in (1, 2, 3, 5):
         typed_number(b, '#design-sliders .slider:nth-child(2) input[type=number]', N); b.sleep(0.25)
-        Rs.append(readout().split('  ')[0])
-    check(Rs == ['R 76.8%', 'R 92.3%', 'R 97.6%', 'R 99.8%'], f'help, Bragg mirror: {Rs}')
+        Rs.append(round(float(readout().split('  ')[0].split()[1].rstrip('%')), 1))
+    check(Rs == [76.8, 92.3, 97.6, 99.8], f'help, Bragg mirror: R {Rs} %')
     b.eval("(() => { const s = document.getElementById('design-H'); s.value = 'bk7'; s.dispatchEvent(new Event('change')); })()"); b.sleep(0.3)
     check(round(point(b)['Rs'] * 100) == 15, f"help, Bragg mirror with BK7 for H: R = {point(b)['Rs']:.3f}")
     setup(b, 'filter'); widths = []
@@ -193,6 +217,21 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     m = b.eval('__app.comp.rpMin')
     check(Rsil == {320: 12, 450: 92, 600: 96} and round(m['R'] * 100) == 91 and round(m['theta']) == 71,
           f'help, silver: R {Rsil} %, R_p least {m and round(m["R"] * 100)}% at {m and round(m["theta"], 1)} deg (550 nm)')
+
+    # The readouts keep still: as the numbers change (the angle, the wavelength, a thickness, the
+    # film draining), every group, number and the words after them keep their places, as long as
+    # the words stay the same.
+    LAM, TH, D = '#light-box .slider:nth-child(1) input[type=number]', '#light-box .slider:nth-child(2) input[type=number]', '#thick-box input[type=number]'
+    RO = '#readouts > span, #readouts .fixnum, #swatches .fixnum, #spec-note, #index-note .fixnum, #index-note'
+    def typed(sel, v): return lambda: typed_number(b, sel, v)
+    for name, steps in (('tir', [typed(TH, v) for v in (47.7, 55.3, 61.04, 75.5, 89.5, 42.3)] + [typed(LAM, v) for v in (400, 632.8, 1064, 1499.9)]),
+                        ('etalon', [typed(LAM, v) for v in (540, 551.2, 563.7, 548.9)] + [typed(TH, v) for v in (3, 7.5, 12.25, 20)]),
+                        ('ar', [typed(D, v) for v in (99.6, 100.4, 9.6, 52, 250)] + [typed(TH, v) for v in (12, 33.3, 61.7)]),
+                        ('soap', [lambda: b.sleep(0.4)] * 4 + [typed(D, v) for v in (1500, 97, 1000, 55)])):
+        setup(b, name, 0.8)
+        worst, compared, seen = keeps_still(b, RO, steps)
+        check(worst <= 0.5 and compared >= len(steps) - 4 and len(seen) >= len(steps) // 2,
+              f'{name}: the readouts keep still while the numbers change (largest shift {worst:.1f} px over {compared} of {len(steps)} changes, {len(seen)} different readings)')
 
     # The computing time of one update while dragging a thickness, the wavelength or the angle
     # (each part is kept until something it depends on changes).  Drawing comes on top; this

@@ -21,7 +21,7 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; color: var(--ink-2);
   min-height: 2.9em; padding: 0 4px; line-height: 1.45;
 }
-.readouts b { color: var(--ink); font-weight: 600; }
+.readouts b, .readouts .fixnum.b { color: var(--ink); font-weight: 600; }
 .readouts .warn { color: var(--warn); }
 .sw { display: inline-block; width: 1.1em; height: 1.1em; border-radius: 3px; vertical-align: -0.2em; border: 1px solid var(--line); margin-right: 3px; }
 
