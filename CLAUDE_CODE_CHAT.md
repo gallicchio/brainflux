@@ -469,3 +469,39 @@ The help texts can point these out, so each demo reinforces the others.
 All of these run in the browser with no server.  The 2D Maxwell solver and the 3D orbitals
 would be faster in WebGL, which is a web standard and needs no framework; the rest would use
 plain canvas, as the current demos do.
+
+## Prompt 4
+
+> Build 1, 2, 3, 4, 5, 8, 9, 10, 12, 13, 18, 19. Do these in parallel to the extent possible.
+
+### Response 4 (2026-10-27; in progress)
+
+Twelve agents are building them at once, one demo each, each in its own git worktree and branch.
+Every agent got the same brief:
+
+- the conventions of the existing demos;
+- physics checked by unit tests against exact results;
+- a scripted UI test of every experiment;
+- screenshots looked at and improved;
+
+plus a page of physics specific to its demo.  Each may touch only its own folder and test
+files.  I merge the branches and do the shared parts: the landing page, thumbnails, README and
+test lists.
+
+| idea | folder |
+|---|---|
+| 1 Maxwell's equations in 2D | `maxwell2d/` |
+| 2 Radiation from a moving charge | `radiation/` |
+| 3 Antenna arrays and aperture synthesis | `arrays/` |
+| 4 Interfaces and thin films | `thinfilms/` |
+| 5 Dispersion and Kramers–Kronig | `dispersion/` |
+| 8 Interferometers and coherence | `interferometer/` |
+| 9 Imaging: Abbe and phase contrast | `imaging/` |
+| 10 Holography | `holography/` |
+| 12 Tomography | `tomography/` |
+| 13 Gaussian beams and laser cavities | `beams/` |
+| 18 Drums and billiards | `drums/` |
+| 19 Quantum phase space | `phasespace/` |
+
+Phase space became a page of its own rather than a view in the 1D demo.  That way it can show a
+classical ensemble flowing beside the Wigner function without crowding the 1D demo.
