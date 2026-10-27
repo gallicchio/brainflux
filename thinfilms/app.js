@@ -739,14 +739,15 @@ function drawFilm() {
   // A thickness scale on the right.
   ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 1;
   const top = state.film.profile === 'wedge' ? state.film.dmax : state.film.hBottom;
+  let first = true;           // the unit goes on the first label
   for (const t of niceTicks(0, top, 5)) {
     const y = filmHeightOf(t);
     if (y === null || t === 0 && state.film.profile !== 'wedge') continue;
     const py = fy + y * fh;
     ctx.beginPath(); ctx.moveTo(fx + fw + 2, py); ctx.lineTo(fx + fw + 6, py); ctx.stroke();
-    ctx.fillText(String(t), fx + fw + 8, py);
+    ctx.fillText(first ? `${t} nm` : String(t), fx + fw + 8, py);
+    first = false;
   }
-  ctx.fillText('nm', fx + fw + 8, fy - 7);
   if (state.film.profile === 'drain') {
     const yb = (25 / state.film.hBottom) ** 2;
     if (yb * fh > 14) { ctx.fillStyle = '#999'; ctx.textAlign = 'center'; ctx.fillText('black film', fx + fw / 2, fy + Math.min(yb * fh / 2, fh / 2)); }
