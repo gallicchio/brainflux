@@ -43,7 +43,7 @@ details.panel[open] summary { margin-bottom: 6px; }
 @media (max-width: 900px) {
   .holo { grid-template-columns: minmax(0, 1fr); }
   .scene { grid-template-columns: minmax(0, 1fr); }
-  .front-wrap { width: 100%; height: auto; aspect-ratio: 1; max-width: 360px; margin: 0 auto; }
+  .front-wrap { width: 100%; height: auto; aspect-ratio: 1; max-width: 260px; margin: 0 auto; }
   .side-wrap { height: 180px; }
   .views { grid-template-columns: minmax(0, 1fr); }
 }

@@ -205,7 +205,10 @@ export function lens(n, p, lambda, d, out = field(n)) {
       let f = Math.floor(u);
       const t = u - f;
       f &= TAB - 1;
-      re[o] = w * (TC[f] + (TC[f + 1] - TC[f]) * t); im[o] = w * (TS[f] + (TS[f + 1] - TS[f]) * t);
+      // Interpolating between two unit phasors shortens them a little (by up to 3e-7): a lens
+      // must not absorb light, so put the length back to exactly 1.
+      const c = TC[f] + (TC[f + 1] - TC[f]) * t, s = TS[f] + (TS[f + 1] - TS[f]) * t, g = w / Math.sqrt(c * c + s * s);
+      re[o] = g * c; im[o] = g * s;
     }
   }
   return out;

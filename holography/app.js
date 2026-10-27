@@ -35,6 +35,7 @@ const DEFAULTS = () => ({
   tool: 'window', brush: 16,
   zoomH: 2, zoomS: 1, zoomR: 4, brightS: 0, brightR: 0,
   sweepFocus: false, sweepWindow: false,
+  cut: '',             // how the plate is covered: '', 'half', 'piece,cx,cy,r', or 'custom' (erased by hand)
 });
 let state = DEFAULTS();
 
@@ -112,7 +113,7 @@ const W = {
   O: field(N), R: field(N), Hraw: new Float64Array(N * N), H: new Float64Array(N * N),
   mask: new Float64Array(N * N).fill(1), junk: new Float64Array(N * N),
   S: field(N), C: field(N), L: field(N), eye: field(N), view: new Float32Array(N * N),
-  OR: field(N), picB: null,
+  OR: field(N), CL: field(N), picB: null,
 };
 const keys = {};
 let maskVersion = 0;
@@ -184,10 +185,16 @@ function compute() {
   if (kC !== keys.C) { referenceWave(l2, W.C, state.relight === 'conj'); keys.C = kC; }
   const kL = [state.focus, l2, p].join();
   if (kL !== keys.L) { lens(N, p, l2, state.focus, W.L); keys.L = kL; }
+  if (keys.CL !== kC + kL) {
+    // The illumination and the lens, multiplied once (look() then has one product per pixel).
+    const { C, L, CL } = W;
+    for (let o = 0; o < N * N; o++) { CL.re[o] = C.re[o] * L.re[o] - C.im[o] * L.im[o]; CL.im[o] = C.re[o] * L.im[o] + C.im[o] * L.re[o]; }
+    keys.CL = kC + kL;
+  }
   const win = state.window ? state.win : null;
   const kE = [kH, kC, kL, win ? [win.x, win.y, win.r].join() : '', lam].join('#');
   if (kE !== keys.E) {
-    look(W.H, W.C, W.L, N, p, win, W.eye);
+    look(W.H, null, W.CL, N, p, win, W.eye);
     viewImage(W.eye, N, state.focus, l2 / lam, W.view);
     keys.E = kE;
     stale.recon = true;
@@ -262,15 +269,22 @@ function frame(now) {
   }
   if (state.sweepWindow && state.window) {
     const reach = Math.max(0, plateL() / 2 - state.win.r);
-    state.win.x = reach * Math.sin((2 * Math.PI * t) / 6);
+    // Up and down, so that the eye moves in the side view too.
+    state.win.y = reach * Math.sin((2 * Math.PI * t) / 6);
+    winY.value = +(state.win.y / MM).toFixed(3);
+    stale.holo = true;
   }
+  render();
+  if (state.sweepFocus || (state.sweepWindow && state.window)) schedule();
+}
+/** Recompute what has changed, and redraw the panes that need it. */
+function render() {
   compute();
   if (stale.holo) drawHolo();
   if (stale.spec) drawSpec();
   if (stale.recon) drawRecon();
   stale.holo = stale.spec = stale.recon = false;
   drawSide(); drawFront(); updateNotes();
-  if (state.sweepFocus || (state.sweepWindow && state.window)) schedule();
 }
 
 /** An approximate colour for a wavelength in micrometres (after Dan Bruton), as in diffraction/. */
@@ -288,6 +302,7 @@ const cssRGB = (rgb, a = 1) => `rgba(${rgb.map((c) => Math.round(255 * Math.min(
 const off = document.createElement('canvas'); off.width = off.height = N;
 const offCtx = off.getContext('2d');
 const offImg = offCtx.createImageData(N, N);
+const offPixels = new Uint32Array(offImg.data.buffer);   // little-endian: 0xAABBGGRR
 
 /** Draw the N x N image in offImg into a canvas, magnified about the middle. */
 function blit(cv, zoom, smooth) {
@@ -314,14 +329,15 @@ function scaleBar(ctx, w, h, pxPerUnit, unit, maxFrac = 0.28) {
 }
 
 function drawHolo() {
-  const H = W.H, m = W.mask, d = offImg.data;
+  const H = W.H, m = W.mask, px = offPixels;
   let min = Infinity, max = -Infinity;
   for (let o = 0; o < N * N; o++) if (m[o] > 0) { const v = H[o]; if (v < min) min = v; if (v > max) max = v; }
-  const span = max - min || 1;
-  for (let o = 0; o < N * N; o++) {
-    if (m[o] > 0) { const g = (255 * (H[o] - min)) / span; d[4 * o] = d[4 * o + 1] = d[4 * o + 2] = g; }
-    else { const k = ((o % N) + Math.floor(o / N)) % 8 < 4; d[4 * o] = k ? 70 : 52; d[4 * o + 1] = k ? 38 : 30; d[4 * o + 2] = k ? 30 : 26; }
-    d[4 * o + 3] = 255;
+  const k = 255 / (max - min || 1);
+  // Covered parts of the plate: dark brown stripes.  (One 32-bit write per pixel: ABGR.)
+  const tape = [0xff1e2646, 0xff1a1e34];
+  for (let j = 0, o = 0; j < N; j++) for (let i = 0; i < N; i++, o++) {
+    if (m[o] > 0) { const g = (k * (H[o] - min)) & 255; px[o] = 0xff000000 | (g << 16) | (g << 8) | g; }
+    else px[o] = tape[((i + j) & 7) < 4 ? 0 : 1];
   }
   const z = state.zoomH, { ctx, width, height } = blit($('#holo'), z, false);
   if (state.window) {
@@ -356,10 +372,10 @@ function dirToCanvas(dx, dy, zoom, w) {
 }
 
 function drawSpec() {
-  const { re, im } = W.S, mag = new Float32Array(N * N);
-  for (let o = 0; o < N * N; o++) mag[o] = Math.hypot(re[o], im[o]);
+  const { re, im } = W.S, m2 = new Float32Array(N * N);
+  for (let o = 0; o < N * N; o++) m2[o] = re[o] * re[o] + im[o] * im[o];
   // Bright enough to show the islands, which are far fainter than the middle.
-  const R = Math.max(percentile(mag, 0.95), 1e-6 * mag[HN * N + HN]) * 10 ** -state.brightS;
+  const R = Math.sqrt(Math.max(percentile(m2, 0.95), 1e-12 * m2[HN * N + HN])) * 10 ** -state.brightS;
   colorize(re, im, offImg.data, R, 'magnitude');
   const z = state.zoomS, { ctx, width, height } = blit($('#spec'), z, false);
   if (islands.image) {
@@ -531,10 +547,12 @@ function drawSide() {
     const x = g.X(-state.picZ);
     ctx.fillStyle = c.ink; ctx.fillRect(x - 2, g.Y(state.picSize / 2), 4, g.Y(-state.picSize / 2) - g.Y(state.picSize / 2));
   }
-  // Where the images form (when lit): the image solid, the twin dashed.
+  // Where the images form (when lit): solid the one this light is meant to make (the virtual
+  // image, or with the conjugate beam the real one), dashed the other.
   ctx.lineWidth = 1.5; ctx.strokeStyle = cssRGB(light2, 1);
+  const conj = state.relight === 'conj';
   for (const im of imageList()) {
-    for (const [q, dash] of [[im.image, []], [im.twin, [3, 3]]]) {
+    for (const [q, dash] of [[im.image, conj ? [3, 3] : []], [im.twin, conj ? [] : [3, 3]]]) {
       if (!Number.isFinite(q.R)) continue;
       const x = g.X(-q.R), y = g.Y(q.y);
       if (x < g.ml || x > width - g.mr || y < g.mt || y > height - g.mb) continue;
@@ -736,8 +754,8 @@ holoCanvas.addEventListener('pointerdown', (e) => {
   const q = platePixel(e);
   holoDrag = { tool: state.tool, last: q };
   if (state.tool === 'window') { state.window = true; windowToggle.on = true; moveWindow(q); }
-  else if (state.tool === 'erase') { paint(W.mask, W.junk, N, q.i, q.j, { shape: 'round', size: state.brush }, 0, 0); maskChanged(); }
-  else if (state.tool === 'piece') { pieceDrag = { cx: q.i, cy: q.j, r: 0, copy: W.mask.slice() }; applyPiece(0); }
+  else if (state.tool === 'erase') { paint(W.mask, W.junk, N, q.i, q.j, { shape: 'round', size: state.brush }, 0, 0); state.cut = 'custom'; maskChanged(); }
+  else if (state.tool === 'piece') { pieceDrag = { cx: q.i, cy: q.j, r: 0, copy: W.mask.slice(), fresh: state.cut === '' }; applyPiece(0); }
   e.preventDefault();
 });
 holoCanvas.addEventListener('pointermove', (e) => {
@@ -755,17 +773,42 @@ function moveWindow(q) {
   const lim = plateL() / 2;
   state.win.x = Math.max(-lim, Math.min(lim, (q.fi - HN) * state.pitch));
   state.win.y = Math.max(-lim, Math.min(lim, (HN - q.fj) * state.pitch));
-  stale.holo = true; changed();
+  state.sweepWindow = false; sweepWindowToggle.on = false;
+  syncWindow(); stale.holo = true; changed();
+}
+function syncWindow() {
+  const lim = +(plateL() / 2 / MM).toFixed(3);
+  winX.setRange(-lim, lim); winY.setRange(-lim, lim);
+  winX.value = +(state.win.x / MM).toFixed(3); winY.value = +(state.win.y / MM).toFixed(3);
+  windowToggle.on = state.window; windowSlider.value = +((2 * state.win.r) / MM).toFixed(3);
+  sweepWindowToggle.on = state.sweepWindow;
 }
 function applyPiece(r) {
   W.mask.set(pieceDrag.copy);
   maskOut(W.mask, W.junk, N, pieceDrag.cx, pieceDrag.cy, r, 'square', 'inside');
   pieceDrag.r = r;
+  // Kept in the URL if it is the only cut.
+  state.cut = pieceDrag.fresh ? `piece,${pieceDrag.cx},${pieceDrag.cy},${Math.round(r * 10) / 10}` : 'custom';
   maskChanged();
 }
-function maskChanged() { maskVersion++; stale.holo = true; schedule(); }
-function uncover() { W.mask.fill(1); maskChanged(); }
-function coverHalf() { for (let j = 0; j < N; j++) for (let i = 0; i < HN; i++) W.mask[j * N + i] = 0; maskChanged(); }
+function maskChanged() { maskVersion++; stale.holo = true; changed(); }
+function uncover() { W.mask.fill(1); state.cut = ''; maskChanged(); }
+function coverHalf() {
+  for (let j = 0; j < N; j++) for (let i = 0; i < HN; i++) W.mask[j * N + i] = 0;
+  state.cut = state.cut === '' || state.cut === 'half' ? 'half' : 'custom';
+  maskChanged();
+}
+/** Put back a cut described in the URL: 'half', or 'piece,cx,cy,r' (pixels). */
+function restoreCut(desc) {
+  W.mask.fill(1);
+  const a = (desc || '').split(',');
+  if (a[0] === 'half') coverHalf();
+  else if (a[0] === 'piece' && a.length === 4 && a.slice(1).every((v) => Number.isFinite(+v))) {
+    pieceDrag = { cx: +a[1], cy: +a[2], copy: W.mask.slice(), fresh: true };
+    applyPiece(+a[3]);
+    pieceDrag = null;
+  }
+}
 
 // --------------------------------------------------------------------------- controls
 
@@ -889,11 +932,15 @@ $('#tool-box').append(toolSeg);
 const windowToggle = toggle('Window on', state.window, (on) => { state.window = on; if (!on) { state.sweepWindow = false; sweepWindowToggle.on = false; } stale.holo = true; changed(); }, 'Look through a round window in the plate instead of the whole plate');
 const windowSlider = slider({ label: 'width (mm)', min: 0.05, max: 1.28, step: 0.01, value: 0.4, title: 'The diameter of the window',
   onInput: (v) => { state.win.r = (v * MM) / 2; state.window = true; windowToggle.on = true; stale.holo = true; changed(); } });
-const sweepWindowToggle = toggle('Sweep', false, (on) => { state.sweepWindow = on; if (on) { state.window = true; windowToggle.on = true; t0 = performance.now(); } changed(); }, 'Move the window from side to side');
+const winX = slider({ label: 'x (mm)', min: -0.64, max: 0.64, step: 0.001, value: 0, title: 'Where the window is on the plate, sideways',
+  onInput: (v) => { state.win.x = v * MM; state.window = true; windowToggle.on = true; stale.holo = true; changed(); } });
+const winY = slider({ label: 'y (mm)', min: -0.64, max: 0.64, step: 0.001, value: 0, title: 'Where the window is on the plate, up and down',
+  onInput: (v) => { state.win.y = v * MM; state.window = true; windowToggle.on = true; state.sweepWindow = false; sweepWindowToggle.on = false; stale.holo = true; changed(); } });
+const sweepWindowToggle = toggle('Sweep', false, (on) => { state.sweepWindow = on; if (on) { state.window = true; windowToggle.on = true; t0 = performance.now(); } changed(); }, 'Move the window up and down the plate');
 const brushSlider = slider({ label: 'brush (px)', min: 2, max: 80, step: 1, value: 16, onInput: (v) => { state.brush = Math.round(v); } });
 const uncoverButton = () => el('button', { type: 'button', title: 'Take every cover off the plate', onclick: uncover }, 'Uncover all');
 const toolOptions = {
-  window: el('div', { class: 'stack' }, el('div', { class: 'row' }, windowToggle, sweepWindowToggle), windowSlider),
+  window: el('div', { class: 'stack' }, el('div', { class: 'row' }, windowToggle, sweepWindowToggle), windowSlider, winX, winY),
   erase: el('div', { class: 'stack' }, brushSlider, el('div', { class: 'row' }, uncoverButton())),
   piece: el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Drag out a square from its centre.'),
     el('div', { class: 'row' }, el('button', { type: 'button', title: 'Cover the left half of the plate', onclick: coverHalf }, 'Cover half'), uncoverButton())),
@@ -946,8 +993,7 @@ function jump(which) {
 function syncControls() {
   showObject(); syncPoint(); syncPicture(); showRef(); syncRef();
   relightSeg.value = state.relight; syncLambda2(); syncCamera(); showTool();
-  windowToggle.on = state.window; windowSlider.value = +((2 * state.win.r) / MM).toFixed(3); brushSlider.value = state.brush;
-  sweepWindowToggle.on = state.sweepWindow; sweepFocusToggle.on = state.sweepFocus;
+  syncWindow(); brushSlider.value = state.brush; sweepFocusToggle.on = state.sweepFocus;
   zoomHolo.value = state.zoomH; zoomSpec.value = state.zoomS; zoomRecon.value = state.zoomR;
   specBright.value = state.brightS; reconBright.value = state.brightR;
   focusSlider.value = +(state.focus / MM).toFixed(2);
@@ -978,6 +1024,7 @@ function updateHash() {
     win: s.window ? [r4(s.win.x), r4(s.win.y), r4(s.win.r)].join(',') : undefined,
     lam: Math.round(s.lambda * 1000), pitch: s.pitch, ratio: s.ratio, bits: s.bits || undefined,
     zoom: [s.zoomH, s.zoomS, s.zoomR].join(','),
+    cut: s.cut && s.cut !== 'custom' ? s.cut : undefined,
   });
 }
 function readState(h) {
@@ -999,6 +1046,7 @@ function readState(h) {
   s.lambda = num(h.lam, 633) / 1000; s.pitch = num(h.pitch, 5); s.ratio = num(h.ratio, 0.3); s.bits = Math.round(num(h.bits, 0));
   if (h.lam2) { s.lambda2 = num(h.lam2, 633) / 1000; s.sameColour = false; } else s.lambda2 = s.lambda;
   s.focus = num(h.d, s.focus / MM) * MM;
+  if (typeof h.cut === 'string') s.cut = h.cut;
   if (h.zoom) { const [a, b, c] = nums(h.zoom); if ([1, 2, 4, 8].includes(a)) s.zoomH = a; if ([1, 2, 4].includes(b)) s.zoomS = b; if ([1, 2, 4].includes(c)) s.zoomR = c; }
   if (h.win) { const [x, y, r] = nums(h.win); if ([x, y, r].every(Number.isFinite) && r > 0) { s.window = true; s.win = { x: x * MM, y: y * MM, r: r * MM }; } }
   return s;
@@ -1008,7 +1056,7 @@ function readState(h) {
 
 function apply(s) {
   state = { ...DEFAULTS(), ...s };
-  W.mask.fill(1); maskVersion++;
+  restoreCut(state.cut); maskVersion++;
   syncControls(); fitScene(); t0 = performance.now();
   stale.holo = stale.spec = stale.recon = true;
   changed();
@@ -1021,7 +1069,7 @@ const setups = {
   offaxis: () => apply({ object: 'picture', picture: 'F', picZ: 120000, picSize: 2000, diffuser: true, ...PLANE(0.4), ratio: 0.5, focus: 120000, zoomR: 1 }),
   islands: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), ratio: 0.6, focus: 150000, zoomR: 1 }),
   cut: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), focus: 150000, tool: 'piece', zoomR: 2 }),
-  parallax: () => apply({ points: [P(0, 0, 40), P(0, 0, 60), P(0, 0, 100)], sel: 1, ...PLANE(2.3), window: true, win: { x: 0, y: 0, r: 150 }, sweepWindow: true, focus: 60000, zoomR: 4 }),
+  parallax: () => apply({ points: [P(0, 0, 40), P(0, 0, 60), P(0, 0, 100)], sel: 1, ...PLANE(2.3), window: true, win: { x: 0, y: 0, r: 150 }, sweepWindow: true, focus: 60000, zoomH: 1, zoomR: 4 }),
   depth: () => apply({ points: [P(-0.4, 0.3, 40), P(0.35, -0.1, 70), P(0, -0.45, 120)], sel: 1, ...PLANE(2.1), focus: 70000, sweepFocus: true, zoomR: 4 }),
   wavelength: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), sameColour: false, lambda2: 0.532, focus: 150000, zoomR: 2 }),
   conjugate: () => apply({ points: [P(-0.3, 0.25, 50), P(0.3, -0.2, 90)], sel: 0, ...PLANE(2.3), relight: 'conj', focus: -50000, zoomR: 4 }),
@@ -1034,12 +1082,25 @@ drawer($('#help'), $('#help-button'), setups);
 
 // ------------------------------------------------------------------------------- start
 
-const hash = readHash();
-if (setups[hash.setup]) setups[hash.setup]();
-else apply(readState(hash));
+function fromHash() {
+  const hash = readHash();
+  if (setups[hash.setup]) setups[hash.setup]();
+  else apply(readState(hash));
+}
+fromHash();
+// A link to another set-up on this page (#setup=...) is followed without a reload.  (The page's
+// own updates of the hash use history.replaceState, which does not fire this.)
+window.addEventListener('hashchange', fromHash);
 
+// For the tests (tools/cdp.py) and for curious students with the console open.
+const fraction = (cv, x, y) => { const r = cv.getBoundingClientRect(); return [x / r.width, y / r.height]; };
 window.__app = {
   get state() { return state; }, setups, W, islands, apply, setFocus, uncover, coverHalf, maskChanged, compute,
-  timing() { const t = performance.now(); keys.O = keys.H = keys.E = ''; pointCache.delete(state.points[0]); compute(); return performance.now() - t; },
+  /** Where point k is drawn, as fractions of the side and front canvases (for dragging it). */
+  sidePoint(k) { const r = sideCanvas.getBoundingClientRect(), g = sideGeom(r.width, r.height), pt = state.points[k]; return fraction(sideCanvas, g.X(-pt.z), g.Y(pt.y)); },
+  frontPoint(k) { const r = frontCanvas.getBoundingClientRect(), g = frontGeom(r.width, r.height), pt = state.points[k]; return fraction(frontCanvas, g.X(pt.x), g.Y(pt.y)); },
+  /** Recompute and redraw what has changed, now, as a frame does; returns the time it took (ms). */
+  redraw() { const t = performance.now(); render(); return performance.now() - t; },
+  verdict: () => $('#verdict').textContent,
   ready: true,
 };
