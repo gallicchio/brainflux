@@ -11,6 +11,7 @@ BrainFlux Java applets of 2001-2007 as plain web pages.
 | [Scattering in 2D](schrodinger2d/) | Wave packets meet disks, wells, slits, crystals or a typed V(x, y); dσ/dθ measured on a detector circle against Born, partial waves and the optical theorem. |
 | [Plane waves](planewave/) | Drag the wavevector of exp(i(k·r − ωt)); the four sign conventions; standing waves, fringes, beats; phase and group velocity for light, Schrödinger, water and relativistic dispersion. |
 | [Diffraction](diffraction/) | Paint an aperture; slide the screen from the near field to the far field; Talbot carpets, zone plates, lenses, white light (the old LightPropagation idea, finished). |
+| [Fourier series you can hear](fourier/) | Draw a period or drag the harmonics, and listen (Web Audio); Gibbs, phase deafness, the missing fundamental (the old SoundFourier idea, finished). |
 
 Each demo opens already doing something worth watching, has preset buttons beside every text
 box, a slider (with a typed value) for every number, and a drawer of guided experiments that set
@@ -50,6 +51,7 @@ browsers refuse to load JavaScript modules from `file://` URLs.)
     python3 tests/ui/schrodinger2d.py
     python3 tests/ui/planewave.py
     python3 tests/ui/diffraction.py
+    python3 tests/ui/fourier.py
 
 `tools/run_page.py` serves the repository and reads back the report the test page posts;
 `tools/cdp.py` drives a page through the Chrome DevTools protocol (standard-library Python

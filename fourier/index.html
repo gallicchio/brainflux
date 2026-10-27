@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fourier Series · BrainFlux</title>
+<meta name="description" content="Draw a wave or shape its harmonics, and hear it.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="fourier.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Fourier series you can hear</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="fs">
+  <section class="plots">
+    <div class="panel-head"><span class="label">One period of the wave</span><span class="small muted" id="wave-note">draw on it</span></div>
+    <div class="plot-wrap wave"><canvas id="wave" tabindex="0" aria-label="One period of the wave: draw on it"></canvas></div>
+    <div class="panel-head"><span class="label">Its harmonics</span><span class="small muted">height: amplitude; colour: phase; drag the bars</span></div>
+    <div class="plot-wrap spec"><canvas id="spectrum" tabindex="0" aria-label="The harmonics: drag a bar to change its amplitude"></canvas></div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="row">
+        <button type="button" id="play" class="primary" aria-pressed="false" title="Start or stop the sound">Play sound</button>
+      </div>
+      <div id="sound-box" class="stack"></div>
+      <div class="small muted" id="audio-note"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Start from</div>
+      <div id="presets" class="button-grid"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Harmonics</div>
+      <div id="terms-box"></div>
+      <div class="row">
+        <button type="button" id="scramble" title="Give every harmonic a random phase, keeping its amplitude">Scramble phases</button>
+        <button type="button" id="zero-phase" title="Set every harmonic's phase to zero (all cosines)">Align phases</button>
+      </div>
+      <div class="row">
+        <button type="button" id="lowpass" title="Halve the number of harmonics: a low-pass filter">Remove the top half</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>Any periodic wave of period $T$ is a sum of sines and cosines at whole multiples of the
+  fundamental frequency $f_1=1/T$:
+  $$f(t)=\sum_{n=1}^{N}A_n\cos(2\pi nf_1t-\varphi_n).$$
+  The top plot is one period; the bars below are the harmonics, their height the amplitude
+  $A_n$ and their colour the phase $\varphi_n$ (the colour wheel of the other demos).  Draw on the
+  wave and the bars follow; drag the bars and the wave follows.  Press <em>Play sound</em> to
+  hear it at $f_1$ (use headphones, at a low volume).</p>
+
+  <article class="exp" data-setup="square">
+    <h3>1. Building a square wave</h3>
+    <p>A square wave has only odd harmonics, with amplitudes $4/\pi n$.  Lower the number of
+    terms to 1: a pure tone.  Raise it one term at a time: the corners sharpen and the sound
+    gets brighter and buzzier.  The bump next to each jump never goes away: it shrinks in width
+    but stays 9% high (the Gibbs phenomenon).</p>
+  </article>
+
+  <article class="exp" data-setup="phases">
+    <h3>2. The ear doesn't hear phase</h3>
+    <p>Press <em>Scramble phases</em>, several times.  The wave changes beyond recognition, but
+    the sound hardly changes at all: the ear hears the amplitudes of the harmonics, not how they
+    line up (Ohm's acoustic law).  Contrast the 2D Fourier demo, where the phases carry the
+    picture.</p>
+  </article>
+
+  <article class="exp" data-setup="saw">
+    <h3>3. Brightness is the high harmonics</h3>
+    <p>A sawtooth has every harmonic, falling as $1/n$; a triangle only the odd ones, falling as
+    $1/n^2$.  The sawtooth sounds bright, the triangle mellow, close to a pure tone.  Press
+    <em>Remove the top half</em> (a low-pass filter) and listen to the sound grow duller.</p>
+  </article>
+
+  <article class="exp" data-setup="draw">
+    <h3>4. Draw your own</h3>
+    <p>Draw a period of any shape you like on the top plot and listen to it.  Smooth shapes have
+    few harmonics and sound pure; jumps and corners add high harmonics and sound harsh.  (A jump
+    makes the amplitudes fall as $1/n$, a corner as $1/n^2$, a smooth curve faster.)</p>
+  </article>
+
+  <article class="exp" data-setup="pulse">
+    <h3>5. A train of pulses</h3>
+    <p>Narrow pulses have harmonics of nearly equal strength up to about $1/\text{width}$: the
+    narrower the pulse, the wider its spectrum (the uncertainty principle again).  The
+    envelope of the bars is a sinc.</p>
+  </article>
+
+  <article class="exp" data-setup="missing">
+    <h3>6. The missing fundamental</h3>
+    <p>Harmonics 2 to 6 at $f_1=150$ Hz, and no harmonic 1 at all.  Yet the pitch you hear is
+    still 150 Hz: the ear works out the fundamental from the spacing of the harmonics.  (Small
+    loudspeakers rely on this: they can't play the bass notes, but you hear them.)</p>
+  </article>
+
+  <p class="small muted">The idea of the BrainFlux SoundFourier applet (2002), finished in 2026.
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

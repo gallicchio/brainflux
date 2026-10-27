@@ -11,7 +11,7 @@
 <script type="module">
   import { run } from './harness.js';
   // Each module registers its tests on import.  ?only=name runs one file.
-  const files = ['fft', 'expr', 'bessel', 'schrodinger1d', 'action', 'schrodinger2d', 'diffraction'];
+  const files = ['fft', 'expr', 'mathml', 'bessel', 'schrodinger1d', 'action', 'schrodinger2d', 'diffraction'];
   const only = new URLSearchParams(location.search).get('only');
   for (const f of files) if (!only || only === f) await import(`./${f}.test.js`);
   const failed = await run(document.getElementById('results'));
