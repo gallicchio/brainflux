@@ -62,3 +62,5 @@ details .stack { margin-top: 6px; }
   #cell-k { order: 5; }
   #cell-extra { order: 6; }
 }
+/* Pause, Play and Go on take the same room, so that the buttons beside it stay put. */
+#play { min-width: 5em; }
