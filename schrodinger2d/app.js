@@ -5,7 +5,7 @@ import { fft2Centered } from '../lib/fft.js';
 import { colorize, autoBrightness } from '../lib/complexcolor.js';
 import { parse } from '../lib/expr.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
+import { fitCanvas, Frame, themeColors, niceTicks } from '../lib/plot.js';
 
 // The targets: typed potentials in x, y, r, theta, with their parameters.
 const TARGETS = [
@@ -86,24 +86,27 @@ function restart() {
   sim.setPotential(prep.V);
   sim.absorbSpeed = state.k0 + 4 / state.sx;
   sim.h = 0;
-  // The packet starts clear of the target (where |V| > E/20, and at least x < -2) and of the
-  // absorbing border; a packet too long for the room between them is shortened to fit.
+  // The packet starts clear of the target (where |V| is more than a twentieth of E or of its
+  // largest value, and at least x < -2.5) and of the absorbing border; a packet too long for
+  // the room between them is shortened to fit.
   const n = state.n, lay = sim.layer;
-  let left = -2;
+  let left = -2.5, vmax = 0;
+  for (let i = 0; i < prep.V.length; i++) vmax = Math.max(vmax, Math.abs(prep.V[i]));
+  const edge = Math.max(state.k0 ** 2 / 2, vmax) / 20;
   for (let j = lay; j < n - lay; j++) {
-    for (let i = lay; i < n - lay && sim.coord[i] < left; i++) if (Math.abs(prep.V[j * n + i]) > state.k0 ** 2 / 40) { left = sim.coord[i]; break; }
+    for (let i = lay; i < n - lay && sim.coord[i] < left; i++) if (Math.abs(prep.V[j * n + i]) > edge) { left = sim.coord[i]; break; }
   }
-  const room = Math.max(sim.inner / 3, sim.inner + left - 1);
+  const room = Math.max(sim.inner / 3, sim.inner + left - 0.5);
   // A target wider than the beam (beyond two widths of it, on either side of its centre) is
   // only partly lit: its totals depend on the beam, not on the target alone.
   wideTarget = false;
   for (let j = lay; j < n - lay && !wideTarget; j++) {
     if (Math.abs(sim.coord[j] - state.b) < 2 * state.sy) continue;
-    for (let i = lay; i < n - lay; i++) if (Math.abs(prep.V[j * n + i]) > state.k0 ** 2 / 40) { wideTarget = true; break; }
+    for (let i = lay; i < n - lay; i++) if (Math.abs(prep.V[j * n + i]) > edge) { wideTarget = true; break; }
   }
   if (6.6 * state.sx > room) {
     state.sx = Math.max(0.5, room / 6.6); packetSliders.sx.value = +state.sx.toFixed(2);
-    warning = warning || 'The packet was shortened to fit between the border and the target.';
+    warning = warning || 'The packet was shortened to fit the box.';
   }
   const x0 = -(sim.inner - 3.6 * state.sx);
   packet = new Packet({ x0, y0: state.b, sx: state.sx, sy: state.sy, k0: state.k0 });
@@ -349,7 +352,8 @@ function drawMomentum() {
   ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(width, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, height); ctx.stroke();
   // The crystal's reciprocal lattice, G = (2 pi / c)(n1, n2) turned with the crystal, drawn from
   // the incident spot: k0 + G.  A wave k0 + G is allowed where it is also on the energy circle:
-  // a Bragg beam (Ewald's construction).  Filled: within a crystal's width of the circle.
+  // a Bragg beam (Ewald's construction).  Filled: within 2 pi / (the crystal's width, 7c) of the
+  // circle, as sharp as so small a crystal can tell.
   const lat = crystalLattice();
   if (lat) {
     const g = (2 * Math.PI) / lat.c, ca = Math.cos(lat.a), sa = Math.sin(lat.a), lim = half * dk, near = Math.PI / (3.5 * lat.c);
@@ -452,6 +456,15 @@ function drawTransmitted(f, c) {
   }
   ctx.restore();
   f.axes({ xlabel: 'θ (degrees)', ylabel: 'dσ/dθ, relative' });
+  // The ends of the range, the directions along the wall (unless a tick is labelled near them).
+  const ticks = niceTicks(f.x0, f.x1, Math.max(2, Math.round(f.w / 80)));
+  ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'top';
+  for (const [d, align] of [[-90, 'left'], [90, 'right']]) {
+    if (ticks.some((v) => Math.abs(v - state.turn - d) < 25)) continue;
+    ctx.textAlign = align;
+    ctx.fillText(String(Math.round(state.turn + d)).replace('-', '−'), f.X(state.turn + d), f.bottom + 6);
+  }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
 function drawWaves() {
@@ -564,7 +577,8 @@ $('#speed-box').append(speedSlider);
 
 const targetButtons = {};
 for (const t of TARGETS) {
-  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => chooseTarget(t) }, t.label);
+  // A new target starts square to the beam.
+  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => { state.turn = 0; turnSlider.value = 0; chooseTarget(t); } }, t.label);
   $('#targets').append(b);
   targetButtons[t.id] = b;
 }
