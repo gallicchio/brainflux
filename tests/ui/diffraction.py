@@ -13,6 +13,20 @@ def set_z(b, mm):
     b.eval(f"(() => {{ const box = document.querySelector('#z-box input[type=number]'); box.value = {mm}; box.dispatchEvent(new Event('change')); }})()")
     b.sleep(0.4)
 
+# What the screen shows, from the canvas: the brightest pixel within 5 um of the middle, and the
+# 99th percentile and the brightest beyond 30 um (leaving out the scale bar at the bottom).
+SPOT = """(() => {
+  const cv = document.querySelector('#field'), w = cv.width, h = cv.height, d = cv.getContext('2d').getImageData(0, 0, w, h).data;
+  const px = w / (256 * __app.screenPitch() / __app.state.zoom);   // canvas pixels per um
+  let peak = 0; const out = [];
+  for (let y = 0; y < h - 30; y++) for (let x = 0; x < w; x++) {
+    const o = 4 * (y * w + x), v = Math.max(d[o], d[o + 1], d[o + 2]), r = Math.hypot(x + 0.5 - w / 2, y + 0.5 - h / 2) / px;
+    if (r < 5) peak = Math.max(peak, v); else if (r > 30) out.push(v);
+  }
+  out.sort((a, b) => a - b);
+  return [peak, out[Math.floor(0.99 * out.length)], out[out.length - 1]];
+})()"""
+
 # The middle row of the field as drawn: [intensity], pitch (um), from __app.fields[0].
 ROW = "(() => { const f = __app.fields[0], N = 512, r = []; for (let i = 128; i < 384; i++) { const o = 256 * N + i; r.push(f.re[o] ** 2 + f.im[o] ** 2); } return [r, f.pitch]; })()"
 
@@ -71,6 +85,18 @@ with Browser('diffraction/index.html', size=(1300, 1000)) as b:
         for s in (0.97, 1, 1.03):
             set_z(b, 50 / m * s); I.append(b.eval(centre))
         check(I[1] > I[0] and I[1] > I[2], f'zone plate focus at f/{m} = {50 / m:.3g} mm: centre {I[1]:.0f}, 3% nearer {I[0]:.0f}, 3% farther {I[2]:.0f}')
+    # As set up (z = f, linear scale, zoomed 4x) the focus is a bright spot on a dark screen;
+    # so for the lens; and at f/3 and f/5 the middle is still much the brightest.
+    b.eval("__app.setups.zone()"); b.sleep(0.8)
+    pk, p99, mx = b.eval(SPOT)
+    check(pk > 200 and mx < pk / 20, f'zone plate as set up, z = f: the focus {pk}/255, nothing beyond 30 um brighter than {mx}/255')
+    for zz, factor in ((50 / 3, 20), (10, 5)):
+        set_z(b, zz); pk, p99, mx = b.eval(SPOT)
+        check(pk > 200 and mx < pk / factor, f'z = {zz:.3g} mm: the focus {pk}/255, beyond 30 um at most {mx}/255')
+    b.eval("__app.setups.lens()"); b.sleep(0.8)
+    pk, p99, mx = b.eval(SPOT)
+    check(pk > 200 and mx < pk / 20, f'lens as set up, z = f: the focus {pk}/255, nothing beyond 30 um brighter than {mx}/255')
+    b.eval("__app.setups.zone()"); b.sleep(0.8)
     set_z(b, 50)
     top = b.eval("(() => { const f = __app.fields[0], N = 512; let m = 0, at = 0; for (let j = 128; j < 384; j++) for (let i = 128; i < 384; i++) { const o = j * N + i, I = f.re[o] ** 2 + f.im[o] ** 2; if (I > m) { m = I; at = [i, j]; } } return at; })()")
     check(top == [256, 256], f'at z = f the brightest point is the focus, in the middle ({top})')
@@ -85,6 +111,8 @@ with Browser('diffraction/index.html', size=(1300, 1000)) as b:
     # A sweep of the screen for the slit, the zone plate and the hole, for looking at.
     for setup, zs in (('slit', (1, 10, 60, 200, 1000, 10000)), ('zone', (10, 16.7, 50, 300, 2000, 10000)), ('double', (5, 80, 300, 10000))):
         b.eval(f'__app.setups.{setup}()'); b.sleep(0.5)
+        # The whole screen, on the compressed scale.
+        b.eval("document.querySelectorAll('#scale-box .seg').forEach((s) => s.querySelector('button').click())"); b.sleep(0.3)
         for zz in zs:
             set_z(b, zz); b.sleep(0.8)
             b.screenshot(f'build/dif-sweep-{setup}-{zz:g}mm.png', selector='main')
