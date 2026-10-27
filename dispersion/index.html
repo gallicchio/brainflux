@@ -119,7 +119,8 @@
     read-out) grows by $\sqrt2$ in 1 mm, doubles in 1.73 mm and is 5.1 times its start after
     5 mm, just as $\sqrt{1+(z/L)^2}$ with $L=T_0^2/\beta_2=1.0$ mm says, for
     $\beta_2=d^2k/d\omega^2=36\ \mathrm{fs^2/mm}$.  This is why femtosecond lasers need prism or
-    grating compressors.  Meanwhile the whole pulse is 7.8 ps behind light in vacuum.</p>
+    grating compressors.  Meanwhile the whole pulse is 7.8 ps behind light in vacuum.  Make the
+    pulse 20 fs long: $L$ grows as $T^2$, and after 5 mm it is only 1.6 times longer.</p>
   </article>
 
   <article class="exp" data-setup="glass">
@@ -150,18 +151,20 @@
     100 MHz) and satellite signals go straight through.  This is the idealised sharp surface
     at normal incidence; the real ionosphere is gradual, and reflects each frequency where
     $f_p$ of the local density reaches it.  At a slant it reflects frequencies up to
-    $f_p/\cos\theta$, which is how shortwave goes round the world.</p>
+    $f_p/\cos\theta$, which is how shortwave goes round the world.  Drag the $\omega_p$ handle: the
+    density, and with it $f_p$, changes through the day and with the sunspot cycle.</p>
   </article>
 
   <article class="exp" data-setup="reststrahlen">
     <h3>7. Reststrahlen: a mirror between $\omega_\mathrm{TO}$ and $\omega_\mathrm{LO}$</h3>
     <p>Rock salt in the infrared (frequencies in THz).  The ions vibrate against each other at
-    the transverse optical frequency $\omega_\mathrm{TO}=4.9$ THz; the electrons respond
+    the transverse optical frequency $\omega_\mathrm{TO}/2\pi=4.9$ THz; the electrons respond
     instantly at these frequencies and add the background $\varepsilon_\infty=2.34$.  Between
     $\omega_\mathrm{TO}$ and the zero of $\varepsilon'$ at
-    $\omega_\mathrm{LO}=\omega_\mathrm{TO}\sqrt{\varepsilon(0)/\varepsilon_\infty}=7.8$ THz (Lyddane, Sachs
-    and Teller) $\varepsilon'<0$ and the crystal reflects almost everything.  Repeated
-    reflections off such crystals filter out all but these "residual rays" (Rubens, 1897).</p>
+    $\omega_\mathrm{LO}=\omega_\mathrm{TO}\sqrt{\varepsilon(0)/\varepsilon_\infty}$, at 7.8 THz (Lyddane, Sachs
+    and Teller) $\varepsilon'<0$ and the crystal reflects almost everything: 94% at 6.2 THz.
+    Repeated reflections off such crystals filter out all but these "residual rays" (Rubens,
+    1897).  Widen $\gamma$ to 0.5 THz: damping rounds the plateau, and $R$ there falls to 75%.</p>
   </article>
 
   <article class="exp" data-setup="draw">
@@ -206,7 +209,8 @@
     But it is mostly absorbed: by $z=10$ the peak is 18% as high (the curve is scaled up to be
     seen).  Nothing is going faster than light: the medium absorbs the back of the pulse more
     than its front, and the front was already there, in the smooth Gaussian, long before the
-    peak.</p>
+    peak.  Make the pulse short ($T=10$): its spectrum is now as wide as the line, the pulse is
+    distorted, and its peak is only 1.6 early at $z=5$.</p>
   </article>
 
   <article class="exp" data-setup="front">

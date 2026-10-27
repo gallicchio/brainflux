@@ -366,7 +366,7 @@ respCanvas.addEventListener('pointerdown', (e) => {
   for (const h of handles) { const d = Math.hypot(h.x - px, h.y - py); if (d < h.r + slack && d < bd) { bd = d; best = h; } }
   respCanvas.setPointerCapture(e.pointerId);
   if (best) {
-    drag = { ...best, py0: py };
+    drag = { ...best, py0: py, dx: best.x - px };
     if (best.j !== undefined) selectOsc(best.j);
     frozenRange = respRange;
   } else drag = { type: 'probe' };
@@ -403,12 +403,13 @@ function hoverCursor(px, py) {
 }
 
 function moveDrag(px, py) {
-  const f = respFrame, w = f.invX(px), y = f.invY(py), W = state.wmax;
+  // (A handle keeps the offset at which it was grabbed, so it does not jump to the pointer.)
+  const f = respFrame, w = f.invX(px + (drag.dx || 0)), y = f.invY(py), W = state.wmax;
   if (drag.type === 'probe') { state.probe = Math.max(0, Math.min(W, w)); dirty(); return; }
   if (drag.type === 'carrier') { state.pulse.w0 = clamp(w, 0.02 * W, W); syncPulseSliders(); pulseChanged(); return; }
   const o = state.oscs[drag.j];
   if (drag.type === 'free') o.wp = clamp(w, 0, 2 * W);
-  else if (drag.type === 'wl' || drag.type === 'wr') o.g = clamp(2 * Math.abs(w - o.w0), 1e-4 * W, 2 * W);
+  else if (drag.type === 'wl' || drag.type === 'wr') o.g = clamp(2 * Math.abs(f.invX(px) - o.w0), 1e-4 * W, 2 * W);
   else if (drag.type === 'peak') {
     o.w0 = clamp(w, 0.01 * W, W);
     // Up and down sets the strength; a sideways drag (within a few pixels) only moves the line.
@@ -743,11 +744,14 @@ function drawPulse() {
   // A column no sample fell in borrows from the one before (only on very wide plots).
   for (let c = 1; c < cols; c++) if (!(fmax[c] >= fmin[c])) { fmin[c] = fmin[c - 1]; fmax[c] = fmax[c - 1]; em[c] = em[c - 1]; ev[c] = ev[c - 1]; wloc[c] = wloc[c - 1]; }
   // Scale the pulse in the medium up if it is small, and say so.
+  // Below a millionth, nothing is drawn: the medium has absorbed the pulse.
   let scale = 1;
-  if (!log && mmax > 0 && mmax < 0.4 * vmax) {
+  const absorbed = !log && !(mmax > 1e-6 * vmax);
+  if (!log && !absorbed && mmax < 0.4 * vmax) {
     const want = (0.8 * vmax) / mmax, p = 10 ** Math.floor(Math.log10(want)), m = want / p;
     scale = (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p;
   }
+  if (absorbed) { scale = 0; em.fill(0); fmin.fill(0); fmax.fill(0); }
   const Y = log ? (v) => Math.log10(Math.max(v, 1e-14) / vmax) : (v) => v * scale / vmax;
   if (log) { f.y0 = -12; f.y1 = 0.5; } else { f.y0 = -1.15; f.y1 = 1.15; }
   const X = (c) => f.left + ((c + 0.5) * f.w) / cols;
@@ -810,7 +814,7 @@ function drawPulse() {
   ctx.stroke();
   // Markers: when light through vacuum arrives, the group-velocity prediction, the front, Brillouin.
   const tc = d.tc, ms = measure(d, z);
-  lastPulse = { ...ms, z, scale };
+  lastPulse = { ...ms, z, scale, absorbed };
   const at = (tt) => tt * tS;
   vline(ctx, f, at(-tc), colors.accent, [2, 3], 'z/c');
   if (at(-tc) < f.x0) {
@@ -829,6 +833,10 @@ function drawPulse() {
   const items = [{ label: log ? 'log₁₀ |E| in the medium' : 'E in the medium' + (scale !== 1 ? `  (×${fmt(scale)})` : ''), color: colors.ink, width: 1.5 },
     { label: 'the same pulse in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
   legend(ctx, f, items, f.left + 4, 2);
+  if (absorbed && z > 0) {
+    ctx.save(); ctx.font = '13px system-ui, sans-serif'; ctx.fillStyle = colors.warn; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('absorbed: less than a millionth of the field gets this far', f.left + f.w / 2, f.Y(0) - 8); ctx.restore();
+  }
   if (!log && sh === 'gauss' && f.w > 560) {
     ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = colors.ink3; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
     ctx.fillText('envelope colour: local frequency (red lower, blue higher than ω₀)', f.right - 4, f.top + 4); ctx.restore();
@@ -866,9 +874,10 @@ function fitView() {
       P.view = view; propKey = '';
       const d = pulseAt(zmax);
       let top = 0;
-      for (let n = 0; n < d.N; n++) top = Math.max(top, Math.hypot(d.mr[n], d.mi[n]));
+      for (let n = 0; n < d.N; n++) top = Math.max(top, d.mr[n] * d.mr[n] + d.mi[n] * d.mi[n]);
       let a = Infinity, b = -Infinity;
-      for (let n = 0; n < d.N; n++) if (Math.hypot(d.mr[n], d.mi[n]) > 2e-3 * top) { a = Math.min(a, d.t[n]); b = Math.max(b, d.t[n]); }
+      for (let n = 0; n < d.N; n++) if (d.mr[n] * d.mr[n] + d.mi[n] * d.mi[n] > 4e-6 * top) { a = Math.min(a, d.t[n]); b = Math.max(b, d.t[n]); }
+      if (!(b > a)) { a = view[0]; b = view[1]; } // (nothing came through)
       const w = d.t[d.N - 1] - d.t[0];
       const lo = Math.min(a, sh === 'front' ? p.tf : -1.6 * p.T, P.frame === 'group' ? -1.6 * p.T : 0), hi = Math.max(b, 1.6 * p.T);
       const touches = a < d.t[0] + 0.03 * w || b > d.t[d.N - 1] - 0.03 * w;
@@ -893,7 +902,7 @@ function readout() {
       const w = state.probe, o = optics(resp, Float64Array.of(Math.max(w, 1e-9))), ng = ngAt(w);
       const absorb = o.k[0] > 1e-12 ? ` · absorption length c/(2κω) = ${lengthStr(1 / (2 * o.k[0] * Math.max(w, 1e-9)))}` : '';
       parts.push(`At ${u.w.split(' ')[0]} = <b>${fmt(w, 4)}</b>: ε = ${fmt(o.er[0], 4)} ${o.ei[0] < 0 ? '−' : '+'} ${fmt(Math.abs(o.ei[0]), 3)}i · ñ = ${fmt(o.n[0], 4)} ${o.k[0] < 0 ? '−' : '+'} ${fmt(Math.abs(o.k[0]), 3)}i · R = ${fmt(o.R[0], 3)} · n<sub>g</sub> = ${fmt(ng, 4)}${absorb}`);
-    } else parts.push('<span class="muted">Tap or point at the plot to read off ε, ñ, R and n_g at one frequency.</span>');
+    } else parts.push('<span class="muted">Tap or point at the plot to read off ε, ñ, R and n<sub>g</sub> at one frequency.</span>');
   }
   if (state.view === 'medium') {
     const sr = sumRule(), lines = media().lines && state.units === MEDIA[state.medium].units ? media().lines : [];
@@ -921,7 +930,8 @@ function readout() {
   if (state.view === 'pulse' && lastPulse) {
     const L = lastPulse, sh = state.pulse.shape;
     let s = `z = <b>${zz(L.z)}</b> · n<sub>g</sub>(ω₀) = ${fmt(L.ng, 4)}`;
-    if (sh !== 'step') {
+    if (L.absorbed && L.z > 0) s += ' · <span class="warn">the pulse is absorbed</span>';
+    else if (sh !== 'step') {
       s += ` · after z/c, the group velocity predicts the peak at z(n<sub>g</sub> − 1)/c = <b>${tt(L.predictedVac)}</b>; it arrives at <b>${tt(L.peakVac)}</b>,` +
         ` ${fmt(L.height, 3)} as high as in vacuum, with ${fmt(L.energy * 100, 3)}% of the energy, ${fmt(L.stretch, 3)} times as long (r.m.s.)`;
     } else {
@@ -930,7 +940,11 @@ function readout() {
     }
     parts.push(s);
     if (sh !== 'gauss') parts.push(`Largest field before the front arrives (t < ${sh === 'front' ? 't_f + ' : ''}z/c): <b>${L.before > 0 ? L.before.toExponential(1) : '0'}</b> of the peak.`);
-    else if (L.z > 0 && L.ng < 1) parts.push(`<span class="warn">n<sub>g</sub> ${L.ng < 0 ? '&lt; 0' : '&lt; 1'}: the group velocity c/n<sub>g</sub> is ${L.ng < 0 ? 'negative' : 'faster than c'}.</span>`);
+    else {
+      const o = optics(resp, Float64Array.of(state.pulse.w0));
+      if (o.k[0] > 0.5 * o.n[0] && o.k[0] > 0.05) parts.push(`<span class="warn">At the carrier κ = ${fmt(o.k[0], 3)} and n = ${fmt(o.n[0], 3)}: the wave hardly propagates (it is evanescent or strongly absorbed), and the group velocity means nothing here.</span>`);
+      else if (L.z > 0 && L.ng < 1) parts.push(`<span class="warn">n<sub>g</sub> ${L.ng < 0 ? '&lt; 0' : '&lt; 1'}: the group velocity c/n<sub>g</sub> is ${L.ng < 0 ? 'negative' : 'faster than c'}.</span>`);
+    }
   }
   box.innerHTML = parts.join('<br>');
 }
@@ -1014,7 +1028,15 @@ function setView(v) {
 // Media.
 const mediaButtons = {};
 for (const [id, m] of Object.entries(MEDIA)) {
-  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => { loadMedium(id); rebuild(); } }, m.label);
+  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => {
+    const w0 = state.wmax;
+    loadMedium(id);
+    // The pulse keeps its place relative to the plotted range of frequencies.
+    const k = state.wmax / w0, P = state.pulse;
+    if (k !== 1) { P.w0 *= k; P.T /= k; P.tf /= k; P.zmax /= k; P.z /= k; syncPulseSliders(); }
+    rebuild();
+    if (state.view === 'pulse') fitView();
+  } }, m.label);
   $('#media').append(b);
   mediaButtons[id] = b;
 }
@@ -1384,11 +1406,18 @@ window.__app = {
     }
     return out;
   },
-  /** Milliseconds per frame, drawing n frames of the current view (the pulse at a new z each time). */
-  bench(n = 30) {
-    const z0 = state.pulse.z, t0 = performance.now();
-    for (let i = 0; i < n; i++) { state.pulse.z = (state.pulse.zmax * (i + 1)) / n; drawNow(); }
+  /** Milliseconds per frame of the animation (the pulse at a new z each time, and the read-out),
+   *  the best of three runs of n frames (other work on the machine only ever adds time). */
+  bench(n = 10) {
+    const z0 = state.pulse.z;
+    let best = Infinity;
+    readColors();
+    for (let run = 0; run < 3; run++) {
+      const t0 = performance.now();
+      for (let i = 0; i < n; i++) { state.pulse.z = (state.pulse.zmax * (i + 1)) / n; drawPulse(); readout(); }
+      best = Math.min(best, (performance.now() - t0) / n);
+    }
     state.pulse.z = z0;
-    return (performance.now() - t0) / n;
+    return best;
   },
 };

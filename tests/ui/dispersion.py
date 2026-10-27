@@ -98,11 +98,11 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     check(p['before'] < 1e-6, f"switched-on carrier: field before z/c {p['before']:.1e} of the peak")
     b.eval("__app.state.playing = false; __app.state.pulse.z = 10; __app.setView('pulse')"); b.sleep(0.4)
     b.screenshot('build/dsp-precursors-z10.png')
-    ms = b.eval('__app.bench(20)')
-    check(ms < 33, f"precursors: {ms:.1f} ms a frame (needs < 33 for 30 fps)")
+    ms = b.eval('__app.bench()')
+    check(ms < 33, f"precursors: {ms:.1f} ms an animation frame (needs < 33 for 30 fps)")
     run(b, 'spread')
-    ms = b.eval('__app.bench(20)')
-    check(ms < 33, f"spreading in glass: {ms:.1f} ms a frame")
+    ms = b.eval('__app.bench()')
+    check(ms < 33, f"spreading in glass: {ms:.1f} ms an animation frame")
     run(b, 'glass')
     o = b.eval('[__app.optics(1.8892).n, __app.optics(2.5506).n]')
     check(abs(o[0] - 1.4564) < 2e-4 and abs(o[1] - 1.4632) < 2e-4, f"fused silica: n(656 nm) = {o[0]:.4f}, n(486 nm) = {o[1]:.4f} (Malitson 1.4564, 1.4632)")
@@ -112,6 +112,13 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     run(b, 'metal')
     lo, hi = b.eval('[__app.optics(3).R, __app.optics(8).R]')
     check(lo > 0.98 and hi < 0.05, f"sodium: R = {lo:.3f} at 3 eV (visible), {hi:.3f} at 8 eV (ultraviolet)")
+
+    # ---- switching medium in the pulse view carries the pulse over to the new frequency scale
+    run(b, 'delay')
+    b.eval("[...document.querySelectorAll('#media button')].find(x => x.textContent === 'Ionosphere').click()"); b.sleep(0.8)
+    st = b.eval('__app.state')
+    check(st['units'] == 'MHz' and abs(st['pulse']['w0'] / st['wmax'] - 0.25) < 1e-9, f"switching to the ionosphere keeps the carrier at a quarter of the range ({st['pulse']['w0']:.2f} MHz)")
+    b.screenshot('build/dsp-switched.png')
 
     # ---- the address keeps a set-up
     run(b, 'one')
