@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves, radialWaves } from '../schrodinger2d/sim.js';
+import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves, radialWaves, fraunhofer, preparePotential2D } from '../schrodinger2d/sim.js';
 
 function setup({ n = 128, L = 64, absorb = true, V, packet }) {
   const sim = new Sim2D({ n, L, absorb });
@@ -95,4 +95,97 @@ test('the radial equation gives the hard disk\'s phase shifts, and the tall disk
   const s1 = fromPartialWaves(movie, k, [0]).sigma, s2 = fromPartialWaves(still, k, [0]).sigma;
   close(s1 / s2, 1, 0.01, 'sigma');
   return `hard disk |dS| <= ${worst.toExponential(1)}; movie vs stationary |dS| <= ${worst2.toExponential(1)}; sigma ${s1.toFixed(4)} vs ${s2.toFixed(4)}`;
+});
+
+// The probability through the detector within centre +- half (degrees), from dP/dtheta.
+function share(det, P, centre, half) {
+  let s = 0;
+  for (let j = 0; j < det.M; j++) {
+    const d = ((((det.theta[j] * 180) / Math.PI - centre) % 360) + 540) % 360 - 180;
+    if (Math.abs(d) <= half) s += (P[j] * 2 * Math.PI) / det.M;
+  }
+  return s;
+}
+
+test('the demo\'s bump, V0 = 1: a sixth of the packet scattered, and Born still close', () => {
+  const V0 = 1, a = 1, k0 = 2;
+  const { sim, det } = scatter((x, y) => V0 * Math.exp(-(x * x + y * y) / (2 * a * a)), { k0, dt: 0.05 });
+  const th = Array.from(det.theta), dth = (2 * Math.PI) / th.length;
+  const P = share(det, det.Psc, 0, 180), tot = det.totals();
+  const sBorn = bornCrossSection(sim, k0, th).reduce((s, v) => s + v * dth, 0);
+  const sExact = fromPartialWaves(radialWaves((r) => r.map((x) => V0 * Math.exp(-x * x / (2 * a * a))), k0, 24), k0, [0]).sigma;
+  const note = `scattered ${P.toFixed(3)} of the packet; sigma: flux ${tot.scattered.toFixed(3)}, exact ${sExact.toFixed(3)}, Born ${sBorn.toFixed(3)}`;
+  assert(P > 0.12, 'too little scattered to see: ' + note);
+  close(tot.scattered / sExact, 1, 0.05, 'flux (over the packet\'s energies) vs exact: ' + note);
+  assert(sBorn / sExact > 1.02 && sBorn / sExact < 1.12, 'Born a few per cent high: ' + note);
+  return note;
+});
+
+test('the flux of psi itself: a free packet goes through the far half of the detector whole', () => {
+  const { det } = scatter(null, { dt: 0.05 });
+  const sy = 6, through = share(det, det.Ptot, 0, 90) / det.fluence;
+  // Per unit fluence at the centre, a Gaussian beam is sqrt(2 pi) sy wide.
+  close(through / (Math.sqrt(2 * Math.PI) * sy), 1, 0.03, `through ${through.toFixed(3)}`);
+  return `${through.toFixed(3)} against sqrt(2 pi) sy = ${(Math.sqrt(2 * Math.PI) * sy).toFixed(3)}`;
+});
+
+test('Fraunhofer: the double slit over every direction of the half circle', () => {
+  const k = 2, a = 1.2, d = 5, dy = 0.002, ys = [];
+  for (let y = -d / 2 - a / 2 + dy / 2; y < d / 2 + a / 2; y += dy) if (Math.abs(Math.abs(y) - d / 2) < a / 2) ys.push(y);
+  const ones = ys.map(() => 1), zeros = ys.map(() => 0);
+  const deg = Array.from({ length: 3601 }, (_, i) => -180 + i / 10), th = deg.map((t) => (t * Math.PI) / 180);
+  const s = fraunhofer(k, ys, ones, zeros, dy, th);
+  // Against the formula: (k/2pi) cos^2 [2 a cos(kd sin/2) sinc(ka sin/2)]^2.
+  let worst = 0;
+  for (let i = 0; i < th.length; i++) {
+    const c = Math.cos(th[i]), u = k * Math.sin(th[i]);
+    const f = c > 0 ? (k / (2 * Math.PI)) * c * c * (2 * a * Math.cos((u * d) / 2) * (u ? Math.sin((u * a) / 2) / ((u * a) / 2) : 1)) ** 2 : 0;
+    worst = Math.max(worst, Math.abs(s[i] - f));
+  }
+  assert(worst < 1e-4, `off the formula by ${worst}`);
+  // Every direction from -90 to 90 degrees, and nothing behind the wall.
+  const at = (t) => s[Math.round((t + 180) * 10)];
+  assert(at(-89.9) > 0 && at(89.9) > 0 && at(90.1) === 0 && at(-120) === 0, 'the half circle');
+  // Dark fringes at d sin(theta) = (n + 1/2) lambda, +-18.3 and +-70.4 degrees, and a bright
+  // one between them near d sin(theta) = lambda, 38.9 degrees (the falling envelopes pull it in).
+  const lam = (2 * Math.PI) / k, asd = (x) => Math.round(Math.asin(x) * 1800 / Math.PI) / 10;
+  for (const t of [asd(lam / 2 / d), asd((3 * lam) / 2 / d)]) assert(at(t) < 2e-3 * at(0) && at(-t) < 2e-3 * at(0), `dark fringe at ${t}`);
+  const fringe = asd(lam / d);
+  let best = 30;
+  for (let t = 300; t < 500; t++) if (at(t / 10) > at(best)) best = t / 10;
+  close(best, fringe, 4, 'first bright fringe');
+  // A wide opening lets the whole beam through: per unit fluence, sqrt(2 pi) sy.
+  const sy = 6, wide = [], amp = [];
+  for (let y = -40; y < 40; y += 0.01) { wide.push(y); amp.push(Math.exp(-(y * y) / (4 * sy * sy))); }
+  const all = fraunhofer(k, wide, amp, wide.map(() => 0), 0.01, th).reduce((acc, v) => acc + (v * 0.1 * Math.PI) / 180, 0);
+  close(all / (Math.sqrt(2 * Math.PI) * sy), 1, 0.01, 'wide opening');
+  return `first fringe at ${best} degrees (d sin = lambda: ${fringe.toFixed(1)}); at 89.9 degrees ${at(89.9).toExponential(1)}; wide opening ${all.toFixed(3)}`;
+});
+
+// The demo's crystal: 7 x 7 atoms c = 2 apart, turned by alpha, in a beam of wavelength 2 (as
+// app.js sets it up: 256 x 256 grid, box 64, packet sx = 2.2, sy = 3).
+function bragg(alpha) {
+  const n = 256, sim = new Sim2D({ n, L: 64 }), c = 2, s = 0.3, V0 = 2, k0 = Math.PI, sx = 2.2, sy = 3;
+  const ca = Math.cos((alpha * Math.PI) / 180), sa = Math.sin((alpha * Math.PI) / 180), N = n * n, V = new Float64Array(N);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const u = ca * sim.coord[i] + sa * sim.coord[j], v = -sa * sim.coord[i] + ca * sim.coord[j];
+    if (Math.abs(u) < 3.5 * c && Math.abs(v) < 3.5 * c) V[j * n + i] = V0 * Math.exp(-((u - c * Math.round(u / c)) ** 2 + (v - c * Math.round(v / c)) ** 2) / (2 * s * s));
+  }
+  sim.setPotential(preparePotential2D(V, n, sim.dx).V);
+  sim.absorbSpeed = k0 + 4 / sx;
+  const x0 = -(sim.inner - 3.6 * sx), p = new Packet({ x0, sx, sy, k0 }), re = new Float64Array(N), im = new Float64Array(N);
+  p.grid(sim, 0, re, im);
+  sim.setPsi(re, im);
+  const det = new Detector(18, 256);
+  det.reset(p.energy);
+  const T = (Math.abs(x0) + 18 + 4 * sx) / (k0 - 1 / sx) + 6;
+  while (sim.t < T) { sim.step(0.05); det.record(sim, p, 0.05); }
+  return share(det, det.Psc, 2 * alpha, 15);
+}
+
+test('Bragg: at 2c sin(alpha) = lambda the crystal reflects to 2 alpha; off it, hardly', () => {
+  const on = bragg(30), off = bragg(20);
+  const note = `within 15 degrees of 2 alpha: ${on.toFixed(3)} of the packet at alpha = 30, ${off.toFixed(3)} at 20`;
+  assert(on > 0.2 && on > 4 * off, note);
+  return note;
 });

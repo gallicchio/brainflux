@@ -1,6 +1,6 @@
 // The 2D scattering demo: a packet, a target, and the scattering theory measured as it goes.
 
-import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, radialWaves, preparePotential2D } from './sim.js';
+import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, radialWaves, preparePotential2D, fraunhofer } from './sim.js';
 import { fft2Centered } from '../lib/fft.js';
 import { colorize, autoBrightness } from '../lib/complexcolor.js';
 import { parse } from '../lib/expr.js';
@@ -10,12 +10,13 @@ import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
 // The targets: typed potentials in x, y, r, theta, with their parameters.
 const TARGETS = [
   { id: 'disk', label: 'Hard disk', V: 'V0/(1 + exp((r - a)/w))', params: { V0: 8, a: 1.5, w: 0.25 } },
-  { id: 'bump', label: 'Weak bump', V: 'V0 exp(-r^2/(2 a^2))', params: { V0: 0.3, a: 1 } },
+  { id: 'bump', label: 'Weak bump', V: 'V0 exp(-r^2/(2 a^2))', params: { V0: 1, a: 1 } },
   { id: 'well', label: 'Attractive well', V: '-V0/(1 + exp((r - a)/w))', params: { V0: 2.5, a: 2, w: 0.25 } },
   { id: 'coulomb', label: 'Screened Coulomb', V: 'Z exp(-r/l)/sqrt(r^2 + 0.25)', params: { Z: 1, l: 4 } },
   { id: 'two', label: 'Two disks', V: 'V0/(1 + exp((sqrt(x^2 + (y-d/2)^2) - a)/w)) + V0/(1 + exp((sqrt(x^2 + (y+d/2)^2) - a)/w))', params: { V0: 8, a: 0.7, w: 0.2, d: 5 } },
   { id: 'slits', label: 'Double slit', V: 'V0 (abs(x) < 0.4) (abs(abs(y) - d/2) > a/2)', params: { V0: 12, d: 5, a: 1.2 }, extended: true },
-  { id: 'crystal', label: 'Crystal', V: 'V0 exp(-((x - c round(x/c))^2 + (y - c round(y/c))^2)/(2 s^2)) (abs(x) < 5.5) (abs(y) < 5.5)', params: { V0: 1.5, c: 2.5, s: 0.3 } },
+  // A square of 7 x 7 atoms, c apart, the edges half way between atoms.
+  { id: 'crystal', label: 'Crystal', V: 'V0 exp(-((x - c round(x/c))^2 + (y - c round(y/c))^2)/(2 s^2)) (abs(x) < 3.5 c) (abs(y) < 3.5 c)', params: { V0: 2, c: 2, s: 0.3 } },
   { id: 'typed', label: 'Typed', V: 'V0 (abs(x) < a) (abs(y) < a)', params: { V0: 3, a: 1 } },
 ];
 
@@ -23,6 +24,7 @@ const state = {
   target: TARGETS[0],
   n: 256, L: 64,
   k0: 2, sy: 6, sx: 2.5, b: 0,
+  turn: 0,                // the target turned anticlockwise, in degrees
   view: 'total',          // 'total' | 'scattered'
   display: 'complex',     // 'complex' | 'intensity'
   bright: 0,
@@ -32,16 +34,18 @@ const state = {
 };
 
 let sim, packet, detector, Vexpr, Vparams = {};
-let dt = 0.05, born = null, exact = null, waves = null, pwResult = null, warning = '';
-let finished = false, tEnd = 30, potentialImage = null;
+let dt = 0.05, born = null, exact = null, waves = null, pwResult = null, slit = null, warning = '';
+let finished = false, tEnd = 30, potentialImage = null, round = true, wideTarget = false;
 
 // --------------------------------------------------------------------- set-up
 
 function evalPotential() {
   const n = state.n, N = n * n;
+  // The target turned anticlockwise by `turn`: x, y, theta are the target's own coordinates.
+  const a = (state.turn * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
   const x = new Float64Array(N), y = new Float64Array(N), r = new Float64Array(N), th = new Float64Array(N);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const k = j * n + i, xv = sim.coord[i], yv = sim.coord[j];
+    const k = j * n + i, xv = ca * sim.coord[i] + sa * sim.coord[j], yv = -sa * sim.coord[i] + ca * sim.coord[j];
     x[k] = xv; y[k] = yv; r[k] = Math.hypot(xv, yv); th[k] = Math.atan2(yv, xv);
   }
   const v = Vexpr.evaluate({ x, y, r, theta: th, ...Vparams }, N).re;
@@ -60,7 +64,7 @@ function updateHash() {
   if (vField.source !== t.V) h.V = vField.source;
   const p = Object.fromEntries(Object.entries(Vparams).map(([k, v]) => [k, r(v)]));
   if (JSON.stringify(p) !== JSON.stringify(Object.fromEntries(Object.entries(t.params).map(([k, v]) => [k, r(v)])))) h.p = JSON.stringify(p);
-  for (const k of ['k0', 'sy', 'sx', 'b']) if (state[k] !== { k0: 2, sy: 6, sx: 2.5, b: 0 }[k]) h[k] = r(state[k]);
+  for (const k of ['k0', 'sy', 'sx', 'b', 'turn']) if (state[k] !== { k0: 2, sy: 6, sx: 2.5, b: 0, turn: 0 }[k]) h[k] = r(state[k]);
   if (state.n !== 256) h.n = state.n;
   if (state.L !== 64) h.L = state.L;
   writeHash(h);
@@ -82,12 +86,24 @@ function restart() {
   sim.setPotential(prep.V);
   sim.absorbSpeed = state.k0 + 4 / state.sx;
   sim.h = 0;
-  // The packet starts clear of the target and of the absorbing border; a packet too long for
-  // the box is shortened to fit.
-  const room = sim.inner - 3;
+  // The packet starts clear of the target (where |V| > E/20, and at least x < -2) and of the
+  // absorbing border; a packet too long for the room between them is shortened to fit.
+  const n = state.n, lay = sim.layer;
+  let left = -2;
+  for (let j = lay; j < n - lay; j++) {
+    for (let i = lay; i < n - lay && sim.coord[i] < left; i++) if (Math.abs(prep.V[j * n + i]) > state.k0 ** 2 / 40) { left = sim.coord[i]; break; }
+  }
+  const room = Math.max(sim.inner / 3, sim.inner + left - 1);
+  // A target wider than the beam (beyond two widths of it, on either side of its centre) is
+  // only partly lit: its totals depend on the beam, not on the target alone.
+  wideTarget = false;
+  for (let j = lay; j < n - lay && !wideTarget; j++) {
+    if (Math.abs(sim.coord[j] - state.b) < 2 * state.sy) continue;
+    for (let i = lay; i < n - lay; i++) if (Math.abs(prep.V[j * n + i]) > state.k0 ** 2 / 40) { wideTarget = true; break; }
+  }
   if (6.6 * state.sx > room) {
     state.sx = Math.max(0.5, room / 6.6); packetSliders.sx.value = +state.sx.toFixed(2);
-    warning = warning || 'The packet was shortened to fit the box.';
+    warning = warning || 'The packet was shortened to fit between the border and the target.';
   }
   const x0 = -(sim.inner - 3.6 * state.sx);
   packet = new Packet({ x0, y0: state.b, sx: state.sx, sy: state.sy, k0: state.k0 });
@@ -111,6 +127,10 @@ function restart() {
   $('#play').textContent = state.running ? 'Pause' : 'Play';
   const th = Array.from(detector.theta);
   born = state.target.extended ? null : bornCrossSection(sim, state.k0, th);
+  slit = state.target.extended ? slitPattern(th, prep.V) : null;
+  // Turning matters only for a target that isn't round; phase shifts belong to round ones.
+  round = !(Vexpr && ['x', 'y', 'theta'].some((v) => Vexpr.uses(v)));
+  turnSlider.hidden = round;
   // For a potential that depends on r alone, the exact answer of time-independent scattering
   // theory: phase shifts from the radial equation (see radialWaves), for the very same V.
   exact = null;
@@ -125,6 +145,39 @@ function restart() {
   potentialImage = makePotentialImage(prep.V);
   autoBright();
   draw();
+}
+
+/**
+ * A wall with openings (the double slit): the openings are where V < E along the wall's middle
+ * line (the target's own y axis), the incident wave there is A(y) (Kirchhoff), and the
+ * Fraunhofer pattern (see fraunhofer) is averaged over the packet's energies, as the measured
+ * flux is.  Returns {dsdt, open, blind}: dsigma/dtheta at the detector's angles, the open
+ * width, and the angles where the detector circle runs inside the wall (V > E there).
+ */
+function slitPattern(th, V) {
+  const a = (state.turn * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+  const dy = 0.01, count = Math.round((2 * sim.inner) / dy);
+  const Y = Float64Array.from({ length: count }, (_, i) => -sim.inner + (i + 0.5) * dy);
+  const v = Vexpr.evaluate({ x: new Float64Array(count), y: Y, r: Y.map(Math.abs), theta: Y.map((y) => (Math.sign(y) * Math.PI) / 2), ...Vparams }, count).re;
+  // The wall's point Y is at x = -Y sin a, y = Y cos a: the beam's profile across itself there,
+  // relative to the origin, times exp(i k x) (below, for each k).
+  const ys = [], A = [];
+  for (let i = 0; i < count; i++) {
+    if (v[i] < packet.energy) { ys.push(Y[i]); A.push(Math.exp(-((Y[i] * ca - state.b) ** 2 - state.b ** 2) / (4 * state.sy ** 2))); }
+  }
+  const thw = th.map((t) => t - a), sk = 1 / (2 * state.sx), out = new Float64Array(th.length);
+  let wsum = 0;
+  for (let z = -3; z <= 3; z += 0.25) {
+    const k = state.k0 + z * sk, w = Math.exp((-z * z) / 2);
+    if (!(k > 0)) continue;
+    const f = fraunhofer(k, ys, A.map((m, p) => m * Math.cos(k * sa * ys[p])), A.map((m, p) => -m * Math.sin(k * sa * ys[p])), dy, thw);
+    for (let j = 0; j < th.length; j++) out[j] += w * f[j];
+    wsum += w;
+  }
+  for (let j = 0; j < th.length; j++) out[j] /= wsum;
+  const n = state.n, R = detector.R, at = (u) => Math.min(n - 1, Math.max(0, Math.round(u / sim.dx + n / 2)));
+  const blind = th.map((t) => V[at(R * Math.sin(t)) * n + at(R * Math.cos(t))] > packet.energy);
+  return { dsdt: out, open: ys.length * dy, blind };
 }
 
 function makePotentialImage(V) {
@@ -177,11 +230,31 @@ function setRunning(on) {
 }
 
 function analyse() {
-  // A wall that runs out past the detector is not a localised target: no cross section.
-  if (state.target.extended) { waves = null; pwResult = null; return; }
+  // A wall that runs out past the detector is not a localised target: no cross section.  And
+  // only a round target scatters each partial wave e^{im theta} into itself, with a phase shift:
+  // others mix them (the S-matrix is not diagonal in m), and S_m means nothing.
+  if (state.target.extended || !round) { waves = null; pwResult = null; return; }
   const k = state.k0;
   waves = detector.partialWaves(k, 24, packet);
   if (waves) pwResult = fromPartialWaves(waves, k, Array.from(detector.theta));
+}
+
+/**
+ * Run the collision on to simulated time t (by default, to its end) at once, without waiting for
+ * animation frames: the same steps as the animation, so the tests don't depend on how fast the
+ * computer is.
+ */
+function runUntil(t = Infinity) {
+  setRunning(false);
+  while (!finished && sim.t < t) {
+    sim.step(dt);
+    detector.record(sim, packet, dt);
+    if (sim.t >= tEnd) finished = true;
+  }
+  if (finished) analyse();
+  setRunning(false);
+  draw();
+  return sim.t;
 }
 
 // --------------------------------------------------------------------- drawing
@@ -242,6 +315,11 @@ function drawView() {
   ctx.fillText(state.view === 'scattered' ? 'scattered: ψ − ψ_inc' : 'ψ', 8, 16);
 }
 
+/** The crystal's lattice spacing c and its turn a (radians), if the target is the crystal. */
+function crystalLattice() {
+  return state.target.id === 'crystal' && Vparams.c > 0 ? { c: Vparams.c, a: (state.turn * Math.PI) / 180 } : null;
+}
+
 function drawMomentum() {
   // Every other frame while running: the transform costs as much as a time step.
   if (state.running && frames % 2) return;
@@ -269,12 +347,27 @@ function drawMomentum() {
   ctx.beginPath(); ctx.arc(cx, cy, state.k0 * s, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
   ctx.strokeStyle = 'rgba(255,255,255,0.25)';
   ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(width, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, height); ctx.stroke();
+  // The crystal's reciprocal lattice, G = (2 pi / c)(n1, n2) turned with the crystal, drawn from
+  // the incident spot: k0 + G.  A wave k0 + G is allowed where it is also on the energy circle:
+  // a Bragg beam (Ewald's construction).  Filled: within a crystal's width of the circle.
+  const lat = crystalLattice();
+  if (lat) {
+    const g = (2 * Math.PI) / lat.c, ca = Math.cos(lat.a), sa = Math.sin(lat.a), lim = half * dk, near = Math.PI / (3.5 * lat.c);
+    const nmax = Math.ceil((lim + state.k0) / g) + 1;
+    for (let n1 = -nmax; n1 <= nmax; n1++) for (let n2 = -nmax; n2 <= nmax; n2++) {
+      const kx = state.k0 + g * (n1 * ca - n2 * sa), ky = g * (n1 * sa + n2 * ca);
+      if (Math.abs(kx) > lim || Math.abs(ky) > lim) continue;
+      const on = Math.abs(Math.hypot(kx, ky) - state.k0) < near;
+      ctx.beginPath(); ctx.arc(cx + kx * s, cy - ky * s, 3.5, 0, 2 * Math.PI);
+      if (on) { ctx.fillStyle = 'rgba(255,210,80,0.9)'; ctx.fill(); } else { ctx.strokeStyle = 'rgba(140,200,255,0.8)'; ctx.lineWidth = 1.2; ctx.stroke(); }
+    }
+  }
   ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '11px system-ui, sans-serif';
   ctx.fillText('kx →', width - 34, cy - 4); ctx.fillText('ky ↑', cx + 4, 12);
   ctx.fillText(`|k| = k₀ = ${fmt(state.k0, 3)}`, 6, height - 6);
 }
 
-const COLORS = { flux: null, pw: '#e07b39', born: '#8a8b91', exact: '#2e9e5b' };
+const COLORS = { flux: null, pw: '#e07b39', born: '#8a8b91', exact: '#2e9e5b', fraunhofer: '#e07b39' };
 
 function drawCrossSection() {
   const cv = $('#xsec');
@@ -287,15 +380,7 @@ function drawCrossSection() {
 
   const flux = detector.crossSection();
   const series = [];
-  if (state.target.extended) {
-    f.x0 = -180; f.x1 = 180; f.y0 = 0; f.y1 = 1;
-    f.axes({ xlabel: 'θ (degrees)', yTicks: false });
-    ctx.fillStyle = c.ink2; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('The wall runs out past the detector circle,', f.left + f.w / 2, f.top + f.h / 2 - 8);
-    ctx.fillText('so there is no cross section to measure: watch the fringes.', f.left + f.w / 2, f.top + f.h / 2 + 10);
-    ctx.textAlign = 'left';
-    return;
-  }
+  if (state.target.extended) { drawTransmitted(f, c); return; }
   if (detector.fluence > 1e-6) series.push(['flux', flux]);
   if (pwResult) series.push(['pw', pwResult.f.map(([a, b]) => a * a + b * b)]);
   if (born) series.push(['born', born]);
@@ -324,6 +409,49 @@ function drawCrossSection() {
   }
   ctx.restore();
   f.axes({ xlabel: 'θ (degrees)', ylabel: 'log₁₀ dσ/dθ' });
+}
+
+/**
+ * Behind a wall there is no incident wave to subtract: what is measured is the flux of psi
+ * itself through the half of the detector circle beyond the wall, the angles within 90 degrees
+ * of its normal, against Fraunhofer's prediction.  The shapes are compared, each curve divided
+ * by its largest value: how much gets through slits about a wavelength wide, with soft edges,
+ * is beyond Kirchhoff's assumption (the table has the measured total).  On a linear scale, so
+ * fringes look like fringes.
+ */
+function drawTransmitted(f, c) {
+  const { ctx } = f, th = detector.theta, wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
+  const pts = [];
+  for (let j = 0; j < th.length; j++) {
+    const d = wrap((th[j] * 180) / Math.PI - state.turn);
+    if (Math.abs(d) <= 90) pts.push([state.turn + d, detector.fluence > 1e-6 ? detector.Ptot[j] : NaN, slit ? slit.dsdt[j] : NaN, slit?.blind[j]]);
+  }
+  pts.sort((p, q) => p[0] - q[0]);
+  for (const col of [1, 2]) {
+    let top = 0;
+    for (const p of pts) if (Number.isFinite(p[col])) top = Math.max(top, p[col]);
+    for (const p of pts) p[col] = top > 0 ? p[col] / top : NaN;
+  }
+  f.x0 = state.turn - 90; f.x1 = state.turn + 90; f.y0 = 0; f.y1 = 1.1;
+  // Where the detector circle runs inside the wall, nothing can be measured.
+  ctx.fillStyle = c.line;
+  const step = 360 / th.length;
+  for (const p of pts) if (p[3]) ctx.fillRect(f.X(p[0] - step / 2), f.top, f.X(p[0] + step / 2) - f.X(p[0] - step / 2) + 0.5, f.h);
+  f.clip();
+  for (const [key, col] of [['fraunhofer', 2], ['flux', 1]]) {
+    ctx.strokeStyle = COLORS[key]; ctx.lineWidth = key === 'flux' ? 2 : 1.6;
+    ctx.setLineDash(key === 'flux' ? [] : [6, 4]);
+    ctx.beginPath();
+    let on = false;
+    for (const p of pts) {
+      if (!Number.isFinite(p[col])) { on = false; continue; }
+      const x = f.X(p[0]), y = f.Y(p[col]);
+      if (!on) { ctx.moveTo(x, y); on = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.restore();
+  f.axes({ xlabel: 'θ (degrees)', ylabel: 'dσ/dθ, relative' });
 }
 
 function drawWaves() {
@@ -358,33 +486,65 @@ function drawWaves() {
   ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center';
   for (let m = -mmax; m <= mmax; m += 4) ctx.fillText(m === 0 ? 'm = 0' : String(m), f.X(m), f.bottom + 4 + 9);
   ctx.textAlign = 'left';
-  if (state.target.extended) {
-    ctx.fillStyle = c.ink2; ctx.fillText('(not for a target bigger than the detector)', f.left + 8, f.top + 30);
+  if (state.target.extended || !round) {
+    ctx.fillStyle = c.ink2;
+    ctx.fillText(state.target.extended ? '(not for a target bigger than the detector)' : '(phase shifts are for round targets: this one mixes the m)', f.left + 8, f.top + 30);
   }
 }
 
 function updateReadouts() {
   const inBox = boxNorm();
+  // Each number in a slot of its own width, with fixed decimals: nothing moves as they change.
   $('#readouts').innerHTML = [
-    ['t', sim.t.toFixed(2)], ['k₀', fmt(state.k0, 3)], ['λ', fmt((2 * Math.PI) / state.k0, 3)],
-    ['E', fmt(packet.energy, 3)], ['in the box', fmt(inBox, 3)], ['time step', fmt(dt, 2)],
-  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + (finished ? '<span><b>done</b>: the packet has gone</span>' : '')
-    + (warning ? `<span style="color:var(--warn)">${warning}</span>` : '');
-  // The table of total cross sections.
-  const dth = (2 * Math.PI) / detector.M, tot = detector.totals();
+    ['t', sim.t.toFixed(2), 6], ['k₀', state.k0.toFixed(3), 5], ['λ', ((2 * Math.PI) / state.k0).toFixed(3), 6],
+    ['E', packet.energy.toFixed(3), 6], ['in the box', inBox.toFixed(4), 6], ['time step', dt.toFixed(4), 6],
+  ].map(([k, v, w]) => `<span class="ro">${k} <b style="width:${w}ch">${v}</b></span>`).join('')
+    + `<span class="ro status">${finished ? '<b>done</b>: the packet has gone' : ''}</span>`
+    + (warning ? `<span class="warning">${warning}</span>` : '');
+  // Bragg's condition for the crystal's rows (turned by alpha from the beam) and columns.
+  const lat = crystalLattice(), lam = (2 * Math.PI) / state.k0;
+  $('#mom-note').textContent = lat ? `2c sin α/λ = ${(Math.abs(2 * lat.c * Math.sin(lat.a)) / lam).toFixed(2)} (rows), 2c cos α/λ = ${(Math.abs(2 * lat.c * Math.cos(lat.a)) / lam).toFixed(2)} (columns)` : '';
+  // The table of total cross sections: the same rows from start to end (values to come shown
+  // as such), so that nothing jumps as the measurements arrive.
+  const dth = (2 * Math.PI) / detector.M, tot = detector.totals(), lit = detector.fluence > 1e-6;
   const rows = [];
-  if (detector.fluence > 1e-6 && !state.target.extended) {
-    rows.push(['scattered flux, ∫ dσ/dθ', tot.scattered], ['shadow: flux lost forward', tot.shadow]);
+  if (!state.target.extended) {
+    rows.push(['scattered flux, ∫ dσ/dθ', lit ? tot.scattered : null], ['shadow: flux lost forward', lit ? tot.shadow : null]);
+    if (round) rows.push(['partial waves, (1/k) Σ |S−1|²', pwResult ? pwResult.sigma : NaN], ['optical theorem, from f(0)', pwResult ? pwResult.optical : NaN]);
   }
-  if (pwResult) rows.push(['partial waves, (1/k) Σ |S−1|²', pwResult.sigma], ['optical theorem, from f(0)', pwResult.optical]);
-  else if (!state.target.extended && detector.fluence > 1e-6) rows.push(['partial waves and optical theorem', NaN]);
   if (born) rows.push(['first Born approximation', born.reduce((s, v) => s + v * dth, 0)]);
   if (exact) rows.push(['exact: the radial equation', exact.pw.sigma]);
-  $('#sigmas').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${Number.isNaN(v) ? 'when the packet has gone' : fmt(v, 4)}</td></tr>`).join('')
-    + (rows.length ? '<tr><td colspan="2" class="muted">σ is a length in 2D</td></tr>' : '');
-  const legend = [['flux', 'measured'], ['pw', '|f|² at k₀'], ['born', 'Born']];
+  if (state.target.extended) {
+    // Through the wall: the far half of the detector, and the openings' width.
+    const half = (P) => P.reduce((s, v, j) => s + (Math.cos(detector.theta[j] - (state.turn * Math.PI) / 180) > 0 ? v * dth : 0), 0);
+    rows.push(['through the wall, ∫ dσ/dθ', lit ? half(detector.Ptot) / detector.fluence : null]);
+    if (slit) rows.push(['the openings\' width', slit.open]);
+  }
+  // The crystal: how much of the packet goes where the rows (turned by alpha) and the columns
+  // would mirror it, 2 alpha and 2 alpha - 180 degrees.
+  if (lat) {
+    rows.push(['share of the packet sent to 2α ± 15° (rows)', lit ? braggShare(2 * state.turn, 15) : null],
+      ['… to 2α − 180° ± 15° (columns)', lit ? braggShare(2 * state.turn - 180, 15) : null]);
+  }
+  const num = (v) => (v === null ? '…' : Number.isNaN(v) ? 'at the end' : (Math.abs(v) < 5e-4 ? 0 : v).toFixed(3).replace('-', '−'));
+  $('#sigmas').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${num(v)}</td></tr>`).join('')
+    + (rows.length ? '<tr><td colspan="2" class="muted">σ is a length in 2D'
+      + (wideTarget && !state.target.extended ? '; the beam lights only part of this target, so its totals depend on the beam' : '') + '</td></tr>' : '');
+  const legend = state.target.extended ? [['flux', 'measured'], ['fraunhofer', 'Fraunhofer']]
+    : [['flux', 'measured'], ...(round ? [['pw', '|f|² at k₀']] : []), ['born', 'Born']];
   if (exact) legend.push(['exact', 'exact (stationary)']);
   $('#xs-legend').innerHTML = legend.filter(([k]) => k !== 'born' || born).map(([k, l]) => `<span><i style="border-color:${COLORS[k] || themeColors().accent}${k === 'flux' ? '' : ';border-top-style:dashed'}"></i>${l}</span>`).join('');
+}
+
+/** The probability scattered through the detector within half degrees of the direction centre. */
+function braggShare(centre, half) {
+  const dth = (2 * Math.PI) / detector.M;
+  let s = 0;
+  for (let j = 0; j < detector.M; j++) {
+    const d = (((((detector.theta[j] * 180) / Math.PI - centre) % 360) + 540) % 360) - 180;
+    if (Math.abs(d) <= half) s += detector.Psc[j] * dth;
+  }
+  return s;
 }
 
 function boxNorm() {
@@ -424,6 +584,12 @@ const vField = exprField({
   },
 });
 $('#v-field').append(vField);
+// Turning the target in a fixed beam is the same as sending the packet in from another
+// direction (and it is how a diffractometer does it); theta stays the scattering angle.
+const turnSlider = slider({ label: 'turn (°)', min: -90, max: 90, step: 0.5, value: state.turn,
+  title: 'Turn the target anticlockwise about the origin, in degrees: the same as sending the packet in from another direction',
+  onInput: (v) => { state.turn = clampTo('turn', v); if (state.turn !== v) turnSlider.value = state.turn; restartSoon(); } });
+$('#turn-box').append(turnSlider);
 
 let restartTimer = 0;
 function restartSoon() {
@@ -442,7 +608,7 @@ function chooseTarget(t, { run = true } = {}) {
 
 // The packet.
 // Typed values can be anything: keep them where the simulation makes sense.
-const LIMITS = { k0: [0.3, 6], sy: [0.5, 20], sx: [0.5, 10], b: [-20, 20], L: [32, 128] };
+const LIMITS = { k0: [0.3, 6], sy: [0.5, 20], sx: [0.5, 10], b: [-20, 20], L: [32, 128], turn: [-180, 180] };
 const clampTo = (k, v) => Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v));
 const packetSlider = (k, opts) => {
   const sl = slider({ ...opts, value: state[k], onInput: (v) => { state[k] = clampTo(k, v); if (state[k] !== v) sl.value = state[k]; restartSoon(); } });
@@ -489,9 +655,9 @@ window.addEventListener('resize', () => kick());
 // --------------------------------------------------------------------- experiments
 
 const byId = (id) => TARGETS.find((t) => t.id === id);
-function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, view = 'total', params, speed = 4, L = 64 } = {}) {
-  Object.assign(state, { k0, sy, sx, b, view, speed, L });
-  boxSlider.value = L;
+function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, turn = 0, view = 'total', params, speed = 4, L = 64 } = {}) {
+  Object.assign(state, { k0, sy, sx, b, turn, view, speed, L });
+  boxSlider.value = L; turnSlider.value = turn;
   packetSliders.k0.value = k0; packetSliders.sy.value = sy; packetSliders.sx.value = sx; packetSliders.b.value = b;
   viewSeg.value = view; speedSlider.value = speed;
   const t = byId(id);
@@ -502,13 +668,14 @@ const setups = {
   disk: () => go('disk'),
   shadow: () => go('disk', { view: 'scattered' }),
   born: () => go('bump'),
-  ring: () => go('bump', { params: { V0: 0.6 } }),
+  ring: () => go('bump', { view: 'scattered' }),
   swave: () => go('disk', { k0: 0.8, sx: 3, sy: 8, L: 112, params: { a: 1, w: 0.2 } }),
   resonance: () => go('well', { k0: 1.2, sx: 3, sy: 7 }),
   coulomb: () => go('coulomb', { k0: 2 }),
   two: () => go('two', { sy: 8 }),
   slits: () => go('slits', { sy: 8, sx: 2 }),
-  crystal: () => go('crystal', { k0: 2.5, sy: 8, sx: 3 }),
+  crystal: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 30 }),
+  offbragg: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 20 }),
   impact: () => go('disk', { sy: 1.5, b: 1.5 }),
   typed: () => go('typed'),
 };
@@ -521,7 +688,7 @@ if (setups[hash.setup]) setups[hash.setup]();
 else {
   const t = byId(hash.target) || TARGETS[0];
   try {
-    for (const k of ['k0', 'sy', 'sx', 'b']) if (hash[k] !== undefined && Number.isFinite(+hash[k])) { state[k] = clampTo(k, +hash[k]); packetSliders[k].value = state[k]; }
+    for (const k of ['k0', 'sy', 'sx', 'b', 'turn']) if (hash[k] !== undefined && Number.isFinite(+hash[k])) { state[k] = clampTo(k, +hash[k]); (packetSliders[k] || turnSlider).value = state[k]; }
     if ([128, 256, 512].includes(+hash.n)) { state.n = +hash.n; gridSeg.value = state.n; }
     if (+hash.L >= 32 && +hash.L <= 128) { state.L = +hash.L; boxSlider.value = state.L; }
     const typed = hash.V || hash.p ? { ...t, V: hash.V || t.V, params: hash.p ? JSON.parse(hash.p) : t.params } : t;
@@ -530,4 +697,4 @@ else {
 }
 
 window.__app = { state, get sim() { return sim; }, get detector() { return detector; }, get pw() { return pwResult; }, get born() { return born; },
-  get finished() { return finished; }, setups, restart, ready: true, parse };
+  get slit() { return slit; }, get finished() { return finished; }, get tEnd() { return tEnd; }, setups, restart, runUntil, ready: true, parse };

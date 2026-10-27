@@ -53,6 +53,7 @@
       <div class="label">Target</div>
       <div id="targets" class="button-grid"></div>
       <div id="v-field"></div>
+      <div id="turn-box"></div>
     </div>
     <div class="panel">
       <div class="label">Incoming packet</div>
@@ -79,7 +80,9 @@
   the detector.  Far away the scattered part is an outgoing circular wave,
   $$\psi\to e^{ikx}+f(\theta)\,\frac{e^{ikr}}{\sqrt r},\qquad \frac{d\sigma}{d\theta}=|f(\theta)|^2,$$
   and in two dimensions a cross section is a length.  Everything on the right is measured on
-  the detector circle while the packet goes by.</p>
+  the detector circle while the packet goes by.  A target that isn't round can be turned
+  (<em>turn</em>): the same as sending the packet in from another direction, with $\theta$
+  still the scattering angle.</p>
 
   <article class="exp" data-setup="disk">
     <h3>1. A packet meets a disk</h3>
@@ -100,17 +103,21 @@
 
   <article class="exp" data-setup="born">
     <h3>3. The Born approximation</h3>
-    <p>A weak, smooth bump.  To first order, $f(\theta)$ is the Fourier transform of the
-    potential at the momentum transfer $q=2k\sin(\theta/2)$:
-    $\frac{d\sigma}{d\theta}=\frac{m^2}{2\pi\hbar^4k}|\tilde V(q)|^2$ (dashed grey).  The measured curve
-    follows it.  Raise $V_0$: the measured cross section grows less than $V_0^2$ and the Born
-    curve overshoots.  Make the bump attractive ($V_0<0$): Born cannot tell the sign; the exact
-    answer can.</p>
+    <p>A smooth bump, $V_0=1$, half the packet's energy: about a sixth of the packet is
+    scattered, most of it within $60^\circ$ of forward.  To first order, $f(\theta)$ is the
+    Fourier transform of the potential at the momentum transfer $q=2k\sin(\theta/2)$:
+    $\frac{d\sigma}{d\theta}=\frac{m^2}{2\pi\hbar^4k}|\tilde V(q)|^2$ (dashed grey).  The measured
+    curve follows it over the forward peak, and Born's total is only 7% too high.  Lower $V_0$
+    to 0.3 and they agree to 1%, but then less than 2% of the packet scatters: that is what
+    weak means.  Raise $V_0$ to 2: the measured cross section grows less than $V_0^2$, and Born
+    is 60% too high.  Make the bump attractive ($V_0=-1$): Born cannot tell the sign; the exact
+    answer can (2.49 instead of 2.66).</p>
   </article>
 
   <article class="exp" data-setup="ring">
     <h3>4. Scattering puts the wave on a circle</h3>
-    <p>Look at momentum space.  The incident packet is a spot at $(k_0,0)$; elastic scattering
+    <p>The same bump, in the <em>Scattered only</em> view, so that momentum space shows
+    $\psi-\psi_\text{inc}$ alone.  The incident packet is a spot at $(k_0,0)$; elastic scattering
     can only turn $\vec k$, not shorten it, so the scattered wave fills in the circle
     $|\vec k|=k_0$, brightest where $|f(\theta)|^2$ is largest.  The Born approximation says the
     brightness at $\vec k$ is $|\tilde V(\vec k-\vec k_0)|^2$: the potential's Fourier transform,
@@ -150,29 +157,56 @@
 
   <article class="exp" data-setup="slits">
     <h3>9. The double slit</h3>
-    <p>A wall with two openings.  Behind it, two circular waves overlap and make fringes; in
-    momentum space, the transverse momenta $k_y$ are quantised into the diffraction orders.
-    Move the slits apart ($d$) and the fringes close up; make them narrower ($a$) and the
-    envelope spreads.</p>
+    <p>A wall with two openings, $a=1.2$ wide and $d=5$ apart.  Behind it, two circular waves
+    overlap and make fringes.  There is no incident wave behind a wall to subtract, so the graph
+    shows the flux of $\psi$ itself through the far half of the detector, from $-90^\circ$ to
+    $90^\circ$: every direction there is, since $\sin\theta=k_y/k$ runs from $-1$ to $1$.  The
+    dashed curve is Fraunhofer's, for a plane wave
+    $$\frac{d\sigma}{d\theta}\propto\cos^2\theta\,\cos^2\Big(\frac{kd\sin\theta}{2}\Big)\Big(\frac{\sin(ka\sin\theta/2)}{ka\sin\theta/2}\Big)^2,$$
+    with the packet's spread of energies: dark fringes where $d\sin\theta=(n+\frac12)\lambda$,
+    here $\pm18^\circ$ and $\pm70^\circ$, and bright ones between, near $d\sin\theta=n\lambda$
+    ($0$ and $\pm39^\circ$; the falling envelope pulls them in a little).  The two are scaled to the same height: how much gets through slits
+    about a wavelength wide with soft edges is beyond Fraunhofer (the table has it), but where
+    it goes is not.  Only within a degree or so of $\pm90^\circ$, where the detector runs into
+    the wall (shaded), is nothing measured.  In momentum space the transverse momenta $k_y$ are
+    the diffraction orders.  Move the slits apart ($d$) and the fringes close up; make them
+    narrower ($a$) and the envelope spreads.</p>
   </article>
 
   <article class="exp" data-setup="crystal">
-    <h3>10. Bragg scattering from a crystal</h3>
-    <p>A small square lattice of scatterers.  The waves from all of them add up only in the
-    directions where $\vec k-\vec k_0$ is a reciprocal lattice vector and $|\vec k|=k_0$: sharp
-    Bragg peaks, where the circle of momentum space crosses the reciprocal lattice (Ewald's
-    construction).</p>
+    <h3>10. Bragg reflection from a crystal</h3>
+    <p>A square crystal of $7\times7$ atoms, $c=2$ apart, turned by $\alpha=30^\circ$, in a beam
+    of wavelength $\lambda=2$.  Each row of atoms reflects a little of the wave, like a
+    half-silvered mirror, and lets the rest through; the waves reflected by successive rows add
+    up only if their paths differ by whole wavelengths, $2c\sin\alpha=n\lambda$ (Bragg).  Here
+    $2c\sin30^\circ=\lambda$: a strong beam leaves at $2\alpha=60^\circ$, about a quarter of the
+    packet (the table).  In momentum space the circles are $\vec k_0+\vec G$: the reciprocal
+    lattice, $\vec G=\frac{2\pi}{c}(n_1,n_2)$ turned with the crystal, hung on the incident spot.
+    A scattered wave $\vec k_0+\vec G$ must also be on the energy circle $|\vec k|=k_0$; where a
+    lattice point sits on it (filled), there is a Bragg beam: Ewald's construction.  Born's curve
+    is the crystal's Fourier transform, the kinematic theory of diffraction.</p>
+  </article>
+
+  <article class="exp" data-setup="offbragg">
+    <h3>11. Off the Bragg angle</h3>
+    <p>The same crystal turned to $\alpha=20^\circ$: $2c\sin\alpha/\lambda=0.68$, no lattice
+    point on the energy circle, and the beam mostly goes through; a sixth as much goes to
+    $2\alpha$.  Turn the crystal slowly back to $30^\circ$ and the reflected beam comes back,
+    strong only within a few degrees of the Bragg angle (the crystal is small, so its lattice
+    points are not sharp).  Or keep $\alpha=20^\circ$ and shorten the wavelength until
+    $2c\sin\alpha=\lambda$: $k_0=4.6$, and the beam reflects to $40^\circ$.  At
+    $\alpha=60^\circ$ it is the columns that reflect, $2c\cos\alpha=\lambda$, to $-60^\circ$.</p>
   </article>
 
   <article class="exp" data-setup="impact">
-    <h3>11. The impact parameter</h3>
+    <h3>12. The impact parameter</h3>
     <p>A narrow packet aimed off centre, with impact parameter $b$.  Large $b$: it passes by,
     barely deflected.  Small $b$: it bounces off.  A classical particle's deflection depends on
     $b$ alone; a wave's spreads, the more so the narrower the packet.</p>
   </article>
 
   <article class="exp" data-setup="typed">
-    <h3>12. Your own target</h3>
+    <h3>13. Your own target</h3>
     <p>Type any $V(x,y)$, using $x$, $y$, $r$ and $\theta$.  Sharp edges are softened slightly
     (an edge sharper than the grid can't be followed in time).</p>
   </article>
@@ -184,7 +218,9 @@
   averaged over the packet's spread of energies.  At the packet's central energy, the time
   Fourier transform of $\psi_\text{sc}$ on the circle, expanded in $e^{im\theta}$ and divided by the
   Hankel functions $H_m(kR)$ and by the incident beam's own partial waves, gives
-  $S_m=e^{2i\delta_m}$ exactly, without assuming $kR\gg1$.</p>
+  $S_m=e^{2i\delta_m}$ exactly, without assuming $kR\gg1$ (for a round target: one that isn't
+  round mixes the partial waves, and has no phase shifts).  Behind a wall, the flux of $\psi$
+  itself is measured instead of the scattered flux.</p>
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
 </aside>
