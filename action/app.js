@@ -63,6 +63,46 @@ function record() {
   if (!current || !Number.isFinite(current.S)) { history.push(NaN); }
   else history.push(current.S);
   if (history.length > HISTORY) history.splice(0, history.length - HISTORY);
+  hashSoon();
+}
+
+// The set-up and the drawn path, in the address (a moment after the last change): a link can
+// pose "here is a path: what is its action, and which way should it move?"
+let hashTimer = 0;
+function hashSoon() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => {
+    const d = state.sys, r = (v) => +v.toPrecision(4);
+    const h = { sys: d.id, q: Array.from(state.knots, r).join(','), mode: state.mode === 'segments' ? 'segments' : undefined };
+    if (state.s1 - state.s0 !== d.s1 - d.s0) h.T = r(state.s1 - state.s0);
+    const p = Object.fromEntries(Object.entries(state.params).filter(([k, v]) => v !== d.params[k]?.value).map(([k, v]) => [k, r(v)]));
+    if (Object.keys(p).length) h.p = JSON.stringify(p);
+    if (typedField && typedField.source !== d.source) h.L = typedField.source;
+    if (typedField && Object.keys(typedField.params).length) h.tp = JSON.stringify(typedField.params);
+    writeHash(h);
+  }, 300);
+}
+
+function fromHash(h) {
+  const d = SYSTEMS.find((x) => x.id === h.sys);
+  if (!d) return false;
+  setSystem(d);
+  try {
+    if (h.mode === 'segments') { state.mode = 'segments'; modeSeg.value = 'segments'; }
+    if (h.p) for (const [k, v] of Object.entries(JSON.parse(h.p))) if (k in state.params) { state.params[k] = +v; paramSliders[k] && (paramSliders[k].value = +v); }
+    if (+h.T > 0 && d.tmax) { state.s1 = state.s0 + +h.T; paramSliders.T && (paramSliders.T.value = +h.T); }
+    if (typedField && (h.L || h.tp)) { typedField.set(h.L || d.source, h.tp ? JSON.parse(h.tp) : {}, false); typedExpr = typedField.expr; }
+    if (h.q) {
+      const q = h.q.split(',').map(Number);
+      if (q.length >= 3 && q.length <= 16 && q.every(Number.isFinite)) {
+        state.knots = Float64Array.from(q); state.q0 = q[0]; state.q1 = q[q.length - 1];
+        knotSlider.value = q.length;
+      }
+    }
+    history = [];
+    rebuild();
+  } catch { /* an address that doesn't parse: the system's defaults stand */ }
+  return true;
 }
 
 let truthTimer = 0;
@@ -141,7 +181,6 @@ function setSystem(d, { knots, bend = 0 } = {}) {
   }
   history = [];
   rebuild({ keepPath: true });
-  writeHash({ sys: d.id });
 }
 
 function rebuild() {
@@ -686,6 +725,6 @@ drawer($('#help'), $('#help-button'), setups);
 const hash = readHash();
 setShow({});
 if (setups[hash.setup]) setups[hash.setup]();
-else setSystem(byId(hash.sys) || SYSTEMS[1], { bend: 2 });
+else if (!fromHash(hash)) setSystem(SYSTEMS[1], { bend: 2 });
 
 window.__app = { state, setups, get truths() { return truths; }, get current() { return current; }, get history() { return history; }, setSystem, setRolling, ready: true };

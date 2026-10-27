@@ -172,6 +172,7 @@ function restart() {
   measureSpeed();
   updateClock();
   draw();
+  updateHash();
 }
 
 /** How long a step takes, to cap the steps per frame at about 12 ms of work. */
@@ -852,15 +853,55 @@ drawWheel($('#legend'), 1, 2.2);
 
 // ------------------------------------------------------------------------ hash
 
+// The set-up, in the address: the potential (with its typed formula and parameters if they
+// changed), the initial state, and the domain if it changed.  Copy the address and a student
+// opening it gets exactly this set-up.
+const rounded = (o) => JSON.parse(JSON.stringify(o, (k, v) => (typeof v === 'number' ? +v.toPrecision(5) : v)));
 function updateHash() {
-  writeHash({ pot: state.pot.id });
+  if (!sim || !state.init) return;
+  const p = state.pot, h = { pot: p.id };
+  if (vField.source !== p.V) h.V = vField.source;
+  const vp = rounded(Vparams);
+  if (Object.keys(vp).length) h.vp = JSON.stringify(vp);
+  h.init = JSON.stringify(rounded(state.init));
+  if (state.domain[0] !== p.domain[0] || state.domain[1] !== p.domain[1]) h.dom = state.domain.join(',');
+  if (state.n !== p.n) h.n = state.n;
+  if (state.boundary !== p.boundary) h.bc = state.boundary;
+  if (state.mass !== 1) h.m = state.mass;
+  writeHash(h);
+}
+
+function fromHash(h) {
+  const pot = byId(h.pot);
+  if (!pot) return false;
+  choosePotential(pot, { keepRunning: false });
+  try {
+    if (h.dom) { const [a, b] = h.dom.split(',').map(Number); if (b > a) state.domain = [a, b]; }
+    if ([256, 512, 1024, 2048, 4096, 8192].includes(+h.n)) state.n = +h.n;
+    if (['walls', 'periodic', 'absorbing'].includes(h.bc)) state.boundary = h.bc;
+    if (+h.m > 0) state.mass = +h.m;
+    syncNumerics();
+    if (h.V || h.vp) {
+      vField.set(h.V || pot.V, h.vp ? JSON.parse(h.vp) : {}, false);
+      if (vField.expr) { Vexpr = vField.expr; Vparams = vField.params; }
+    }
+    if (h.init) {
+      const init = JSON.parse(h.init);
+      if (['packet', 'eigen', 'two', 'typed'].includes(init.kind)) state.init = init;
+    }
+    const keep = state.init;
+    rebuildKeepingInit();
+    useState(keep);
+    restart();
+  } catch { /* an address that doesn't parse: the preset stands */ }
+  return true;
 }
 
 // ------------------------------------------------------------------------ start
 
 const hash = readHash();
 if (setups[hash.setup]) setups[hash.setup]();
-else choosePotential(byId(hash.pot) || POTENTIALS[2], { keepRunning: false });
+else if (!fromHash(hash)) choosePotential(POTENTIALS[2], { keepRunning: false });
 setRunning(true);
 
 window.__app = { state, get sim() { return sim; }, get slow() { const r = [slowFrames, frames]; slowFrames = frames = 0; return r; }, setups, choosePotential, restart, advance, get levels() { return shownLevels; }, ready: true };
