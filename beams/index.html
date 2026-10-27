@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gaussian Beams · BrainFlux</title>
+<meta name="description" content="Lenses and mirrors on an optical bench: a laser beam's waist, wavefronts and Gouy phase from the ABCD law; laser cavities, their stability and their modes.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="beams.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Gaussian beams and laser cavities</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="bm">
+  <section class="stage">
+    <div class="row tabs" id="tabs"></div>
+
+    <div class="view" id="view-bench">
+      <div class="readout" id="bench-readout" aria-live="polite"></div>
+      <div class="plot-wrap bench-wrap"><canvas id="bench" tabindex="0" aria-label="The optical bench: the beam drawn to scale along the axis, with its lenses, mirrors and slabs. Drag an element to move it, drag the background to pan, scroll or pinch to zoom."></canvas></div>
+      <div class="plot-wrap gouy-wrap"><canvas id="gouy" aria-label="The Gouy phase accumulated along the bench"></canvas></div>
+      <div class="table-wrap"><table class="waists" id="waists"></table></div>
+    </div>
+
+    <div class="view" id="view-cavity" hidden>
+      <div class="readout" id="cavity-readout" aria-live="polite"></div>
+      <div class="cav-grid">
+        <div class="plot-wrap dark cav-wrap"><canvas id="cavity" tabindex="0" aria-label="The cavity: two mirrors, the mode they select, and rays bouncing between them. Drag the right mirror to change the length."></canvas></div>
+        <div class="plot-wrap sq-wrap"><canvas id="stability" tabindex="0" aria-label="The stability diagram: the g1 g2 plane. Drag the point to change the mirrors."></canvas></div>
+        <div class="plot-wrap spec-wrap"><canvas id="spectrum" aria-label="The resonant frequencies of the cavity's longitudinal and transverse modes"></canvas></div>
+        <div class="plot-wrap sq-wrap"><canvas id="rayphase" aria-label="Where each ray hits mirror 1, round trip after round trip: position against angle"></canvas></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-modes" hidden>
+      <div class="readout" id="modes-readout" aria-live="polite"></div>
+      <div class="mode-grid">
+        <div class="cross-col">
+          <div class="sq-dark"><canvas id="cross" aria-label="The mode's cross-section at distance z: brightness is the amplitude, colour the phase"></canvas></div>
+        </div>
+        <div class="side-col">
+          <div class="plot-wrap dark mside-wrap"><canvas id="mside" aria-label="The mode from the side: a slice through the axis, from 3 Rayleigh ranges before the waist to 3 after"></canvas></div>
+          <div class="plot-wrap mgouy-wrap"><canvas id="mgouy" aria-label="The Gouy phase of this mode and of the fundamental mode"></canvas></div>
+        </div>
+      </div>
+      <div class="gallery-head small muted" id="gallery-head"></div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="view-controls" data-view="bench">
+      <div class="panel">
+        <div class="label">Laser</div>
+        <div id="laser-box" class="stack"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Optics on the bench</div>
+        <div class="row" id="add-box"></div>
+        <div class="row chips" id="chips"></div>
+        <div id="el-editor" class="stack"></div>
+      </div>
+      <div class="panel">
+        <div class="label">View</div>
+        <div class="row" id="field-box"></div>
+        <div class="row" id="view-buttons"></div>
+        <div id="view-box" class="stack"></div>
+        <div id="crest-note" class="small muted"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Mode matching</div>
+        <div class="row" id="target-box"></div>
+        <div id="target-more" class="stack"></div>
+      </div>
+    </div>
+
+    <div class="view-controls" data-view="cavity" hidden>
+      <div class="panel">
+        <div class="label">Cavity</div>
+        <div id="cav-box" class="stack"></div>
+        <div class="button-grid" id="cav-presets"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Rays</div>
+        <div class="row" id="ray-box"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Numbers</div>
+        <dl class="numbers" id="cav-numbers"></dl>
+      </div>
+    </div>
+
+    <div class="view-controls" data-view="modes" hidden>
+      <div class="panel">
+        <div class="label">Mode</div>
+        <div class="row" id="family-box"></div>
+        <div id="index-box" class="stack"></div>
+        <div id="mode-formula" class="formula"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Where along the beam</div>
+        <div id="zeta-box" class="stack"></div>
+        <div class="row" id="zeta-buttons"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Show</div>
+        <div class="row" id="cross-show"></div>
+        <div class="row" id="side-show"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Check by computing</div>
+        <div class="row" id="fft-box"></div>
+        <div id="fft-note" class="small muted"></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A laser beam is not a bundle of rays but a wave that stays narrow: a <em>Gaussian beam</em>.
+  Its radius $w(z)$ (where the intensity falls to $1/e^2$ of the peak) is smallest at the
+  <em>waist</em> $w_0$, and grows to $\sqrt2\,w_0$ one Rayleigh range $z_R=\pi w_0^2/\lambda$ away:
+  $$w(z)=w_0\sqrt{1+z^2/z_R^2},\qquad R(z)=z\left(1+z_R^2/z^2\right),$$
+  with $R$ the radius of curvature of the wavefronts.  All of it is held in one complex number,
+  the beam parameter $q=z+iz_R$, or
+  $$\frac1q=\frac1R-i\frac{\lambda}{\pi w^2}.$$
+  A lens, a mirror, a slab of glass or a stretch of empty space, with ray-transfer matrix
+  elements $A,B,C,D$ (the same as for rays: $B=d$ for a distance $d$, $C=-1/f$ for a lens),
+  changes it by the ABCD law $q'=(Aq+B)/(Cq+D)$.</p>
+  <p>Three views: the <b>Bench</b>, where you drag lenses, mirrors and glass along the beam;
+  the <b>Cavity</b>, two mirrors that trap light; and the <b>Modes</b>, the beams that keep their
+  shape.  Everything is paraxial (small angles: $w_0\gg\lambda$), lenses and mirrors are thin,
+  and a mirror on the bench is <em>unfolded</em>: the reflected beam is drawn carrying on to the
+  right, as if the mirror were a lens of focal length $R/2$.</p>
+  <p><b>How the bench is drawn.</b>  A beam a millimetre wide and a metre long would be a
+  line, so the bench is drawn many times wider than it is (the factor $E$ is in the corner).
+  Stretching a paraxial beam sideways by $E$ is exactly the same as making its wavelength $E^2$
+  times longer (the paraxial wave equation keeps its form), so the crests are drawn
+  $\lambda E^2$ apart: only then are their curvature and their Gouy shift true.  There are
+  really 1580 crests in every millimetre of red light.  The brightness is squeezed, so that a
+  focus doesn't outshine everything else.  Drag a lens, mirror or slab along the bench, drag the
+  round handle to move and resize the input waist, drag the background to pan, and scroll or
+  pinch to zoom.  Hover over the beam to read $w$, $R$ and $\psi$ anywhere.</p>
+
+  <article class="exp" data-setup="waist">
+    <h3>1. A beam from its waist</h3>
+    <p>A red helium–neon laser beam ($\lambda=633$ nm) with its waist $w_0=200$ µm at $z=0$.
+    It is narrowest there, and $\sqrt2$ times wider one Rayleigh range away (the dashed lines):
+    $z_R=\pi w_0^2/\lambda=199$ mm.  Far away it spreads in a cone of half-angle
+    $\theta=\lambda/\pi w_0=1.01$ mrad: the diffraction of a beam of width $w_0$.  Type
+    $w_0=100$ µm: $z_R$ falls four times (49.6 mm) and $\theta$ doubles.</p>
+    <p>Watch the crests: flat at the waist, most curved at $z=\pm z_R$ (where $R=2z_R$), and
+    flatter again far away, where $R\approx z$, a spherical wave centred on the waist.  Turn on
+    <em>Wavefronts</em> for arcs of radius $R(z)$.</p>
+  </article>
+
+  <article class="exp" data-setup="focus">
+    <h3>2. Focusing: a wider beam makes a smaller spot</h3>
+    <p>A beam 1 mm in radius, nearly parallel, meets a lens of $f=100$ mm.  It focuses to a waist
+    of 20.1 µm, about $f$ beyond the lens, and the panel compares this with the estimate for a
+    parallel beam of radius $w$,
+    $$w_0'\approx\frac{\lambda f}{\pi w}.$$
+    Type $w_0=2000$ µm: the spot halves, to 10.1 µm.  A wider beam converges at a steeper angle,
+    and the angle is what sets the spot ($w_0'\theta'=\lambda/\pi$).  The focus is short, too:
+    its length $2z_R'=4.0$ mm is the <em>depth of focus</em>.  (Spots near a micrometre need the
+    non-paraxial theory: then $\theta$ is no longer small.)</p>
+  </article>
+
+  <article class="exp" data-setup="gouy">
+    <h3>3. The Gouy phase</h3>
+    <p>Zoomed in on a focus ($\pm4z_R$).  The white ticks along the edges are the crests of a
+    plane wave of the same wavelength, in step with the beam's crests at the left edge.  Follow
+    the crests on the axis: through the focus they pull ahead of the ticks, and by the right
+    edge they are 0.42 of a wavelength ahead.  From far before a focus to far after it, the
+    beam gains half a wavelength, a phase of $\pi$: the <em>Gouy phase</em>
+    $$\psi(z)=\arctan\frac{z}{z_R},$$
+    drawn in the strip below the bench (the field is $e^{i(kz-\psi)}$ on the axis).  It changes
+    fastest at the waist, $d\psi/dz=2/kw^2$: squeezing light into a width $w$ costs it some of
+    its wavenumber along the axis, so near a focus the crests travel faster than $c$.  (In
+    <em>Phase</em> the colour is the phase relative to a plane wave: on the axis it turns from
+    one colour to the opposite one through the focus.)</p>
+  </article>
+
+  <article class="exp" data-setup="telescope">
+    <h3>4. A telescope beam expander</h3>
+    <p>Two lenses $f_1+f_2$ apart, here 50 and 200 mm (a Keplerian telescope): the beam comes
+    out parallel and $f_2/f_1=4$ times wider, 2 mm, and spreading 4 times less (101 µrad
+    instead of 403: the table below).  A wider beam stays narrow longer, which is why a beam
+    is expanded before it is sent far.  The Gouy strip climbs by $\pi$ at the focus between the
+    lenses.  Now make a Galilean telescope: select lens 1, make it diverging ($-50$ mm), and
+    put lens 2 at $z=200$ mm ($f_2-|f_1|$ behind it).  Same magnification, no focus inside,
+    and no $\pi$.</p>
+  </article>
+
+  <article class="exp" data-setup="imaging">
+    <h3>5. Imaging a waist: the Gaussian lens law</h3>
+    <p>A waist of 100 µm ($z_R=49.6$ mm) sits $s=100$ mm before a lens of $f=50$ mm.  Ray
+    optics ($1/s+1/s'=1/f$) would image it 100 mm after the lens, the same size.  The beam's
+    new waist is only 75.2 mm after the lens, and 71.0 µm wide.  The plot in the panel shows
+    where the lens puts the waist ($s'$) against where it was ($s$), in units of $f$: rays
+    dashed, the beam solid, following Self's law
+    $$\frac{1}{s+z_R^2/(s-f)}+\frac{1}{s'}=\frac1f.$$
+    Drag the lens.  Far from $s=f$ (compared with $z_R$) the two agree.  Near $s=f$ the rays go
+    off to infinity, but the waist only reaches $s'=f+f^2/2z_R$, at $s=f+z_R$: you are close to
+    that point now.  Make $w_0$ small (so $z_R\ll f$) and the curves merge.</p>
+  </article>
+
+  <article class="exp" data-setup="slab">
+    <h3>6. A slab of glass</h3>
+    <p>A beam focused by a lens of 150 mm passes through 40 mm of glass ($n=1.5$).  Inside, the
+    crests are $n$ times closer together and the beam converges more slowly.  The focus moves
+    back by $t(1-1/n)=13.3$ mm, to 162.3 mm (remove the slab: 149.0 mm).  In the ABCD law glass
+    of thickness $t$ counts as a distance $t/n$ of air.</p>
+  </article>
+
+  <article class="exp" data-setup="stability">
+    <h3>7. The stability diagram</h3>
+    <p>Two mirrors, $R_1=1$ m and $R_2=500$ mm, $L=250$ mm apart.  Each is described by
+    $g=1-L/R$, and the cavity has a Gaussian mode (and keeps rays near its axis) only if
+    $$0\le g_1g_2\le1,$$
+    the shaded region between the axes and the hyperbola $g_1g_2=1$.  The mode's wavefronts
+    fit the mirrors exactly (the arcs in the picture).  Drag the point: the mirrors change and
+    the mode with them; outside the shaded region there is none.  Drag mirror 2 in the picture
+    (or use the $L$ slider): the point moves along the dashed line through $(1,1)$.  Landmarks:
+    two flat mirrors (planar, $g=1$), $R=L$ (confocal), $R=L/2$ (concentric), and one flat with
+    $R=L$ (hemispherical), all on the edge of stability.</p>
+  </article>
+
+  <article class="exp" data-setup="rays">
+    <h3>8. Rays in stable and unstable cavities</h3>
+    <p>Three rays bounce between mirrors of $R=400$ mm, 250 mm apart.  They stay near the axis
+    for ever.  The plot at the bottom right marks where each ray hits mirror 1, round trip after
+    round trip: the hits lie on an ellipse, and go round it by the round-trip Gouy phase
+    $2\psi_1=0.755\pi$ each time.  Press <em>Unstable</em> ($R=100$ mm, $g=-1.5$): the rays walk
+    off within a few round trips.  Then try $R_1=R_2=500$ mm ($g_1g_2=1/4$, $2\psi_1=2\pi/3$):
+    every ray comes back to where it started after 3 round trips.</p>
+  </article>
+
+  <article class="exp" data-setup="confocal">
+    <h3>9. The confocal cavity and its degenerate modes</h3>
+    <p>A mode of order $N$ ($N=m+n$ for Hermite–Gauss, $2p+|l|$ for Laguerre–Gauss) gains a
+    Gouy phase $(N+1)\psi_1$ each way, so it resonates at
+    $$\nu=\frac{c}{2L}\left(q+(N+1)\frac{\psi_1}{\pi}\right),\qquad\cos\psi_1=\pm\sqrt{g_1g_2}.$$
+    Here $R_1=R_2=L=250$ mm, $\psi_1=\pi/2$: every even order lands on the comb of the lowest mode
+    and every odd order half way between.  The spectrum repeats every 300 MHz, half the free
+    spectral range $c/2L=600$ MHz, and any ray comes back after two round trips.  Make both
+    mirrors 280 mm: the orders split apart.  Then $R_1=260$ and $R_2=240$ mm: unstable.  The
+    confocal cavity sits where the stable region pinches to a point, so it stays stable only if
+    both mirrors err the same way.  (Changing one mirror alone keeps the other's $g=0$, on the
+    edge.)</p>
+  </article>
+
+  <article class="exp" data-setup="waveguide">
+    <h3>10. A cavity unfolded: a row of lenses</h3>
+    <p>Light bouncing between two mirrors of radius $R$ is light going through a row of lenses of
+    focal length $R/2$, one every $L$.  Here $R=200$ mm, $L=150$ mm, and the beam sent in is
+    that cavity's own mode, $w_0=139.7$ µm: after every lens it comes back to the same waist,
+    the self-consistency that defines the mode.  The Gouy strip climbs evenly, by
+    $\psi_1=\arccos(1-L/R)=0.42\pi$ per lens.  Type $w_0=300$ µm: the beam no longer repeats, it
+    breathes, but stays bounded, because the cavity is stable.  Drag one lens along the bench
+    and watch the disturbance travel on down the row.</p>
+  </article>
+
+  <article class="exp" data-setup="matching">
+    <h3>11. Mode matching</h3>
+    <p>The cavity of the Cavity view ($R_1=R_2=300$ mm, $L=200$ mm) is placed on the bench, its
+    mode dashed in yellow.  Only the part of the beam shaped like that mode gets in: $\eta$ is the
+    fraction of the power coupled into it,
+    $$\eta=\frac{4\,\mathrm{Im}\,q_1\,\mathrm{Im}\,q_2}{|q_1-q_2^*|^2},$$
+    100% only when the beam's waist has the mode's size and position.  Now $\eta$ is 69%.  Move
+    the lens: with $f=200$ mm the best is 92% (near $z=362$ mm).  Change $f$ too, and you can
+    reach 100% (near $f=254$ mm at $z=324$ mm).  This is how a beam is coupled into a cavity
+    or an optical fibre.  (The input mirror is taken to be thin, with no lens effect of its
+    own.)</p>
+  </article>
+
+  <article class="exp" data-setup="hermite">
+    <h3>12. Hermite–Gauss modes and their Gouy phase</h3>
+    <p>$\mathrm{HG}_{21}$: two dark lines across $x$, one across $y$.  Every
+    $\mathrm{HG}_{mn}$ keeps its shape as it travels: the cross-section is drawn in a square that
+    grows with $w(z)$, and only the colours (the phase) change.  Its Gouy phase is
+    $(m+n+1)\psi$, here $4\arctan(z/z_R)$: in the side view its crests pull ahead of the
+    plane-wave ticks four times as much as the fundamental's would (click $\mathrm{HG}_{00}$ to
+    compare).  This is why modes of different order resonate at different frequencies in a
+    cavity.  In the frame that grows with $w(z)$, the paraxial wave equation is the Schrödinger
+    equation of a 2D harmonic oscillator, with $\psi$ for $\omega t$: these modes are its
+    eigenstates, and $(N+1)\psi$ is the phase $E_Nt/\hbar$ of the level $E_N=(N+1)\hbar\omega$.</p>
+  </article>
+
+  <article class="exp" data-setup="donut">
+    <h3>13. The Laguerre–Gauss donut and its vortex</h3>
+    <p>$\mathrm{LG}_{01}$: a ring of light with a dark centre.  Its phase turns once round the
+    axis ($l=1$), so all colours meet at the centre, where the field must vanish: an optical
+    vortex.  Away from the waist the curved wavefront adds a phase growing as $r^2$, and the
+    colours wind into a spiral (press <em>Travel</em>).  Try $l=3$.  Such a beam carries
+    angular momentum $l\hbar$ per photon.  Then choose $\mathrm{HG}_{10}+e^{i\varphi}\mathrm{HG}_{01}$
+    with $\varphi=\pi/2$: the same donut, made of two modes with lobes (both of order 1, so they
+    keep step).  With $\varphi=0$ it is $\mathrm{HG}_{10}$ turned by 45°; in between, a ring of
+    uneven brightness.</p>
+  </article>
+
+  <article class="exp" data-setup="fft">
+    <h3>14. Check it by computing</h3>
+    <p>The modes here come from formulas.  To check one, <em>Propagate by FFT</em> takes the mode
+    at its waist on a 256 × 256 grid and sends it a distance $z$ with the angular spectrum
+    method of the Diffraction demo, using the exact $k_z=\sqrt{k^2-k_x^2-k_y^2}$ rather than the
+    paraxial approximation, with $w_0=20\lambda$.  The computed beam is drawn instead of the
+    formula.  For $\mathrm{HG}_{31}$ at $1.5z_R$ it differs from the formula by 0.1% of its peak,
+    and its Gouy phase comes out as $5\arctan1.5=1.564\pi$.  Move $z$ or change the mode.</p>
+  </article>
+
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
