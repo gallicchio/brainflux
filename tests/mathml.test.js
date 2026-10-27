@@ -21,7 +21,9 @@ test('TeX to MathML: the common constructions', () => {
 });
 
 test('every formula in every demo translates without an error', async () => {
-  const pages = ['fft2d', 'schrodinger1d', 'action', 'schrodinger2d', 'planewave', 'diffraction', 'fourier'];
+  // ?page=name checks one demo's page, listed here or not.
+  const one = new URLSearchParams(location.search).get('page');
+  const pages = one ? [one] : ['fft2d', 'schrodinger1d', 'action', 'schrodinger2d', 'planewave', 'diffraction', 'fourier'];
   let count = 0;
   for (const p of pages) {
     const html = await (await fetch(`../${p}/index.html`)).text();
