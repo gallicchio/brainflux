@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imaging: Abbe and phase contrast · BrainFlux</title>
+<meta name="description" content="A microscope as two Fourier transforms: paint the pupil in the Fourier plane and see Abbe's resolution limit, dark field, schlieren and Zernike's phase contrast.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="imaging.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Imaging: Abbe and phase contrast</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="imaging">
+  <section class="stage">
+    <div class="trio">
+      <div class="side" id="side-obj">
+        <div class="side-head"><h2>Object</h2><span class="small muted" id="obj-sub">t = a e<sup>iφ</sup></span><span class="spacer"></span><div id="obj-view"></div></div>
+        <div class="sq"><canvas id="object" aria-label="The object: its transmission. Paint on it to add or remove ink."></canvas></div>
+        <div class="foot">
+          <div class="tools" id="obj-tools"></div>
+          <div class="readout small mono" id="obj-read">&nbsp;</div>
+        </div>
+      </div>
+      <div class="side" id="side-fp">
+        <div class="side-head"><h2>Fourier plane</h2><span class="spacer"></span><div id="fp-view" class="row"></div></div>
+        <div class="sq"><canvas id="fourier" aria-label="The Fourier plane: the light from the object, sorted by direction, with the pupil drawn over it. Paint on the pupil, or drag the light with the Tilt tool."></canvas></div>
+        <div class="foot">
+          <div class="tools" id="fp-tools"></div>
+          <div class="readout small mono" id="fp-read">&nbsp;</div>
+        </div>
+      </div>
+      <div class="side" id="side-img">
+        <div class="side-head"><h2>Image</h2><span class="small muted">intensity |E|²</span><span class="spacer"></span><div id="img-view" class="row"></div></div>
+        <div class="sq"><canvas id="image" aria-label="The image: its intensity in grey. Drag on it to move the profile line."></canvas></div>
+        <div class="foot">
+          <div class="tools" id="img-tools"></div>
+          <div class="readout small mono" id="img-read">&nbsp;</div>
+        </div>
+      </div>
+    </div>
+    <div class="profile-box">
+      <div class="side-head"><h2>Profile</h2><span class="small muted" id="profile-note">along the dashed line; drag on the image to move it</span></div>
+      <div class="profile-wrap"><canvas id="profile" aria-label="The image intensity along the dashed line, with the object for comparison"></canvas></div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="label">Object</div>
+      <div id="presets" class="button-grid"></div>
+      <div id="preset-params" class="stack"></div>
+      <div id="enc-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Objective</div>
+      <div id="objective" class="stack"></div>
+      <div id="limit" class="small"></div>
+    </div>
+    <div class="panel">
+      <div class="label">In the Fourier plane</div>
+      <div id="filter" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Illumination</div>
+      <div id="illum" class="stack"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A microscope is two Fourier transforms.  Light of wavelength $\lambda$ passes the object,
+  whose transmission $t(x,y)=a\,e^{i\varphi}$ can dim it (the amplitude $a$) or delay it (the
+  phase $\varphi$).  The first lens sorts the light by direction: in its back focal plane, the
+  <em>Fourier plane</em>, light that left the object at angle $\theta$ lands at spatial frequency
+  $f=\sin\theta/\lambda$, so that plane holds the object's Fourier transform $T(f)$.  There the
+  objective's aperture, the <em>pupil</em> $P(f)$, lets through only $|f|\le\mathrm{NA}/\lambda$.
+  The second lens transforms back to the image:
+  $$E(x,y)=\mathcal{F}^{-1}\left[P(f)\,T(f)\right],\qquad I=|E|^2.$$
+  Paint on the pupil, or use the controls, and the image follows.</p>
+  <figure>
+    <svg class="layout" viewBox="0 0 420 120" role="img" aria-label="The 4f system: object, lens, Fourier plane, lens, image, each a focal length f apart">
+      <g fill="none" stroke="currentColor" stroke-width="1.2">
+        <line x1="10" y1="60" x2="410" y2="60" stroke-dasharray="3 3" opacity="0.4"/>
+        <line x1="20" y1="20" x2="20" y2="100"/>
+        <ellipse cx="110" cy="60" rx="7" ry="44"/>
+        <line x1="210" y1="12" x2="210" y2="28" stroke-width="2.5"/><line x1="210" y1="92" x2="210" y2="108" stroke-width="2.5"/>
+        <ellipse cx="310" cy="60" rx="7" ry="44"/>
+        <line x1="400" y1="20" x2="400" y2="100"/>
+      </g>
+      <g fill="none" stroke-width="1.3">
+        <path d="M20 45 L110 45 L310 75 L400 75" stroke="#d33" opacity="0.8"/>
+        <path d="M20 75 L110 75 L310 45 L400 45" stroke="#d33" opacity="0.8"/>
+        <path d="M20 60 L110 37 L210 37 L310 37 L400 60" stroke="#2a8" opacity="0.9"/>
+        <path d="M20 60 L110 83 L210 83 L310 83 L400 60" stroke="#2a8" opacity="0.9"/>
+      </g>
+      <g font-size="10" fill="currentColor" text-anchor="middle">
+        <text x="20" y="114">object</text><text x="110" y="114">lens</text><text x="210" y="118">Fourier plane</text>
+        <text x="310" y="114">lens</text><text x="400" y="114">image</text>
+        <text x="65" y="12">f</text><text x="160" y="12">f</text><text x="260" y="12">f</text><text x="355" y="12">f</text>
+      </g>
+    </svg>
+    <figcaption class="small muted">Undeviated light (red) crosses the Fourier plane on the axis:
+    the zero order.  Light diffracted by the object (green) crosses it off the axis, and the two
+    meet again in the image.  The pupil's edges (thick) set how steep a diffracted ray may be:
+    no diffracted light through the pupil, no detail in the image.</figcaption>
+  </figure>
+  <p>Colours in the Fourier plane are phases (red real and positive, yellow-green $+i$, cyan
+  negative, violet $-i$), brightness is $|T|$; the parts the pupil blocks are dimmed.  The object
+  is drawn as its transmitted intensity $|t|^2$ in grey, or as its phase $\varphi$ in colour.
+  The field of view is $25.6~\mu\mathrm{m}$ across, on 256 × 256 points.</p>
+
+  <article class="exp" data-setup="abbe">
+    <h3>1. Abbe's experiment: no first orders, no image</h3>
+    <p>A grating of period $d=1.28~\mu\mathrm{m}$ sends its light in a few directions only: the
+    orders, points in the Fourier plane at $\sin\theta=m\lambda/d$ (ringed and numbered: white
+    ones get through the pupil, red ones are blocked).  With NA 0.35 only the zero order gets
+    through, and the image is blank: an even field, a quarter as bright as clear glass.  The
+    light is all there; the grating is not.  Slide the NA past $\lambda/d=0.43$: the $\pm1$
+    orders enter and the grating appears, as a sinusoid of period $d$.  Past $3\lambda/d=1.29$
+    the third orders enter too (equal bars and gaps have no even orders) and the bars sharpen.
+    Abbe (1873): with light along the axis, a period is resolved only if
+    $d\ge\lambda/\mathrm{NA}$.</p>
+  </article>
+
+  <article class="exp" data-setup="zero">
+    <h3>2. Block the zero order and the period halves</h3>
+    <p>The pupil (NA 0.6) passes the orders $-1$, $0$ and $+1$, and a small stop blocks the zero
+    order.  What is left, $E\propto\cos(2\pi x/d)$, has an intensity $\cos^2$ that repeats every
+    $d/2$: the image has twice as many lines as the object (the profile reads 0.64 µm).  The
+    image is made by the orders interfering, not by the object being copied.  Choose
+    <em>Open</em> to compare.</p>
+  </article>
+
+  <article class="exp" data-setup="oblique">
+    <h3>3. Oblique light doubles the resolution</h3>
+    <p>A finer grating, $d=0.8~\mu\mathrm{m}$: at NA 0.4 its first orders, at $\sin\theta=\pm0.69$,
+    miss the pupil, and light along the axis shows nothing.  Here the light is tilted
+    ($\sin\theta=0.35$), and the whole spectrum slides: the zero order and the $+1$ order both get
+    through, and the grating is resolved from two beams.  Drag the light about with the
+    <em>Tilt</em> tool and watch the grating come and go.  The limit becomes
+    $d=\lambda/2\mathrm{NA}$.  A condenser lighting the object from every direction up to the
+    objective's NA (choose <em>Condenser</em>, NA 0.4) resolves it too, with less contrast.</p>
+  </article>
+
+  <article class="exp" data-setup="diatom">
+    <h3>4. A diatom, Abbe's test object</h3>
+    <p>The silica shell of a diatom is pierced by a lattice of pores whose rows are
+    $0.52~\mu\mathrm{m}$ apart; nineteenth-century microscopists tested their objectives on such
+    shells.  The dashed rings mark the lattice's six first orders, at $\sin\theta=1.06$.  At NA
+    0.65 they are outside the pupil: the outline and the midrib are sharp, but the pores are
+    gone.  Raise the NA past 1.06 (an oil-immersion objective) and they appear.  Or keep NA
+    0.65 and tilt the light (sin θ 0.53, direction −65°): one order joins the zero order in
+    the pupil, and one family of rows appears, as stripes.  Then make the <em>pore spacing</em>
+    smaller and find where the pores disappear again.</p>
+  </article>
+
+  <article class="exp" data-setup="invisible">
+    <h3>5. A transparent cell is invisible</h3>
+    <p>These cells only delay the light, by up to 0.3 rad; $|t|=1$ everywhere.  With the aperture
+    wide open (NA 1.4) the image is uniform to about 0.1%: $I=|e^{i\varphi}|^2=1$, nothing to see,
+    though the object's colours (its phase) show the cells plainly.  Close the aperture to NA
+    0.25: the light that the cells' steep edges send out at wide angles is lost, and faint rims
+    appear (choose <em>Stretch</em> under the image to see them).  The Fourier plane shows why
+    phase objects are hard to see: nearly all their light is in the zero order.</p>
+  </article>
+
+  <article class="exp" data-setup="defocus">
+    <h3>6. Defocus makes it faintly visible</h3>
+    <p>The same cells, with the focus moved $z=1~\mu\mathrm{m}$ past them (the pupil gains the
+    phase $e^{-i\pi\lambda zf^2}$).  A cell is thicker in the middle, like a weak lens, so beyond
+    focus its middle is a little brighter (3% at the nucleus) and its rim darker: for small $z$,
+    $I\approx1-\frac{\lambda z}{2\pi}\nabla^2\varphi$.  Slide $z$ through zero and the contrast
+    reverses.  Biologists did this for a century: a slightly defocused microscope shows
+    transparent cells.</p>
+  </article>
+
+  <article class="exp" data-setup="darkfield">
+    <h3>7. Dark field</h3>
+    <p>A central stop, 0.08 NA in radius, removes the zero order (the undeviated light) and the
+    lowest frequencies.  Only 0.7% of the light gets through, but these letters, written in phase
+    alone, now glow on black at their edges, where the phase changes fastest.  (With
+    <em>Zero order only</em> the whole letters shine, as $I\approx(\varphi-\langle\varphi\rangle)^2$.)  Real
+    dark-field microscopes instead light the object at angles beyond the objective's NA, so the
+    direct light misses the pupil: choose <em>Open</em> and set the tilt to 0.6.</p>
+  </article>
+
+  <article class="exp" data-setup="zernike">
+    <h3>8. Zernike's phase contrast</h3>
+    <p>A transparent object $t=e^{i\varphi}\approx1+i\varphi$ is the zero order plus a weak
+    diffracted wave a quarter period out of step with it, so the two don't change each other's
+    brightness.  Zernike's dot shifts the zero order alone by a quarter wave ($-90°$, an
+    advance), bringing the two into step:
+    $$I\approx1-2(\varphi-\langle\varphi\rangle).$$
+    The cells now look dark (Zernike's "positive" contrast); with $+90°$ they look bright.  The
+    profile compares the image with this small-phase formula: at NA 0.5 the image is a blurred
+    version of it (at NA 1.4 they agree to within 0.08); raise the phase $\varphi_0$ and watch
+    the formula fail.  A dot that also absorbs, with amplitude $a$, gives
+    $I\approx a^2\mp2a(\varphi-\langle\varphi\rangle)$: with $\varphi_0=0.1$, $a=0.5$ doubles the contrast.
+    Zernike, 1935; Nobel prize, 1953.</p>
+  </article>
+
+  <article class="exp" data-setup="halo">
+    <h3>9. The halo</h3>
+    <p>A real phase dot has a size (here 0.1 NA), and it shifts not only the zero order but the
+    lowest frequencies of the object too, the ones that make up a large cell's broad, smooth
+    inside.  So the middle of a big cell fades back towards the background ("shading off") and a
+    bright halo rings it.  Make the dot bigger (0.2) and the cells all but vanish, leaving bright
+    rims; make it smaller and the halo fades.  Real microscopes need a ring wide enough to catch
+    all the condenser's direct light, which is why phase-contrast pictures of cells glow at the
+    edges.</p>
+  </article>
+
+  <article class="exp" data-setup="schlieren">
+    <h3>10. Schlieren: a knife edge</h3>
+    <p>Foucault's knife edge cuts off half the Fourier plane, keeping the zero order.  For a weak
+    phase $\varphi=\epsilon\cos kx$ the image is
+    $I\approx1-\epsilon\sin kx=1+\frac1k\,\partial_x\varphi$: the phase's slope across the edge
+    becomes brightness.  The cells look lit from one side, like relief (Hoffman's modulation
+    contrast microscope, 1975, refines this for living cells).  Turn the knife's angle and the
+    light swings round.  With the <em>Condenser</em> on, the knife also cuts the image of the
+    light source, as in the schlieren cameras that photograph shock waves and hot air.</p>
+  </article>
+
+  <article class="exp" data-setup="portrait">
+    <h3>11. The hidden portrait</h3>
+    <p>Fourier's portrait written in phase alone, 0.3 rad at the darkest ink: the image shows
+    almost nothing (a contrast of 1.5%).  Choose <em>Phase dot</em> in the Fourier plane and he
+    appears.  The $-90°$ dot shows him as engraved, $+90°$ as a negative.</p>
+  </article>
+
+  <article class="exp" data-setup="coherence">
+    <h3>12. Coherent or incoherent light</h3>
+    <p>The bar target in coherent light at NA 0.5: bars finer than
+    $\lambda/\mathrm{NA}=1.1~\mu\mathrm{m}$ are gone (the 1 µm group is a grey block), and edges
+    ring.  Beside a single straight edge the light overshoots by 19% (try <em>Edge</em>); between
+    close bars the ripples add, and the image reaches $I=1.66$ (see the readout), though nothing in the object
+    transmits more than 1.  Choose <em>Incoherent</em>: now intensities add, not fields, and the
+    transfer function is the pupil's autocorrelation (the OTF view), reaching twice as far, to
+    $\lambda/2\mathrm{NA}=0.55~\mu\mathrm{m}$, but falling off gradually.  The 0.79 and 0.63 µm
+    groups show, with less contrast, and nothing overshoots: an incoherent image is never
+    brighter than the brightest part of the object.  A condenser gives something in between.</p>
+  </article>
+
+  <article class="exp" data-setup="star">
+    <h3>13. Where resolution runs out: the Siemens star</h3>
+    <p>The spokes' period shrinks towards the centre, as $2\pi r/18$.  Inside the dashed circle,
+    $r=\frac{18\lambda}{2\pi\,\mathrm{NA}}=3.15~\mu\mathrm{m}$, it is finer than $\lambda/\mathrm{NA}$ and
+    the star turns grey.  In <em>Incoherent</em> light the circle shrinks by half.  Then set
+    the defocus to 4 µm: between $r\approx3$ and 6 µm the spokes come back faintly, with black
+    and white swapped (choose <em>Stretch</em> to see them).  The OTF view shows why: defocus
+    makes the transfer function negative in a ring (cyan).  This is "spurious resolution", and
+    a reason to focus on something with sharp edges.</p>
+  </article>
+
+  <article class="exp" data-setup="rayleigh">
+    <h3>14. Two points and Rayleigh's criterion</h3>
+    <p>Two pinholes $0.6~\mu\mathrm{m}$ apart at NA 0.56: Rayleigh's limit $0.61\lambda/\mathrm{NA}$.
+    In incoherent light (two stars, two fluorescent molecules) the profile dips by 26.6% (26.5% for ideal points)
+    between them: just resolved.  In coherent light the amplitudes add first: in step, the two
+    make one blob, brightest in the middle; set the <em>phase</em> to 180° and a dark line
+    separates them however close they are.  Coherent resolution depends on the object's
+    phase.</p>
+  </article>
+
+  <h3>Things to know</h3>
+  <ul>
+    <li>Scalar, thin-object, paraxial optics with perfect lenses: the object is a mask, the light
+    has one polarisation, and the lenses add no aberrations of their own.  Defocus is the
+    paraxial phase $e^{-i\pi\lambda zf^2}$; at high NA the true one differs.  An NA above 1 means
+    an immersion objective, with the object in oil.</li>
+    <li>The image is drawn upright (a real 4f system turns it over) and at the object's scale.</li>
+    <li>Everything is periodic on the 256 × 256 grid: light leaving one edge comes back at the
+    other.  The grating's period is rounded so that a whole number of periods fits.</li>
+    <li>The condenser's light is a sum over up to 40 directions inside its NA (Abbe's own
+    method), added a few at a time, so the image settles over a few frames.  Incoherent light
+    uses the OTF and is exact.</li>
+    <li>The image's grey: by default its brightest point is white; <em>I = 1 white</em> fixes
+    clear glass at white, so dimmer images look dimmer; <em>Stretch</em> makes the darkest point
+    black and the brightest white, to see faint contrast.  The readout gives the true
+    intensities.</li>
+    <li>The profile's dashed curve is the object, $|t|^2$; for a transparent object it is its
+    phase (right-hand axis) or, with a phase dot, the small-phase formula.  Drag on the image to
+    move the line.</li>
+  </ul>
+  <p class="small muted">New in 2026 for BrainFlux.
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

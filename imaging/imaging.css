@@ -1,0 +1,63 @@
+.imaging {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px;
+  padding: 12px; max-width: 1640px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto auto auto; column-gap: 12px; row-gap: 5px; }
+/* Each panel spans the three rows (head, canvas, foot) of the trio, so the canvases line up. */
+.side { display: grid; grid-row: span 3; grid-template-rows: subgrid; min-width: 0; }
+.side-head { display: flex; align-items: center; gap: 8px; min-height: 30px; flex-wrap: wrap; }
+.side-head h2 { font-size: 15px; margin: 0; white-space: nowrap; }
+.side-head .spacer { flex: 1; }
+.side-head select { padding: 2px 4px; min-height: 26px; font-size: 13px; }
+.side-head .row { gap: 4px; flex-wrap: nowrap; }
+.side-head .seg > button, .side-head > div > button { min-height: 26px; padding: 2px 8px; font-size: 13px; }
+.sq { position: relative; width: 100%; aspect-ratio: 1; background: var(--canvas-bg); border-radius: var(--radius); overflow: hidden; }
+.sq canvas { width: 100%; height: 100%; }
+#object { cursor: crosshair; }
+#fourier { cursor: crosshair; }
+#fourier.tilt { cursor: grab; }
+#image { cursor: row-resize; }
+.foot { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.foot .tools { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.foot .tools .seg > button { padding: 2px 7px; min-height: 26px; font-size: 13px; }
+.foot .tools > button { padding: 2px 8px; min-height: 26px; font-size: 13px; }
+.foot .slider { grid-template-columns: auto minmax(40px, 1fr) 3.6em; flex: 1 1 140px; min-width: 120px; }
+.foot .slider input[type="number"] { font-size: 12px; }
+.readout { color: var(--ink-2); min-height: 1.45em; line-height: 1.45; overflow-wrap: anywhere; }
+.readout b { color: var(--ink); font-weight: 600; }
+.readout .good { color: var(--good); }
+.readout .warn { color: var(--warn); }
+
+.profile-box { display: flex; flex-direction: column; gap: 4px; }
+.profile-wrap { height: 170px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.profile-wrap canvas { width: 100%; height: 100%; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.controls .slider { grid-template-columns: minmax(4.6em, auto) 1fr 4.6em; }
+.button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+.controls .seg { display: flex; }
+.controls .seg > button { flex: 1 1 auto; padding: 3px 6px; font-size: 13px; }
+.controls .note { color: var(--ink-3); font-size: 12px; }
+.controls .examples { display: flex; flex-wrap: wrap; gap: 4px; }
+.controls .examples button { font-size: 12px; padding: 2px 6px; min-height: 24px; font-family: var(--mono); }
+#limit { color: var(--ink-2); }
+
+.drawer svg.layout { width: 100%; height: auto; color: var(--ink-2); }
+
+@media (max-width: 1180px) {
+  .imaging { grid-template-columns: minmax(0, 1fr) 270px; }
+}
+@media (max-width: 960px) {
+  .imaging { grid-template-columns: minmax(0, 1fr); }
+  .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; }
+}
+@media (max-width: 640px) {
+  .imaging { padding: 8px; }
+  .trio { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; row-gap: 14px; }
+  .side { grid-row: auto; display: flex; flex-direction: column; gap: 5px; }
+  .bar h1 { font-size: 14px; }
+}
+#profile-note b { color: var(--ink-2); font-weight: 600; }
