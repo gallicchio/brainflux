@@ -28,6 +28,9 @@ repository with any static web server, for example
 and open <http://localhost:8000/>.  (Opening `index.html` straight from the disk does not work:
 browsers refuse to load JavaScript modules from `file://` URLs.)
 
+To publish it: push to GitHub and turn on Pages for the `main` branch, root folder
+(Settings, Pages).  The empty `.nojekyll` file tells Pages to serve the files as they are.
+
 ## How it is made
 
 - **No frameworks, no build step, no CDN.**  HTML, CSS, ES2020 JavaScript, Canvas 2D, Pointer
