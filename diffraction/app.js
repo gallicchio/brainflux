@@ -19,6 +19,8 @@ const state = {
   lambda: 0.55,           // um
   white: false,
   display: 'intensity',
+  scale: 'sqrt',          // brightness in proportion to sqrt(I), or 'linear': to I
+  zoom: 1,                // the screen magnified about its middle: 1, 4 or 16
   bright: 0,
   tool: 'open',
   brush: 6,
@@ -82,7 +84,8 @@ function sizeLabel(p) {
 let hashTimer = 0;
 function saveHash() {
   clearTimeout(hashTimer);
-  hashTimer = setTimeout(() => writeHash({ preset: state.preset, size: state.size, z: Math.round(state.z) }), 300);
+  hashTimer = setTimeout(() => writeHash({ preset: state.preset, size: state.size, z: Math.round(state.z),
+    scale: state.scale === 'linear' ? 'linear' : undefined, zoom: state.zoom > 1 ? state.zoom : undefined }), 300);
 }
 
 // --------------------------------------------------------------------- computing
@@ -187,13 +190,17 @@ function scaleBar(ctx, w, h, span, z = 0) {
   ctx.fillText(text, 10 * dpr, h - 20 * dpr);
 }
 
-/** Intensities of the fields over the drawn region, to a coloured image. */
-function intensityImage(getI, m, rgbs, ref) {
+/**
+ * Intensities of the fields over the drawn region, to a coloured image: brightness in
+ * proportion to the amplitude, sqrt(I / ref) (faint light shows), or if linear to the
+ * intensity itself, I / ref (the true contrast).
+ */
+function intensityImage(getI, m, rgbs, ref, linear = false) {
   const img = new ImageData(m, m), d = img.data;
   for (let o = 0; o < m * m; o++) {
     let r = 0, g = 0, b = 0;
     rgbs.forEach((rgb, w) => {
-      const v = Math.min(1, Math.sqrt(getI(w, o) / ref));
+      const v = Math.min(1, linear ? getI(w, o) / ref : Math.sqrt(getI(w, o) / ref));
       r += rgb[0] * v; g += rgb[1] * v; b += rgb[2] * v;
     });
     d[4 * o] = 255 * Math.min(1, r); d[4 * o + 1] = 255 * Math.min(1, g); d[4 * o + 2] = 255 * Math.min(1, b); d[4 * o + 3] = 255;
@@ -201,47 +208,79 @@ function intensityImage(getI, m, rgbs, ref) {
   return img;
 }
 
+// Weights for reading a band-limited sequence at the fractional index u: a sinc, windowed
+// (Lanczos) to LANCZOS samples either side.  [the first index, the weights]
+const LANCZOS = 6;
+function lanczos(u) {
+  const i0 = Math.floor(u) - LANCZOS + 1, w = new Float64Array(2 * LANCZOS);
+  for (let t = 0; t < w.length; t++) {
+    const d = u - (i0 + t);
+    w[t] = d === 0 ? 1 : (LANCZOS * Math.sin(Math.PI * d) * Math.sin((Math.PI * d) / LANCZOS)) / (Math.PI * Math.PI * d * d);
+  }
+  return [i0, w];
+}
+
 /**
- * The intensity of each field on the screen, SHOW x SHOW pixels of pitch P, the middle half of
- * the finest field's grid.  The other wavelengths' grids are coarser (their pitch is
- * lambda z / (n dx)): their intensities are interpolated.
+ * Each field on the screen, SHOW x SHOW pixels of pitch P / zoom about the middle (P: the
+ * finest field's pitch, so unzoomed the middle half of its grid).  Where these aren't the
+ * field's own samples (zoomed in, or the coarser grids of the redder light in white light) the
+ * field is read between its samples as the band-limited function it is.  Returns [{re, im}].
  */
-function screenIntensities(P) {
+function screenFields(P) {
   return fields.map((f) => {
-    const I = new Float64Array(SHOW * SHOW), r = P / f.pitch;
-    const at = (o) => f.re[o] * f.re[o] + f.im[o] * f.im[o];
-    for (let j = 0; j < SHOW; j++) {
-      const v = (j - SHOW / 2) * r + N / 2, j0 = Math.floor(v), fv = v - j0;
-      for (let i = 0; i < SHOW; i++) {
-        const u = (i - SHOW / 2) * r + N / 2, i0 = Math.floor(u), fu = u - i0, o = j0 * N + i0;
-        I[j * SHOW + i] = r === 1 ? at(o) : (1 - fv) * ((1 - fu) * at(o) + fu * at(o + 1)) + fv * ((1 - fu) * at(o + N) + fu * at(o + N + 1));
+    const step = P / state.zoom / f.pitch, re = new Float64Array(SHOW * SHOW), im = new Float64Array(SHOW * SHOW);
+    if (step === 1) {
+      for (let j = 0; j < SHOW; j++) for (let i = 0; i < SHOW; i++) { const o = (j + OFF) * N + i + OFF; re[j * SHOW + i] = f.re[o]; im[j * SHOW + i] = f.im[o]; }
+      return { re, im };
+    }
+    // The same positions across and down; along the rows first, for the rows needed.
+    const at = Array.from({ length: SHOW }, (_, i) => lanczos((i - SHOW / 2) * step + N / 2));
+    const lo = at[0][0], rows = at[SHOW - 1][0] + 2 * LANCZOS - lo;
+    const tr = new Float64Array(rows * SHOW), ti = new Float64Array(rows * SHOW);
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0, base = (lo + r) * N; i < SHOW; i++) {
+        const [i0, w] = at[i];
+        let sr = 0, si = 0;
+        for (let t = 0; t < w.length; t++) { sr += w[t] * f.re[base + i0 + t]; si += w[t] * f.im[base + i0 + t]; }
+        tr[r * SHOW + i] = sr; ti[r * SHOW + i] = si;
       }
     }
-    return I;
+    for (let j = 0; j < SHOW; j++) {
+      const [j0, w] = at[j];
+      for (let i = 0; i < SHOW; i++) {
+        let sr = 0, si = 0;
+        for (let t = 0; t < w.length; t++) { const o = (j0 - lo + t) * SHOW + i; sr += w[t] * tr[o]; si += w[t] * ti[o]; }
+        re[j * SHOW + i] = sr; im[j * SHOW + i] = si;
+      }
+    }
+    return { re, im };
   });
 }
 
-function percentile(I, from = 0) {
-  const s = Float64Array.from(I.subarray(from)).sort();
-  return s[Math.floor(0.995 * (s.length - 1))];
+// The intensity drawn white: the brightest point (linear scale), or all but the brightest 0.5%
+// (the compressed scale, which then shows faint light); then the Brightness slider.
+function whiteLevel(Is, linear, from = 0) {
+  let ref = 0;
+  for (const I of Is) {
+    if (linear) { for (let o = from; o < I.length; o++) ref = Math.max(ref, I[o]); }
+    else { const s = Float64Array.from(I.subarray(from)).sort(); ref = Math.max(ref, s[Math.floor(0.995 * (s.length - 1))]); }
+  }
+  return (ref || 1) * 10 ** -state.bright;
 }
 
+let shown = null;     // what the screen shows: {Is, ref}, for the tests
 function drawField() {
   const cv = $('#field'), P = screenPitch();
-  const Is = screenIntensities(P);
-  let ref = 0;
-  for (const I of Is) ref = Math.max(ref, percentile(I));
-  ref = (ref || 1) * 10 ** -state.bright;
+  const Fs = screenFields(P), Is = Fs.map(({ re, im }) => re.map((v, o) => v * v + im[o] * im[o]));
+  const linear = state.scale === 'linear', ref = whiteLevel(Is, linear);
+  shown = { Is, ref, linear };
   let img;
   if (state.display === 'complex' && fields.length === 1) {
-    // One wavelength: the screen's pixels are the field's own.
     img = new ImageData(SHOW, SHOW);
-    const re = new Float64Array(SHOW * SHOW), im = new Float64Array(SHOW * SHOW), f = fields[0];
-    for (let j = 0; j < SHOW; j++) for (let i = 0; i < SHOW; i++) { const o = (j + OFF) * N + i + OFF; re[j * SHOW + i] = f.re[o]; im[j * SHOW + i] = f.im[o]; }
-    colorize(re, im, img.data, Math.sqrt(ref) * 0.5, 'complex');
-  } else img = intensityImage((w, o) => Is[w][o], SHOW, fields.map((f) => f.rgb), ref);
+    colorize(Fs[0].re, Fs[0].im, img.data, Math.sqrt(ref) * 0.5, 'complex');
+  } else img = intensityImage((w, o) => Is[w][o], SHOW, fields.map((f) => f.rgb), ref, linear);
   const ctx = blit(cv, img, SHOW, true);
-  scaleBar(ctx, cv.width, cv.height, SHOW * P, P > DX ? state.z : 0);
+  scaleBar(ctx, cv.width, cv.height, (SHOW * P) / state.zoom, P > DX ? state.z : 0);
 }
 
 // One row of the side view on the screen's pixels (pitch P) from a row of the computed field
@@ -275,10 +314,9 @@ function drawSide() {
     zs.forEach((zz, a) => { const p = pitchAt(N, DX, lam, zz); resampleRow(I, a * N, p, P, out, a * m, (p / DX) ** 2); });
     return out;
   });
-  let ref = 0;
-  // Ignore the very first rows (the aperture itself) when choosing the brightness.
-  for (const I of Is) ref = Math.max(ref, percentile(I, m * 4));
-  ref = (ref || 1) * 10 ** -state.bright;
+  // Always on the compressed scale, which shows the whole beam.  Ignore the very first rows (the
+  // aperture itself) when choosing the brightness.
+  const ref = whiteLevel(Is, false, m * 4);
   const img = intensityImage((w, o) => Is[w][o], m, rows.map((r) => r.rgb), ref);
   const [w, h] = canvasSize(cv), ctx = cv.getContext('2d');
   const c = document.createElement('canvas'); c.width = m; c.height = NZ;
@@ -289,6 +327,12 @@ function drawSide() {
   const dpr = window.devicePixelRatio || 1;
   ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.setLineDash([6 * dpr, 4 * dpr]); ctx.lineWidth = dpr;
   ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke(); ctx.setLineDash([]);
+  if (state.zoom > 1) {
+    // The part of the screen shown zoomed in.
+    const a = (w / 2) * (1 - 1 / state.zoom), b = w - a;
+    ctx.lineWidth = 2 * dpr; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.moveTo(a, h / 2 - 6 * dpr); ctx.lineTo(a, h / 2 + 6 * dpr); ctx.moveTo(b, h / 2 - 6 * dpr); ctx.lineTo(b, h / 2 + 6 * dpr); ctx.stroke();
+  }
   ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = `${11 * dpr}px system-ui, sans-serif`;
   ctx.fillText('z = 0', 6 * dpr, 13 * dpr);
   ctx.fillText(`z = ${fmtZ(z)} (the screen)`, 6 * dpr, h / 2 - 4 * dpr);
@@ -301,9 +345,10 @@ function drawSide() {
 function fmtZ(z) { return z >= 1e6 ? `${fmt(z / 1e6, 3)} m` : z >= 1000 ? `${fmt(z / 1000, 3)} mm` : `${fmt(z, 3)} µm`; }
 
 function updateNotes() {
-  const P = screenPitch(), span = SHOW * P, far = P > DX;
+  const P = screenPitch(), span = (SHOW * P) / state.zoom, far = P > DX;
   $('#field-note').textContent = `z = ${fmtZ(state.z)}` +
-    (far ? `: ${fmtLen(span)} across, ±${fmt((span / 2 / state.z) * 1000, 3)} mrad` : '') +
+    (state.zoom > 1 ? `, zoomed ${state.zoom}×: ${fmtLen(span)} across` : far ? `: ${fmtLen(span)} across` : '') +
+    (far ? `, ±${fmt((span / 2 / state.z) * 1000, 3)} mrad` : '') +
     (state.z >= ZMAX ? ', the far field' : '');
   const p = PRESETS[state.preset];   // undefined when painted by hand
   const lam = state.white ? 0.55 : state.lambda, z = state.z;
@@ -393,14 +438,23 @@ const displaySeg = segmented([
   { value: 'intensity', label: 'Intensity' }, { value: 'complex', label: 'Field (phase)' },
 ], state.display, (v) => { state.display = v; drawField(); updateNotes(); }, { label: 'Show' });
 $('#show-box').append(displaySeg);
+const scaleSeg = segmented([
+  { value: 'sqrt', label: '√I', title: 'Brightness in proportion to the amplitude |U| = √I, all but the brightest 0.5% within range: faint fringes show' },
+  { value: 'linear', label: 'I', title: 'Brightness in proportion to the intensity I = |U|², the brightest point white: the true contrast (the screen only; the side view stays on √I)' },
+], state.scale, (v) => { state.scale = v; drawField(); saveHash(); }, { label: 'Scale' });
+const zoomSeg = segmented([1, 4, 16].map((zm) => ({ value: zm, label: `${zm}×`, title: zm === 1 ? 'The whole screen' : `The middle of the screen, magnified ${zm} times` })),
+  state.zoom, (v) => { state.zoom = v; drawField(); drawSide(); updateNotes(); saveHash(); }, { label: 'Zoom' });
+$('#scale-box').append(el('span', { class: 'small muted' }, 'Scale:'), scaleSeg, el('span', { class: 'small muted' }, 'Zoom:'), zoomSeg);
 $('#bright-box').append(slider({ label: 'Brightness', min: -2, max: 2, step: 0.01, value: 0, onInput: (v) => { state.bright = v; drawField(); drawSide(); } }));
 
 window.addEventListener('resize', () => { drawAperture(); drawField(); drawSide(); });
 
 // --------------------------------------------------------------------- experiments
 
-function go(preset, { z = 10000, size, white = false, lambda = 0.55 } = {}) {
+function go(preset, { z = 10000, size, white = false, lambda = 0.55, scale = 'sqrt', zoom = 1 } = {}) {
   state.z = z; zSlider.value = z / 1000;
+  state.scale = scale; scaleSeg.value = scale;
+  state.zoom = zoom; zoomSeg.value = zoom;
   state.white = white; whiteToggle.on = white;
   state.lambda = lambda; lambdaSlider.value = lambda * 1000;
   loadPreset(preset, size ?? PRESETS[preset].size[2]);
@@ -411,8 +465,8 @@ const setups = {
   arago: () => go('disk', { z: 150000, size: 500 }),
   double: () => go('double', { z: 80000, size: 250 }),
   talbot: () => go('grating', { z: (2 * 48 * 48) / 0.55 / 2, size: 48 }),
-  zone: () => go('zone', { z: 50000, size: 50 }),
-  lens: () => go('lens', { z: 50000, size: 50 }),
+  zone: () => go('zone', { z: 50000, size: 50, scale: 'linear', zoom: 4 }),
+  lens: () => go('lens', { z: 50000, size: 50, scale: 'linear', zoom: 4 }),
   white: () => go('grating', { z: 60000, size: 48, white: true }),
   speckle: () => go('random', { z: 200000, size: 24 }),
 };
@@ -424,7 +478,9 @@ const hash = readHash();
 if (setups[hash.setup]) setups[hash.setup]();
 else {
   if (+hash.z > 0) { state.z = +hash.z; zSlider.value = state.z / 1000; }
+  if (hash.scale === 'linear') { state.scale = 'linear'; scaleSeg.value = 'linear'; }
+  if ([4, 16].includes(+hash.zoom)) { state.zoom = +hash.zoom; zoomSeg.value = state.zoom; }
   const id = PRESETS[hash.preset] ? hash.preset : 'slit';
   loadPreset(id, +hash.size > 0 ? +hash.size : PRESETS[id].size[2]);
 }
-window.__app = { state, setups, ap, ZMAX, DX, screenPitch, get fields() { return fields; }, get sideData() { return sideData; }, ready: true };
+window.__app = { state, setups, ap, ZMAX, DX, screenPitch, get fields() { return fields; }, get sideData() { return sideData; }, get screen() { return shown; }, ready: true };

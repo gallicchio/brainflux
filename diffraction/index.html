@@ -55,6 +55,7 @@
     <div class="panel">
       <div class="label">Show</div>
       <div class="row" id="show-box"></div>
+      <div class="row" id="scale-box"></div>
       <div id="bright-box"></div>
     </div>
   </aside>
@@ -125,16 +126,20 @@
     <p>Rings, open and closed alternately, with radii $r_n=\sqrt{n\lambda f}$: every open ring
     sends light to the point $z=f$ on the axis in step, so the plate focuses like a lens, to a
     spot about $0.61\lambda f/R$ in radius for a plate of radius $R$; and also at $f/3$,
-    $f/5$..., from the harmonics of the rings.  Watch the side view for the bright foci.  The
-    rings stop before they get narrower than 2.5 pixels: drawn on a grid, finer rings would
-    alias, sending light where a real plate doesn't.</p>
+    $f/5$..., from the harmonics of the rings.  The screen is set at $z=f$, zoomed in 4 times, on
+    the linear scale ($I$), which shows the true contrast: with $N$ open rings each adding its
+    share in step, the focus is $(2N)^2$ times as bright as the light falling on the plate (324
+    for $N=9$; 305 here, the pixels softening the finest rings a little), and everything else is dark.  Switch to $\sqrt I$ to see the faint rings around
+    it, and move the screen to $f/3$ and $f/5$; the side view shows the light converging.  The
+    plate's rings stop before they get narrower than 2.5 pixels: drawn on a grid, finer rings
+    would alias, sending light where a real plate doesn't.</p>
   </article>
 
   <article class="exp" data-setup="lens">
     <h3>7. A lens is a phase</h3>
     <p>A thin lens changes only the phase of the light, by $-kr^2/2f$: the aperture is drawn in
     colour, the colour being the phase.  At $z=f$ the light gathers into the focus, the Airy
-    pattern of the lens's round opening.</p>
+    pattern of the lens's round opening (switch the scale to $\sqrt I$ to see its rings).</p>
   </article>
 
   <article class="exp" data-setup="white">
@@ -164,6 +169,11 @@
   $z_c$ the phase (<em>Field</em>) is shown relative to a spherical wave from the aperture,
   whose rings would be finer than the pixels, and the side view brightens its rows in
   proportion to $z^2$, to make up for the spreading.</p>
+  <p>The screen's brightness is in proportion to the amplitude, $\sqrt I$, with the brightest
+  0.5% of it white: that shows faint fringes.  The linear scale, $I$, is the intensity itself
+  with the brightest point white: the true contrast.  Zoom magnifies the middle of the screen,
+  reading the field between its pixels as the band-limited function it is (a sum of plane
+  waves), not as squares.</p>
 
   <h3>Light and quantum mechanics</h3>
   <p>For waves near the axis, $k_z\approx k-(k_x^2+k_y^2)/2k$, and the field obeys
