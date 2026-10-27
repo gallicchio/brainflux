@@ -237,7 +237,8 @@ const UNDO_DEPTH = 24;
 
 function snapshot(key) {
   const s = sides[key];
-  return { key, n: state.n, re: Float32Array.from(s.re), im: Float32Array.from(s.im), modified: state.modified };
+  return { key, n: state.n, re: Float32Array.from(s.re), im: Float32Array.from(s.im), modified: state.modified,
+    preset: state.preset, customImage: state.customImage, size: state.size };
 }
 function pushUndo(key) {
   undoStack.push(snapshot(key));
@@ -249,6 +250,13 @@ function restore(entry) {
   const s = sides[entry.key];
   s.re.set(entry.re); s.im.set(entry.im);
   state.modified = entry.modified;
+  // What the picture was made from, so a change of resolution remakes the right thing.
+  state.preset = entry.preset; state.customImage = entry.customImage; state.size = entry.size;
+  for (const [k, b] of Object.entries(presetButtons)) b.setAttribute('aria-pressed', String(k === entry.preset));
+  const p = PRESETS.find((q) => q.id === entry.preset);
+  sizeBox.style.visibility = p?.sized ? 'visible' : 'hidden';
+  presetSize.value = entry.size;
+  updateHash();
   pending = entry.key;
   s.stale = true;
   schedule();
@@ -285,8 +293,8 @@ function pixelAt(side, e) {
   };
 }
 
-function paintValue(side) {
-  if (state.tool === 'eraser') return [0, 0];
+function paintValue(side, tool = state.tool) {
+  if (tool === 'eraser') return [0, 0];
   const R = side.R * state.value.mag;
   return [R * Math.cos(state.value.phase), R * Math.sin(state.value.phase)];
 }
@@ -299,15 +307,17 @@ function onDown(side, e) {
   side.canvas.setPointerCapture(e.pointerId);
   const p = pixelAt(side, e), n = state.n;
   pushUndo(side.key);
-  drag = { side, start: p, last: p };
-  if (state.tool === 'brush' || state.tool === 'eraser') {
-    const [vr, vi] = paintValue(side);
+  // The tool is the one the drag began with, even if a key changes it halfway.
+  drag = { side, start: p, last: p, tool: state.tool };
+  const tool = drag.tool;
+  if (tool === 'brush' || tool === 'eraser') {
+    const [vr, vi] = paintValue(side, tool);
     paint(side.re, side.im, n, p.i, p.j, state.brush, vr, vi, { repeat: state.repeat, mirror: state.mirror });
     changed(side.key);
-  } else if (state.tool === 'hand') {
+  } else if (tool === 'hand') {
     drag.re = side.re.slice(); drag.im = side.im.slice();
     side.canvas.classList.add('dragging');
-  } else if (state.tool === 'mask') {
+  } else if (tool === 'mask') {
     // Snap to the origin when pressed near it: filters are centred on k = 0.
     let { i, j } = p;
     if (Math.hypot(i - n / 2, j - n / 2) < Math.max(3, n * 0.03)) { i = n / 2; j = n / 2; }
@@ -331,15 +341,15 @@ function onMove(side, e) {
   side.hover = p;
   showReadout(side, p);
   if (!drag || drag.side !== side) { schedule(); return; }
-  const n = state.n;
-  if (state.tool === 'brush' || state.tool === 'eraser') {
-    const [vr, vi] = paintValue(side);
+  const n = state.n, tool = drag.tool;
+  if (tool === 'brush' || tool === 'eraser') {
+    const [vr, vi] = paintValue(side, tool);
     stroke(side.re, side.im, n, drag.last.i, drag.last.j, p.i, p.j, state.brush, vr, vi, { repeat: state.repeat, mirror: state.mirror });
     changed(side.key);
-  } else if (state.tool === 'hand') {
+  } else if (tool === 'hand') {
     roll(drag.re, drag.im, side.re, side.im, n, Math.round(p.fx - drag.start.fx), Math.round(p.fy - drag.start.fy));
     changed(side.key);
-  } else if (state.tool === 'mask') {
+  } else if (tool === 'mask') {
     applyMask(side, Math.hypot(p.fx - (drag.cx + 0.5), p.fy - (drag.cy + 0.5)));
   }
   drag.last = p;
@@ -646,14 +656,15 @@ async function setResolution(m) {
   if (m === state.n) return;
   const old = state.n, x = sides.x;
   let data = null;
-  if (state.modified && !state.camera) data = resample(x.re, x.im, old, m);
+  // Painted on, or a frozen camera picture: keep it, resampled.
+  if ((state.modified && !state.camera) || (state.camera && !state.camera.live)) data = resample(x.re, x.im, old, m);
   state.n = m;
   sides.x.alloc(m); sides.k.alloc(m);
   clearUndo();
   state.memory = null;
   if (data) setData('x', data[0], data[1]);
   else if (state.customImage) { const [re, im] = imageData(state.customImage, m, 'fit'); setData('x', re, im); }
-  else if (state.camera) { state.camera.first = true; schedule(); }
+  else if (state.camera?.live) { state.camera.first = true; schedule(); }
   else await loadPreset(state.preset, { push: false });
   updateHash();
 }
@@ -747,7 +758,6 @@ const setups = {
     const n = state.n;
     paint(sides.x.re, sides.x.im, n, n / 2 - n / 16, n / 2 - n / 20, { ...state.brush, strength: 1 }, 0.75, 0, { repeat: 4 });
     changed('x');
-    state.modified = false;
   },
 };
 

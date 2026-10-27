@@ -12,7 +12,7 @@ const wrap = (i, n) => ((i % n) + n) % n;
  * Hard brushes set the value; the soft brush blends towards it with a Gaussian weight, like an
  * airbrush.
  */
-export function stamp(re, im, n, cx, cy, brush, vr, vi) {
+export function stamp(re, im, n, cx, cy, brush, vr, vi, touched = null) {
   const size = Math.max(1, brush.size);
   cx = Math.round(cx); cy = Math.round(cy);
   if (brush.shape === 'soft') {
@@ -25,6 +25,7 @@ export function stamp(re, im, n, cx, cy, brush, vr, vi) {
         const i = row + wrap(cx + dx, n);
         re[i] += (vr - re[i]) * w;
         im[i] += (vi - im[i]) * w;
+        if (touched) touched.push(i);
       }
     }
     return;
@@ -38,6 +39,7 @@ export function stamp(re, im, n, cx, cy, brush, vr, vi) {
       if (brush.shape === 'round' && size > 2 && (dx - c) ** 2 + (dy - c) ** 2 > r2) continue;
       const i = row + wrap(cx + dx, n);
       re[i] = vr; im[i] = vi;
+      if (touched) touched.push(i);
     }
   }
 }
@@ -50,13 +52,27 @@ export function stamp(re, im, n, cx, cy, brush, vr, vi) {
  *           the other side stays real)
  */
 export function paint(re, im, n, cx, cy, brush, vr, vi, { repeat = 1, mirror = false } = {}) {
-  const step = n / repeat;
+  const step = n / repeat, touched = mirror ? [] : null;
+  // The mirror of pixel i is n - i (mod n).  A hard brush of even size covers x - size/2 + 1 ...
+  // x + size/2, whose mirror is the same brush centred one pixel lower, at n - x - 1.
+  const shift = brush.shape !== 'soft' && Math.max(1, Math.round(brush.size)) % 2 === 0 ? 1 : 0;
   for (let a = 0; a < repeat; a++) {
     for (let b = 0; b < repeat; b++) {
       const x = wrap(cx + a * step, n), y = wrap(cy + b * step, n);
-      stamp(re, im, n, x, y, brush, vr, vi);
-      if (mirror) stamp(re, im, n, wrap(n - x, n), wrap(n - y, n), brush, vr, -vi);
+      stamp(re, im, n, x, y, brush, vr, vi, touched);
+      if (mirror) stamp(re, im, n, wrap(n - x - shift, n), wrap(n - y - shift, n), brush, vr, -vi, touched);
     }
+  }
+  // Where a mark overlaps its own mirror image (near the origin, or the edges) the second stamp
+  // has overwritten v with v*: make every touched pair exactly f(-r) = f(r)*.
+  if (mirror) hermitize(re, im, n, touched);
+}
+
+function hermitize(re, im, n, touched) {
+  for (const i of touched) {
+    const x = i % n, y = (i - x) / n, j = wrap(n - y, n) * n + wrap(n - x, n);
+    const a = (re[i] + re[j]) / 2, b = (im[i] - im[j]) / 2;
+    re[i] = a; im[i] = b; re[j] = a; im[j] = -b;
   }
 }
 
@@ -119,7 +135,8 @@ export const OPERATIONS = {
     run(re, im) {
       let sum = 0, count = 0;
       for (let i = 0; i < re.length; i++) { const m2 = re[i] * re[i] + im[i] * im[i]; if (m2 > 0) { sum += m2; count++; } }
-      const rms = count ? Math.sqrt(sum / re.length) : 0;
+      // count pixels of magnitude rms carry the same total power as before.
+      const rms = count ? Math.sqrt(sum / count) : 0;
       for (let i = 0; i < re.length; i++) {
         const m = Math.hypot(re[i], im[i]);
         if (m > 0) { re[i] *= rms / m; im[i] *= rms / m; }
