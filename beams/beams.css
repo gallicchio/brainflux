@@ -11,7 +11,8 @@
 .plot-wrap canvas { width: 100%; height: 100%; }
 .plot-wrap.dark { background: var(--panel); }
 
-.readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px; padding: 0 4px; min-height: 2.6em; color: var(--ink-2); }
+/* Room for the longest read-out, so the canvases under it never move. */
+.readout { display: flex; flex-wrap: wrap; align-items: baseline; align-content: flex-start; gap: 2px 18px; padding: 0 4px; min-height: 2.9em; color: var(--ink-2); }
 .readout b { color: var(--ink); }
 .readout .probe { color: var(--ink); font-variant-numeric: tabular-nums; }
 .readout .good { color: var(--good); font-weight: 600; }
@@ -82,6 +83,9 @@ dl.numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
   .sq-wrap, .cav-grid .sq-wrap:last-child { height: auto; aspect-ratio: 1; max-height: 70vh; }
   .mode-grid { grid-template-columns: minmax(0, 1fr); }
   .bench-wrap { height: max(280px, 46vh); }
+}
+@media (max-width: 700px) {
+  .readout { min-height: 4.4em; }
 }
 @media (max-width: 520px) {
   .gallery.g-hg { grid-template-columns: repeat(4, minmax(0, 1fr)); }

@@ -247,8 +247,19 @@ export function createBench(app) {
     drawElements(ctx, F, Zp, yc, sx, c);
     drawInputHandle(ctx, Zp, Xp);
     if (hover !== null && !drag) {
+      // The probe: a line, and the beam's numbers there in a box beside it.
+      const px = Zp(hover), b = beamAt(trace, hover);
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(Zp(hover), F.top); ctx.lineTo(Zp(hover), F.bottom); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(px, F.top); ctx.lineTo(px, F.bottom); ctx.stroke(); ctx.setLineDash([]);
+      const lines = [`z = ${fmtLen(hover)}`, `w = ${fmtLen(b.w)}`, `R = ${fmtLen(b.R)}`, `ψ = ${fmtPi(b.gouy, 3)}`];
+      if (b.n !== 1) lines.push(`in glass, n = ${fmt(b.n, 3)}`);
+      ctx.font = '12px system-ui, sans-serif';
+      const bw = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 14, bh = 16 * lines.length + 8;
+      const bx = px + 8 + bw > F.right ? px - 8 - bw : px + 8, by = F.top + 24;
+      ctx.fillStyle = 'rgba(10,12,18,0.82)'; ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      lines.forEach((t, k) => ctx.fillText(t, bx + 7, by + 5 + 16 * k));
     }
     // The sideways stretch, in a corner.
     ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
@@ -501,19 +512,18 @@ export function createBench(app) {
 
   // ------------------------------------------------------------------- read-outs
 
+  let readoutKey = '';
   function readout() {
     const inB = { w0: state.w0, zR: (Math.PI * state.w0 ** 2) / lam() };
     const parts = [
       el('span', {}, `λ = ${fmt(state.lambda, 4)} nm`),
       el('span', {}, 'input waist ', el('b', {}, fmtLen(state.w0)), ` at z = ${fmtLen(state.z0)}, z`, el('sub', {}, 'R'), ` = ${fmtLen(inB.zR)}, divergence λ/πw₀ = ${fmtAngle(lam() / (Math.PI * state.w0))}`),
     ];
-    if (hover !== null) {
-      const b = beamAt(trace, hover);
-      parts.push(el('span', { class: 'probe' }, `at z = ${fmtLen(hover)}: w = ${fmtLen(b.w)}, R = ${fmtLen(b.R)}, ψ = ${fmtPi(b.gouy, 3)}${b.n !== 1 ? `, in glass n = ${fmt(b.n, 3)}` : ''}`));
-    }
     const m = matching();
     if (m) parts.push(el('span', { class: 'good' }, `mode matching η = ${(100 * m.eta).toFixed(1)}%`));
-    $('#bench-readout').replaceChildren(...parts);
+    // Only when it changes (writing the page's text makes the browser lay it out again).
+    const key = parts.map((p) => p.textContent).join('|');
+    if (key !== readoutKey) { readoutKey = key; $('#bench-readout').replaceChildren(...parts); }
   }
 
   function waistTable() {
@@ -676,7 +686,9 @@ export function createBench(app) {
     ctx.restore();
     F.axes({ xlabel: 's/f: the waist was this far before the lens', colors: c });
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`s′/f: the new waist is this far after it (z_R/f = ${fmt(Z, 2)}; rays dashed)`, 4, 12);
+    ctx.fillText(`s′/f: the new waist this far after it (z_R/f = ${fmt(Z, 2)})`, 4, 12);
+    ctx.textAlign = 'right'; ctx.fillStyle = c.ink3;
+    ctx.fillText('rays: dashed', F.right, F.top + 12);
   }
 
   // View controls.
@@ -989,7 +1001,7 @@ export function createBench(app) {
   return {
     show, draw, tick, toHash, fromHash, load, fit, zoomToFocus,
     get trace() { return trace; }, matching, addElement, removeElement, select,
-    get frame() { return frame; }, get field() { return field; }, drawBench, computeField: () => { version++; layout(); return computeField(); },
+    get frame() { return frame; }, get field() { return field; }, drawBench, hitTest, computeField: () => { version++; layout(); return computeField(); },
     refreshTarget: () => { buildTarget(); retrace(); },
   };
 }

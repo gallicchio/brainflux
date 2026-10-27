@@ -108,6 +108,8 @@ export function createCavity(app) {
     } else {
       ctx.font = '13px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       haloText(ctx, 'unstable: no mode, and rays walk off', F.X(L / 2), F.top + 8, '#ff8a80');
+      const lost = rays.filter((r) => r.lost).map((r) => r.lost);
+      if (lost.length) haloText(ctx, `rays lost after ${lost.join(', ')} round trip${lost.length === 1 && lost[0] === 1 ? '' : 's'}`, F.X(L / 2), F.top + 26, 'rgba(255,255,255,0.85)');
     }
     // Rays: the last passes, fading.
     if (state.rays) {
@@ -290,10 +292,13 @@ export function createCavity(app) {
     const { ctx, width, height } = fitCanvas(rph);
     const c = themeColors();
     ctx.clearRect(0, 0, width, height);
-    const size = Math.min(width - 50, height - 44);
-    const F = new Frame(ctx, size + 50, size + 44, { left: 40, right: 10, top: 14, bottom: 30 });
+    const size = Math.min(width - 50, height - 52);
+    const F = new Frame(ctx, size + 50, size + 52, { left: 40, right: 10, top: 22, bottom: 30 });
     F.left += (width - (size + 50)) / 2; F.right = F.left + F.w;
     const s = scale(), L = state.L;
+    ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(mode ? `hits on mirror 1: each round trip turns them by 2ψ₁ = ${fmtPi(2 * mode.gouy)}` : 'hits on mirror 1: they run away',
+      F.left + F.w / 2, 14);
     // Scaled to the ellipses (stable), or to where the rays started (unstable: they leave).
     let big = 0;
     for (const ray of rays) for (const [x, th] of mode ? ray.phase : ray.phase.slice(0, 1)) big = Math.max(big, Math.abs(x / s), Math.abs((th * L) / s));
@@ -340,13 +345,17 @@ export function createCavity(app) {
         ['transverse spacing Δν_T', fmtFreq((fsr(state.L) * mode.gouy) / Math.PI)],
       );
     }
-    $('#cav-numbers').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
-    const lost = rays.filter((r) => r.lost).map((r) => r.lost);
-    const r = [];
-    if (mode) r.push(el('span', {}, `stable: g₁g₂ = ${fmt(p, 3)}; mode waist `, el('b', {}, fmtLen(mode.w0)), `, round trip Gouy phase 2ψ₁ = ${fmtPi(2 * mode.gouy)}: each ray goes round its ellipse by that much per round trip`));
-    else r.push(el('span', { class: 'warn' }, `unstable: g₁g₂ = ${fmt(p, 3)}`), lost.length ? el('span', {}, `rays lost after ${lost.join(', ')} round trips`) : '');
-    $('#cavity-readout').replaceChildren(...r);
+    const nkey = rows.join('|');
+    if (nkey !== numbersKey) { numbersKey = nkey; $('#cav-numbers').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])); }
+    // A short line, the same length whatever the cavity, so the canvases below don't move
+    // while the point is dragged.
+    const r = mode
+      ? [el('span', { class: 'good' }, `stable: g₁g₂ = ${fmt(p, 3)}`), el('span', {}, 'mode waist ', el('b', {}, fmtLen(mode.w0)), `, Gouy phase ψ₁ = ${fmtPi(mode.gouy)} each way`)]
+      : [el('span', { class: 'warn' }, `${p === 0 || p === 1 ? 'on the edge' : 'unstable'}: g₁g₂ = ${fmt(p, 3)}`), el('span', {}, 'no mode')];
+    const key = r.map((x) => x.textContent).join('|');
+    if (key !== readoutKey) { readoutKey = key; $('#cavity-readout').replaceChildren(...r); }
   }
+  let readoutKey = '', numbersKey = '';
 
   function draw() {
     update();

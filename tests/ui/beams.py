@@ -53,7 +53,7 @@ with Browser('beams/index.html', size=SIZE) as b:
     b.screenshot(f'build/beams{TAG}-edited.png')
     # Pan and zoom.
     v0 = b.eval('[__app.state.bench.vz0, __app.state.bench.vz1]')
-    b.drag('#bench', (0.5, 0.92 * F[3] / box[3]), (0.3, 0.92 * F[3] / box[3]), steps=6)
+    b.drag('#bench', (fx(380), 0.92 * F[3] / box[3]), (fx(300), 0.92 * F[3] / box[3]), steps=6)
     v1 = b.eval('[__app.state.bench.vz0, __app.state.bench.vz1]')
     check(v1[0] > v0[0] + 10 and abs((v1[1] - v1[0]) - (v0[1] - v0[0])) < 1e-6, f'dragging the background pans ({v0[0]:.0f}..{v0[1]:.0f} -> {v1[0]:.0f}..{v1[1]:.0f} mm)')
 
@@ -73,6 +73,9 @@ with Browser('beams/index.html', size=SIZE) as b:
     check(abs(ws[1]['w0'] - est) < 1e-3 * est, f'focus: w0\' = {1000 * ws[1]["w0"]:.2f} um against lambda f / pi w = {1000 * est:.2f} um')
     info = b.eval("document.querySelector('#el-info').textContent")
     check('20.1 µm' in info, f'the lens panel quotes the focus: "{info[:120]}..."')
+    b.eval("(() => { const n = document.querySelectorAll('#laser-box input[type=number]')[1]; n.value = 2000; n.dispatchEvent(new Event('change')); })()"); b.sleep(0.2)
+    ws = waists(b)
+    check(abs(1000 * ws[1]['w0'] - 10.07) < 0.01, f'focus: typing w0 = 2000 um halves the spot, to {1000 * ws[1]["w0"]:.2f} um')
 
     # The Gouy phase in the drawn crests: on the axis, the field's phase across the zoomed view
     # is the carrier minus the Gouy phase, and the Gouy phase changes by 2 atan 4.
@@ -106,6 +109,12 @@ with Browser('beams/index.html', size=SIZE) as b:
     ws = waists(b)
     spread = max(w['w0'] for w in ws) / min(w['w0'] for w in ws) - 1
     check(spread < 1e-9 and len(ws) == 7, f'lens row: the cavity mode repeats after every lens ({len(ws)} waists equal to {spread:.1e})')
+    b.eval("(() => { const n = document.querySelectorAll('#laser-box input[type=number]')[1]; n.value = 300; n.dispatchEvent(new Event('change')); })()"); b.sleep(0.2)
+    wr = b.eval("""import('/beams/gauss.js').then(g => { const t = __app.bench.trace, out = [];
+        for (const [a, b] of [[0, 450], [450, 900]]) { let lo = Infinity, hi = 0; for (let z = a; z <= b; z += 0.5) { const w = g.beamAt(t, z).w; lo = Math.min(lo, w); hi = Math.max(hi, w); } out.push([lo, hi]); }
+        return out; })""")
+    check(abs(wr[1][1] / wr[0][1] - 1) < 0.05 and abs(wr[1][0] / wr[0][0] - 1) < 0.05,
+          f'lens row: a 300 um beam breathes between {1000 * wr[0][0]:.0f} and {1000 * wr[0][1]:.0f} um in the first half of the row, {1000 * wr[1][0]:.0f} and {1000 * wr[1][1]:.0f} um in the second: bounded')
 
     b.eval('__app.setups.matching()'); b.sleep(0.2)
     eta0 = b.eval('__app.bench.matching().eta')
@@ -174,6 +183,12 @@ with Browser('beams/index.html', size=SIZE) as b:
     g = b.eval('__app.cavity.mode.gouy')
     spec = b.eval('[...document.querySelectorAll("#cav-numbers dd")].map(d => d.textContent).join(" | ")')
     check(abs(g - math.pi / 2) < 1e-12 and '300 MHz' in spec and '600 MHz' in spec, f'confocal: psi1 = pi/2, transverse spacing half the FSR ({spec})')
+    b.eval('__app.cavity.set({ R1: 280, R2: 280 })'); b.sleep(0.1)
+    g = b.eval('__app.cavity.mode && __app.cavity.mode.gouy')
+    check(g and abs(g / math.pi - 0.4659) < 1e-3, f'R1 = R2 = 280 mm: psi1 = {g / math.pi:.4f} pi, the orders split by {0.5 - g / math.pi:.3f} FSR per order')
+    for (r1, r2, want) in [(250, 260, False), (260, 240, False)]:
+        b.eval(f'__app.cavity.set({{ R1: {r1}, R2: {r2} }})'); b.sleep(0.1)
+        check(b.eval('!!__app.cavity.mode') == want, f'R1 = {r1}, R2 = {r2} mm: {"a mode" if want else "no mode (on the edge, or unstable)"}')
 
     # ---------------------------------------------------------------- the modes
     b.eval('__app.setups.donut()'); b.sleep(0.3)
