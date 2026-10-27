@@ -381,8 +381,8 @@ function draw() {
   if (drawn.recon !== `${data}:${lo}:${hi}`) {
     greyInto(off.fbp, sc.fbp, lo, hi);
     // Back-projection has no natural scale (it is the object blurred by 1/r): its own.
-    const bpHi = quantile(sc.bp, 0.998) || 1;
-    greyInto(off.bp, sc.bp, 0, bpHi);
+    const bpLo = quantile(sc.bp, 0.002), bpHi = quantile(sc.bp, 0.998);
+    greyInto(off.bp, sc.bp, bpLo, bpHi > bpLo ? bpHi : bpLo + 1);
     drawn.recon = `${data}:${lo}:${hi}`;
   }
   drawScanner();
@@ -624,7 +624,8 @@ function drawK() {
     if (k >= kw * 1.41) return;
     ctx.strokeStyle = C.circle; ctx.lineWidth = 1; ctx.setLineDash(dash);
     ctx.beginPath(); ctx.arc(X(0), Y(0), k * s, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]);
-    if (label && k * s > 30 && k < kw * 0.95) { ctx.fillStyle = C.text; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(label, X(0), Y(k) - 2); }
+    // Labelled up and to the left, clear of the axes' labels.
+    if (label && k * s > 30 && k < kw * 0.95) { ctx.fillStyle = C.text; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(label, X(-0.71 * k) - 2, Y(0.71 * k) - 2); }
   };
   if (state.circles) {
     ring(Math.PI / sc.ds, [6, 4], 'π/ds');
@@ -639,8 +640,18 @@ function drawK() {
   if (state.pick) sliceLine(state.pick.j, 'rgba(255, 95, 210, 0.7)', 1);
   else if (state.playing && sc.count) sliceLine(hardwareIndex(), 'rgba(127, 211, 255, 0.45)', 1);
   ctx.fillStyle = C.text; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('kₓ →', size - 44, size / 2 + 4);
-  ctx.fillText('↑ k_y'.replace('_y', 'ᵧ'), size / 2 + 4, 6);
+  subscripted(ctx, 'k', 'x', ' →', size - 40, size / 2 + 4);
+  subscripted(ctx, '↑ k', 'y', '', size / 2 + 4, 6);
+}
+
+// Text with a subscript, as k_x: base, then the subscript smaller and lower, then the rest.
+function subscripted(ctx, base, sub, rest, x, y) {
+  const font = ctx.font;
+  ctx.fillText(base, x, y); x += ctx.measureText(base).width;
+  ctx.font = font.replace(/\d+px/, (m) => `${Math.round(parseInt(m, 10) * 0.75)}px`);
+  ctx.fillText(sub, x, y + 5); x += ctx.measureText(sub).width;
+  ctx.font = font;
+  if (rest) ctx.fillText(rest, x, y);
 }
 
 function drawRecon(canvas, img, which) {
@@ -877,7 +888,7 @@ function updateReadouts(data) {
   const hf = hover.fbp, rms = rmsCache.rms, smooth = rmsCache.smooth;
   state.rmsSmooth = smooth;
   $('#fbp-readout').textContent = hf ? `x ${fmt(hf.x, 3)}, y ${fmt(hf.y, 3)}: ${fmt(pixel(sc.fbp, hf.x, hf.y), 4)} (object ${fmt(pixel(sc.truth, hf.x, hf.y), 4)})`
-    : `RMS difference from the object ${Number.isFinite(rms) ? fmt(rms, 3) : '–'}${Number.isFinite(smooth) ? `, away from edges ${fmt(smooth, 3)}` : ''}`;
+    : `RMS error ${Number.isFinite(rms) ? fmt(rms, 3) : '–'}${Number.isFinite(smooth) ? `, away from edges ${fmt(smooth, 3)}` : ''}`;
   state.rms = rms;
   $('#fbp-note').textContent = FILTERS[sc.opts.filter].label + (sc.opts.cutoff < 1 ? `, cut at ${fmt(sc.opts.cutoff, 2)}` : '');
   // The sixth panel.
@@ -885,7 +896,7 @@ function updateReadouts(data) {
   if (state.view === 'direct') {
     const img = directCache.img, e = img && sc.count ? sc.rmsError(img) : NaN;
     state.rmsDirect = e;
-    $('#extra-readout').textContent = he ? `x ${fmt(he.x, 3)}, y ${fmt(he.y, 3)}: ${fmt(pixel(img || sc.fbp, he.x, he.y), 4)}` : `RMS difference from the object ${Number.isFinite(e) ? fmt(e, 3) : '–'}`;
+    $('#extra-readout').textContent = he ? `x ${fmt(he.x, 3)}, y ${fmt(he.y, 3)}: ${fmt(pixel(img || sc.fbp, he.x, he.y), 4)}` : `RMS error ${Number.isFinite(e) ? fmt(e, 3) : '–'}`;
     $('#extra-note').textContent = 'slices gridded, one inverse FFT';
   } else if (state.view === 'profile') {
     $('#extra-readout').textContent = `along y = ${fmt(state.py0, 3)} (drag on a reconstruction to move it)`;

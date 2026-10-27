@@ -357,3 +357,23 @@ test('re-measuring an angle replaces its row in the pictures', () => {
   assert(worst < 1e-12 * peak, `${worst}`);
   assert(bp.some((v, i) => v !== sc.bp[i]) && fbp.length === again.length, 'the pictures changed');
 });
+
+test('a worker thread measures a block of angles exactly as the page would', async () => {
+  // The page shares full rescans out between workers (tomography/worker.js) and adds up their
+  // pictures: with noise, two energies, metal and the Hann filter, the block must be identical.
+  const w = new Worker(new URL('../tomography/worker.js', import.meta.url), { type: 'module' });
+  const opts = { nA: 60, range: Math.PI, M: 128, aperture: 1, noise: true, I0: 1e5, poly: true, filter: 'hann', cutoff: 1, seed: 1 };
+  const shapes = sheppLogan('original').concat([{ ...disk(0.3, -0.2, 0.03, 19), metal: true }]);
+  const reply = await new Promise((res, rej) => {
+    w.onmessage = (e) => res(e.data);
+    w.onerror = (e) => rej(new Error(`worker: ${e.message}`));
+    w.postMessage({ gen: 7, N: 128, opts, pass: 3, shapes, j0: 10, j1: 40 });
+  });
+  w.terminate();
+  const sc = new Scanner(128);
+  sc.configure(opts, false); sc.pass = 3; sc.setShapes(shapes);
+  const b = sc.measureBlock(10, 40);
+  let worst = 0;
+  for (const key of ['meas', 'filt', 'bp', 'fbp']) for (let i = 0; i < b[key].length; i++) worst = Math.max(worst, Math.abs(b[key][i] - reply[key][i]));
+  assert(reply.gen === 7 && reply.j0 === 10 && reply.j1 === 40 && worst === 0, `gen ${reply.gen}, difference ${worst}`);
+});

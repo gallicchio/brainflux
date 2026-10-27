@@ -103,9 +103,9 @@
 
   <p>A CT scanner sends a sheet of parallel X-rays through one slice of the body and measures,
   with a row of detectors, how much each ray has been absorbed.  That is the integral of the
-  attenuation $f(x,y)$ along the ray,
-  $$p(\theta,s)=\int f\,dl\quad\text{along the line}\quad x\cos\theta+y\sin\theta=s,$$
-  for the ray at distance $s$ from the centre, crossing the direction
+  attenuation $f(x,y)$ along the ray, the line $x\cos\theta+y\sin\theta=s$:
+  $$p(\theta,s)=\int_{\mathrm{ray}} f\,dl,$$
+  for the ray at distance $s$ from the centre, across the direction
   $\hat n=(\cos\theta,\sin\theta)$.  Turning source and detector through half a turn fills
   the <em>sinogram</em>, one row per angle.  The task is to get $f$ back.</p>
 
@@ -115,18 +115,18 @@
   whose Fourier transform is $|k|$, and then smears it back: that gives $f$ itself.</p>
 
   <p>Point at the object to see its sinusoid in the sinogram; click the sinogram to see the
-  ray it measured.  Values are attenuation in units of water's; the scan circle is 20 cm
-  across.</p>
+  ray it measured, on the object and in the back-projection.  Values are attenuations in units
+  of water's, and the scan circle is 20 cm across.</p>
 
   <article class="exp" data-setup="sinusoid">
     <h3>1. One point, one sinusoid</h3>
-    <p>A single small object, off centre.  As the scanner turns, its shadow on the detector moves
-    to and fro: at angle $\theta$ it falls at $s=x_0\cos\theta+y_0\sin\theta=r_0\cos(\theta-\phi_0)$.
-    So its row-by-row record is a sinusoid, whose amplitude is the point's distance $r_0$ from the
-    centre and whose phase is its direction $\phi_0$.  This is where the name <em>sinogram</em>
-    comes from.  Move the point with its sliders, or point anywhere on the scanner: the dashed
-    curve is that point's sinusoid.  Every object is a sum of points, so its sinogram is a sum of
-    sinusoids.</p>
+    <p>A single small object, off centre (it is one pixel wide: the ring shows where).  As the
+    scanner turns, its shadow on the detector moves to and fro, as the sixth panel shows: at angle
+    $\theta$ it falls at $s=x_0\cos\theta+y_0\sin\theta=r_0\cos(\theta-\phi_0)$.  So its record,
+    row by row, is a sinusoid whose amplitude is the point's distance $r_0$ from the centre and
+    whose phase is its direction $\phi_0$; hence the name <em>sinogram</em>.  Move the point with
+    its sliders, or point anywhere on the scanner: the dashed curve is that point's sinusoid.
+    Every object is a sum of points, so its sinogram is a sum of sinusoids.</p>
   </article>
 
   <article class="exp" data-setup="smear">
@@ -139,12 +139,13 @@
 
   <article class="exp" data-setup="blur">
     <h3>3. Back-projection blurs a point into 1/r</h3>
-    <p>One point, many angles.  Every smear passes through the point, so the back-projection is a
-    star of lines that merge into a halo falling off as $1/r$: each line contributes in a band
-    of width $ds$, and the angle it subtends at distance $r$ is $ds/r$.  The profile (the
-    sixth panel) shows the back-projection through the point against $m/r$, for the point's
-    mass $m$, with no adjustable factor.  Every point of an object is blurred this way, which is
-    why the back-projection of the head looks foggy.</p>
+    <p>One point, 360 angles.  Every smear passes through the point, so the back-projection is a
+    star of lines that merge into a halo.  A place at distance $r$ from the point lies within a
+    detector bin $ds$ of the smears from a fraction $ds/\pi r$ of the angles, so the halo falls off
+    as $1/r$: exactly, $b=m/r$ for a point of mass $m$.  The profile (the sixth panel) shows the
+    back-projection along the line through the point (orange, right-hand scale) and $m/r$
+    (dotted), with nothing adjusted: they lie on top of each other.  Every point of an object is
+    blurred this way, which is why the back-projection of the head looks foggy.</p>
   </article>
 
   <article class="exp" data-setup="ramp">
@@ -153,118 +154,142 @@
     one projection (grey) and its filtered version (blue): the filter is a sharpener, it
     overshoots at every edge and goes negative beside it.  Smeared back, those negative side
     lobes cancel the $1/r$ halos of the neighbouring lines, and the picture comes out sharp,
-    with the right values: compare the profiles of the object and the reconstruction.</p>
+    with the right values.  Click the sinogram to see other projections, and choose
+    <em>Profile</em> to compare the reconstruction with the object along a line.</p>
   </article>
 
   <article class="exp" data-setup="slice">
     <h3>5. The projection-slice theorem</h3>
     <p>The 1D Fourier transform of a projection is a slice through the 2D Fourier transform of
     the object: $$P(\theta,k)=F(k\cos\theta,\,k\sin\theta),$$ along the line through $k=0$ in
-    the direction $\hat n$, across the rays.  Here the object is a disk with stripes, which put
-    two bright spots in $F$ at $\pm\vec k$ (the object's own transform is drawn faintly
-    underneath).  Watch the slices fill Fourier space: the spots light up only when the slice
-    passes through them, when the rays run along the stripes.  Collect slices at enough
-    angles and you have $F$, and so the object.</p>
+    the direction $\hat n$, across the rays.  Here the object is a disk with stripes; their
+    wavevector puts two bright spots in $F$, at $|k|=40$ in the direction 60°.  Fourier space is
+    magnified four times, with the object's own transform drawn faintly underneath.  Watch the
+    slices arrive, one every 5°: the spots light up when the slice reaches 60°, when the rays run
+    along the stripes.  Collect slices at enough angles and you have $F$, and so the object.</p>
   </article>
 
   <article class="exp" data-setup="density">
     <h3>6. Why the filter is |k|</h3>
-    <p>A few angles, so the slices are easy to count.  Each slice has the same number of samples,
-    so near the centre of Fourier space they crowd together and far out they spread apart:
-    at radius $k$ the slices are $k\,\Delta\theta$ apart, so the density of samples falls as
+    <p>Twelve angles, so the slices are easy to count.  Each slice has the same number of
+    samples, so near the centre of Fourier space they crowd together and far out they spread
+    apart: at radius $k$ the slices are $k\,\Delta\theta$ apart, and the density of samples falls as
     $1/|k|$.  Back-projection adds every sample with the same weight, which over-counts the low
     frequencies by $1/|k|$; in real space that is the $1/r$ blur (in 2D, $1/r$ and $1/|k|$ are
-    each other's Fourier transforms).  Weighting each slice by $|k|$ undoes it: the ramp
-    filter.  Choose <em>Direct Fourier</em> in the sixth panel for the other way to use the
-    theorem: interpolate the slices onto a square grid and take one inverse 2D FFT.  It works,
-    but interpolating far from the centre, where the slices are sparse, is hard, and the errors
-    spread over the whole picture.</p>
+    each other's Fourier transforms, up to $2\pi$).  Weighting each slice by $|k|$ undoes it: the
+    ramp filter.</p>
+    <p>The sixth panel uses the theorem directly: it interpolates the slices onto a square grid
+    and takes one inverse 2D FFT.  With these twelve slices its RMS error is 0.12, against 0.26
+    for filtered back-projection, whose streaks cost more; with 180 angles it does worse, 0.034
+    against 0.023, because interpolating far from the centre, where the slices are sparse, is
+    hard, and an error at one $k$ spreads over the whole picture.</p>
   </article>
 
   <article class="exp" data-setup="streaks">
     <h3>7. Too few angles: streaks</h3>
     <p>The head with 24 angles.  Close to each sharp edge the smears still cancel, but further
-    away they separate into streaks.  Fourier space shows why: the slices are $k\pi/n_\theta$
+    away they separate into streaks.  Fourier space shows why: the slices are $k\,\pi/n_\theta$
     apart at radius $k$, and to describe an object of radius $R$ (here the scan circle, 1)
-    samples must be at most $\pi/R$ apart.  Inside the dotted circle, $|k|<n_\theta/R$, they
-    are; outside they are not, but the detector measures out to the dashed circle,
-    $|k|=\pi/ds$.  The two circles meet when $n_\theta=\tfrac{\pi}{2}M$ for $M$ detector bins:
-    that is how many angles a scanner needs.  Raise the number of angles and watch the
-    streaks retreat.</p>
+    samples must be at most $\pi/R$ apart.  Inside the dotted circle, $|k|&lt;\pi/\Delta\theta=n_\theta/R$,
+    they are; outside they are not, though the detector measures out to the dashed circle,
+    $|k|=\pi/ds$.  The circles meet when $n_\theta=\tfrac{\pi}{2}M$ for $M$ detector bins:
+    the number of angles that samples the whole scan circle fully.  Raise the angles and watch
+    the streaks retreat: the RMS error away from edges (under the picture) falls from 0.15 at 24
+    angles to 0.067 at 48, 0.023 at 96 and 0.009 at 180; beyond that the streaks are faint and
+    little more is gained (0.008 at $\tfrac{\pi}{2}\times256\approx400$).</p>
   </article>
 
   <article class="exp" data-setup="wedge">
     <h3>8. A limited range of angles: the missing wedge</h3>
     <p>The scanner turns through only 110° instead of 180°.  The slices leave a wedge of
-    Fourier space empty, and with it every detail that varies in those directions.  Edges are
-    seen by the rays that run along them; edges no ray ran along are lost, so the picture
-    smears in one direction.  (Electron tomography of a thin sample, which cannot be tilted
-    beyond about 70°, has exactly this problem.)  Widen the range and the wedge closes.</p>
+    Fourier space empty, and with it every detail that varies in those directions.  An edge is
+    seen by the rays that run along it; edges no ray ran along are lost, so the picture smears
+    in one direction.  (Electron tomography of a thin slab, which cannot be tilted much beyond
+    60° to 70° either way, has exactly this problem.)  Widen the range and the wedge closes.  The scan
+    building up shows the same thing as it goes: until it has turned through 180° every
+    reconstruction is a limited-angle one.</p>
   </article>
 
   <article class="exp" data-setup="noise">
     <h3>9. Noise: the ramp amplifies it</h3>
     <p>Each ray now counts photons: $n$ arrive out of $I_0$ sent, Poisson distributed, and the
-    scanner reports $-\ln(n/I_0)$.  Few photons through the middle of the head means noisy rays
-    there.  The noise is spread evenly over all frequencies, and the ramp multiplies the high
-    frequencies by $|k|$: the reconstruction is grainy.  Choose <em>Hann</em>: the window rolls
-    the filter smoothly to zero at the cutoff, the grain drops to about a third (read the RMS
-    difference under the picture), and edges blur a little.  Lower the cutoff to trade more.
-    The noise falls as $1/\sqrt{I_0}$: try $I_0$ ten times larger, and the dose ten times
-    larger with it.</p>
+    scanner reports $-\ln(n/I_0)$.  Along the longest paths through the 1974 head (realistic
+    attenuations) only 2% of the photons get through, so those rays are noisy.  The noise is spread evenly over
+    all frequencies, and the ramp multiplies the high frequencies by $|k|$: the picture is grainy,
+    and the ventricles (2% darker than the brain) are lost.  Choose <em>Hann</em>: the window
+    rolls the filter smoothly to zero at the cutoff, the grain drops to about a third (the RMS
+    error away from edges, under the picture, goes from 0.043 to 0.015), the ventricles
+    reappear, and edges blur a little.  Lower the cutoff to trade more.  With Ram-Lak, ten times
+    the photons (ten times the dose) cut the noise by $\sqrt{10}$; the reading falls from 0.043
+    to 0.020, not 0.014, because 0.016 of it is streaks and ringing that are there without noise
+    (turn the noise off to see).</p>
   </article>
 
   <article class="exp" data-setup="aliasing">
     <h3>10. Detector sampling and aliasing</h3>
-    <p>Only 64 detector bins, each narrow (a fifth of the spacing between them), measuring the
-    sharp-edged head.  The edges hold detail finer than the bins can sample, and it comes back
-    at the wrong frequencies: fine ripples and streaks tangent to the skull.  Widen the
-    detectors (the slider under <em>Detector width</em>) to 1: each bin now averages over its
-    width, a low-pass filter before sampling, and the aliasing mostly goes, at the price of
-    a little blur.  More bins sharpen the picture and push aliasing to finer scales.</p>
+    <p>A zone plate, $\cos(kr^2)$, whose rings get finer outwards (the local wavenumber is
+    $2kr$), scanned by only 64 detector bins, each a fifth of the spacing wide.  64 bins sample
+    up to $|k|=\pi/ds=100$, which the rings pass at $r=0.5$.  Beyond that, the reconstruction
+    shows rings that are not there, coarser and in the wrong places: detail finer than the
+    sampling comes back at the wrong frequency (aliasing).  Under <em>Detector width</em>,
+    widen the bins to 1: each now averages over its width, which removes much of that detail
+    before it is sampled, and the false rings fade to grey.  Then raise the bins to 256: every
+    ring is there.</p>
   </article>
 
   <article class="exp" data-setup="metal">
     <h3>11. Metal makes streaks</h3>
-    <p>Two metal pins, twenty times as absorbing as water.  For an ideal scanner they are no
-    problem: turn the noise off and the beam monochromatic, and the reconstruction is clean.
-    Real scanners have two problems with them.  Few photons get through the metal (photon
-    starvation), so those rays are very noisy, and filtered back-projection spreads their
-    errors along the rays as streaks.  And the beam has many energies; the soft photons are
-    absorbed first, so long paths through metal look less absorbing than they are (beam
-    hardening), which leaves a dark band between the pins.  Turn each effect on and off.</p>
+    <p>Two metal pins, twenty times as absorbing as water, in the 1974 head, reconstructed with
+    the Hann filter as soft tissue is.  Turn off the noise and choose one energy: an ideal scanner
+    gets the brain between the pins right, with only faint ripples round the pins (their edges
+    are too sharp and bright for 180 angles and 256 bins to capture fully).  A real scanner
+    adds two worse problems.  Few photons get through the metal (photon starvation), so the rays
+    through it are very noisy, and filtered back-projection spreads their errors along the rays:
+    streaks fanning out from the pins.  And the beam has many energies.  The scanner corrects
+    for the hardening of the beam as water causes it, but metal absorbs the soft photons far
+    more strongly than the hard ones, so rays through metal look less absorbing than they are:
+    a dark band joins the pins, where rays pass through both, and the brain there comes out
+    about 0.87 instead of 1.02.  Turn each effect on and off.</p>
   </article>
 
   <article class="exp" data-setup="faint">
     <h3>12. The faint features of the Shepp–Logan phantom</h3>
-    <p>The phantom of Shepp and Logan (1974) has a skull of attenuation 2 and a brain of 1.02,
-    and its small ellipses differ from the brain by 1%.  A grey scale from 1.0 to 1.05 shows
-    them, as CT viewers use narrow "windows" for soft tissue.  Now the faint features compete
-    with noise: lower the photon count and see when the three small spots at the bottom can no
-    longer be told apart, and how much the Hann window helps.</p>
+    <p>Shepp and Logan's phantom of 1974 has a skull of attenuation 2 and a brain of 1.02, and
+    its small ellipses differ from the brain by 1%.  The grey scale runs from 1.00 to 1.05, as CT
+    viewers use narrow "windows" for soft tissue; the skull is far off the scale.  Turn on
+    photon noise at $10^6$ photons: the three small spots at the bottom disappear in the grain.
+    Choose <em>Hann</em> and they come back, a little blurred; or keep Ram-Lak and send
+    $10^7$ photons.</p>
   </article>
 
   <article class="exp" data-setup="picture">
     <h3>13. Your own picture, or the camera</h3>
-    <p>Fourier's portrait, scanned.  Paint on it with the brush (the reconstruction follows), or
-    choose <em>Your picture…</em> or <em>Camera</em>.  With the camera the scanner keeps turning
-    and each angle sees the picture of that moment: move during the scan and see what motion
-    does to a CT image.  (Pictures are projected numerically, by summing along each ray with
-    linear interpolation; the phantom, the point and the disk exactly.)</p>
+    <p>Fourier's portrait, scanned at 360 angles.  Paint on it with the brush (the reconstruction
+    follows), or choose <em>Your picture…</em> or <em>Camera</em>.  With the camera the scanner
+    keeps turning and each angle sees the picture of its moment: move during the scan and see
+    what motion does to a CT image.  (Pictures are projected numerically, by summing along each
+    ray with linear interpolation, accurate to a fraction of a percent; the phantom, the point and
+    the disk exactly.)</p>
   </article>
 
   <h3>Things to know</h3>
   <ul>
     <li>Parallel beams: half a turn measures every line once, since $p(\theta+\pi,s)=p(\theta,-s)$.
     Real scanners use a fan of rays from one point and turn all the way round.</li>
-    <li>Filtered back-projection here: $f(\vec r)=\sum_j Q(\theta_j,\vec r\cdot\hat n_j)\,\Delta\theta$,
+    <li>Filtered back-projection here is $f(\vec r)=\sum_j Q(\theta_j,\vec r\cdot\hat n_j)\,\Delta\theta$,
     with $Q$ the projection convolved with the band-limited ramp kernel (Kak and Slaney, 1988),
-    interpolated linearly between detector bins.</li>
-    <li>The RMS difference compares the reconstruction with the object, pixel by pixel, inside
-    95% of the scan circle.</li>
-    <li>Photon counting is exact (Poisson); the two-energy beam is a simple model of beam
-    hardening in which every material absorbs the soft photons twice as strongly as the hard
-    ones.  No correction is applied for it.</li>
+    interpolated linearly between detector bins.  Each detector bin averages the projection over
+    its width.</li>
+    <li>The RMS error compares the reconstruction with the object pixel by pixel, inside 95% of
+    the scan circle; "away from edges" counts only pixels whose surroundings (four pixels each
+    way) are uniform in the object, so that it measures noise and streaks rather than blurred
+    edges.</li>
+    <li>Photon counting is exact (Poisson).  The two-energy beam is a simple model of beam
+    hardening: water-like matter absorbs the soft photons 1.35 times as strongly as the hard
+    ones, metal 4 times; the scanner corrects exactly for water, not for metal.</li>
+    <li>The scanner measures the object as it is at each angle, so changing the object during a
+    scan (painting, sliders, the camera) gives the motion artefacts of a real scan.  Once a scan
+    is over, any change measures every angle again at once.</li>
   </ul>
   <p class="small muted">The tomography idea from the old BrainFlux FFT2D to-do list, built in 2026.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>,
