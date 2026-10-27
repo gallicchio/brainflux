@@ -133,6 +133,50 @@ with Browser('interferometer/index.html', size=(1400, 900)) as b:
     vm = b.eval('__app.starV(550e-9 / (2 * 50 * Math.PI / 648e6))')
     check(abs(vm - 0.1 / 1.9) < 0.005, f'binary: visibility {vm:.4f} at the first beat minimum ((1 - r)/(1 + r) = {0.1 / 1.9:.4f})')
 
+    # The readouts keep still: every number in a slot of its own, so that no label, number or
+    # button moves (by more than 0.5 px) as the numbers change sign, size and number of figures.
+    def frame_passed():
+        b.eval('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(0))))')
+    def typed(sel, i, v):
+        return lambda: (b.eval(f"(() => {{ const box = [...document.querySelectorAll('{sel} input[type=number]')][{i}]; box.value = {v}; box.dispatchEvent(new Event('change')); }})()"), frame_passed())
+    def still(name, sel, steps, want_texts):
+        moves, texts = b.steady(sel, steps)
+        check(not moves and len(texts) >= want_texts,
+              f'{name}: the readouts keep still through {len(texts)} different readings' + (f'; moved: {moves[:4]}' if moves else ''))
+    # The mirror, the counter and the screen, the mirror on either side of equal paths and the count
+    # up and down (the counter driven by the motor's own steps, so it never loses count).
+    def place(d, motor, until):
+        return lambda: (b.eval(f"""(() => {{ const M = __app.M; M.setMotor('stop'); M.placeMirror({d}); M.state.speed = 2; M.setMotor('{motor}');
+            for (let i = 0; i < 20000 && !({until}); i++) M.tick(0.01); M.setMotor('stop'); }})()"""), frame_passed())
+    b.eval('__app.setups.count()')
+    place(250, 'fwd', '__app.counter().count >= 5')()
+    still('Michelson', '#mirror-readout, #mirror-readout .fixnum, #counter-readout, #counter-readout .fixnum, #counter-reset, #screen-note .fixnum, #screen',
+          [place(-3.2, 'back', '__app.counter().count <= -12'), place(-480, 'fwd', '__app.counter().count >= 40'),
+           place(9.87, 'back', '__app.counter().count <= -7'), place(123.4, 'fwd', '__app.counter().count >= 400')], 5)
+    # Through equal paths, where the units change (nm, μm) and the count is one fringe: the
+    # monospaced readouts keep their width, and the Reset button its place.
+    place(250, 'fwd', '__app.counter().count >= 5')()
+    still('Michelson, through equal paths', '#mirror-readout, #mirror-readout .fixnum, #counter-readout, #counter-readout .fixnum, #counter-reset',
+          [place(0.2, 'fwd', '__app.counter().count >= 1'), place(-0.1, 'back', '__app.counter().count <= -1'), place(-700, 'back', '__app.counter().count <= -3')], 4)
+    b.eval("__app.M.setMotor('fwd')"); frame_passed()
+    still('the motor', '#motor-note, #motor-note .fixnum', [typed('#speed-box', 0, v) for v in (0.01, 3.7, 999, 42)], 5)
+    # The spectrometer's readouts as the scan's length and step change.
+    b.eval('__app.setups.aliasing()'); typed('#fts-box', 1, 0.3)()
+    still('the spectrometer', '#trace-note .fixnum, #plot-box button, #fts-readout > div, #fts-readout .fixnum',
+          [typed('#fts-box', 0, 99), typed('#fts-box', 1, 0.05), typed('#fts-box', 0, 640), typed('#fts-box', 1, 0.123), typed('#fts-box', 0, 10)], 6)
+    still('Scan, Scanning...', '#scan, #apod-box button', [lambda: (b.eval('__app.M.startScan()'), frame_passed())], 2)
+    # The stellar interferometer: the star's size, the baseline, the band.
+    b.eval('__app.setups.star(); __app.S.setSweep(false)'); typed('#light-box', 1, 5)()
+    def baseline(B):
+        return lambda: (b.eval(f'__app.S.setB({B})'), frame_passed())
+    still('stellar', '#sky-note .fixnum, #fringe-note .fixnum, #st-readout > div, #st-readout .fixnum, #st-play, #seeing-box button',
+          [baseline(0.01), typed('#star-box', 0, 0.5), baseline(9.99), typed('#light-box', 1, 150), typed('#star-box', 0, 199.9), baseline(3.7)], 7)
+    # While the baseline sweeps (the first line of the readout is always there), and the button's
+    # new words don't move the one after it.
+    b.eval('__app.setups.star()'); b.sleep(0.3)
+    still('stellar, sweeping', '#sky-note .fixnum, #fringe-note .fixnum, #st-readout > div:first-child .fixnum, #st-play, #seeing-box button',
+          [lambda: b.sleep(0.4) for _ in range(6)] + [lambda: (b.click('#st-play'), frame_passed())], 3)
+
     # Every experiment.
     for name in b.eval('Object.keys(__app.setups)'):
         b.eval(f'__app.setups[{json.dumps(name)}]()'); b.sleep(2.5 if name in ('fts', 'resolution') else 1.2)

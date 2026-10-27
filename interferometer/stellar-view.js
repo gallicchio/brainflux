@@ -6,8 +6,8 @@
 // starlight and two inner mirrors, at a fixed separation b, send it into the telescope.  The
 // fringe spacing at the focus is set by b, so it does not change; their visibility is set by B.
 
-import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, fmt, setGroups } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, fillSlots } from '../lib/plot.js';
 import { MAS, makeModel, visibility, bandVisibility, bandSamples, firstNull, airyAmp } from './stars.js';
 import { cmf, xyzToLinear, gamutFix, wavelengthColour, toBytes, ENCODE_TABLE, ENCODE_SCALE } from './colour.js';
 
@@ -67,7 +67,8 @@ function drawSchematic() {
     ctx.font = `${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.textBaseline = 'middle';
     const [px, py] = P(x, y);
     if (back) { const w = ctx.measureText(s).width + 8, x0 = align === 'center' ? px - w / 2 : align === 'right' ? px - w + 4 : px - 4; ctx.fillStyle = 'rgba(13,16,32,0.85)'; ctx.fillRect(x0, py - size * 0.7, w, size * 1.4); }
-    ctx.fillStyle = col; ctx.fillText(s, px, py);
+    // A label with a live number comes as parts for fillSlots, its words kept still.
+    ctx.fillStyle = col; if (Array.isArray(s)) fillSlots(ctx, s, px, py); else ctx.fillText(s, px, py);
   };
   // Not to scale across: the inner mirrors are drawn at ±6, the outer ones from there out to ±44.
   const Lb = beamLength(), xOf = (B) => 6 + 38 * Math.min(1, B / Lb);
@@ -78,7 +79,7 @@ function drawSchematic() {
   label('starlight: plane wavefronts', 50, 11, 'center', dim, 9, true);
   // The beam.
   ctx.fillStyle = '#2a2f45'; { const [x0, y0] = P(4, by - 1.6); ctx.fillRect(x0, y0, 92 * u, 3.2 * u); }
-  label(`beam, ${fmt(Lb, 3)} m long`, 4, by + 4.5, 'left', dim, 9);
+  label(['beam, ', { v: Lb, dec: 1, w: 4 }, ' m long'], 4, by + 4.5, 'left', dim, 9);
   // Light paths: down to the outer mirrors, in to the inner ones, down into the telescope, to the focus.
   ctx.lineCap = 'round';
   const paths = [0, 1].map((s) => [[xo[s], 1], [xo[s], by], [xi[s], by], [xi[s], 30], [50, 56]]);
@@ -94,7 +95,7 @@ function drawSchematic() {
   // The baseline B, above the beam.
   const dimY = by + 6.5;
   line([[xo[0], dimY], [xo[1], dimY]], 1, dim); line([[xo[0], dimY - 1.2], [xo[0], dimY + 1.2]], 1, dim); line([[xo[1], dimY - 1.2], [xo[1], dimY + 1.2]], 1, dim);
-  label(`B = ${fmt(state.B, 3)} m`, Math.max(xo[1] + 2, 60), dimY, 'left', text, 11);
+  label(['B = ', { v: state.B, dec: 3, w: 6 }, ' m'], Math.max(xo[1] + 2, 60), dimY, 'left', text, 11);
   // The telescope: an objective and its tube, the light coming to a focus.
   line([[36, 31], [64, 31]], 1.2 * u, 'rgba(180,200,255,0.7)');
   line([[36, 31], [36, 58]], 1, 'rgba(255,255,255,0.25)'); line([[64, 31], [64, 58]], 1, 'rgba(255,255,255,0.25)');
@@ -184,10 +185,14 @@ function drawSky() {
   ctx.fillRect(12, height - 16, bw, 3);
   ctx.textAlign = 'left'; ctx.fillText(`${fmt(bar, 3)} mas`, 12, height - 20);
   ctx.textAlign = 'right';
-  ctx.fillText(pxPer > 3 ? `fringes on the sky: λ/B = ${fmt(period, 3)} mas` : state.B > 0 ? `λ/B = ${fmt(period, 3)} mas: too fine to draw` : 'B = 0: no fringes', width - 10, height - 8);
+  const per = { v: period, dec: 1, w: 6 };
+  if (pxPer > 3) fillSlots(ctx, ['fringes on the sky: λ/B = ', per, ' mas'], width - 10, height - 8);
+  else if (state.B > 0) fillSlots(ctx, ['λ/B = ', per, ' mas: too fine to draw'], width - 10, height - 8);
+  else ctx.fillText('B = 0: no fringes', width - 10, height - 8);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillText('baseline →', 12, 10);
-  $('#sky-note').textContent = binary ? `two stars ${fmt(state.rho, 3)} mas apart, each ${fmt(state.theta, 3)} mas across` : `${fmt(state.theta, 3)} mas = ${fmt(state.theta / 1000, 3)}″ across`;
+  setGroups($('#sky-note'), binary ? [['two stars ', { v: state.rho, dec: 1, w: 5 }, ' mas apart,'], ['each ', { v: state.theta, dec: 1, w: 5 }, ' mas across']]
+    : [[{ v: state.theta, dec: 1, w: 5 }, ' mas'], ['= ', { v: state.theta / 1000, dec: 5, w: 7 }, '″ across']]);
 }
 function niceLen(x) { const p = 10 ** Math.floor(Math.log10(x)), f = x / p; return (f < 2 ? 1 : f < 5 ? 2 : 5) * p; }
 
@@ -266,7 +271,7 @@ function drawFringes() {
   ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillText('brightness across the middle', f.left + 2, imgH + 4);
   const V = Math.hypot(...currentV());
-  $('#fringe-note').textContent = `visibility ${V.toFixed(3)}${state.bw > 0 ? ` over ${fmt(state.bw, 3)} nm` : ''}`;
+  setGroups($('#fringe-note'), [['visibility ', { v: V, dec: 3, w: 5 }], ...(state.bw > 0 ? [['over ', { v: state.bw, dec: 0, w: 3 }, ' nm']] : [])]);
 }
 
 // --------------------------------------------------------------------- visibility plot
@@ -289,7 +294,7 @@ function drawVisibility() {
     ctx.beginPath(); ctx.moveTo(f.X(B1) + 0.5, f.top); ctx.lineTo(f.X(B1) + 0.5, f.bottom); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     const k = (B1 * state.theta * MAS) / lam;
-    ctx.fillText(`${fmt(k, 3)} λ/θ = ${fmt(B1, 3)} m`, f.X(B1) + 4, f.top + 4);
+    fillSlots(ctx, [{ v: k, dec: 2, w: 4 }, ' λ/θ = ', { v: B1, dec: 2, w: 6 }, ' m'], f.X(B1) + 4, f.top + 4);
   }
   // Monochromatic |V(B/λ)|, and over the band.
   const curve = (fn, style, dash, w, m = n) => {
@@ -307,8 +312,8 @@ function drawVisibility() {
   ctx.restore();
   f.axes({ xlabel: 'baseline B (m)', ylabel: '|V|', colors: c });
   ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-  ctx.fillStyle = c.accent; ctx.fillText(`at λ = ${fmt(state.lam, 4)} nm`, f.right - 6, f.top + 4);
-  if (state.bw > 0) { ctx.fillStyle = c.ink2; ctx.fillText(`- - over ${fmt(state.bw, 3)} nm`, f.right - 6, f.top + 18); }
+  ctx.fillStyle = c.accent; fillSlots(ctx, ['at λ = ', { v: state.lam, dec: 0, w: 3 }, ' nm'], f.right - 6, f.top + 4);
+  if (state.bw > 0) { ctx.fillStyle = c.ink2; fillSlots(ctx, ['- - over ', { v: state.bw, dec: 0, w: 3 }, ' nm'], f.right - 6, f.top + 18); }
   $('#vis-note').textContent = 'click or drag to set the baseline';
 }
 function visPointer(e) { const r = visCanvas.getBoundingClientRect(); return visFrame.invX(e.clientX - r.left); }
@@ -319,16 +324,21 @@ visCanvas.addEventListener('pointercancel', () => { visDrag = false; });
 
 // --------------------------------------------------------------------- read-outs and controls
 
+// A line each, every number in a slot of its own (setGroups), so that nothing moves as they change.
+const stLines = [];
 function updateReadout() {
   const V = currentV(), lam = state.lam * 1e-9, B1 = firstNullB();
-  const parts = [`|V| = ${Math.hypot(...V).toFixed(3)} at B = ${fmt(state.B, 4)} m`];
-  if (Number.isFinite(B1)) parts.push(`first null of one star: B = ${fmt(B1, 4)} m`);
-  if (state.B > 0) parts.push(`fringes on the sky λ/B = ${fmt(lam / state.B / MAS, 3)} mas`);
+  const lines = [[['|V| = ', { v: Math.hypot(...V), dec: 3, w: 5 }], ['at B = ', { v: state.B, dec: 3, w: 6 }, ' m']]];
+  if (Number.isFinite(B1)) lines.push(['first null of one star:', ['B = ', { v: B1, dec: 3, w: 7 }, ' m']]);
+  if (state.B > 0) lines.push(['fringes on the sky', ['λ/B = ', { v: lam / state.B / MAS, dec: 1, w: 7 }, ' mas']]);
   if (state.kind === 'binary') {
     const proj = state.rho * Math.cos((state.pa * Math.PI) / 180);
-    if (Math.abs(proj) > 1e-6) parts.push(`beat period λ/(ρ cos φ) = ${fmt(lam / (Math.abs(proj) * MAS), 3)} m`);
+    if (Math.abs(proj) > 1e-6) lines.push(['beat period', ['λ/(ρ cos φ) = ', { v: lam / (Math.abs(proj) * MAS), dec: 3, w: 7 }, ' m']]);
   }
-  $('#st-readout').innerHTML = parts.join('<br>');
+  const box = $('#st-readout');
+  while (stLines.length < lines.length) stLines.push(el('div'));
+  if (box.childElementCount !== lines.length) box.replaceChildren(...stLines.slice(0, lines.length));
+  lines.forEach((l, i) => setGroups(stLines[i], l));
 }
 
 export function tick(dt) {

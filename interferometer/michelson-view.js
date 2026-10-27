@@ -5,7 +5,7 @@
 // Lengths in micrometres.  The mirror M2 sits a distance d = dc + df from equal paths (a coarse
 // and a fine part, like a micrometer and its fine screw); the path difference is Δ = 2d.
 
-import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, niceTicks, tickLabel } from '../lib/plot.js';
 import { SOURCES, GRID, GRID_HI, BROAD_W, Spectrum, normalCdf } from './spectrum.js';
 import { ColourModel, renderScreen, minMaxOver, FringeCounter } from './fringes.js';
@@ -702,8 +702,12 @@ function traceAxis() {
   const [w0, w1] = state.win, W = w1 - w0, [unit, uname] = pathUnit(W), c = (w0 + w1) / 2;
   let ref = 0;
   if (Math.abs(c) > 300 * W || Math.abs(c) / unit >= 9999) { const p = 10 ** Math.ceil(Math.log10(W)); ref = Math.round(c / p) * p; }
-  const refText = Math.abs(ref) >= 1000 ? `${+(ref / 1000).toPrecision(10)} mm` : `${+ref.toPrecision(10)} μm`;
-  return { unit, ref, label: ref ? `path difference Δ − ${refText} (${uname})` : `path difference Δ (${uname})` };
+  if (!ref) return { unit, ref, label: `path difference Δ (${uname})` };
+  // The reference in a slot (parts for fillSlots): as many decimals as its round step needs, so
+  // that the label keeps still as the reference steps along with the window.
+  const p = 10 ** Math.ceil(Math.log10(W)), mm = Math.abs(ref) >= 1000, scale = mm ? 1000 : 1;
+  const dec = Math.max(0, -Math.round(Math.log10(p / scale))), w = (mm ? 2 : 4) + (dec ? dec + 1 : 0);
+  return { unit, ref, label: ['path difference Δ − ', { v: ref / scale, dec, w }, ` ${mm ? 'mm' : 'μm'} (${uname})`] };
 }
 const traceX = (px) => { const { unit, ref } = traceAxis(); return ref + trace.frame.invX(px) * unit; };
 
@@ -767,7 +771,7 @@ function drawTrace() {
   f.axes({ xlabel: label, colors: c });
   ctx.save(); ctx.fillStyle = c.ink3; ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
   ctx.translate(11, f.top + f.h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('I / I(0)', 0, 0); ctx.restore();
-  $('#trace-note').textContent = record.length ? 'the detector\'s record; click or drag to move the mirror' : 'click or drag to move the mirror';
+  setGroups($('#trace-note'), [record.length ? 'the detector\'s record; click or drag to move the mirror' : 'click or drag to move the mirror']);
 }
 
 function drawFtsPlot(f, ctx, c) {
@@ -827,7 +831,8 @@ function drawFtsPlot(f, ctx, c) {
   ctx.restore();
   f.axes({ xlabel: `path difference Δ (${uname})`, colors: c });
   ctx.save(); ctx.fillStyle = c.ink3; ctx.font = '10px system-ui, sans-serif'; ctx.translate(11, f.top + f.h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('I / I(0)', 0, 0); ctx.restore();
-  $('#trace-note').textContent = fts.drawn ? 'your interferogram: keep drawing' : fts.scanning ? 'scanning...' : `${K + 1} samples, one every ${fmt(step, 3)} μm; draw on them`;
+  setGroups($('#trace-note'), fts.drawn ? ['your interferogram: keep drawing'] : fts.scanning ? ['scanning...']
+    : [[{ v: K + 1, dec: 0, w: 5 }, ' samples,'], ['one every ', { v: step, dec: 3, w: 5 }, ' μm;'], 'draw on them']);
 }
 
 function tracePointer(e) {
@@ -911,32 +916,40 @@ export function setPlot(p) {
 
 // --------------------------------------------------------------------- read-outs
 
-function fmtPath(x) {
+// Each number in a slot of its own width (setGroups), so that nothing moves as it changes; a
+// path difference in the unit that suits it, in a slot as wide whatever the unit, so that the
+// mirror sweeping through equal paths (nm, μm, nm...) moves nothing either.
+function pathParts(x) {
   const a = Math.abs(x);
-  if (a < 1) return `${(x * 1000).toFixed(1)} nm`;
-  if (a < 1000) return `${x.toFixed(3)} μm`;
-  return `${(x / 1000).toFixed(6)} mm`;
+  if (a < 1) return [{ v: x * 1000, dec: 1, w: 9 }, ' nm'];
+  if (a < 1000) return [{ v: x, dec: 3, w: 9 }, ' μm'];
+  return [{ v: x / 1000, dec: 6, w: 9 }, ' mm'];
 }
 
-let lastFtsHtml = '';
+// The spectrometer's three lines, each a block of its own.
+const ftsLines = [0, 1, 2].map(() => el('div'));
+$('#fts-readout').replaceChildren(...ftsLines);
 function updateReadouts() {
   const d = state.dc + state.df;
-  $('#mirror-readout').textContent = `M2 is d = ${fmtPath(d)} from equal paths;  Δ = 2d = ${fmtPath(2 * d)}`;
+  setGroups($('#mirror-readout'), [['M2 is d = ', ...pathParts(d), ' from equal paths;'], ['Δ = 2d = ', ...pathParts(2 * d)]]);
   const travel = (D() - counter.start) / 2;
-  $('#counter-readout').textContent = counter.lost ? 'Counter: lost count (the mirror moved too fast); reset it'
-    : `Counter: ${counter.count} fringe${Math.abs(counter.count) === 1 ? '' : 's'}; mirror moved ${fmtPath(travel)}`;
+  setGroups($('#counter-readout'), counter.lost ? ['Counter: lost count (the mirror moved too fast); reset it']
+    // (one fringe: a no-break space for the s (a monospace readout), so that the readout keeps its width)
+    : [['Counter: ', { v: counter.count, dec: 0, w: 6 }, Math.abs(counter.count) === 1 ? ' fringe;\u00a0' : ' fringes;'], ['mirror moved ', ...pathParts(travel)]]);
   const s = meanSigma(), rate = (2 * state.speed * s);
-  $('#motor-note').textContent = state.motor === 'stop' ? 'stopped' : `fringes pass the detector at about 2v/λ = ${fmt(rate, 3)} per second`;
+  setGroups($('#motor-note'), state.motor === 'stop' ? ['stopped'] : ['fringes pass the detector at about', ['2v/λ = ', { v: rate, dec: 2, w: 7 }, ' per second']]);
   const V = spec.visibility(D());
-  $('#screen-note').textContent = `Δ = ${fmtPath(D())}, visibility ${V.toFixed(3)}`;
+  setGroups($('#screen-note'), [['Δ = ', ...pathParts(D()), ','], ['visibility ', { v: V, dec: 3, w: 5 }]]);
   // The spectrometer.
   const K = ftsK(), step = state.fts.step, Lm = K * step, res = 1 / (2 * Lm), sN = 1 / (2 * step);
   const nm = 1000 / s, resNm = (res * nm * nm) / 1000;
   const alias = spec.range()[1] > sN;
-  const html = `${K + 1} samples to Δ<sub>max</sub> = ${fmtPath(Lm)}<br>`
-    + `resolution 1/(2Δ<sub>max</sub>) = ${fmt(res, 3)} μm⁻¹ (${fmt(resNm, 3)} nm at ${Math.round(nm)} nm)<br>`
-    + `<span class="${alias ? 'warn-text' : ''}">Nyquist σ<sub>N</sub> = 1/(2δ) = ${fmt(sN, 3)} μm⁻¹ (λ > ${Math.round(1000 / sN)} nm)${alias ? ': light beyond it folds back' : ''}</span>`;
-  if (html !== lastFtsHtml) { $('#fts-readout').innerHTML = html; lastFtsHtml = html; }
+  setGroups(ftsLines[0], [[{ v: K + 1, dec: 0, w: 5 }, ' samples'], ['to ', { html: 'Δ<sub>max</sub>' }, ' = ', ...pathParts(Lm)]]);
+  setGroups(ftsLines[1], [['resolution ', { html: '1/(2Δ<sub>max</sub>)' }, ' = ', { v: res, dec: 5, w: 7 }, ' μm⁻¹'],
+    ['(', { v: resNm, dec: 3, w: 7 }, ' nm at ', { v: nm, dec: 0, w: 4 }, ' nm)']]);
+  setGroups(ftsLines[2], [['Nyquist ', { html: 'σ<sub>N</sub>' }, ' = 1/(2δ) = ', { v: sN, dec: 2, w: 5 }, ' μm⁻¹'],
+    ['(λ > ', { v: 1000 / sN, dec: 0, w: 4 }, ` nm)${alias ? ':' : ''}`], ...(alias ? ['light beyond it folds back'] : [])]);
+  ftsLines[2].className = alias ? 'warn-text' : '';
   $('#undraw').hidden = !fts.drawn;
   $('#scan').textContent = fts.scanning ? 'Scanning...' : 'Scan';
 }
@@ -976,14 +989,15 @@ function showSourceNote() {
     hene: '632.8 nm (in air), a line far narrower than this demo can show',
     sodium: 'D₂ 588.995 nm and D₁ 589.592 nm, strengths 2 : 1; use "Lines" to zoom in',
     mercury: '404.7, 407.8, 435.8, 546.1, 577.0 and 579.1 nm (strengths approximate)',
-    gauss: p ? `coherence length λ²/Δλ = ${fmtPath((p.lam * p.lam) / p.fwhm / 1000)}` : '',
+    gauss: p ? ['coherence length', ['λ²/Δλ = ', ...pathParts((p.lam * p.lam) / p.fwhm / 1000)]] : '',
     led: 'blue chip at 450 nm (20 nm wide) and phosphor at 565 nm (110 nm wide)',
     lamp: 'Planck\'s law, inside the band 360 to 830 nm',
     white: 'flat per nanometre (CIE illuminant E), inside 360 to 830 nm',
     draw: 'draw on the spectrum',
     drawn: 'your drawing (wavenumbers 1.2 to 2.8 μm⁻¹)',
   };
-  $('#source-note').textContent = notes[state.source] || '';
+  const note = notes[state.source] || '';
+  setGroups($('#source-note'), Array.isArray(note) ? note : [note]);
 }
 
 export function init(hooks) {
