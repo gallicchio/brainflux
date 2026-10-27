@@ -24,7 +24,9 @@ const E1 = 71 / 57600, E3 = -71 / 16695, E4 = 71 / 1920, E5 = -17253 / 339200, E
  *   opts.keep(x, y)  false ends the curve (it has left the view, say)
  *   opts.more()   false ends the curve (out of time, say)
  *   opts.maxLength, opts.maxPoints
- * The points go into out (x0, y0, x1, y1, ...); returns how many there are.
+ * The points go into out (x0, y0, x1, y1, ...); returns how many there are.  Where the curve
+ * turns within a step, points on the cubic through its two ends (with their tangents) are put
+ * in between, for drawing.
  */
 export function traceCurve(dir, x0, y0, opts, out) {
   const tol = opts.tol ?? 1e-3, hmin = opts.hmin ?? 1e-5, hmax = opts.hmax ?? 1;
