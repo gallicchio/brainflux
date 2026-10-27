@@ -9,8 +9,8 @@ import {
 import { fft2Centered } from '../lib/fft.js';
 import { colorize } from '../lib/complexcolor.js';
 import { paint, stroke as paintStroke, mask as maskOut } from '../fft2d/tools.js';
-import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
-import { fitCanvas, themeColors, niceTicks, tickLabel } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, setSlots } from '../lib/ui.js';
+import { fitCanvas, themeColors, niceTicks, tickLabel, fillSlots } from '../lib/plot.js';
 
 const N = 256, HN = N / 2;
 const MM = 1000, DEG = Math.PI / 180;
@@ -640,7 +640,9 @@ function drawFront() {
       ctx.fillStyle = c.ink; ctx.globalAlpha = 0.35 + 0.65 * pt.b;
       ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill(); ctx.globalAlpha = 1;
       if (k === state.sel) { ctx.strokeStyle = c.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 3.5, 0, 2 * Math.PI); ctx.stroke(); }
-      ctx.fillStyle = c.ink2; ctx.fillText(`${fmt(pt.z / MM, 3)}`, x + r + 4, y);
+      // The depth in a slot of its own, clear of the largest dot: its digits keep their places as
+      // the point is dragged in depth (and its dot grows or shrinks).
+      ctx.fillStyle = c.ink2; fillSlots(ctx, [{ v: pt.z / MM, dec: 1, w: 5 }], x + 13, y);
     });
     ctx.fillStyle = c.ink3; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
     ctx.fillText('depths in mm', width - 5, height - 3);
@@ -649,21 +651,25 @@ function drawFront() {
 
 // ------------------------------------------------------------------------ notes, verdict
 
+// Each number in the notes has a slot of its own, a fixed number of characters wide with fixed
+// decimals, so that nothing in a note moves as the numbers change (setSlots).
 function updateNotes() {
   const p = state.pitch, L = plateL(), sMax = sinMax();
-  $('#holo-note').textContent = `${N}² pixels of ${fmt(p, 3)} µm`;
-  $('#spec-note').textContent = `to ±${fmt(sMax * 1000, 3)} mrad`;
+  setSlots($('#holo-note'), [`${N}² pixels of `, { v: p, dec: 1, w: 4 }, ' µm']);
+  setSlots($('#spec-note'), ['to ±', { v: sMax * 1000, dec: 0, w: 3 }, ' mrad']);
   const d = state.focus;
-  $('#recon-note').textContent = `focus ${fmt(Math.abs(d) / MM, 3)} mm ${d >= 0 ? 'behind' : 'in front'}`;
-  $('#side-note').textContent = `plate ${fmt(L / MM, 3)} mm across; drag the points, the focus line${state.ref === 'point' ? ', the reference source' : ''}`;
-  let ref = '';
+  // (Whole millimetres: the heading has little room, and the focus slider shows the rest.)
+  setSlots($('#recon-note'), ['focus ', { v: Math.abs(d) / MM, dec: 0, w: 3 }, ` mm ${d >= 0 ? 'behind' : 'in front'}`]);
+  setSlots($('#side-note'), ['plate ', { v: L / MM, dec: 2, w: 4 }, ` mm across; drag the points, the focus line${state.ref === 'point' ? ', the reference source' : ''}`]);
+  let ref;
   if (state.ref === 'plane') {
     const s = Math.sin(state.theta);
-    ref = s > 1e-9 ? `Fringes every ${fmt(state.lambda / s, 3)} µm = ${fmt(state.lambda / s / p, 3)} pixels (at least 2).` : 'In line: the reference runs along the axis (Gabor).';
+    ref = s > 1e-9 ? ['Fringes every ', { v: state.lambda / s, dec: 1, w: 5 }, '\u00a0µm = ', { v: state.lambda / s / p, dec: 2, w: 5 }, '\u00a0pixels (at least 2).']
+      : ['In line: the reference runs along the axis (Gabor).'];
   } else {
-    ref = `From ${fmt(Math.hypot(state.refSrc.x, state.refSrc.y) / state.refSrc.z * 1000, 3)} mrad off the axis, ${fmt(state.refSrc.z / MM, 3)} mm away.`;
+    ref = ['From ', { v: Math.hypot(state.refSrc.x, state.refSrc.y) / state.refSrc.z * 1000, dec: 1, w: 5 }, '\u00a0mrad off the axis, ', { v: state.refSrc.z / MM, dec: 1, w: 5 }, '\u00a0mm away.'];
   }
-  $('#ref-note').textContent = ref;
+  setSlots($('#ref-note'), ref);
   // The verdict on the islands.
   const v = $('#verdict');
   const I = islands;

@@ -29,6 +29,8 @@ details.panel[open] summary { margin-bottom: 6px; }
 .button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
 #verdict { min-height: 2.9em; }
+/* Room for two lines, so that the panels below keep their places as the wording changes. */
+#ref-note { min-height: 2.9em; }
 #verdict .bad { color: var(--warn); }
 #verdict .good { color: var(--good); }
 .warn { color: var(--warn); }

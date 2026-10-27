@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Drive the holography demo: dragging, the tools, every experiment, and the physics read-outs."""
-import json, math, os, sys
+import json, math, os, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
 
@@ -8,6 +8,30 @@ failures = []
 def check(cond, msg):
     print(('ok    ' if cond else 'FAIL  ') + msg)
     if not cond: failures.append(msg)
+
+# Where the words and number slots of some readouts are, to check that they keep still: each word
+# (not the numbers) by its readout, the readout's words and its place among them; each number slot
+# likewise.  Two layouts are compared word by word where the wording is the same.
+LAYOUT = r"""((sel) => { const out = {};
+  for (const e of document.querySelectorAll(sel)) {
+    if (!e.getClientRects().length) continue;       // (not shown)
+    const walk = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), words = []; let n;
+    while ((n = walk.nextNode())) {
+      if (n.parentElement.closest('.fixnum')) continue;
+      for (const m of n.textContent.matchAll(/[^\s\d.,:;()−+-]+/g)) {
+        const g = document.createRange(); g.setStart(n, m.index); g.setEnd(n, m.index + m[0].length);
+        const r = g.getBoundingClientRect(); words.push([m[0], r.left, r.top]);
+      }
+    }
+    const shape = e.id + '|' + words.map((w) => w[0]).join(' ');
+    words.forEach(([w, x, y], k) => { out[`${shape}|${k}`] = [x, y]; });
+    e.querySelectorAll('.fixnum').forEach((s, i) => { const r = s.getBoundingClientRect(); out[`${shape}|slot${i}`] = [r.left, r.top, r.width]; });
+  }
+  return out; })"""
+def layout_moves(a, b, tol=0.5):
+    """What moved by more than tol px between two LAYOUT records (where the wording is the same)."""
+    return [(k.split('|')[0], k.split('|')[-1], round(max(abs(x - y) for x, y in zip(p, b[k])), 1)) for k, p in a.items()
+            if k in b and max(abs(x - y) for x, y in zip(p, b[k])) > tol]
 
 LAM, P, N = 0.633, 5, 256
 DU = LAM / (N * P)                       # one display pixel of the view, radians
@@ -207,8 +231,41 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
 
     # 13. The steepest reference: fringes of two pixels, and the warning.
     b.eval('__app.setups.steep()'); b.sleep(0.4); b.eval('__app.redraw()')
-    note = b.eval("document.querySelector('#ref-note').textContent")
-    check('= 2 pixels' in note and 'past the edge' in b.eval('__app.verdict()'), f'the steepest reference: {note!r}; {b.eval("__app.verdict()")!r}')
+    note = b.eval("document.querySelector('#ref-note').textContent").replace('\u00a0', ' ')
+    check('= 2.00 pixels' in note and 'past the edge' in b.eval('__app.verdict()'), f'the steepest reference: {note!r}; {b.eval("__app.verdict()")!r}')
+
+    # The notes keep still: every number in a slot of its own, so that neither its digits nor the
+    # words after it move as the focus sweeps and the sliders take numbers of other sizes and signs.
+    NOTES = f"{LAYOUT}('#recon-note, #holo-note, #spec-note, #side-note, #ref-note')"
+    b.eval('__app.setups.depth()'); b.sleep(0.5)
+    first, bad, seen = b.eval(NOTES), [], set()
+    t0 = time.time()
+    while time.time() - t0 < 30 and len(seen) < 6:       # (a loaded machine draws few frames)
+        b.sleep(0.25)
+        seen.add(b.eval("document.querySelector('#recon-note').textContent"))
+        bad += layout_moves(first, b.eval(NOTES))
+    check(len(seen) >= 3 and not bad, f'the notes keep still as the focus sweeps ({len(seen)} focus readings, e.g. {sorted(seen)[:2]}; moved {bad[:3]})')
+    b.eval("document.querySelector('#camera-panel').open = true"); b.sleep(0.2)
+    first, moved = b.eval(NOTES), []
+    for label, v in (('focus (mm)', -250), ('focus (mm)', -3.5), ('focus (mm)', 4), ('focus (mm)', 120), ('angle (°)', 0.25),
+                     ('angle (°)', 3.3), ('pixel (µm)', 2), ('pixel (µm)', 19.5), ('angle (°)', 1.2)):
+        b.eval(f'T.slider({json.dumps(label)}, {v})'); b.sleep(0.3)
+        d = layout_moves(first, b.eval(NOTES))
+        if d: moved.append((label, v, d[:2]))
+    check(not moved, f'the notes keep still as focus, angle and pixel take other sizes and signs' + (f': moved {moved[:2]}' if moved else ''))
+    # The depths beside the points in the front view: right-aligned in slots that stay put.
+    b.eval("""(() => { const orig = CanvasRenderingContext2D.prototype.fillText; window.__depths = [];
+        CanvasRenderingContext2D.prototype.fillText = function (t, x, y, m) {
+          if (this.canvas.id === 'front' && /\\d/.test(t)) __depths.push([String(t), Math.round(this.getTransform().e + x * this.getTransform().a), this.textAlign]);
+          return orig.call(this, t, x, y, m); }; })()""")
+    xs, texts = set(), set()
+    for v in (6, 45, 90.5, 480, 140):
+        b.eval(f"T.slider('depth (mm)', {v})"); b.sleep(0.2)
+        b.eval('__depths.length = 0; __app.redraw()')
+        calls = b.eval('__depths')
+        texts |= {t for t, _, _ in calls}
+        xs.add(tuple(sorted(x for _, x, _ in calls)))
+    check(len(xs) == 1 and len(texts) >= 5, f'the depth labels in the front view keep their places ({sorted(texts)[:6]}; x {sorted(xs)[:3]})')
 
     # The URL keeps the state.
     b.eval('__app.setups.fourier()'); b.sleep(0.4)
