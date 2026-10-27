@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Holography · BrainFlux</title>
+<meta name="description" content="Record the interference of an object wave and a reference wave, then light the recording to bring the object back.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="holography.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Holography</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="holo">
+  <section class="stage">
+    <div class="scene">
+      <div class="pane side-pane">
+        <div class="pane-head"><h2>The set-up, from the side</h2><span class="note small muted" id="side-note"></span></div>
+        <div class="side-wrap"><canvas id="side" aria-label="Side view of the set-up: the object behind the plate, the reference beam, the focus of the camera in front. Drag the points, the focus line and the reference source."></canvas></div>
+      </div>
+      <div class="pane front-pane">
+        <div class="pane-head"><h2>From the front</h2></div>
+        <div class="front-wrap"><canvas id="front" aria-label="The object seen from the front, with the outline of the plate. Drag the points sideways."></canvas></div>
+      </div>
+    </div>
+    <div class="views">
+      <div class="pane" id="pane-holo">
+        <div class="pane-head"><h2>Hologram</h2><span class="note small muted" id="holo-note"></span><select id="zoom-holo" aria-label="Magnify the hologram"></select></div>
+        <div class="sq"><canvas id="holo" aria-label="The hologram: the brightness |O + R|² recorded by the camera. Drag to move the viewing window, or erase parts of the plate."></canvas></div>
+        <div class="pane-foot">
+          <div class="row" id="tool-box"></div>
+          <div id="tool-options" class="stack"></div>
+        </div>
+      </div>
+      <div class="pane" id="pane-spec">
+        <div class="pane-head"><h2>Its Fourier transform</h2><span class="note small muted" id="spec-note"></span><select id="zoom-spec" aria-label="Magnify the transform"></select></div>
+        <div class="sq"><canvas id="spec" aria-label="The two-dimensional Fourier transform of the hologram, on a logarithmic brightness scale"></canvas></div>
+        <div class="pane-foot">
+          <div id="spec-bright"></div>
+          <div class="small" id="verdict" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="pane" id="pane-recon">
+        <div class="pane-head"><h2>Looking through it</h2><span class="note small muted" id="recon-note"></span><select id="zoom-recon" aria-label="Magnify the view"></select></div>
+        <div class="sq"><canvas id="recon" aria-label="What a camera looking through the lit hologram sees, focused at the focus distance; directions across"></canvas></div>
+        <div class="pane-foot">
+          <div class="focus-row"><div id="focus-box"></div><span id="sweep-box"></span></div>
+          <div class="row" id="jump-box"></div>
+          <div id="recon-bright"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="label">Object</div>
+      <div class="row" id="object-box"></div>
+      <div id="points-box" class="stack"></div>
+      <div id="picture-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Reference beam</div>
+      <div class="row" id="ref-box"></div>
+      <div id="ref-options" class="stack"></div>
+      <div class="small muted" id="ref-note"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Light the hologram with</div>
+      <div class="row" id="relight-box"></div>
+      <div id="lambda2-box" class="stack"></div>
+    </div>
+    <details class="panel" id="camera-panel">
+      <summary class="label">Laser and camera</summary>
+      <div id="camera-box" class="stack"></div>
+    </details>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A hologram is a photograph of interference.  Light from an object, $O$, and a reference
+  beam from the same laser, $R$, fall together on a camera, which records only the brightness
+  $H=|O+R|^2$: the fringes where the two meet.  Light the recording with the reference again
+  and it passes on
+  $$HR=(|R|^2+|O|^2)\,R+|R|^2\,O+O^*R^2.$$
+  The middle term is the object's own wave: look through the plate and the object is there, in
+  depth (the <em>virtual image</em>).  The last term is its <em>twin</em>, the conjugate wave,
+  which converges to a <em>real image</em> in front of the plate.  The first goes straight on
+  (the <em>zero order</em>).</p>
+  <p>The camera here has 256 × 256 pixels of 5 µm (a plate 1.28 mm across) and the laser is
+  red, 633 nm.  Drag the points in the side and front views.  Magnify the hologram to see its
+  fringes.  Its Fourier transform sorts the fringes by direction: fringes of period $\Lambda$
+  bend light by $\sin\theta=\lambda/\Lambda$.  The last view is what a camera looking through
+  the lit plate sees, focused at a distance $d$ you choose: positive behind the plate, where
+  virtual images are, negative in front, for real images.  It is drawn in directions, $x/d$, so
+  the picture keeps its size as you focus.</p>
+
+  <article class="exp" data-setup="zone">
+    <h3>1. One point: a zone plate</h3>
+    <p>One point 30 mm behind the plate, with the reference beam along the axis.  The point's
+    light and the reference arrive in step at the middle of the plate, and fall in and out of
+    step farther out.  So the hologram is a set of rings, at radii $r_n=\sqrt{n\lambda z}$
+    (bright for even $n$, dark for odd): a Fresnel zone plate.  There are 21 of them out to the
+    edge, ever closer together.  A point nearer than $Np^2/\lambda=10$ mm would make rings finer
+    than two pixels.</p>
+    <p>Lit again, a zone plate is a lens with two focal lengths.  It spreads light as if from
+    the point (focus at +30 mm: the dot in the middle of the view), and it also gathers light
+    to a point 30 mm in front (focus at −30 mm, or press <em>on the twin</em>).  The red glow
+    round the dot is the light that went straight through, and the twin's light out of focus.
+    In line, everything lies on top of everything else.</p>
+  </article>
+
+  <article class="exp" data-setup="gabor">
+    <h3>2. Gabor's in-line hologram</h3>
+    <p>Three points 80 mm behind the plate, with the reference along the axis, as in Dennis
+    Gabor's first holograms (1948).  In focus, the points are sharp dots, but they sit on a
+    bright square: the reference light that went straight through, which is the plate itself
+    out of focus, $L/d$ = 16 mrad wide.  On top of that are the twins, which are real images
+    80 mm in front of the plate, here out of focus over twice that width.  No focus gets rid of
+    them.  The overlapping twin held holography back until Leith and Upatnieks tilted the
+    reference beam, in 1962.</p>
+  </article>
+
+  <article class="exp" data-setup="offaxis">
+    <h3>3. Tilt the reference: the twin moves away</h3>
+    <p>A letter F, 2 mm tall and 120 mm behind the plate, lit through ground glass, with the
+    reference tilted by 0.4°.  Raise the angle.  The zero order and the twin slide down the view,
+    away from the F, and in the transform the islands move apart.  The twin is clear at 0.8°.
+    The light from the F reaches the plate from directions spread over ±14 mrad (the F subtends
+    17 mrad, and each of its points lights the whole plate, which subtends 11 mrad), and the
+    tilt must exceed that.  A haze, the object's light interfering with itself ($|O|^2$),
+    clears at 1.75°.  Above 2.85° the fringes become finer than two pixels (experiment 13).</p>
+  </article>
+
+  <article class="exp" data-setup="islands">
+    <h3>4. Three islands in the transform</h3>
+    <p>The hologram's transform has three islands.  The middle one is $|R|^2+|O|^2$: a bright
+    point from the reference alone, and round it the object's light interfering with itself,
+    as wide as the spread of directions between points of the F.  Below is the image island,
+    $OR^*$: the object's own spread of directions, moved down by the reference's tilt,
+    $\sin\theta/\lambda$.  Above is the twin island, $O^*R$, the same turned half round (the
+    hologram is real, so its transform has $F(-k)=F(k)^*$).</p>
+    <p>The view shows the same three: the F, the zero order below it, and the twin, which leaves
+    at twice the angle and, being past the largest angle the pixels allow, comes back at the
+    top.  Make the object beam stronger (<em>Laser and camera</em>, object/ref.) and the middle
+    island grows brighter.</p>
+  </article>
+
+  <article class="exp" data-setup="cut">
+    <h3>5. Cut the hologram</h3>
+    <p>Seen through ground glass, every point of the F lights the whole plate, so every part of
+    the plate holds the whole F.  Press <em>Cover half</em>: the whole letter is still there,
+    speckled and blurred from side to side, because the plate is now half as wide that way.
+    Then <em>Uncover all</em> and drag out a small square on the hologram.  The F survives in any
+    piece, coarser and grainier as the piece shrinks, until the grains are as big as its
+    strokes.  A piece of width $D$ resolves directions $\lambda/D$ apart, like a lens of that
+    size.  The grains are speckle, from the random phases of the ground glass.  (Try the bars
+    too: with half the plate covered, the upright bars blur and the lying ones do not.)</p>
+  </article>
+
+  <article class="exp" data-setup="parallax">
+    <h3>6. Parallax through a window</h3>
+    <p>Three points straight behind one another, 40, 60 and 100 mm behind the plate, seen
+    through a window 0.3 mm wide that sweeps across the plate (or drag it yourself on the
+    hologram).  The camera is focused at 60 mm.  The point at 60 mm stays put; the nearer one
+    slides one way, the farther one the other: parallax, as when you move your head in front
+    of a window.  The plate recorded light arriving from every direction it can see, so each
+    window shows the scene from its own position.  Moving the window by $x_w$ moves a point at
+    depth $z$ by $x_w(1/d-1/z)$ in this view.  A photograph cannot do this.</p>
+  </article>
+
+  <article class="exp" data-setup="depth">
+    <h3>7. Focus through depth</h3>
+    <p>Points 40, 70 and 120 mm behind the plate, and the focus sweeping back and forth: each
+    point sharpens at its own depth.  Out of focus, a point is a small square $L\,|1/d-1/z|$
+    wide.  It is the plate's own outline, just as the blur of an out-of-focus camera has the
+    shape of its aperture.  Stop the sweep and press <em>Focus on the image</em> to focus on the
+    selected point.</p>
+  </article>
+
+  <article class="exp" data-setup="wavelength">
+    <h3>8. Relight in another colour</h3>
+    <p>The F was recorded in red (633 nm) and is lit with green (532 nm), and it is out of focus.
+    The fringes of a hologram bend light by $\sin\theta=\lambda/\Lambda$, so they bend green
+    light less and the image forms farther away, at $150\times633/532=178$ mm.  Press <em>Focus
+    on the image</em>.  The F is also smaller, by $532/633=0.84$, and it has moved down towards
+    the zero order, because the reference's fringes also bend green light less.  Slide the
+    colour and watch it move.  In white light every colour would make its own image, which is why
+    these holograms need a laser to be seen (rainbow and reflection holograms get round it).</p>
+  </article>
+
+  <article class="exp" data-setup="conjugate">
+    <h3>9. The conjugate beam: a real image</h3>
+    <p>Light the hologram with the reference reversed, its complex conjugate $R^*$.  Now the
+    term $O^*|R|^2$ sends back the conjugate of the object's light: it converges, and makes real
+    images in front of the plate, where a screen would catch them.  Focus at −50 mm for the
+    nearer point and −90 mm for the other.  The real image is inside out (pseudoscopic): the
+    point that was nearer the plate is still nearer it, so to someone in front, the depths are
+    reversed.</p>
+  </article>
+
+  <article class="exp" data-setup="binary">
+    <h3>10. A binary hologram</h3>
+    <p>The hologram has been rounded to one bit: each pixel black or white, split at the average
+    brightness (magnified 4 times).  The F survives, a little noisier.  The fringes are still in
+    the right places, and that is what matters.  Computer-generated holograms are often binary:
+    printed, etched, or shown on micromirror displays.  Try more bits under <em>Laser and
+    camera</em>: with 4 bits (16 grey levels) the image is all but perfect.</p>
+  </article>
+
+  <article class="exp" data-setup="portrait">
+    <h3>11. A digital hologram of Fourier</h3>
+    <p>Joseph Fourier's portrait, 5 mm across and 150 mm behind the plate, lit through ground
+    glass.  Its hologram looks like noise and the transform has the three islands, but through
+    the plate there is Fourier.  The engraving has more detail than the hologram can hold.  The
+    plate tells apart directions only $\lambda/L$ = 0.5 mrad apart, so the portrait is 67
+    directions across, and an off-axis hologram can give only part of its directions to the
+    image: the rest go to the zero order and the twin.  The grain is speckle again.</p>
+  </article>
+
+  <article class="exp" data-setup="fourier">
+    <h3>12. A lensless Fourier hologram</h3>
+    <p>Here the reference is a point source in the object's own plane, 5 mm below the F, both
+    150 mm behind the plate.  The waves from each point of the F and from the reference curve
+    alike, so together they make straight fringes, and the hologram's transform is a picture of
+    the object: the F turned half round in the image island, and upright in the twin island.
+    One FFT makes the image.  X-ray holograms of nanostructures are made this way, with a
+    pinhole beside the sample for the reference.</p>
+  </article>
+
+  <article class="exp" data-setup="steep">
+    <h3>13. Fringes two pixels apart</h3>
+    <p>The reference is as steep as the pixels allow: fringes $\lambda/\sin\theta=2p$ = 10 µm
+    apart, at $\theta$ = 3.6°.  The image island reaches the edge of the transform and comes
+    back on the other side, and the twin, which leaves at twice the angle, comes back right on
+    top of the image.  With two pixels per fringe, the camera cannot tell a fringe tilted one way
+    from one tilted the other.  Lower the angle until the islands come clear of the edges.  The
+    best angle depends on the object, but it is always well short of the limit.</p>
+  </article>
+
+  <h3>How it is computed</h3>
+  <ul>
+    <li>The points' light is exact spherical waves, $e^{ikr}$, with $r$ the distance to each
+    pixel.  A picture's light reaches the plate by the Fresnel diffraction integral (paraxial,
+    which is accurate at these few degrees), computed by one FFT on a grid in which each sample
+    of the picture is one direction of the view.  With the ground glass, every sample has a
+    random phase, so every point of the picture lights the whole plate.</li>
+    <li>The camera records the brightness at the centre of each pixel, without noise; rounding
+    to a few grey levels is optional.</li>
+    <li>The view is a lens focused at $d$ (exact on the axis), then one FFT: the light's
+    directions, $\lambda/Np$ apart, out to $\pm\lambda/2p$.  Light at larger angles comes back
+    from the other side, as it does from a real pixelated display.  The brightest spots are
+    drawn white, so that fainter light can be seen.</li>
+    <li>The islands' extents (and the note under the transform) come from the paraxial
+    directions of the waves at the corners of the plate.  The image positions in the side view
+    come from the paraxial holography equations.  The tests check both against the computed
+    images.</li>
+  </ul>
+  <p class="small muted">New in 2026 for BrainFlux.
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
