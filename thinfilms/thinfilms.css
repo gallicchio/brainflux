@@ -1,0 +1,88 @@
+/* Interfaces and thin films. */
+
+:root {
+  /* R, T, A: the first three categorical slots of the shared chart palette (validated for
+     colour-blind separation as a set, light and dark). */
+  --c-r: #2a78d6;
+  --c-t: #eb6834;
+  --c-a: #1baf7a;
+  --c-field: #1d1d1f;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --c-r: #3987e5; --c-t: #d95926; --c-a: #199e70; --c-field: #ececef; }
+}
+
+.tf {
+  display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 12px;
+  padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
+.readouts {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; color: var(--ink-2);
+  min-height: 2.9em; padding: 0 4px; line-height: 1.45;
+}
+.readouts b { color: var(--ink); font-weight: 600; }
+.readouts .warn { color: var(--warn); }
+.sw { display: inline-block; width: 1.1em; height: 1.1em; border-radius: 3px; vertical-align: -0.2em; border: 1px solid var(--line); margin-right: 3px; }
+
+.top { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 10px; min-width: 0; }
+.top.nofilm { grid-template-columns: minmax(0, 1fr); }
+.right-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+.plot-wrap canvas { width: 100%; height: 100%; }
+.head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 30px;
+  padding: 4px 8px 0; font-size: 13px; color: var(--ink-2);
+}
+.head h2 { font-size: 13px; font-weight: 600; margin: 0; color: var(--ink); }
+.head .spacer { flex: 1; }
+.head .seg > button { min-height: 24px; padding: 1px 8px; font-size: 12px; }
+.stack-box { display: flex; flex-direction: column; }
+.stack-canvas { height: max(190px, calc(37vh - 40px)); }
+.plots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
+.plot-box { display: flex; flex-direction: column; min-width: 0; }
+.plot-canvas { height: max(210px, calc(50vh - 125px)); }
+#stack { cursor: default; }
+#spec, #ang { cursor: ew-resize; }
+
+.film-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.film-wrap { flex: 1; min-height: 260px; background: #000; border-radius: var(--radius); overflow: hidden; position: relative; }
+.film-wrap.light-bg { background: #f2f2ee; }
+.film-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: ns-resize; }
+.swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.swatch { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: var(--ink-2); text-align: center; }
+.swatch .chip { width: 100%; height: 34px; border-radius: 6px; border: 1px solid var(--line); }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 12.5px; }
+.selrow { display: flex; align-items: center; gap: 6px; }
+.selrow .what { flex: 1; text-align: center; font-weight: 600; }
+.selrow button { min-width: 32px; }
+.controls select { width: 100%; }
+.row button { font-size: 13px; padding: 3px 8px; }
+.note { font-size: 12px; color: var(--ink-3); }
+.err { font-size: 12px; color: var(--warn); }
+details.panel summary { cursor: pointer; }
+details.panel[open] summary { margin-bottom: 6px; }
+.design-line { display: flex; gap: 6px; align-items: center; }
+.design-line input { flex: 1; min-width: 0; font-family: var(--mono); }
+.pair { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
+.pair label { color: var(--ink-2); }
+
+@media (max-width: 1100px) {
+  .top { grid-template-columns: 170px minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .tf { grid-template-columns: minmax(0, 1fr); }
+  .stage { position: static; }
+  .top, .top.nofilm { grid-template-columns: minmax(0, 1fr); }
+  .film-col { display: grid; grid-template-columns: minmax(0, 1fr) 120px; grid-template-rows: auto 1fr; }
+  .film-col .head { grid-column: 1 / -1; }
+  .film-wrap { min-height: 220px; height: 220px; }
+  .swatches { grid-template-columns: 1fr; align-content: start; }
+  .plots { grid-template-columns: minmax(0, 1fr); }
+  .stack-canvas { height: 200px; }
+  .plot-canvas { height: 220px; }
+}
