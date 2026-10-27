@@ -12,6 +12,8 @@
 //   - the outward flux of psi_sc and of the interference between psi_inc and psi_sc, added up
 //     over the whole collision: dP/dtheta.  Divided by the incident fluence (probability per
 //     unit length across the beam at the target), that is the differential cross section;
+//   - the outward flux of psi itself, which is what a wall with openings lets through: behind
+//     a wall there is no incident wave to subtract;
 //   - the time Fourier transforms of psi_sc(R, theta, t) and psi_inc(0, 0, t) at one energy
 //     E0 = k0^2/2: the steady-state scattered wave at that energy, from which the S-matrix
 //     elements S_m = exp(2 i delta_m) of each partial wave follow.
@@ -255,6 +257,7 @@ export class Detector {
     this.E0 = E0;
     this.Psc = new Float64Array(M);     // integral of the scattered flux, per radian
     this.Pint = new Float64Array(M);    // integral of the interference flux, per radian
+    this.Ptot = new Float64Array(M);    // integral of the flux of psi itself, per radian
     this.Are = new Float64Array(M);     // time Fourier transform of psi_sc(R, theta, t) at E0
     this.Aim = new Float64Array(M);
     this.Ainc = [0, 0];                 // ... of psi_inc(0, 0, t)
@@ -297,17 +300,18 @@ export class Detector {
     // psi_inc = X(x) Y(y) on this step's grid.
     packet.factors(sim, t, st.Xr, st.Xi, st.Yr, st.Yi);
     const env = (base, out) => {
-      // A = sum_taps w exp(-i k0 r) (psi - psi_inc)
-      let ar = 0, ai = 0;
+      // A = sum_taps w exp(-i k0 r) (psi - psi_inc), and the same for psi alone in out[2, 3].
+      let ar = 0, ai = 0, br = 0, bi = 0;
       for (let q = base; q < base + 16; q++) {
         const g = st.idx[q], i = g % n, jj = (g - i) / n;
         const ir = st.Xr[i] * st.Yr[jj] - st.Xi[i] * st.Yi[jj], ii = st.Xr[i] * st.Yi[jj] + st.Xi[i] * st.Yr[jj];
         const sr = sim.re[g] - ir, si = sim.im[g] - ii;
         ar += st.wr[q] * sr - st.wi[q] * si; ai += st.wr[q] * si + st.wi[q] * sr;
+        br += st.wr[q] * sim.re[g] - st.wi[q] * sim.im[g]; bi += st.wr[q] * sim.im[g] + st.wi[q] * sim.re[g];
       }
-      out[0] = ar; out[1] = ai;
+      out[0] = ar; out[1] = ai; out[2] = br; out[3] = bi;
     };
-    const lo = [0, 0], mid = [0, 0], hi = [0, 0], inc = [0, 0], g = [0, 0, 0, 0];
+    const lo = [0, 0, 0, 0], mid = [0, 0, 0, 0], hi = [0, 0, 0, 0], inc = [0, 0], g = [0, 0, 0, 0];
     const cE = Math.cos(this.E0 * t), sE = Math.sin(this.E0 * t), eR = [Math.cos(k0 * R), Math.sin(k0 * R)];
     for (let j = 0; j < M; j++) {
       const base = j * 48;
@@ -327,6 +331,11 @@ export class Detector {
       const jint = (inc[0] * di - inc[1] * dr + pr * gi - pi * gr) / m;
       this.Psc[j] += jsc * R * dt;
       this.Pint[j] += jint * R * dt;
+      // The flux of psi itself, from its own envelope (smooth where psi is outgoing: behind a
+      // wall, not in front of it, where the incident and reflected waves beat).
+      const Br = mid[2], Bi = mid[3];
+      const Bpr = (hi[2] - lo[2]) / (2 * d) - k0 * Bi, Bpi = (hi[3] - lo[3]) / (2 * d) + k0 * Br;
+      this.Ptot[j] += ((Br * Bpi - Bi * Bpr) / m) * R * dt;
       // psi_sc exp(i E0 t) dt
       this.Are[j] += (pr * cE - pi * sE) * dt;
       this.Aim[j] += (pr * sE + pi * cE) * dt;
@@ -449,6 +458,32 @@ export function bornCrossSection(sim, k, thetas, mass = 1) {
     ar *= dA; ai *= dA;
     // (2m/hbar^2)^2 |V~|^2 / (8 pi k) = m^2 |V~|^2 / (2 pi k)
     return (mass * mass * (ar * ar + ai * ai)) / (2 * Math.PI * k);
+  });
+}
+
+/**
+ * Fraunhofer diffraction by openings in a thin wall along the y axis.  If psi(0, y) = A(y) in
+ * the openings (Kirchhoff: the incident wave, undisturbed) and 0 on the wall, the wave behind
+ * it is the sum of plane waves exp(i(q y + sqrt(k^2 - q^2) x)) A~(q) dq/2pi, with
+ * A~(q) = integral A(y) e^{-iqy} dy, and far away, by stationary phase in q,
+ *     psi -> sqrt(k / 2 pi r) e^{i(kr - pi/4)} cos(theta) A~(k sin theta),   |theta| < 90 deg:
+ * every direction of the half circle, k_y = k sin(theta) running over -k ... k.  With A relative
+ * to the incident wave at the origin (current k per unit length across the beam),
+ *     dsigma/dtheta = (k / 2 pi) cos^2(theta) |A~(k sin theta)|^2,
+ * a length per radian like any 2D cross section; its integral is at most the open width.
+ * ys: the open sample points, dy apart; Are, Aim: A there.  0 behind the wall (|theta| >= 90).
+ */
+export function fraunhofer(k, ys, Are, Aim, dy, thetas) {
+  return thetas.map((th) => {
+    const c = Math.cos(th);
+    if (!(c > 0)) return 0;
+    const q = k * Math.sin(th);
+    let sr = 0, si = 0;
+    for (let p = 0; p < ys.length; p++) {
+      const ph = -q * ys[p], cr = Math.cos(ph), ci = Math.sin(ph);
+      sr += Are[p] * cr - Aim[p] * ci; si += Are[p] * ci + Aim[p] * cr;
+    }
+    return (k / (2 * Math.PI)) * c * c * (sr * sr + si * si) * dy * dy;
   });
 }
 
