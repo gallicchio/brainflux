@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tomography · BrainFlux</title>
+<meta name="description" content="How a CT scanner sees inside: projections at many angles, the sinogram, back-projection, the ramp filter and the projection-slice theorem.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="tomography.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Tomography</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="tomo">
+  <section class="stage" aria-label="The scan and the reconstructions">
+    <figure class="cell" id="cell-scan">
+      <figcaption class="cell-head"><h2>Scanner</h2><span class="note"><span class="swatch source"></span>X-ray source <span class="swatch detector"></span>detector</span></figcaption>
+      <div class="sq"><canvas id="scanner" tabindex="0" aria-label="The object in the scanner, with the X-ray source and the detector turning round it. Point at the object to see where it lies in the sinogram; with the brush, paint on it."></canvas></div>
+      <div class="readout mono small" id="scan-readout">&nbsp;</div>
+    </figure>
+    <figure class="cell" id="cell-sino">
+      <figcaption class="cell-head"><h2>Sinogram <span class="fn">p(θ, s)</span></h2><span class="note" id="sino-note"></span></figcaption>
+      <div class="sq"><canvas id="sinogram" tabindex="0" aria-label="The sinogram: one row per angle, the detector across. Click a point to see its ray."></canvas></div>
+      <div class="readout mono small" id="sino-readout">&nbsp;</div>
+    </figure>
+    <figure class="cell" id="cell-k">
+      <figcaption class="cell-head"><h2>Fourier space</h2><span class="note" id="k-note"></span><span class="spacer"></span><select id="k-zoom" class="small-select" aria-label="Zoom into Fourier space"></select></figcaption>
+      <div class="sq"><canvas id="kspace" tabindex="0" aria-label="Fourier space: each projection's 1D Fourier transform lies on a line through the centre of the object's 2D transform"></canvas></div>
+      <div class="readout mono small" id="k-readout">&nbsp;</div>
+    </figure>
+    <figure class="cell" id="cell-bp">
+      <figcaption class="cell-head"><h2>Back-projection</h2><span class="note">no filter</span></figcaption>
+      <div class="sq"><canvas id="bp" tabindex="0" aria-label="Plain back-projection: every projection smeared back along its rays and added up"></canvas></div>
+      <div class="readout mono small" id="bp-readout">&nbsp;</div>
+    </figure>
+    <figure class="cell" id="cell-fbp">
+      <figcaption class="cell-head"><h2>Filtered back-projection</h2><span class="note" id="fbp-note"></span></figcaption>
+      <div class="sq"><canvas id="fbp" tabindex="0" aria-label="Filtered back-projection: each projection convolved with the ramp filter, then smeared back"></canvas></div>
+      <div class="readout mono small" id="fbp-readout">&nbsp;</div>
+    </figure>
+    <figure class="cell" id="cell-extra">
+      <figcaption class="cell-head"><select id="extra-view" aria-label="What the sixth panel shows"></select><span class="note" id="extra-note"></span></figcaption>
+      <div class="sq plot" id="extra-wrap"><canvas id="extra" tabindex="0" aria-label="A profile through the pictures, one projection and its filtered version, or the direct Fourier reconstruction"></canvas></div>
+      <div class="readout mono small" id="extra-readout">&nbsp;</div>
+    </figure>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="row">
+        <button type="button" id="play" class="primary" title="Pause or go on (space)">Pause</button>
+        <button type="button" id="again" title="Start the scan again from the first angle">Scan again</button>
+        <button type="button" id="finish" title="Measure every remaining angle at once">Finish</button>
+      </div>
+      <div id="speed-box"></div>
+      <div class="row" id="keep-box"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Object</div>
+      <div class="button-grid" id="objects"></div>
+      <div class="button-grid">
+        <select id="gallery" aria-label="More pictures"></select>
+        <button type="button" id="upload" title="Use a picture of your own (or drop one on the scanner, or paste one)">Your picture…</button>
+        <input type="file" id="file" accept="image/*" hidden>
+        <button type="button" id="camera" aria-pressed="false" title="Scan your camera's picture, live">Camera</button>
+      </div>
+      <div id="object-options" class="stack"></div>
+      <div class="row" id="tool-box"></div>
+      <div id="brush-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Scanner</div>
+      <div id="geometry" class="stack"></div>
+      <div class="row" id="noise-box"></div>
+      <div id="photons-box"></div>
+      <details id="more">
+        <summary class="small">Detector width, polychromatic beam</summary>
+        <div class="stack" id="more-box"></div>
+      </details>
+    </div>
+    <div class="panel">
+      <div class="label">Reconstruction filter</div>
+      <div id="filter-box"></div>
+      <div id="cutoff-box"></div>
+      <div class="filter-plot"><canvas id="filter-plot" aria-label="The filter's response against frequency"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="label">Show</div>
+      <div id="window-box" class="stack"></div>
+      <div class="row" id="show-box"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+
+  <p>A CT scanner sends a sheet of parallel X-rays through one slice of the body and measures,
+  with a row of detectors, how much each ray has been absorbed.  That is the integral of the
+  attenuation $f(x,y)$ along the ray, the line $x\cos\theta+y\sin\theta=s$:
+  $$p(\theta,s)=\int_{\mathrm{ray}} f\,dl,$$
+  for the ray at distance $s$ from the centre, across the direction
+  $\hat n=(\cos\theta,\sin\theta)$.  Turning source and detector through half a turn fills
+  the <em>sinogram</em>, one row per angle.  The task is to get $f$ back.</p>
+
+  <p><em>Back-projection</em> smears every projection back along its rays and adds them up,
+  $b(\vec r)=\int_0^\pi p(\theta,\vec r\cdot\hat n)\,d\theta$: a blurred picture.
+  <em>Filtered back-projection</em> first convolves each projection with the ramp filter,
+  whose Fourier transform is $|k|$, and then smears it back: that gives $f$ itself.</p>
+
+  <p>Point at the object to see its sinusoid in the sinogram; click the sinogram to see the
+  ray it measured, on the object and in the back-projection.  Values are attenuations in units
+  of water's, and the scan circle is 20 cm across.</p>
+
+  <article class="exp" data-setup="sinusoid">
+    <h3>1. One point, one sinusoid</h3>
+    <p>A single small object, off centre (it is one pixel wide: the ring shows where).  As the
+    scanner turns, its shadow on the detector moves to and fro, as the sixth panel shows: at angle
+    $\theta$ it falls at $s=x_0\cos\theta+y_0\sin\theta=r_0\cos(\theta-\phi_0)$.  So its record,
+    row by row, is a sinusoid whose amplitude is the point's distance $r_0$ from the centre and
+    whose phase is its direction $\phi_0$; hence the name <em>sinogram</em>.  Move the point with
+    its sliders, or point anywhere on the scanner: the dashed curve is that point's sinusoid.
+    Every object is a sum of points, so its sinogram is a sum of sinusoids.</p>
+  </article>
+
+  <article class="exp" data-setup="smear">
+    <h3>2. One projection, smeared back</h3>
+    <p>With a single angle, back-projection can only spread the projection evenly along the
+    direction the rays came from: stripes.  The scanner cannot tell where along a ray the
+    absorption happened.  Raise the number of angles to 2, 3, 4, 8: the stripes cross, and they
+    add up most where the object is.</p>
+  </article>
+
+  <article class="exp" data-setup="blur">
+    <h3>3. Back-projection blurs a point into 1/r</h3>
+    <p>One point, 360 angles.  Every smear passes through the point, so the back-projection is a
+    star of lines that merge into a halo.  A place at distance $r$ from the point lies within a
+    detector bin $ds$ of the smears from a fraction $ds/\pi r$ of the angles, so the halo falls off
+    as $1/r$: exactly, $b=m/r$ for a point of mass $m$.  The profile (the sixth panel) shows the
+    back-projection along the line through the point (orange, right-hand scale) and $m/r$
+    (dotted), with nothing adjusted: they lie on top of each other.  Every point of an object is
+    blurred this way, which is why the back-projection of the head looks foggy.</p>
+  </article>
+
+  <article class="exp" data-setup="ramp">
+    <h3>4. The ramp filter sharpens</h3>
+    <p>Before smearing, each projection is convolved with the ramp filter.  The sixth panel shows
+    one projection (grey) and its filtered version (blue): the filter is a sharpener, it
+    overshoots at every edge and goes negative beside it.  Smeared back, those negative side
+    lobes cancel the $1/r$ halos of the neighbouring lines, and the picture comes out sharp,
+    with the right values.  Click the sinogram to see other projections, and choose
+    <em>Profile</em> to compare the reconstruction with the object along a line.</p>
+  </article>
+
+  <article class="exp" data-setup="slice">
+    <h3>5. The projection-slice theorem</h3>
+    <p>The 1D Fourier transform of a projection is a slice through the 2D Fourier transform of
+    the object: $$P(\theta,k)=F(k\cos\theta,\,k\sin\theta),$$ along the line through $k=0$ in
+    the direction $\hat n$, across the rays.  Here the object is a disk with stripes; their
+    wavevector puts two bright spots in $F$, at $|k|=40$ in the direction 60°.  Fourier space is
+    magnified four times, with the object's own transform drawn faintly underneath.  Watch the
+    slices arrive, one every 5°: the spots light up when the slice reaches 60°, when the rays run
+    along the stripes.  Collect slices at enough angles and you have $F$, and so the object.</p>
+  </article>
+
+  <article class="exp" data-setup="density">
+    <h3>6. Why the filter is |k|</h3>
+    <p>Twelve angles, so the slices are easy to count.  Each slice has the same number of
+    samples, so near the centre of Fourier space they crowd together and far out they spread
+    apart: at radius $k$ the slices are $k\,\Delta\theta$ apart, and the density of samples falls as
+    $1/|k|$.  Back-projection adds every sample with the same weight, which over-counts the low
+    frequencies by $1/|k|$; in real space that is the $1/r$ blur (in 2D, $1/r$ and $1/|k|$ are
+    each other's Fourier transforms, up to $2\pi$).  Weighting each slice by $|k|$ undoes it: the
+    ramp filter.</p>
+    <p>The sixth panel uses the theorem directly: it interpolates the slices onto a square grid
+    and takes one inverse 2D FFT.  With these twelve slices its RMS error is 0.12, against 0.26
+    for filtered back-projection, whose streaks cost more; with 180 angles it does worse, 0.034
+    against 0.023, because interpolating far from the centre, where the slices are sparse, is
+    hard, and an error at one $k$ spreads over the whole picture.</p>
+  </article>
+
+  <article class="exp" data-setup="streaks">
+    <h3>7. Too few angles: streaks</h3>
+    <p>The head with 24 angles.  Close to each sharp edge the smears still cancel, but further
+    away they separate into streaks.  Fourier space shows why: the slices are $k\,\pi/n_\theta$
+    apart at radius $k$, and to describe an object of radius $R$ (here the scan circle, 1)
+    samples must be at most $\pi/R$ apart.  Inside the dotted circle, $|k|&lt;\pi/\Delta\theta=n_\theta/R$,
+    they are; outside they are not, though the detector measures out to the dashed circle,
+    $|k|=\pi/ds$.  The circles meet when $n_\theta=\tfrac{\pi}{2}M$ for $M$ detector bins:
+    the number of angles that samples the whole scan circle fully.  Raise the angles and watch
+    the streaks retreat: the RMS error away from edges (under the picture) falls from 0.15 at 24
+    angles to 0.067 at 48, 0.023 at 96 and 0.009 at 180; beyond that the streaks are faint and
+    little more is gained (0.008 at $\tfrac{\pi}{2}\times256\approx400$).</p>
+  </article>
+
+  <article class="exp" data-setup="wedge">
+    <h3>8. A limited range of angles: the missing wedge</h3>
+    <p>The scanner turns through only 110° instead of 180°.  The slices leave a wedge of
+    Fourier space empty, and with it every detail that varies in those directions.  An edge is
+    seen by the rays that run along it; edges no ray ran along are lost, so the picture smears
+    in one direction.  (Electron tomography of a thin slab, which cannot be tilted much beyond
+    60° to 70° either way, has exactly this problem.)  Widen the range and the wedge closes.  The scan
+    building up shows the same thing as it goes: until it has turned through 180° every
+    reconstruction is a limited-angle one.</p>
+  </article>
+
+  <article class="exp" data-setup="noise">
+    <h3>9. Noise: the ramp amplifies it</h3>
+    <p>Each ray now counts photons: $n$ arrive out of $I_0$ sent, Poisson distributed, and the
+    scanner reports $-\ln(n/I_0)$.  Along the longest paths through the 1974 head (realistic
+    attenuations) only 2% of the photons get through, so those rays are noisy.  The noise is spread evenly over
+    all frequencies, and the ramp multiplies the high frequencies by $|k|$: the picture is grainy,
+    and the ventricles (2% darker than the brain) are lost.  Choose <em>Hann</em>: the window
+    rolls the filter smoothly to zero at the cutoff, the grain drops to about a third (the RMS
+    error away from edges, under the picture, goes from 0.043 to 0.015), the ventricles
+    reappear, and edges blur a little.  Lower the cutoff to trade more.  With Ram-Lak, ten times
+    the photons (ten times the dose) cut the noise by $\sqrt{10}$; the reading falls from 0.043
+    to 0.020, not 0.014, because 0.016 of it is streaks and ringing that are there without noise
+    (turn the noise off to see).</p>
+  </article>
+
+  <article class="exp" data-setup="aliasing">
+    <h3>10. Detector sampling and aliasing</h3>
+    <p>A zone plate, $\cos(kr^2)$, whose rings get finer outwards (the local wavenumber is
+    $2kr$), scanned by only 64 detector bins, each a fifth of the spacing wide.  64 bins sample
+    up to $|k|=\pi/ds=100$, which the rings pass at $r=0.5$.  Beyond that, the reconstruction
+    shows rings that are not there, coarser and in the wrong places: detail finer than the
+    sampling comes back at the wrong frequency (aliasing).  Under <em>Detector width</em>,
+    widen the bins to 1: each now averages over its width, which removes much of that detail
+    before it is sampled, and the false rings fade to grey.  Then raise the bins to 256: every
+    ring is there.</p>
+  </article>
+
+  <article class="exp" data-setup="metal">
+    <h3>11. Metal makes streaks</h3>
+    <p>Two metal pins, twenty times as absorbing as water, in the 1974 head, reconstructed with
+    the Hann filter as soft tissue is.  Turn off the noise and choose one energy: an ideal scanner
+    gets the brain between the pins right, with only faint ripples round the pins (their edges
+    are too sharp and bright for 180 angles and 256 bins to capture fully).  A real scanner
+    adds two worse problems.  Few photons get through the metal (photon starvation), so the rays
+    through it are very noisy, and filtered back-projection spreads their errors along the rays:
+    streaks fanning out from the pins.  And the beam has many energies.  The scanner corrects
+    for the hardening of the beam as water causes it, but metal absorbs the soft photons far
+    more strongly than the hard ones, so rays through metal look less absorbing than they are:
+    a dark band joins the pins, where rays pass through both, and the brain there comes out
+    about 0.87 instead of 1.02.  Turn each effect on and off.</p>
+  </article>
+
+  <article class="exp" data-setup="faint">
+    <h3>12. The faint features of the Shepp–Logan phantom</h3>
+    <p>Shepp and Logan's phantom of 1974 has a skull of attenuation 2 and a brain of 1.02, and
+    its small ellipses differ from the brain by 1%.  The grey scale runs from 1.00 to 1.05, as CT
+    viewers use narrow "windows" for soft tissue; the skull is far off the scale.  Turn on
+    photon noise at $10^6$ photons: the three small spots at the bottom disappear in the grain.
+    Choose <em>Hann</em> and they come back, a little blurred; or keep Ram-Lak and send
+    $10^7$ photons.</p>
+  </article>
+
+  <article class="exp" data-setup="picture">
+    <h3>13. Your own picture, or the camera</h3>
+    <p>Fourier's portrait, scanned at 360 angles.  Paint on it with the brush (the reconstruction
+    follows), or choose <em>Your picture…</em> or <em>Camera</em>.  With the camera the scanner
+    keeps turning and each angle sees the picture of its moment: move during the scan and see
+    what motion does to a CT image.  (Pictures are projected numerically, by summing along each
+    ray with linear interpolation, accurate to a fraction of a percent; the phantom, the point and
+    the disk exactly.)</p>
+  </article>
+
+  <h3>Things to know</h3>
+  <ul>
+    <li>Parallel beams: half a turn measures every line once, since $p(\theta+\pi,s)=p(\theta,-s)$.
+    Real scanners use a fan of rays from one point and turn all the way round.</li>
+    <li>Filtered back-projection here is $f(\vec r)=\sum_j Q(\theta_j,\vec r\cdot\hat n_j)\,\Delta\theta$,
+    with $Q$ the projection convolved with the band-limited ramp kernel (Kak and Slaney, 1988),
+    interpolated linearly between detector bins.  Each detector bin averages the projection over
+    its width.</li>
+    <li>The RMS error compares the reconstruction with the object pixel by pixel, inside 95% of
+    the scan circle; "away from edges" counts only pixels whose surroundings (four pixels each
+    way) are uniform in the object, so that it measures noise and streaks rather than blurred
+    edges.</li>
+    <li>Photon counting is exact (Poisson).  The two-energy beam is a simple model of beam
+    hardening: water-like matter absorbs the soft photons 1.35 times as strongly as the hard
+    ones, metal 4 times; the scanner corrects exactly for water, not for metal.</li>
+    <li>The scanner measures the object as it is at each angle, so changing the object during a
+    scan (painting, sliders, the camera) gives the motion artefacts of a real scan.  Once a scan
+    is over, any change measures every angle again at once.</li>
+  </ul>
+  <p class="small muted">The tomography idea from the old BrainFlux FFT2D to-do list, built in 2026.
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>,
+  MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
