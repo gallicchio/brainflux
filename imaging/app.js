@@ -836,7 +836,7 @@ imgCanvas.addEventListener('pointerleave', () => { hover.img = false; show('#img
 // ------------------------------------------------------------------------------ controls
 
 const ctl = {};
-const S_ = (key, opts, what = 'pupil') => (ctl[key] = slider({ ...opts, value: state[key], onInput: (v) => { state[key] = v; opts.after?.(v); changed(what); } }));
+const S_ = (key, opts, what = 'pupil') => (ctl[key] = slider({ ...opts, value: state[key], onInput: (v) => { state[key] = v; changed(what); } }));
 
 // The object panel.
 const presetButtons = {};
@@ -1062,9 +1062,9 @@ async function configure(cfg) {
 }
 
 const setups = {
-  abbe: () => configure({ preset: 'grating', d: 1.28, NA: 0.35, filter: 'open' }),
-  zero: () => configure({ preset: 'grating', d: 1.28, NA: 0.6, filter: 'stop', stopNA: 0.02 }),
-  oblique: () => configure({ preset: 'grating', d: 0.8, NA: 0.4, filter: 'open', tiltNA: 0.35, tiltDir: 180 }),
+  abbe: () => configure({ preset: 'grating', d: 1.28, NA: 0.35, filter: 'open', zoom: 2 }),
+  zero: () => configure({ preset: 'grating', d: 1.28, NA: 0.6, filter: 'stop', stopNA: 0.02, zoom: 2 }),
+  oblique: () => configure({ preset: 'grating', d: 0.8, NA: 0.4, filter: 'open', tiltNA: 0.35, tiltDir: 180, zoom: 2 }),
   diatom: () => configure({ preset: 'diatom', NA: 0.65, filter: 'open', zoom: 2, xzoom: 2 }),
   invisible: () => configure({ preset: 'cells', NA: 1.4, filter: 'open', zoom: 1 }),
   defocus: () => configure({ preset: 'cells', NA: 0.5, filter: 'open', z: 1, zoom: 4 }),

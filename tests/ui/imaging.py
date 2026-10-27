@@ -107,6 +107,12 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     b.eval("document.querySelector('#presets button:last-child').click()"); settle(b, 0.6)
     view, c = b.eval('__app.state.objView'), b.eval('__app.stats().contrast')
     check(b.eval('__app.state.preset') == 'formula' and view == 'phase' and c > 0.3, f'the typed phase disk exp(i a (r < R)) is drawn as a phase ({view}) and shows with the dot (contrast {c:.2f})')
+    ok = []
+    for k in range(b.eval("document.querySelectorAll('.examples button').length")):
+        b.eval(f"document.querySelectorAll('.examples button')[{k}].click()"); settle(b, 0.4)
+        st = b.eval('__app.stats()')
+        ok.append(st['max'] > 0 and st['max'] == st['max'] and not b.eval("document.querySelector('.expr .error').textContent"))
+    check(all(ok) and len(ok) == 5, f'every example formula parses and makes an image ({ok})')
 
     # 5. Invisible cells.
     setup(b, 'invisible')
