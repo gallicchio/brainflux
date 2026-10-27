@@ -694,6 +694,19 @@ let traceDrag = null;
 
 function pathUnit(W) { return W >= 2000 ? [1000, 'mm'] : W < 2 ? [1e-3, 'nm'] : [1, 'μm']; }
 
+/**
+ * The trace's axis: a unit, and a round reference subtracted when the window is narrow far from
+ * zero path (so that ticks like 1000.2 μm don't all read "1000").  Δ = ref + x * unit.
+ */
+function traceAxis() {
+  const [w0, w1] = state.win, W = w1 - w0, [unit, uname] = pathUnit(W), c = (w0 + w1) / 2;
+  let ref = 0;
+  if (Math.abs(c) > 300 * W || Math.abs(c) / unit >= 9999) { const p = 10 ** Math.ceil(Math.log10(W)); ref = Math.round(c / p) * p; }
+  const refText = Math.abs(ref) >= 1000 ? `${+(ref / 1000).toPrecision(10)} mm` : `${+ref.toPrecision(10)} μm`;
+  return { unit, ref, label: ref ? `path difference Δ − ${refText} (${uname})` : `path difference Δ (${uname})` };
+}
+const traceX = (px) => { const { unit, ref } = traceAxis(); return ref + trace.frame.invX(px) * unit; };
+
 function computeColumns(c0, c1, x0, W, P) {
   const g = [0, 0];
   for (let col = Math.max(0, c0); col <= Math.min(P - 1, c1); col++) {
@@ -732,14 +745,14 @@ function drawTrace() {
     computeColumns(Math.floor(((a - w0) / W) * P), Math.floor(((b - w0) / W) * P), w0, W, P);
     trace.pending = null;
   }
-  const [unit, uname] = pathUnit(W), norm = 1 / (2 * spec.I0 || 1);
-  f.x0 = w0 / unit; f.x1 = w1 / unit; f.y0 = -0.04; f.y1 = 1.1;
+  const { unit, ref, label } = traceAxis(), norm = 1 / (2 * spec.I0 || 1);
+  f.x0 = (w0 - ref) / unit; f.x1 = (w1 - ref) / unit; f.y0 = -0.04; f.y1 = 1.1;
   f.clip();
   // Half the peak: the level with no interference.
   ctx.strokeStyle = c.ink3; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(0.5) + 0.5); ctx.lineTo(f.right, f.Y(0.5) + 0.5); ctx.stroke(); ctx.setLineDash([]);
   // Zero path.
-  if (w0 <= 0 && w1 >= 0) { ctx.strokeStyle = c.line; ctx.beginPath(); ctx.moveTo(f.X(0) + 0.5, f.top); ctx.lineTo(f.X(0) + 0.5, f.bottom); ctx.stroke(); }
+  if (w0 <= 0 && w1 >= 0) { const x0 = f.X(-ref / unit); ctx.strokeStyle = c.line; ctx.beginPath(); ctx.moveTo(x0 + 0.5, f.top); ctx.lineTo(x0 + 0.5, f.bottom); ctx.stroke(); }
   ctx.fillStyle = c.accent;
   for (let k = 0; k < P; k++) {
     if (!trace.has[k]) continue;
@@ -747,11 +760,11 @@ function drawTrace() {
     ctx.fillRect(f.left + k, yt - 0.75, 1, Math.max(1.5, yb - yt + 1.5));
   }
   // The mirror's position.
-  const Dn = D(), x = f.X(Dn / unit);
+  const Dn = D(), x = f.X((Dn - ref) / unit);
   ctx.strokeStyle = c.warn; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); ctx.stroke();
   ctx.fillStyle = c.warn; ctx.beginPath(); ctx.arc(x, f.Y(spec.intensity(Dn) * norm), 4.5, 0, 2 * Math.PI); ctx.fill();
   ctx.restore();
-  f.axes({ xlabel: `path difference Δ (${uname})`, colors: c });
+  f.axes({ xlabel: label, colors: c });
   ctx.save(); ctx.fillStyle = c.ink3; ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
   ctx.translate(11, f.top + f.h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('I / I(0)', 0, 0); ctx.restore();
   $('#trace-note').textContent = record.length ? 'the detector\'s record; click or drag to move the mirror' : 'click or drag to move the mirror';
@@ -838,15 +851,14 @@ traceCanvas.addEventListener('pointerdown', (e) => {
   } else {
     setMotor('stop');
     traceDrag = { fts: false };
-    const W = state.win[1] - state.win[0], [unit] = pathUnit(W);
-    setPath(f.invX(px) * unit, true);
+    setPath(traceX(px), true);
   }
 });
 traceCanvas.addEventListener('pointermove', (e) => {
   if (!traceDrag) return;
   const [px, py] = tracePointer(e), f = trace.frame;
   if (traceDrag.fts) drawSamples(px, py);
-  else { const W = state.win[1] - state.win[0], [unit] = pathUnit(W); setPath(Math.max(state.win[0], Math.min(state.win[1], f.invX(px) * unit)), true); }
+  else setPath(Math.max(state.win[0], Math.min(state.win[1], traceX(px))), true);
 });
 const endTrace = () => { traceDrag = null; };
 traceCanvas.addEventListener('pointerup', endTrace);
@@ -855,7 +867,7 @@ traceCanvas.addEventListener('wheel', (e) => {
   const f = trace.frame;
   if (!f || state.plot !== 'trace') return;
   e.preventDefault();
-  const [px] = tracePointer(e), W = state.win[1] - state.win[0], [unit] = pathUnit(W), x = f.invX(px) * unit;
+  const [px] = tracePointer(e), x = traceX(px);
   const k = Math.exp(Math.sign(e.deltaY) * 0.2);
   setWindow([x + (state.win[0] - x) * k, x + (state.win[1] - x) * k]);
 }, { passive: false });
