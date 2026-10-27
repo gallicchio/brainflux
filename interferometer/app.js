@@ -31,10 +31,12 @@ function setMode(m) {
 
 // --------------------------------------------------------------------- the address
 
+// At most every 300 ms (the motor changes the state every frame).
 let hashTimer = 0;
 function saveHash() {
-  clearTimeout(hashTimer);
+  if (hashTimer) return;
   hashTimer = setTimeout(() => {
+    hashTimer = 0;
     if (app.mode === 'stellar') {
       const s = S.state;
       writeHash({ mode: 'stellar', kind: s.kind, th: s.theta, ld: s.limb || undefined, rho: s.kind === 'binary' ? s.rho : undefined,
@@ -88,8 +90,8 @@ const setups = {
   count: () => michelson({ source: 'hene', d: 250, motor: 'fwd', speed: 0.5, window: 16 }),
   tilt: () => michelson({ source: 'hene', d: 0, tilt: 150, window: 6 }),
   sodium: () => michelson({ source: 'sodium', d: 0, motor: 'fwd', speed: 60, win: [-60, 2440], viewPreset: 'fit' }),
-  white: () => michelson({ source: 'white', d: -1.6, tilt: 200, motor: 'sweep', speed: 0.12, win: [-4, 4] }),
-  coherence: () => michelson({ source: 'gauss', params: { lam: 550, fwhm: 10 }, d: -20, motor: 'sweep', speed: 3, win: [-45, 45] }),
+  white: () => michelson({ source: 'white', d: -0.8, tilt: 200, motor: 'sweep', speed: 0.25, win: [-4, 4] }),
+  coherence: () => michelson({ source: 'gauss', params: { lam: 550, fwhm: 10 }, d: -8, motor: 'sweep', speed: 2.5, win: [-32, 32] }),
   led: () => michelson({ source: 'led', d: -5, tilt: 120, motor: 'sweep', speed: 0.4, win: [-12, 12] }),
   draws: () => {
     michelson({ source: 'draw', d: 0, win: [-12, 12], record: [-12, 12] });

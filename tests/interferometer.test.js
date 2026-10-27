@@ -3,7 +3,7 @@ import { cmf, xyzToLinear, gamutFix, chromaticity } from '../interferometer/colo
 import { Spectrum, SOURCES, LINE_DATA, lineSpectrum, gaussianLine, gridSpectrum, planckSigma, band, GRID } from '../interferometer/spectrum.js';
 import { ColourModel, FringeCounter, minMaxOver } from '../interferometer/fringes.js';
 import { sampleInterferogram, recoverSpectrum } from '../interferometer/fts.js';
-import { MAS, airyAmp, diskVisibility, visibility, visibilityNumeric, makeModel, firstNull, bandSamples, bandVisibility } from '../interferometer/stars.js';
+import { MAS, airyAmp, airyAmpExact, diskVisibility, visibility, visibilityNumeric, makeModel, firstNull, bandSamples, bandVisibility } from '../interferometer/stars.js';
 import { besselJ } from '../lib/bessel.js';
 
 // ------------------------------------------------------------------------- colour
@@ -243,13 +243,21 @@ test('a uniform disk: the Fourier transform of its brightness is 2J₁(x)/x, x =
     const exact = (2 * besselJ(1, x)[1]) / x;
     const [re, im] = visibilityNumeric(model, u, 500);
     worst = Math.max(worst, Math.abs(re - exact), Math.abs(im));
-    close(visibility(model, u)[0], exact, 1e-12, 'closed form');
+    close(visibility(model, u)[0], exact, 1e-9, 'closed form');
   }
   assert(worst < 2e-4, `numerical transform differs by ${worst}`);
   // First zero at 1.22 λ/θ: for Betelgeuse in 1920, θ = 0.047" at 575 nm, about 3.08 m.
   const B0 = firstNull(model, lam, 10);
   close(B0, (3.8317 / Math.PI) * lam / theta, 1e-4, 'first null');
   return `numerical transform within ${worst.toExponential(1)}; first null at ${B0.toFixed(3)} m = ${(B0 * theta / lam).toFixed(4)} λ/θ`;
+});
+
+test('2J₁(x)/x from its table agrees with lib/bessel.js', () => {
+  let worst = 0;
+  for (let i = 0; i <= 30000; i++) { const x = i * 0.00433 + 1e-7; worst = Math.max(worst, Math.abs(airyAmp(x) - airyAmpExact(x))); }
+  for (const x of [0, 119.99, 130, 300]) worst = Math.max(worst, Math.abs(airyAmp(x) - airyAmpExact(x)));
+  assert(worst < 1e-9, `largest difference ${worst}`);
+  return `largest difference ${worst.toExponential(1)} for 0 < x < 130`;
 });
 
 test('a limb-darkened disk: the first null moves out to 1.43 λ/θ', () => {

@@ -7,7 +7,7 @@
 
 import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, niceTicks, tickLabel } from '../lib/plot.js';
-import { SOURCES, GRID, GRID_HI, BROAD_W, Spectrum } from './spectrum.js';
+import { SOURCES, GRID, GRID_HI, BROAD_W, Spectrum, normalCdf } from './spectrum.js';
 import { ColourModel, renderScreen, minMaxOver, FringeCounter } from './fringes.js';
 import { sampleInterferogram, recoverSpectrum, nextPow2 } from './fts.js';
 import { spectralFill, toBytes, xyzToLinear, gamutFix } from './colour.js';
@@ -227,13 +227,14 @@ function adoptDrawn() {
   const r = recovered(GRID.ds);
   const s = new Spectrum([], r);
   spec = new Spectrum([], { s0: GRID.s0, ds: GRID.ds, v: s.gridValues() });
-  fts.drawn = false;
+  fts.drawn = false; fts.saved = null;
   state.source = 'drawn';
   showSourceControls();
   specChanged();
 }
 
 export function undoDrawing() {
+  if (fts.saved) { spec = fts.saved.spec; state.source = fts.saved.source; fts.saved = null; }
   fts.drawn = false;
   fts.samples = null;
   specChanged();
@@ -243,7 +244,7 @@ export function undoDrawing() {
 // --------------------------------------------------------------------- the schematic
 
 const schem = $('#schematic');
-let hits = null, schemDrag = null;
+let hits = null, schemDrag = null, boardCache = null;
 // The mirror's drawn offset (design units) against d: compressed so nanometres and millimetres both show.
 const OFF_MAX = 8, OFF_K = Math.asinh(D_LIMIT / 2);
 const offOf = (d) => (OFF_MAX * Math.asinh(d / 2)) / OFF_K;
@@ -259,10 +260,17 @@ function drawSchematic() {
   const { ctx, width, height } = fitCanvas(schem);
   const u = Math.min(width / 100, height / 64), ox = (width - 100 * u) / 2, oy = (height - 64 * u) / 2;
   const P = (x, y) => [ox + x * u, oy + y * u];
-  ctx.fillStyle = '#1b1d22'; ctx.fillRect(0, 0, width, height);
-  // An optical breadboard.
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  for (let x = 2; x < 100; x += 4) for (let y = 2; y < 64; y += 4) { const [px, py] = P(x, y); ctx.fillRect(px - 0.8, py - 0.8, 1.6, 1.6); }
+  // An optical breadboard, drawn once per size.
+  const dpr = window.devicePixelRatio || 1;
+  if (!boardCache || boardCache.width !== schem.width || boardCache.height !== schem.height) {
+    boardCache = document.createElement('canvas'); boardCache.width = schem.width; boardCache.height = schem.height;
+    const b = boardCache.getContext('2d');
+    b.scale(dpr, dpr);
+    b.fillStyle = '#1b1d22'; b.fillRect(0, 0, width, height);
+    b.fillStyle = 'rgba(255,255,255,0.07)';
+    for (let x = 2; x < 100; x += 4) for (let y = 2; y < 64; y += 4) { const [px, py] = P(x, y); b.fillRect(px - 0.8, py - 0.8, 1.6, 1.6); }
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(boardCache, 0, 0); ctx.restore();
   const [r, g, b] = sourceRGB(), beam = `rgb(${r},${g},${b})`;
   const text = 'rgba(225,226,230,0.85)', dim = 'rgba(225,226,230,0.55)';
   const line = (pts, w, style) => { ctx.strokeStyle = style; ctx.lineWidth = w; ctx.beginPath(); pts.forEach(([x, y], i) => { const [px, py] = P(x, y); if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }); ctx.stroke(); };
@@ -398,7 +406,9 @@ function drawScreen() {
     screenImg = screenOff.getContext('2d').createImageData(n, n);
   }
   const Dnow = D();
+  const t0 = performance.now();
   renderScreen(colour, { D: Dnow, Dprev: blurFrom ?? Dnow, tilt: 2 * state.tilt * 1e-6 * MIRROR_HALF, thetaMax: THETA_MAX, n }, screenImg.data);
+  timings.render = performance.now() - t0;
   blurFrom = null;
   screenOff.getContext('2d').putImageData(screenImg, 0, 0);
   const { ctx, width, height } = fitCanvas(screen);
@@ -418,7 +428,7 @@ function drawScreen() {
 // --------------------------------------------------------------------- the spectrum plot
 
 const specCanvas = $('#spectrum');
-let specFrame = null, specScale = 1, specCols = null, specDrag = null;
+let specFrame = null, specScale = 1, specCols = null, specDrag = null, specDens = null;
 
 /** The plot's columns: σ edges and the width in axis units (μm⁻¹ or nm). */
 function columns(f) {
@@ -455,9 +465,24 @@ function drawSpectrum() {
   specCols = cols;
   const showFts = state.plot === 'fts';
   // The light source, as density per column (what a spectrometer with this resolution shows).
+  // Lines narrower than a column and a half are sticks of height A / (column width), standing on
+  // the rest of the light; everything else is shown as its density averaged over each column.
   const dens = new Float64Array(cols.P);
+  const colOf = (sig) => { const x = state.axis === 'sigma' ? f.X(sig) : f.X(1000 / sig); return [x, Math.floor(x - f.left)]; };
+  const sticks = [];
   let top = 0;
-  if (!fts.drawn) for (let k = 0; k < cols.P; k++) { dens[k] = spec.power(cols.sa[k], cols.sb[k]) / cols.wid[k]; top = Math.max(top, dens[k]); }
+  if (!fts.drawn) {
+    for (let k = 0; k < cols.P; k++) dens[k] = spec.power(cols.sa[k], cols.sb[k]);
+    for (const { l, i } of narrowLines()) {
+      const [x, k] = colOf(l.s);
+      if (k < 0 || k >= cols.P || 2.355 * l.w > 1.5 * (cols.sb[k] - cols.sa[k])) continue;
+      for (let q = Math.max(0, k - 3); q <= Math.min(cols.P - 1, k + 3); q++) dens[q] -= l.A * (normalCdf((cols.sb[q] - l.s) / l.w) - normalCdf((cols.sa[q] - l.s) / l.w));
+      sticks.push({ l, i, x, k });
+    }
+    for (let k = 0; k < cols.P; k++) { dens[k] = Math.max(0, dens[k]) / cols.wid[k]; top = Math.max(top, dens[k]); }
+    for (const st of sticks) { st.h = dens[st.k] + st.l.A / cols.wid[st.k]; top = Math.max(top, st.h); }
+  }
+  specDens = dens;
   // The recovered spectrum.
   let rec = null, rtop = 0, rmin = 0;
   if (showFts || fts.drawn) {
@@ -499,17 +524,16 @@ function drawSpectrum() {
       const y = f.Y(dens[k] / specScale);
       ctx.fillRect(f.left + k, y, 1, y0 - y);
     }
-    // Narrow lines, a little wider, so their colour shows.
-    for (const { l } of narrowLines()) {
-      const x = state.axis === 'sigma' ? f.X(l.s) : f.X(1000 / l.s), k = Math.floor(x - f.left);
-      if (k < 0 || k >= cols.P) continue;
-      const y = f.Y(Math.min(1.2, dens[k] / specScale));
-      ctx.fillStyle = `rgb(${toBytes(spectralFill(1000 / l.s)).join(',')})`;
-      ctx.fillRect(x - 1.5, y, 3, y0 - y);
-    }
     ctx.strokeStyle = c.ink; ctx.lineWidth = 1.2; ctx.beginPath();
     for (let k = 0; k < cols.P; k++) { const y = f.Y(Math.min(1.2, dens[k] / specScale)); if (k) ctx.lineTo(f.left + k + 0.5, y); else ctx.moveTo(f.left + k + 0.5, y); }
     ctx.stroke();
+    // The sticks, in their colours, outlined.
+    for (const st of sticks) {
+      const y = f.Y(Math.min(1.2, st.h / specScale)), yb = f.Y(dens[st.k] / specScale);
+      ctx.fillStyle = `rgb(${toBytes(spectralFill(1000 / st.l.s)).join(',')})`;
+      ctx.fillRect(st.x - 1.5, y, 3, yb - y);
+      ctx.strokeStyle = c.ink; ctx.lineWidth = 0.8; ctx.strokeRect(st.x - 1.5, y, 3, yb - y);
+    }
   }
   if (rec && rtop > 0) {
     if (fts.drawn) {
@@ -528,13 +552,12 @@ function drawSpectrum() {
   // Handles on narrow lines, to drag their strength.
   lineHandles = [];
   if (!fts.drawn) for (const { l, i } of narrowLines()) {
-    const x = state.axis === 'sigma' ? f.X(l.s) : f.X(1000 / l.s);
-    if (x < f.left || x > f.right) continue;
-    const k = Math.max(0, Math.min(cols.P - 1, Math.floor(x - f.left)));
-    const y = f.Y(Math.min(1.05, dens[k] / specScale));
+    const st = sticks.find((q) => q.i === i), [x, k0] = colOf(l.s);
+    if (k0 < 0 || k0 >= cols.P) continue;
+    const y = f.Y(Math.min(1.05, (st ? st.h : dens[k0]) / specScale));
     ctx.fillStyle = c.panel; ctx.strokeStyle = c.ink; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
-    lineHandles.push({ x, y, i, k });
+    lineHandles.push({ x, y, i, k: k0, stick: !!st });
   }
   ctx.restore();
   f.axes({ xlabel: state.axis === 'sigma' ? 'wavenumber σ = 1/λ (μm⁻¹)' : 'wavelength λ (nm)', yTicks: false, colors: c });
@@ -583,7 +606,7 @@ specCanvas.addEventListener('pointerdown', (e) => {
   if (fts.drawn) adoptDrawn();
   const p = specPointer(e);
   const h = lineHandles.find((q) => Math.abs(q.x - p.px) < 8 && p.py < specFrame.bottom + 4);
-  if (h) { specDrag = { line: h.i, k: h.k }; dragLine(p); return; }
+  if (h) { specDrag = { line: h.i, k: h.k, stick: h.stick }; dragLine(p); return; }
   spec.prepareForDrawing();
   state.source = 'drawn';
   showSourceControls();
@@ -613,10 +636,15 @@ specCanvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 function dragLine(p) {
-  const l = spec.lines[specDrag.line];
+  // The handle shows the density in its column, which holds only part of a line spread over
+  // several columns: choose A so that the column's density meets the pointer.
+  const l = spec.lines[specDrag.line], k = specDrag.k;
   if (!l) return;
-  const w = specCols.wid[specDrag.k];
-  l.A = Math.max(0, p.y) * specScale * w;
+  const sa = specCols.sa[k], sb = specCols.sb[k], w = specCols.wid[k];
+  if (specDrag.stick) { l.A = Math.max(0, Math.max(0, p.y) * specScale - specDens[k]) * w; specChanged(); return; }
+  const frac = Math.max(1e-3, normalCdf((sb - l.s) / l.w) - normalCdf((sa - l.s) / l.w));
+  const others = spec.power(sa, sb) - l.A * frac;
+  l.A = Math.max(0, (Math.max(0, p.y) * specScale * w - others) / frac);
   specChanged();
 }
 
@@ -756,12 +784,15 @@ function drawFtsPlot(f, ctx, c) {
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(ref) + 0.5); ctx.lineTo(f.right, f.Y(ref) + 0.5); ctx.stroke(); ctx.setLineDash([]);
   // The samples.
   const n = fts.shown;
-  if (K + 1 <= P / 3) {
-    ctx.strokeStyle = c.accent; ctx.lineWidth = 1; ctx.beginPath();
+  if (K + 1 <= P) {
+    // At least a pixel per sample: a line through them, and dots when they are well apart.
+    ctx.strokeStyle = c.accent; ctx.lineWidth = K + 1 <= P / 3 ? 1 : 1.5; ctx.beginPath();
     for (let k = 0; k <= n; k++) { const x = f.X((k * step) / unit), y = f.Y(fts.samples[k] * norm); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
     ctx.stroke();
-    ctx.fillStyle = c.accent;
-    for (let k = 0; k <= n; k++) { ctx.beginPath(); ctx.arc(f.X((k * step) / unit), f.Y(fts.samples[k] * norm), K + 1 <= P / 8 ? 3 : 2, 0, 2 * Math.PI); ctx.fill(); }
+    if (K + 1 <= P / 3) {
+      ctx.fillStyle = c.accent;
+      for (let k = 0; k <= n; k++) { ctx.beginPath(); ctx.arc(f.X((k * step) / unit), f.Y(fts.samples[k] * norm), K + 1 <= P / 8 ? 3 : 2, 0, 2 * Math.PI); ctx.fill(); }
+    }
   } else {
     ctx.fillStyle = c.accent;
     const per = (K + 1) / P;
@@ -796,6 +827,7 @@ traceCanvas.addEventListener('pointerdown', (e) => {
   if (state.plot === 'fts') {
     ensureSamples();
     if (!fts.drawn) {
+      fts.saved = { spec, source: state.source };
       fts.drawn = true; fts.scanning = false; fts.shown = fts.K;
       fts.samples = Float64Array.from(fts.samples); fts.drawnVersion = 0;
     }
@@ -872,6 +904,7 @@ function fmtPath(x) {
   return `${(x / 1000).toFixed(6)} mm`;
 }
 
+let lastFtsHtml = '';
 function updateReadouts() {
   const d = state.dc + state.df;
   $('#mirror-readout').textContent = `M2 is d = ${fmtPath(d)} from equal paths;  Δ = 2d = ${fmtPath(2 * d)}`;
@@ -886,9 +919,10 @@ function updateReadouts() {
   const K = ftsK(), step = state.fts.step, Lm = K * step, res = 1 / (2 * Lm), sN = 1 / (2 * step);
   const nm = 1000 / s, resNm = (res * nm * nm) / 1000;
   const alias = spec.range()[1] > sN;
-  $('#fts-readout').innerHTML = `${K + 1} samples to Δ<sub>max</sub> = ${fmtPath(Lm)}<br>`
+  const html = `${K + 1} samples to Δ<sub>max</sub> = ${fmtPath(Lm)}<br>`
     + `resolution 1/(2Δ<sub>max</sub>) = ${fmt(res, 3)} μm⁻¹ (${fmt(resNm, 3)} nm at ${Math.round(nm)} nm)<br>`
     + `<span class="${alias ? 'warn-text' : ''}">Nyquist σ<sub>N</sub> = 1/(2δ) = ${fmt(sN, 3)} μm⁻¹ (λ > ${Math.round(1000 / sN)} nm)${alias ? ': light beyond it folds back' : ''}</span>`;
+  if (html !== lastFtsHtml) { $('#fts-readout').innerHTML = html; lastFtsHtml = html; }
   $('#undraw').hidden = !fts.drawn;
   $('#scan').textContent = fts.scanning ? 'Scanning...' : 'Scan';
 }
@@ -1010,12 +1044,14 @@ export function placeMirror(d, { tilt = 0, resetCounter = true, clear = true } =
 }
 
 /** Draw whatever needs it. */
+export const timings = {};
+const timed = (name, fn) => { const t0 = performance.now(); fn(); timings[name] = performance.now() - t0; };
 export function frame() {
-  if (dirty.schem) { drawSchematic(); dirty.schem = false; }
-  if (dirty.screen) { drawScreen(); dirty.screen = false; }
-  if (dirty.spec) { drawSpectrum(); dirty.spec = false; }
-  if (dirty.trace) { drawTrace(); dirty.trace = false; }
-  if (dirty.readout) { updateReadouts(); dirty.readout = false; }
+  if (dirty.schem) { timed('schem', drawSchematic); dirty.schem = false; }
+  if (dirty.screen) { timed('screen', drawScreen); dirty.screen = false; }
+  if (dirty.spec) { timed('spec', drawSpectrum); dirty.spec = false; }
+  if (dirty.trace) { timed('trace', drawTrace); dirty.trace = false; }
+  if (dirty.readout) { timed('readout', updateReadouts); dirty.readout = false; }
 }
 
 export function invalidate() { Object.keys(dirty).forEach((k) => { dirty[k] = true; }); trace.key = ''; trace.fullKey = ''; }
@@ -1024,3 +1060,16 @@ export function isBusy() { return fts.scanning || (state.motor !== 'stop' && sta
 
 /** For the tests: the spectrum recovered from the current scan, and the spectrum shown. */
 export function recoveredSpectrum(colWidth = 1e-3) { return recovered(colWidth); }
+
+/** For the tests: where the draggable parts of the schematic are (CSS px in the canvas), and the canvas size. */
+export function schemPoints() {
+  if (!hits) return null;
+  const r = schem.getBoundingClientRect();
+  return { w: r.width, h: r.height, body: [hits.body[0] + hits.body[2] / 2, hits.body[1] + hits.body[3] / 2], knob: [hits.knob[0], hits.knob[1]], top: hits.top };
+}
+
+/** For the tests: the handles of narrow lines on the spectrum plot. */
+export function lineHandlePoints() {
+  const r = specCanvas.getBoundingClientRect();
+  return { w: r.width, h: r.height, handles: lineHandles.map((q) => [q.x, q.y, q.i]), top: specFrame.Y(1), bottom: specFrame.Y(0), left: specFrame.left, right: specFrame.right };
+}

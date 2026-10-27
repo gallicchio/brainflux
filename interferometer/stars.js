@@ -18,10 +18,29 @@ import { besselJ } from '../lib/bessel.js';
 export const MAS = Math.PI / (180 * 3600 * 1000);
 export const ARCSEC = 1000 * MAS;
 
+/** 2 J₁(x) / x, from lib/bessel.js. */
+export function airyAmpExact(x) {
+  const a = Math.abs(x);
+  if (a < 1e-6) return 1 - (a * a) / 8;
+  return (2 * besselJ(1, a)[1]) / a;
+}
+
+// The same through a table, for speed: values f = 2J₁(x)/x and slopes f' = -2J₂(x)/x every 0.02
+// up to x = 120, joined by cubic Hermite interpolation (error below 1e-9).
+const TH = 0.02, TN = 6000, TF = new Float64Array(TN + 1), TD = new Float64Array(TN + 1);
+for (let i = 0; i <= TN; i++) {
+  const x = i * TH;
+  if (i === 0) { TF[0] = 1; TD[0] = 0; continue; }
+  const J = besselJ(2, x);
+  TF[i] = (2 * J[1]) / x; TD[i] = (-2 * J[2]) / x;
+}
+
 /** 2 J₁(x) / x. */
 export function airyAmp(x) {
-  if (Math.abs(x) < 1e-6) return 1 - (x * x) / 8;
-  return (2 * besselJ(1, Math.abs(x))[1]) / Math.abs(x);
+  const a = Math.abs(x), p = a / TH;
+  if (p >= TN) return airyAmpExact(a);
+  const i = Math.floor(p), t = p - i, t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * TF[i] + (t3 - 2 * t2 + t) * TH * TD[i] + (-2 * t3 + 3 * t2) * TF[i + 1] + (t3 - t2) * TH * TD[i + 1];
 }
 
 /** 3 (sin x - x cos x) / x³, the transform of a disk of brightness μ. */
@@ -59,13 +78,13 @@ export function makeModel({ theta, binary = false, rho = 0, pa = 0, ratio = 1, l
   return { stars: [{ theta, flux: f1, x: -px * f2, y: -py * f2 }, { theta, flux: f2, x: px * f1, y: py * f1 }], limb };
 }
 
-/** Wavelengths (m) and weights across a Gaussian band of full width fwhm about lam. */
+/** Wavelengths (m) and weights across a Gaussian band of full width fwhm about lam (kept above 300 nm). */
 export function bandSamples(lam, fwhm, n = 31) {
   if (!(fwhm > 0)) return [[lam, 1]];
   const sd = fwhm / (2 * Math.sqrt(2 * Math.LN2)), out = [];
   for (let j = 0; j < n; j++) {
-    const z = -2.5 + (5 * j) / (n - 1);
-    out.push([lam + z * sd, Math.exp(-0.5 * z * z)]);
+    const z = -2.5 + (5 * j) / (n - 1), l = lam + z * sd;
+    if (l > 300e-9) out.push([l, Math.exp(-0.5 * z * z)]);
   }
   const W = out.reduce((a, [, w]) => a + w, 0);
   return out.map(([l, w]) => [l, w / W]);

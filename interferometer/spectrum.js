@@ -33,7 +33,7 @@ export function erf(x) {
   const y = 1 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t) * Math.exp(-a * a);
   return s * y;
 }
-const normalCdf = (z) => 0.5 * (1 + erf(z / Math.SQRT2));
+export const normalCdf = (z) => 0.5 * (1 + erf(z / Math.SQRT2));
 
 /** A Gaussian line at a wavelength (nm) with a full width at half maximum (nm) and an area. */
 export function gaussianLine(nm, fwhmNm, A = 1) {

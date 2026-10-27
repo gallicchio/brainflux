@@ -17,17 +17,18 @@ export const state = {
 };
 
 const B_INNER = 1.14;     // the inner mirrors' separation (m), drawn only
-let model = null, xmax = 6, dirty = true, sweepDir = 1, atm = 0, onChange = () => {};
+let model = null, xmax = 6, dirty = true, sweepDir = 1, atm = 0, onChange = () => {}, nullB = Infinity;
 let bSlider, thetaSlider, limbSlider, rhoSlider, paSlider, ratioSlider, lamSlider, bwSlider, kindSeg, seeingToggle;
 
 export const getModel = () => model;
 
 function rebuild(keepRange = false) {
   model = makeModel({ theta: state.theta * MAS, binary: state.kind === 'binary', rho: state.rho * MAS, pa: (state.pa * Math.PI) / 180, ratio: state.ratio, limb: state.limb });
+  const lam = state.lam * 1e-9, single = makeModel({ theta: state.theta * MAS, limb: state.limb });
+  nullB = state.theta > 0 ? firstNull(single, lam, (5 * lam) / (state.theta * MAS)) : Infinity;
   if (!keepRange) {
     // Show the first null (or a few beats) and some way beyond.
-    const lam = state.lam * 1e-9, single = makeModel({ theta: state.theta * MAS, limb: state.limb });
-    const B1 = state.theta > 0 ? firstNull(single, lam, (5 * lam) / (state.theta * MAS)) : Infinity;
+    const B1 = nullB;
     const proj = Math.abs(state.rho * MAS * Math.cos((state.pa * Math.PI) / 180));
     const beat = state.kind === 'binary' && proj > 0 ? lam / proj : Infinity;
     let X = Math.min(3.3 * B1, 4 * beat);
@@ -39,12 +40,10 @@ function rebuild(keepRange = false) {
   dirty = true;
 }
 
-export function firstNullB() {
-  const lam = state.lam * 1e-9, single = makeModel({ theta: state.theta * MAS, limb: state.limb });
-  return state.theta > 0 ? firstNull(single, lam, (5 * lam) / (state.theta * MAS)) : Infinity;
-}
+/** The first null of a single disk like the star (cached when the star or the light changes). */
+export function firstNullB() { return nullB; }
 
-const samples = () => bandSamples(state.lam * 1e-9, state.bw * 1e-9, state.bw > 0 ? 25 : 1);
+const samples = () => bandSamples(state.lam * 1e-9, state.bw * 1e-9, state.bw > 0 ? 21 : 1);
 
 /** The complex visibility at the central fringe, for the light's band. */
 export function currentV() { return bandVisibility(model, state.B, samples()); }
@@ -195,55 +194,57 @@ function niceLen(x) { const p = 10 ** Math.floor(Math.log10(x)), f = x / p; retu
 // --------------------------------------------------------------------- the fringes at the focus
 
 const fringeCanvas = $('#fringes');
-let fOff = null, fImg = null;
-const AIRY_N = 4096, AIRY_MAX = 16, AIRY = new Float64Array(AIRY_N + 1);
-for (let i = 0; i <= AIRY_N; i++) { const a = (i * AIRY_MAX) / AIRY_N; AIRY[i] = airyAmp(a) ** 2; }
-const airy2 = (a) => { const p = (a / AIRY_MAX) * AIRY_N; if (p >= AIRY_N) return 0; const i = Math.floor(p), t = p - i; return AIRY[i] * (1 - t) + AIRY[i + 1] * t; };
-const FX = 7, FY = 3.2;    // the image spans ±FX fringes across and ±FY up and down
+let fOff = null, fImg = null, envelope = null;
+const FX = 7, FY = 3.6;    // the image spans ±FX fringes across and ±FY up and down
 let lastProfile = null;
+
+/** Wavelength samples for the image: enough that the fringe phase 2πfλ0/λ moves < 0.6 rad between them at f = FX. */
+function imageSamples() {
+  if (!(state.bw > 0)) return samples();
+  const lam = state.lam, sd = state.bw / 2.3548, lo = Math.max(300, lam - 2.5 * sd), hi = lam + 2.5 * sd;
+  const n = Math.max(9, Math.min(161, Math.ceil((2 * Math.PI * FX * (lam / lo - lam / hi)) / 0.6) + 1));
+  return bandSamples(lam * 1e-9, state.bw * 1e-9, n | 1);
+}
+
+// The diffraction envelope of the (round) inner mirrors, (2J₁(a)/a)², a = (π/4) ρ in units of
+// the fringe spacing (inner mirrors 4 diameters apart): drawn for the central wavelength.
+function envelopeOf(nx, ny) {
+  if (envelope && envelope.nx === nx && envelope.ny === ny) return envelope.A;
+  const A = new Float32Array(nx * ny);
+  for (let j = 0; j < ny; j++) {
+    const y = FY - ((j + 0.5) * 2 * FY) / ny;
+    for (let i = 0; i < nx; i++) { const x = -FX + ((i + 0.5) * 2 * FX) / nx; A[j * nx + i] = airyAmp((Math.PI / 4) * Math.sqrt(x * x + y * y)) ** 2; }
+  }
+  envelope = { nx, ny, A };
+  return A;
+}
 
 function drawFringes() {
   const { ctx, width, height } = fitCanvas(fringeCanvas);
-  const c = themeColors();
-  const imgH = Math.round(height * 0.66), dpr = window.devicePixelRatio || 1;
+  const imgH = Math.round(height * 0.68), dpr = window.devicePixelRatio || 1;
   const nx = Math.max(64, Math.min(480, Math.round(width * dpr * 0.75))), ny = Math.max(24, Math.round((nx * imgH) / width));
   if (!fOff || fOff.width !== nx || fOff.height !== ny) { fOff = document.createElement('canvas'); fOff.width = nx; fOff.height = ny; fImg = fOff.getContext('2d').createImageData(nx, ny); }
-  const lam0 = state.lam * 1e-9, S = samples(), v = [0, 0];
-  const waves = S.map(([lam, w]) => {
+  const lam0 = state.lam * 1e-9, v = [0, 0];
+  // The fringe term summed over the band, column by column: X(f) = Σ w x̄ [1 + Re(V e^{i(2πfλ0/λ + φ)})].
+  const FXc = new Float64Array(nx), FYc = new Float64Array(nx), FZc = new Float64Array(nx), base = [0, 0, 0];
+  for (const [lam, w] of imageSamples()) {
     visibility(model, state.B / lam, v);
-    const k = lam0 / lam, cm = cmf(lam * 1e9);
-    return { w, k, re: v[0], im: v[1], cx: w * cm[0], cy: w * cm[1], cz: w * cm[2] };
-  });
-  let base = [0, 0, 0];
-  for (const q of waves) { base[0] += q.cx; base[1] += q.cy; base[2] += q.cz; }
-  const rgbMax = gamutFix(xyzToLinear(2 * base[0], 2 * base[1], 2 * base[2])), expo = 1 / Math.max(...rgbMax, 1e-9);
-  // Per wave, the fringe term along x: Re(V e^{i(2π f k + φ)}).
-  const fr = waves.map((q) => {
-    const a = new Float64Array(nx);
+    const k = lam0 / lam, cm = cmf(lam * 1e9), cx = w * cm[0], cy = w * cm[1], cz = w * cm[2];
+    base[0] += cx; base[1] += cy; base[2] += cz;
     for (let i = 0; i < nx; i++) {
-      const f = -FX + ((i + 0.5) * 2 * FX) / nx, ph = 2 * Math.PI * f * q.k + atm;
-      a[i] = q.re * Math.cos(ph) - q.im * Math.sin(ph);
+      const f = -FX + ((i + 0.5) * 2 * FX) / nx, ph = 2 * Math.PI * f * k + atm;
+      const t = 1 + v[0] * Math.cos(ph) - v[1] * Math.sin(ph);
+      FXc[i] += cx * t; FYc[i] += cy * t; FZc[i] += cz * t;
     }
-    return a;
-  });
-  const d = fImg.data, prof = new Float64Array(nx);
-  for (let j = 0; j < ny; j++) {
-    const y = FY - ((j + 0.5) * 2 * FY) / ny;
-    for (let i = 0; i < nx; i++) {
-      const x = -FX + ((i + 0.5) * 2 * FX) / nx, rho = Math.hypot(x, y);
-      let X = 0, Y = 0, Z = 0;
-      for (let q = 0; q < waves.length; q++) {
-        const wv = waves[q], A = airy2((Math.PI / 4) * rho * wv.k) * (1 + fr[q][i]);
-        X += wv.cx * A; Y += wv.cy * A; Z += wv.cz * A;
-      }
-      if (j === (ny >> 1)) prof[i] = Y / (2 * base[1]);
-      let [R, G, B] = xyzToLinear(X * expo, Y * expo, Z * expo);
-      [R, G, B] = gamutFix([R, G, B]);
-      const o = 4 * (j * nx + i);
-      d[o] = ENCODE_TABLE[Math.round(Math.max(0, Math.min(1, R)) * ENCODE_SCALE)];
-      d[o + 1] = ENCODE_TABLE[Math.round(Math.max(0, Math.min(1, G)) * ENCODE_SCALE)];
-      d[o + 2] = ENCODE_TABLE[Math.round(Math.max(0, Math.min(1, B)) * ENCODE_SCALE)];
-      d[o + 3] = 255;
+  }
+  const rgbMax = gamutFix(xyzToLinear(2 * base[0], 2 * base[1], 2 * base[2])), expo = 1 / Math.max(...rgbMax, 1e-9);
+  const A = envelopeOf(nx, ny), out = new Uint32Array(fImg.data.buffer), E = ENCODE_TABLE, ES = ENCODE_SCALE;
+  for (let j = 0, p = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++, p++) {
+      const g = A[p] * expo, X = FXc[i] * g, Y = FYc[i] * g, Z = FZc[i] * g;
+      const R = 3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z, G = -0.969266 * X + 1.8760108 * Y + 0.041556 * Z, B = 0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z;
+      out[p] = (0xff000000 | (E[((B <= 0 ? 0 : B >= 1 ? 1 : B) * ES + 0.5) | 0] << 16) | (E[((G <= 0 ? 0 : G >= 1 ? 1 : G) * ES + 0.5) | 0] << 8)
+        | E[((R <= 0 ? 0 : R >= 1 ? 1 : R) * ES + 0.5) | 0]) >>> 0;
     }
   }
   fOff.getContext('2d').putImageData(fImg, 0, 0);
@@ -251,7 +252,9 @@ function drawFringes() {
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(fOff, 0, 0, width, imgH);
   // The brightness across the middle, below the image.
-  const f = new Frame(ctx, width, height - imgH, { left: 8, right: 8, top: 6, bottom: 6 });
+  const prof = new Float64Array(nx);
+  for (let i = 0; i < nx; i++) { const f = -FX + ((i + 0.5) * 2 * FX) / nx; prof[i] = (airyAmp((Math.PI / 4) * Math.abs(f)) ** 2 * FYc[i]) / (2 * base[1] || 1); }
+  const f = new Frame(ctx, width, height - imgH, { left: 8, right: 8, top: 18, bottom: 6 });
   f.top += imgH; f.bottom += imgH;
   f.x0 = -FX; f.x1 = FX; f.y0 = 0; f.y1 = 1.05;
   ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
@@ -261,10 +264,9 @@ function drawFringes() {
   ctx.stroke();
   lastProfile = prof;
   ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('brightness across the middle', f.left + 2, f.top);
+  ctx.fillText('brightness across the middle', f.left + 2, imgH + 4);
   const V = Math.hypot(...currentV());
   $('#fringe-note').textContent = `visibility ${V.toFixed(3)}${state.bw > 0 ? ` over ${fmt(state.bw, 3)} nm` : ''}`;
-  void c;
 }
 
 // --------------------------------------------------------------------- visibility plot
@@ -290,14 +292,14 @@ function drawVisibility() {
     ctx.fillText(`${fmt(k, 3)} λ/θ = ${fmt(B1, 3)} m`, f.X(B1) + 4, f.top + 4);
   }
   // Monochromatic |V(B/λ)|, and over the band.
-  const curve = (fn, style, dash, w) => {
+  const curve = (fn, style, dash, w, m = n) => {
     ctx.strokeStyle = style; ctx.lineWidth = w; ctx.setLineDash(dash); ctx.beginPath();
-    for (let i = 0; i <= n; i++) { const B = (xmax * i) / n, y = f.Y(fn(B)); if (i) ctx.lineTo(f.X(B), y); else ctx.moveTo(f.X(B), y); }
+    for (let i = 0; i <= m; i++) { const B = (xmax * i) / m, y = f.Y(fn(B)); if (i) ctx.lineTo(f.X(B), y); else ctx.moveTo(f.X(B), y); }
     ctx.stroke(); ctx.setLineDash([]);
   };
   curve((B) => Math.hypot(...visibility(model, B / lam, v)), c.accent, [], 2);
   const S = samples();
-  if (state.bw > 0) curve((B) => Math.hypot(...bandVisibility(model, B, S, v)), c.ink2, [5, 4], 1.5);
+  if (state.bw > 0) curve((B) => Math.hypot(...bandVisibility(model, B, S, v)), c.ink2, [5, 4], 1.5, Math.ceil(n / 2));
   // The present baseline.
   const Vn = Math.hypot(...currentV()), x = f.X(state.B);
   ctx.strokeStyle = c.warn; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); ctx.stroke();
@@ -348,12 +350,16 @@ export function tick(dt) {
   return busy;
 }
 
+export const timings = {};
+
 export function isBusy() { return state.sweeping || state.seeing; }
 
 export function frame() {
   if (!dirty) return;
   dirty = false;
-  drawSchematic(); drawSky(); drawFringes(); drawVisibility(); updateReadout();
+  for (const [k, fn] of [['schem', drawSchematic], ['sky', drawSky], ['fringes', drawFringes], ['vis', drawVisibility], ['readout', updateReadout]]) {
+    const t0 = performance.now(); fn(); timings[k] = performance.now() - t0;
+  }
 }
 
 export function invalidate() { dirty = true; }
@@ -378,7 +384,7 @@ export function init(hooks) {
   bSlider = slider({ label: 'B (m)', min: 0, max: 10, step: 0.001, value: state.B, title: 'The baseline: the distance between the outer mirrors', onInput: (v) => { setSweep(false); setB(Math.max(0, v)); } });
   $('#baseline-box').append(bSlider);
   lamSlider = slider({ label: 'λ (nm)', min: 400, max: 800, step: 1, value: state.lam, title: 'The middle of the band of light used', onInput: (v) => { state.lam = v; changed(); } });
-  bwSlider = slider({ label: 'Δλ (nm)', min: 0, max: 300, step: 1, value: state.bw, title: 'The width of the band (0: one wavelength)', onInput: (v) => { state.bw = v; changed(true); } });
+  bwSlider = slider({ label: 'Δλ (nm)', min: 0, max: 200, step: 1, value: state.bw, title: 'The width of the band (0: one wavelength)', onInput: (v) => { state.bw = v; changed(true); } });
   $('#light-box').append(lamSlider, bwSlider);
   seeingToggle = toggle('Atmosphere', state.seeing, (on) => { state.seeing = on; onChange(); hooks.kick?.(); }, 'The air above the telescope delays the two beams differently, and the fringes dance');
   $('#seeing-box').append(seeingToggle);
@@ -408,3 +414,9 @@ export function configure(s) {
 }
 
 export function profile() { return lastProfile; }
+
+/** For the tests: the outer mirrors' handles (CSS px) and the canvas size. */
+export function handlePoints() {
+  const r = schem.getBoundingClientRect();
+  return hits ? { w: r.width, h: r.height, handles: hits.handles } : null;
+}

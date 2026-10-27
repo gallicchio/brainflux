@@ -118,6 +118,24 @@ export function screenPath(u, v, opts) {
  *         thetaMax (the angle at the edge of the screen, rad), n (pixels across).
  * Returns { lo, hi, h, cells } (the table used) for read-outs.
  */
+// Per-pixel geometry of the round screen, kept between frames: u (across), cos θ, sin θ, and the
+// soft edge (0 outside the field of view).
+let geo = null;
+function geometry(n, thetaMax) {
+  if (geo && geo.n === n && geo.thetaMax === thetaMax) return geo;
+  const N = n * n, U = new Float32Array(N), CT = new Float32Array(N), ST = new Float32Array(N), EDGE = new Float32Array(N), half = n / 2;
+  for (let y = 0; y < n; y++) {
+    const v = (half - y - 0.5) / half;
+    for (let x = 0; x < n; x++) {
+      const u = (x + 0.5 - half) / half, p = y * n + x, r = Math.sqrt(u * u + v * v);
+      U[p] = u; CT[p] = Math.cos(thetaMax * r); ST[p] = Math.sin(thetaMax * r);
+      EDGE[p] = r >= 1 ? 0 : Math.min(1, (1 - r) * half * 0.7);
+    }
+  }
+  geo = { n, thetaMax, U, CT, ST, EDGE };
+  return geo;
+}
+
 export function renderScreen(model, opts, img) {
   const { D, tilt, thetaMax, n } = opts, Dprev = opts.Dprev ?? D;
   const blur = Math.abs(D - Dprev), px = 2 / n;
@@ -129,40 +147,38 @@ export function renderScreen(model, opts, img) {
   const h = (hi - lo) / cells;
   const C = model.table(lo, h, cells);
   const k = model.exposure, inv = 1 / h, dD = D - Dprev;
-  const at = (x, ch) => {
-    let p = (x - lo) * inv;
-    if (p < 0) p = 0; else if (p > cells) p = cells;
-    const j = Math.min(cells - 1, Math.floor(p)), f = p - j, a = C[3 * j + ch];
-    return a + f * (C[3 * j + 3 + ch] - a);
-  };
-  const half = n / 2;
-  for (let y = 0; y < n; y++) {
-    const v = (half - y - 0.5) / half;
-    for (let x = 0; x < n; x++) {
-      const u = (x + 0.5 - half) / half, o = 4 * (y * n + x), r = Math.hypot(u, v);
-      if (r > 1) { img[o] = img[o + 1] = img[o + 2] = 0; img[o + 3] = 255; continue; }
-      const th = thetaMax * r, ct = Math.cos(th);
-      const c = D * ct + tilt * u, cp = c - dD * ct;
-      const s = (Math.abs(D) * thetaMax * Math.sin(th) + Math.abs(tilt)) * px;
-      let a = Math.min(c, cp) - s / 2, b = Math.max(c, cp) + s / 2;
-      let X, Y, Z;
-      if (b - a < 1e-3 * h) {
-        const j = Math.min(cells - 1, Math.max(0, Math.floor((c - lo) * inv)));
-        X = (C[3 * j + 3] - C[3 * j]) * inv; Y = (C[3 * j + 4] - C[3 * j + 1]) * inv; Z = (C[3 * j + 5] - C[3 * j + 2]) * inv;
-      } else {
-        const w = 1 / (b - a);
-        X = (at(b, 0) - at(a, 0)) * w; Y = (at(b, 1) - at(a, 1)) * w; Z = (at(b, 2) - at(a, 2)) * w;
-      }
-      // Linear sRGB, negative channels cut to zero (gamutFix), a soft edge to the round field.
-      const edge = Math.min(1, (1 - r) * half * 0.7) * k;
-      const R = (3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z) * edge;
-      const G = (-0.969266 * X + 1.8760108 * Y + 0.041556 * Z) * edge;
-      const B = (0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z) * edge;
-      img[o] = ENCODE_TABLE[Math.round((R <= 0 ? 0 : R >= 1 ? 1 : R) * ENCODE_SCALE)];
-      img[o + 1] = ENCODE_TABLE[Math.round((G <= 0 ? 0 : G >= 1 ? 1 : G) * ENCODE_SCALE)];
-      img[o + 2] = ENCODE_TABLE[Math.round((B <= 0 ? 0 : B >= 1 ? 1 : B) * ENCODE_SCALE)];
-      img[o + 3] = 255;
+  const { U, CT, ST, EDGE } = geometry(n, thetaMax);
+  const sD = Math.abs(D) * thetaMax * px, sT = Math.abs(tilt) * px, last = cells - 1;
+  // One 32-bit write per pixel (RGBA bytes in memory order: little-endian ABGR).
+  const out = new Uint32Array(img.buffer, img.byteOffset, n * n), E = ENCODE_TABLE, ES = ENCODE_SCALE;
+  for (let p = 0, N = n * n; p < N; p++) {
+    const e = EDGE[p];
+    if (e === 0) { out[p] = 0xff000000; continue; }
+    const ct = CT[p], c = D * ct + tilt * U[p], cp = c - dD * ct, s = 0.5 * (sD * ST[p] + sT);
+    // The range of path difference this pixel sees during the frame, in table cells.
+    let pa = ((c < cp ? c : cp) - s - lo) * inv, pb = ((c < cp ? cp : c) + s - lo) * inv;
+    if (pa < 0) pa = 0; else if (pa > cells) pa = cells;
+    if (pb < 0) pb = 0; else if (pb > cells) pb = cells;
+    let X, Y, Z;
+    if (pb - pa < 1e-3) {
+      let j = pa | 0; if (j > last) j = last;
+      const q = 3 * j;
+      X = (C[q + 3] - C[q]) * inv; Y = (C[q + 4] - C[q + 1]) * inv; Z = (C[q + 5] - C[q + 2]) * inv;
+    } else {
+      let ja = pa | 0; if (ja > last) ja = last;
+      let jb = pb | 0; if (jb > last) jb = last;
+      const fa = pa - ja, fb = pb - jb, qa = 3 * ja, qb = 3 * jb, w = inv / (pb - pa);
+      X = (C[qb] + fb * (C[qb + 3] - C[qb]) - C[qa] - fa * (C[qa + 3] - C[qa])) * w;
+      Y = (C[qb + 1] + fb * (C[qb + 4] - C[qb + 1]) - C[qa + 1] - fa * (C[qa + 4] - C[qa + 1])) * w;
+      Z = (C[qb + 2] + fb * (C[qb + 5] - C[qb + 2]) - C[qa + 2] - fa * (C[qa + 5] - C[qa + 2])) * w;
     }
+    // Linear sRGB, negative channels cut to zero (gamutFix), a soft edge to the round field.
+    const g = e * k;
+    const R = (3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z) * g;
+    const G = (-0.969266 * X + 1.8760108 * Y + 0.041556 * Z) * g;
+    const B = (0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z) * g;
+    out[p] = (0xff000000 | (E[((B <= 0 ? 0 : B >= 1 ? 1 : B) * ES + 0.5) | 0] << 16)
+      | (E[((G <= 0 ? 0 : G >= 1 ? 1 : G) * ES + 0.5) | 0] << 8) | E[((R <= 0 ? 0 : R >= 1 ? 1 : R) * ES + 0.5) | 0]) >>> 0;
   }
   return { lo, hi, h, cells };
 }
@@ -174,8 +190,9 @@ export function renderScreen(model, opts, img) {
 export function minMaxOver(spec, a, b, sigmaTop, out = [0, 0]) {
   const per = 1 / sigmaTop, L = b - a, g = [0, 0], I0 = spec.I0;
   let lo = Infinity, hi = -Infinity;
-  const n = L <= per / 8 ? 2 : Math.min(48, Math.ceil(L / (per / 8)) + 1);
-  const many = L >= per;
+  // Few fringes: sample finely enough to follow them.  Many: the envelope at 16 points.
+  const many = L > 4 * per;
+  const n = L <= per / 8 ? 2 : many ? 16 : Math.ceil(L / (per / 8)) + 1;
   for (let i = 0; i < n; i++) {
     const D = n === 1 ? a : a + (L * i) / (n - 1);
     spec.gamma(D, g);
