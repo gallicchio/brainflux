@@ -184,7 +184,7 @@ test could catch it again.  The ones worth knowing about:
 
 ### Where it stands
 
-`~/mudd/brainflux` is a git repository (23 commits so far, all as you, with the attribution
+`~/mudd/brainflux` is a git repository (25 commits so far, all as you, with the attribution
 lines), not pushed: create `github.com/gallicchio/brainflux` (or tell me another name), push,
 and turn on Pages for `main` / root; it will be at `gallicchio.github.io/brainflux/`.  To try it
 now: `cd ~/mudd/brainflux && python3 -m http.server` and open <http://localhost:8000/>.
@@ -192,13 +192,13 @@ now: `cd ~/mudd/brainflux && python3 -m http.server` and open <http://localhost:
 
 | demo | from | experiments |
 |---|---|---|
-| `fft2d/` 2D Fourier transform | FFT2D applet (2001) | 13 |
-| `schrodinger1d/` Schrödinger in 1D | Schrodinger1D applet (2004) | 18 |
+| `fft2d/` 2D Fourier transform | FFT2D applet | 13 |
+| `schrodinger1d/` Schrödinger in 1D | Schrodinger1D applet | 18 |
 | `action/` the principle of least action | your idea, new | 14 |
 | `schrodinger2d/` scattering in 2D | your idea, new | 12 |
-| `planewave/` plane waves | PlaneWave applet (2002) | 10 |
-| `diffraction/` diffraction | LightPropagation (2004, unfinished) | 9 |
-| `fourier/` Fourier series you can hear | SoundFourier (2002, unfinished) | 6 |
+| `planewave/` plane waves | PlaneWave applet | 10 |
+| `diffraction/` diffraction | LightPropagation (unfinished) | 9 |
+| `fourier/` Fourier series you can hear | SoundFourier (unfinished) | 6 |
 
 ### What I need from you
 
@@ -222,3 +222,108 @@ scripted run of every demo and experiment); it passes.
 Live filtering of the camera in the FFT demo (paint a mask on the transform and see your own
 face low-passed as you move), a polar plot option for the cross section, and whatever your
 students trip over.
+
+## Prompt 2
+
+> I'm confused when you said, "In a real image's transform, yellow-green faces violet, not red
+> facing cyan." A real symmetrical image should be all red and transform into a real symmetrical
+> 2DFFT, which should also be all red. Why is there any pure imaginary yellow-green and violet
+> around? How sure are you that you are properly centering on zero frequency and doing the
+> correct fftshift stuff?
+>
+> 1. If each app is very independent, I'd make one repo per demo. But if they all work together
+> or rely on a lot of shared code, yes, let's make that address the remote head. I haven't set it
+> up yet on github, so I'll need to do that and test the code. You should write a very brief
+> overall readme that says that these things were initially developed in 2000 and 2001, left to
+> stagnate due to lack of time, and revived now in 2026 with the help of Claude.
+>
+> 2. My photo can be under that license.
+>
+> 3. I don't know if bricks is taken from my photo or not. I like it more than a drawn wall
+> because it's a real photo. I can try to take my own photo of bricks for you to crop similarly.
+>
+> 4. I don't know what sounds you're talking about.
+>
+> 5. Nothing in particular that I can think of. We use Townsend. Others use Griffiths. Keeping
+> this independent from particular books is not a bad thing.
+
+### Response 2 (2026-10-27)
+
+**The colours.**  You're right about symmetric images, and the demo agrees.  My sentence was
+about real images in general, and it was too terse.
+
+- A real image has $F(-\vec k)=F(\vec k)^*$: opposite points have equal magnitude and opposite
+  phase.  Red faces red and cyan faces cyan, but $+i$ (yellow-green) faces $-i$ (violet).  The
+  old help text said a colour faces its complement (red facing cyan), which would be
+  $F(-\vec k)=-F(\vec k)$.  That was the error I fixed.
+- A real image that is also even, $f(-\vec r)=f(\vec r)$, has a real transform: red, and cyan
+  where it is negative.  The square's sinc lobes and the disk's Airy rings alternate red and
+  cyan.  Only a transform that is positive everywhere, like the Gaussian's, is all red.
+- Fourier's portrait isn't symmetric.  Its antisymmetric part gives the imaginary part of the
+  transform, which is where the yellow-green and violet come from.
+
+**The centring.**  On both sides the origin is the pixel $(N/2, N/2)$, counting from 0; the faint
+cross marks it.  The centred transform multiplies by $(-1)^{x+y}$ before and after an ordinary
+FFT, which is exactly fftshift for $N$ a multiple of 4.  I measured it in the running app for
+every built-in pattern:
+
+| pattern | max $\lvert\mathrm{Im}\,F\rvert$ / max $\lvert F\rvert$ | max $\lvert F(-\vec k)-F(\vec k)^*\rvert$ / max $\lvert F\rvert$ |
+|---|---|---|
+| Gaussian, square, disk, ring, double slit, lattice, hexagonal (all even) | $\le 8\times10^{-16}$ | $\le 10^{-15}$ |
+| portrait, text, bricks (not symmetric) | 0.06 to 0.26 | $\le 5\times10^{-16}$ |
+
+The DC term is real, positive and at the centre in every case.  Hermitian symmetry also covers
+the unpaired Nyquist row and column ($-N/2$ is its own partner).  The classic fftshift mistake
+is putting the origin half a pixel off, between the four centre pixels.  That gives an even
+image a phase ramp $e^{\pm i\pi k/N}$, which would show as colour drifting from red at the centre
+to yellow-green and violet at the edges.  These numbers rule it out.  They are now a regression
+test in `tests/ui/fft2d.py`.
+
+One honest caveat: a shape you paint by hand is symmetric about the cross only if you centre it
+on that pixel.  Half a pixel off makes the slow colour drift above; a few pixels off makes
+stripes of colour (the shift theorem).
+
+I rewrote experiment 9's help to say all this: symmetric gives real (red and cyan), Hermitian
+pairs colours across the real axis, and the portrait has every colour because it isn't
+symmetric.
+
+**1. One repository.**  The demos share a lot: `lib/` holds the FFT, the expression parser with
+its MathML previews, the complex colouring, the plots and the controls, and the diffraction demo
+paints with the FFT demo's tools.  Splitting them would mean copying that code seven times.  So
+it's one repository, and `origin` is now `git@github.com:gallicchio/brainflux.git`; nothing is
+pushed.  To publish:
+
+1. Create `gallicchio/brainflux` on GitHub, empty: no README, licence or .gitignore, since the
+   repository has its own.
+2. `git push -u origin main`
+3. Settings → Pages → Deploy from a branch → `main`, `/ (root)`.
+
+The site will be <https://gallicchio.github.io/brainflux/>.
+
+The README is now a few lines: your history in your words, links to the seven demos, how to run
+it, the licences.  The developer material moved to `DEVELOPING.md`.  I had dated the old
+applets 2001 to 2004 from file dates in the archive.  Those dates are copies, not origins, so
+the pages now give no years except yours: 2000 and 2001.
+
+**2. Your photo** stays under CC BY 4.0, as `LICENSE-CONTENT.md` already says.
+
+**3. Bricks.**  The old `Bricks.jpg` (400×300) was taken with a Sony Cyber-shot and saved with
+QuickTime 6.3 on 1 October 2003.  No other image in the archive came from that camera, so its
+origin stays unknown, and the drawn wall stays until your photo arrives.  For a photo that
+works well here:
+
+- Stand square to the wall, so the mortar lines are level and parallel with no perspective.
+- Use even light, overcast or shade, rather than sun raking across the bricks.
+- Get 10 to 20 bricks across, in an ordinary running bond with the rows offset by half a brick.
+  The offset is what removes some of the reciprocal-lattice spots.
+- Send it at full resolution.
+
+I'll straighten it, crop it square and turn it grey.
+
+**4. The sounds.**  The old site's `java/Resources/sound/` folder holds four recordings from the
+University of Iowa Electronic Music Studios: alto sax, bassoon, flute and horn, saved in 2005.
+They sit beside two unfinished `fourier.java` files and a note pointing to
+theremin.music.uiowa.edu.  The new Fourier-series demo synthesises its sounds, so it doesn't
+need them.  I've dropped the question.
+
+**5. Courses.**  Agreed: the presets stay independent of any textbook.

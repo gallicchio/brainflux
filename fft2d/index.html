@@ -165,10 +165,16 @@
   <article class="exp" data-setup="hermitian">
     <h3>9. Real images have symmetric transforms</h3>
     <p>A real image has $F(-\vec k)=F(\vec k)^*$: points opposite each other through the centre
-    have the same brightness and opposite phases (yellow-green facing violet, orange facing
-    magenta; red facing red, because a positive real number is its own conjugate).  Paint on the transform with
-    <em>Mirror</em> off and the image picks up colour: it has become complex.  Turn <em>Mirror</em>
-    on, and every stroke is copied to $-\vec k$ with the conjugate value: the image stays real.</p>
+    have the same brightness and opposite phases.  Red faces red and cyan faces cyan (a real
+    number is its own conjugate), but yellow-green ($+i$) faces violet ($-i$), and orange faces
+    magenta.  Fourier's portrait has every colour because it is not symmetric.  An image that a
+    half turn about the centre leaves unchanged, $f(-\vec r)=f(\vec r)$, has a real transform:
+    load the square or the disk and you see only red, with cyan where the transform is negative
+    (the sinc's side lobes, the Airy rings).  In general, the symmetric part of an image makes the
+    real part of its transform, and the antisymmetric part the imaginary part.</p>
+    <p>Paint on the transform with <em>Mirror</em> off and the image picks up colour: it has
+    become complex.  Turn <em>Mirror</em> on, and every stroke is copied to $-\vec k$ with the
+    conjugate value: the image stays real.</p>
   </article>
 
   <article class="exp" data-setup="phase">
@@ -215,7 +221,7 @@
     <kbd>[</kbd> <kbd>]</kbd> brush size, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo.</li>
     <li>Your own pictures never leave your computer; everything is computed in the page.</li>
   </ul>
-  <p class="small muted">Rewritten in 2026 from the BrainFlux FFT2D Java applet (2001).
+  <p class="small muted">Rewritten in 2026 from the BrainFlux FFT2D Java applet.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>,
   MIT licence.</p>
 </aside>

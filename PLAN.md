@@ -1,7 +1,7 @@
 # BrainFlux reborn: the plan
 
 Interactive physics demos for sophomore-to-senior physics majors, rebuilt from the BrainFlux Java
-applets (2001-2007) as plain web pages.  This file holds the decisions and the reasons for them;
+applets (begun in 2000 and 2001) as plain web pages.  This file holds the decisions and the reasons for them;
 `CLAUDE_CODE_CHAT.md` holds the conversation.
 
 ## Design rules, from the old site's `About/Philosophy.xml` (2004)

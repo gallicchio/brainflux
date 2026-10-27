@@ -21,6 +21,21 @@ with Browser('fft2d/index.html', size=(1400, 950)) as b:
     e = b.eval("(() => { const {x, k} = __app.sides; let a = 0, c = 0; for (let i = 0; i < x.re.length; i++) { a += x.re[i]**2 + x.im[i]**2; c += k.re[i]**2 + k.im[i]**2; } return [a, c]; })()")
     check(abs(e[0] - e[1]) < 1e-9 * e[0], f'Parseval holds ({e[0]:.6g} vs {e[1]:.6g})')
 
+    # The origin is the centre pixel on both sides: every real image has F(-k) = F(k)*, and one
+    # that a half turn leaves unchanged has a real transform, with a real positive DC at the centre.
+    SYMMETRY = """(() => { const {k} = __app.sides, n = __app.state.n; let fm = 0, fi = 0, he = 0;
+        for (let a = 0; a < n * n; a++) fm = Math.max(fm, Math.hypot(k.re[a], k.im[a]));
+        for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const a = j * n + i, b = ((n - j) % n) * n + (n - i) % n;
+          fi = Math.max(fi, Math.abs(k.im[a])); he = Math.max(he, Math.hypot(k.re[b] - k.re[a], k.im[b] + k.im[a])); }
+        const c = (n / 2) * n + n / 2;
+        return [fi / fm, he / fm, k.re[c] / fm, k.im[c] / fm]; })()"""
+    for p, even in [('gaussian', True), ('box', True), ('disk', True), ('ring', True), ('double', True),
+                    ('lattice', True), ('hexagonal', True), ('portrait', False), ('text', False), ('bricks', False)]:
+        b.eval(f"__app.loadPreset('{p}')"); b.sleep(0.3)
+        imag, herm, dc, dci = b.eval(SYMMETRY)
+        check(herm < 1e-12 and dc > 0 and abs(dci) < 1e-12, f'{p}: F(-k) = F(k)* to {herm:.1e}, real positive DC at the centre')
+        if even: check(imag < 1e-12, f'{p}: symmetric, so its transform is real (max |Im F| / max |F| = {imag:.1e})')
+
     # 1. The jacket: erase with the mirror on; the image must stay real.
     b.eval("__app.setups.jacket()"); b.sleep(0.6)
     b.drag(K, (0.62, 0.30), (0.75, 0.45), steps=20)
