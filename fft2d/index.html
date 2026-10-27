@@ -39,7 +39,8 @@
       <div class="label">Paint with</div>
       <canvas id="picker" width="120" height="120" aria-label="Choose the complex value to paint: brightness is magnitude, colour is phase"></canvas>
       <div class="row" id="quick-values"></div>
-      <div id="value-readout" class="mono small muted"></div>
+      <div id="value-fields" class="value-fields"></div>
+      <div class="small muted value-note">times the side's brightness</div>
     </div>
     <div class="stack">
       <div class="row" id="paint-options"></div>
@@ -217,6 +218,9 @@
     periodic wallpaper, so paint that leaves one edge comes back on the other.</li>
     <li>The transform here is unitary: $\sum|f|^2=\sum|F|^2$ (Parseval), so equal colours mean
     equal values on both sides.</li>
+    <li>The brush paints the value under the ring on the wheel, or the one you type, as
+    $\mathrm{Re}$ and $\mathrm{Im}$ or as magnitude and angle, times the side's brightness
+    scale.  Painting $0$ is the same as erasing.</li>
     <li>Keys: <kbd>H</kbd> hand, <kbd>B</kbd> brush, <kbd>E</kbd> eraser, <kbd>M</kbd> mask,
     <kbd>[</kbd> <kbd>]</kbd> brush size, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo.</li>
     <li>Your own pictures never leave your computer; everything is computed in the page.</li>

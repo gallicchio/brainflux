@@ -17,6 +17,17 @@ function grid(n, f) {
   return [re, im];
 }
 
+// A shape sampled 4 x 4 times in every pixel, so that its edge is a ramp of greys.  A disk drawn
+// with whole pixels is an octagon at low resolution, and so are the rings of its transform.
+function smooth(n, inside) {
+  const S = 4;
+  return grid(n, (x, y) => {
+    let c = 0;
+    for (let a = 0; a < S; a++) for (let b = 0; b < S; b++) c += inside(x + (a + 0.5) / S - 0.5, y + (b + 0.5) / S - 0.5);
+    return c / (S * S);
+  });
+}
+
 // Draw with the 2D canvas (text, bricks) and read back the grey levels.
 function rasterize(n, draw) {
   const c = document.createElement('canvas');
@@ -81,7 +92,7 @@ export const PRESETS = [
   { id: 'box', label: 'Square', title: 'A square transforms into sinc(kx) sinc(ky): a bright centre with lobes along the axes',
     side: 'x', sized: true, make: (n, s) => grid(n, (x, y) => +(Math.max(Math.abs(x), Math.abs(y)) < 0.06 * n * s)) },
   { id: 'disk', label: 'Disk', title: 'A disk transforms into the Airy pattern: rings around a bright centre (the diffraction pattern of a round aperture)',
-    side: 'x', sized: true, make: (n, s) => grid(n, (x, y) => +(x * x + y * y < (0.07 * n * s) ** 2)) },
+    side: 'x', sized: true, make: (n, s) => smooth(n, (x, y) => x * x + y * y < (0.1 * n * s) ** 2) },
   { id: 'ring', label: 'Ring', title: 'A thin ring transforms into a Bessel function J0(kR): rings in both',
     side: 'x', sized: true, make: (n, s) => grid(n, (x, y) => { const r = Math.hypot(x, y), R = 0.18 * n * s; return Math.exp(-((r - R) ** 2) / 1.5); }) },
   { id: 'slit', label: 'Slit', title: 'A long narrow slit: its transform is narrow along the slit and wide across it',

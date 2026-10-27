@@ -437,12 +437,13 @@ function drawPicker() {
   drawWheel(picker, 1, PICK_EXTENT);
   const ctx = picker.getContext('2d');
   const w = state.value;
-  const cx = size / 2 + (w.mag * Math.cos(w.phase) * size) / (2 * PICK_EXTENT);
-  const cy = size / 2 - (w.mag * Math.sin(w.phase) * size) / (2 * PICK_EXTENT);
+  const m = Math.min(w.mag, PICK_EXTENT);
+  const cx = size / 2 + (m * Math.cos(w.phase) * size) / (2 * PICK_EXTENT);
+  const cy = size / 2 - (m * Math.sin(w.phase) * size) / (2 * PICK_EXTENT);
   ctx.lineWidth = 2 * dpr;
   ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.arc(cx, cy, 6 * dpr, 0, 2 * Math.PI); ctx.stroke();
   ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, 4.5 * dpr, 0, 2 * Math.PI); ctx.stroke();
-  $('#value-readout').textContent = `${fmt(w.mag, 2)} ∠ ${Math.round((w.phase * 180) / Math.PI)}°  (× brightness)`;
+  showValue();
 }
 function pick(e) {
   const r = picker.getBoundingClientRect();
@@ -453,8 +454,43 @@ function pick(e) {
 }
 picker.addEventListener('pointerdown', (e) => { picker.setPointerCapture(e.pointerId); pick(e); });
 picker.addEventListener('pointermove', (e) => { if (e.buttons) pick(e); });
-for (const [label, mag, phase] of [['1', 1, 0], ['−1', 1, Math.PI], ['i', 1, Math.PI / 2], ['−i', 1, -Math.PI / 2]]) {
-  $('#quick-values').append(el('button', { type: 'button', title: `Paint ${label} (times the brightness)`, onclick: () => { state.value = { mag, phase }; drawPicker(); } }, label));
+for (const [label, mag, phase] of [['0', 0, 0], ['1', 1, 0], ['−1', 1, Math.PI], ['i', 1, Math.PI / 2], ['−i', 1, -Math.PI / 2]]) {
+  $('#quick-values').append(el('button', { type: 'button', title: mag ? `Paint ${label} (times the brightness)` : 'Paint 0: the same as the eraser',
+    onclick: () => { state.value = { mag, phase }; drawPicker(); } }, label));
+}
+
+// The paint as numbers, in either form: typing in one pair updates the other.  The box being
+// typed in is left alone, so that "-" or "0." can be on the way to a number.
+const valueFields = {};
+for (const [key, label, title] of [['re', 'Re', 'Real part'], ['im', 'Im', 'Imaginary part'],
+  ['mag', '|w|', 'Magnitude'], ['deg', '∠°', 'Phase in degrees, anticlockwise from the positive real axis']]) {
+  const input = el('input', { type: 'number', step: 'any', id: `value-${key}`, title, oninput: () => typeValue(key) });
+  input.addEventListener('change', showValue);
+  valueFields[key] = input;
+  $('#value-fields').append(el('label', { for: `value-${key}`, title }, label), input);
+}
+function showValue() {
+  const { mag, phase } = state.value;
+  const tidy = (v) => (Math.abs(v) < 1e-12 * Math.max(1, mag) ? 0 : v);
+  const shown = { re: fmt(tidy(mag * Math.cos(phase))), im: fmt(tidy(mag * Math.sin(phase))),
+    mag: fmt(mag), deg: fmt(tidy((phase * 180) / Math.PI)) };
+  for (const [k, input] of Object.entries(valueFields)) if (input !== document.activeElement) input.value = shown[k];
+}
+function typeValue(key) {
+  const v = Object.fromEntries(Object.entries(valueFields).map(([k, input]) => [k, input.value === '' ? NaN : +input.value]));
+  let mag, phase;
+  if (key === 're' || key === 'im') {
+    const re = Number.isFinite(v.re) ? v.re : 0, im = Number.isFinite(v.im) ? v.im : 0;
+    if (!Number.isFinite(v[key])) return;
+    mag = Math.hypot(re, im); phase = mag ? Math.atan2(im, re) : state.value.phase;
+  } else {
+    if (!Number.isFinite(v[key])) return;
+    mag = Number.isFinite(v.mag) ? v.mag : state.value.mag;
+    phase = Number.isFinite(v.deg) ? (v.deg * Math.PI) / 180 : state.value.phase;
+    if (mag < 0) { mag = -mag; phase += Math.PI; }
+  }
+  state.value = { mag, phase };
+  drawPicker();
 }
 
 const mirrorToggle = toggle('Mirror', state.mirror, (on) => { state.mirror = on; },

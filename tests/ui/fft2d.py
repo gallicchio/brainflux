@@ -36,6 +36,25 @@ with Browser('fft2d/index.html', size=(1400, 950)) as b:
         check(herm < 1e-12 and dc > 0 and abs(dci) < 1e-12, f'{p}: F(-k) = F(k)* to {herm:.1e}, real positive DC at the centre')
         if even: check(imag < 1e-12, f'{p}: symmetric, so its transform is real (max |Im F| / max |F| = {imag:.1e})')
 
+    # The paint can be typed in either form, and 0 is a button.
+    def typed(field, v):
+        b.eval(f"(() => {{ const e = document.getElementById('value-{field}'); e.focus(); e.value = '{v}'; e.dispatchEvent(new Event('input')); e.blur(); e.dispatchEvent(new Event('change')); }})()")
+        return b.eval("[__app.state.value.mag, __app.state.value.phase, ...['re', 'im', 'mag', 'deg'].map((k) => +document.getElementById('value-' + k).value)]")
+    typed('re', 0); mag, ph, re, im, m, deg = typed('im', -2)
+    check(abs(mag - 2) < 1e-12 and abs(ph + 1.5707963) < 1e-6 and abs(m - 2) < 1e-9 and abs(deg + 90) < 1e-9, f'typing Re 0, Im -2 gives 2 at -90 degrees ({mag:.3g}, {deg:.3g})')
+    typed('mag', 1); mag, ph, re, im, m, deg = typed('deg', 180)
+    check(abs(re + 1) < 1e-9 and im == 0, f'typing |w| 1 at 180 degrees gives Re -1, Im 0 ({re}, {im})')
+    b.eval("[...document.querySelectorAll('#quick-values button')].find((e) => e.textContent === '0').click()")
+    check(b.eval("__app.state.value.mag") == 0, 'the 0 button paints zero')
+    b.eval("[...document.querySelectorAll('#quick-values button')].find((e) => e.textContent === '1').click()")
+
+    # The disk is round even at 128: its edge is anti-aliased, so its area is pi R^2 to a pixel or so.
+    b.eval("__app.setResolution(128)"); b.sleep(0.4); b.eval("__app.loadPreset('disk')"); b.sleep(0.3)
+    area = b.eval("__app.sides.x.re.reduce((a, v) => a + v, 0) / Math.max(...__app.sides.x.re)")
+    R = 0.1 * 128
+    check(abs(area - 3.14159265 * R * R) < 2, f'the disk at 128 has area pi R^2 ({area:.1f} vs {3.14159265 * R * R:.1f})')
+    b.eval("__app.setResolution(256)"); b.sleep(0.4)
+
     # 1. The jacket: erase with the mirror on; the image must stay real.
     b.eval("__app.setups.jacket()"); b.sleep(0.6)
     b.drag(K, (0.62, 0.30), (0.75, 0.45), steps=20)

@@ -36,9 +36,12 @@
 #tool-buttons button { padding: 4px 0; display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11px; }
 #tool-buttons svg { width: 22px; height: 22px; }
 #picker { width: 120px; height: 120px; border-radius: 50%; cursor: crosshair; align-self: center; }
-#quick-values { justify-content: center; }
-#quick-values button { min-width: 36px; padding: 2px 6px; font-family: var(--mono); }
-#value-readout { text-align: center; }
+#quick-values { justify-content: center; gap: 4px; }
+#quick-values button { min-width: 30px; padding: 2px 6px; font-family: var(--mono); }
+.value-fields { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 4px 5px; align-items: center; }
+.value-fields label { color: var(--ink-2); font-size: 12px; text-align: right; }
+.value-fields input[type="number"] { width: 100%; padding: 2px 4px; text-align: right; font-family: var(--mono); font-size: 12px; }
+.value-note { text-align: center; margin-top: -4px; }
 .tools .slider { grid-template-columns: 3em 1fr 3.4em; }
 
 .gallery-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
