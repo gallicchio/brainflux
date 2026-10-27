@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantum phase space · BrainFlux</title>
+<meta name="description" content="The Wigner function of a wave function evolving live, beside a classical ensemble flowing under the same Hamiltonian.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="phasespace.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Quantum phase space</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="ps">
+  <section class="stage">
+    <div class="readouts mono small" id="readouts" aria-live="off"></div>
+    <div class="plot-wrap main-wrap"><canvas id="plot" tabindex="0" aria-label="Phase space: the Wigner function W(x, p) in colour, red where positive and blue where negative, with classical points as dots, energy contours, and the probability densities of x and p along the edges. Drag the state's centre; arrow keys move it too."></canvas></div>
+    <div class="legend small">
+      <span class="bar"><span id="cb-name">W(x, p)</span> <span id="cb-lo">−1/πħ</span><canvas id="colorbar" aria-hidden="true"></canvas><span id="cb-hi">+1/πħ</span></span>
+      <span id="dots-note"></span>
+      <span id="hover"></span>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel transport">
+      <div class="row">
+        <button type="button" id="play" class="primary" title="Play or pause (space)">Pause</button>
+        <button type="button" id="restart" title="Back to the initial state, t = 0 (R)">Restart</button>
+      </div>
+      <div id="speed-box"></div>
+    </div>
+
+    <div class="panel">
+      <div class="label">Potential</div>
+      <div id="potentials" class="button-grid"></div>
+      <div id="v-field"></div>
+    </div>
+
+    <div class="panel">
+      <div class="label">Initial state</div>
+      <div id="kind"></div>
+      <div id="state-box" class="stack"></div>
+    </div>
+
+    <div class="panel">
+      <div class="label">Show</div>
+      <div id="view"></div>
+      <div class="row" id="shows"></div>
+      <div id="quad-box"></div>
+    </div>
+
+    <details class="panel" id="numerics">
+      <summary class="label">Points, colours and grid</summary>
+      <div class="stack" id="numerics-box"></div>
+    </details>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A classical particle is a point $(x,p)$ in phase space; an uncertain one is a cloud of
+  points, a probability density that flows along the contours of $H(x,p)=p^2/2m+V(x)$.  A
+  quantum state has its own phase-space picture, the <em>Wigner function</em>
+  $$W(x,p)=\frac{1}{\pi\hbar}\int\psi^*(x+y)\,\psi(x-y)\,e^{2ipy/\hbar}\,dy,$$
+  drawn here in colour: red where $W>0$, blue where $W<0$, white (black on a dark page) where it
+  is zero.  It behaves like a probability density in one way: integrating it over $p$ gives
+  $|\psi(x)|^2$ and over $x$ gives $|\phi(p)|^2$, the strips along the top and the right.  But it
+  can be negative, which no probability can.  The black dots are classical particles, drawn at
+  $t=0$ from $W$ (where it is positive) and each moving by Hamilton's equations under the same
+  $H$; their histograms are the black lines in the strips.  Units: $\hbar=m=1$.</p>
+  <p>Drag the centre of a coherent, squeezed or cat state on the plot; the thin grey curves are
+  contours of $H$ at the stationary states' energies, and the dashed one is $\langle E\rangle$.</p>
+
+  <article class="exp" data-setup="coherent">
+    <h3>1. Quantum and classical agree</h3>
+    <p>A coherent state in a harmonic well: a round Gaussian blob, the smallest $W$ allowed,
+    circling at the oscillator's frequency without changing shape.  The classical points
+    circle with it, exactly: for a quadratic $H$ the Wigner function obeys the classical
+    Liouville equation, so every $W$ moves like a classical fluid.  $W$ stays positive (min $W$
+    in the readout is 0) and $\sigma_x\sigma_p$ stays at $\hbar/2$.  Drag the blob somewhere
+    else.</p>
+  </article>
+
+  <article class="exp" data-setup="squeezed">
+    <h3>2. A squeezed state breathes</h3>
+    <p>The ellipse is narrower than a coherent state in $x$ and wider in $p$, with the same area.
+    It turns rigidly, so its shadow on the $x$ axis, $|\psi(x)|^2$, narrows and widens twice
+    per period, and $\sigma_x\sigma_p$ goes from $\hbar/2$ (ellipse along the axes) up and back.
+    Try other angles and squeezes ($r<0$ squeezes $p$).</p>
+  </article>
+
+  <article class="exp" data-setup="number">
+    <h3>3. Number states are rings, and negative</h3>
+    <p>The oscillator's first excited state $|1\rangle$.  Its Wigner function is
+    $W_1=\frac{1}{\pi\hbar}(2(x^2+p^2)/\hbar-1)e^{-(x^2+p^2)/\hbar}$ (with $m\omega=1$): a ring,
+    and at the centre $W_1(0,0)=-1/\pi\hbar$, as negative as $W$ can ever be.  The readout's min
+    $W$ says $-1.00/\pi\hbar$.  Raise $n$: $|n\rangle$ has $n+1$ rings of alternating sign, with
+    $W_n(0,0)=(-1)^n/\pi\hbar$, and its outer ring lies on the contour $H=E_n$.  Nothing moves:
+    a stationary state's $W$ is stationary.  The classical points (from the Husimi $Q$ here,
+    since $W$ is not a probability) circle round the ring for ever.</p>
+  </article>
+
+  <article class="exp" data-setup="cat">
+    <h3>4. A cat state's fringes</h3>
+    <p>Two coherent states, at $\pm x_0$, added: $|\alpha\rangle+e^{i\varphi}|{-\alpha}\rangle$.
+    Besides the two blobs, $W$ has fringes between them, positive and negative, at spacing
+    $\pi\hbar/x_0$ in $p$.  They encode the coherence between the blobs: a mixture (half a chance
+    of each, no superposition) would have the blobs and no fringes.  Change the phase $\varphi$:
+    the fringes slide; at $\varphi=180°$ the centre $W(0,0)=-1/\pi\hbar$ (an odd state).  The whole
+    picture rotates rigidly, fringes and all.</p>
+  </article>
+
+  <article class="exp" data-setup="marginals">
+    <h3>5. The marginals are what you measure</h3>
+    <p>The same cat a quarter period on: the two blobs now have momenta $\pm p_0$ and sit on top of
+    each other in $x$.  $|\psi(x)|^2$ along the top has interference fringes: two waves with
+    opposite momenta make a standing wave.  Those fringes are the sum of $W$ over $p$ along each
+    vertical line, positive and negative stripes together.  The momentum distribution at the right
+    has none.  Press <em>Play</em> and watch the fringes pass from one marginal to the other as
+    the picture turns.  No measurement ever sees $W$ itself, only its shadows.</p>
+  </article>
+
+  <article class="exp" data-setup="free">
+    <h3>6. Free motion shears phase space</h3>
+    <p>With no force, every point moves at its own speed: $x\to x+pt/m$, $p$ fixed.  The blob is
+    sheared into a tilted ellipse, ever longer and thinner.  Its shadow on $x$ widens (the packet
+    spreads), its shadow on $p$ never changes, and its area never changes either.  Again the
+    classical points follow $W$ exactly.</p>
+  </article>
+
+  <article class="exp" data-setup="anharmonic">
+    <h3>7. Where quantum and classical part</h3>
+    <p>The same coherent state in an anharmonic well, $V=\tfrac12x^2+\lambda x^4$, where bigger
+    orbits take less time.  The outer points run ahead of the inner ones and the classical cloud
+    winds into a spiral, its arms ever thinner.  $W$ follows at first, then cannot: it has no
+    structure finer than $\hbar$, and where the arms come within $\hbar$ of each other it makes
+    interference fringes instead, with negative stripes between them (min $W$ and the negative
+    volume in the readout grow).  This is the whole difference between classical and quantum
+    dynamics: the Moyal bracket that moves $W$ is the Poisson bracket plus terms in $\hbar^2V'''$,
+    which vanish for quadratic $H$.</p>
+  </article>
+
+  <article class="exp" data-setup="orbits">
+    <h3>8. Stationary states sit on orbits</h3>
+    <p>The Morse potential of a vibrating molecule, $V=D(1-e^{-ax})^2$, and its stationary state
+    $n=4$.  $W$ concentrates on the classical orbit at the state's energy (the dashed contour)
+    with fringes inside.  The contours are drawn at the energies $E_n$; the area each encloses
+    is close to $2\pi\hbar(n+\tfrac12)$ (Bohr and Sommerfeld's rule), so each ring between two
+    contours holds one state per area $2\pi\hbar=h$.</p>
+  </article>
+
+  <article class="exp" data-setup="tunnel">
+    <h3>9. Tunnelling in phase space</h3>
+    <p>A double well, and $(|0\rangle+|1\rangle)/\sqrt2$: the particle in the left well.
+    Classically it would stay there; the classical points do (all but a few with more
+    energy than the barrier, which go over the top).  The quantum state goes through the
+    barrier, where no classical orbit goes, and halfway it is a cat state of the two wells,
+    with fringes between them.  It comes back after $2\pi\hbar/(E_1-E_0)$.</p>
+  </article>
+
+  <article class="exp" data-setup="uncertainty">
+    <h3>10. The uncertainty principle as an area</h3>
+    <p>A squeezed state: squeeze it harder with $r$.  The ellipse gets as thin as you like in one
+    direction, but only by growing in the other: its area stays $\pi\hbar/2$ (one standard
+    deviation), and $\sigma_x\sigma_p\ge\hbar/2$.  No $W$ can be concentrated in a region of
+    phase space smaller than about $\hbar$: a Gaussian bump narrower than that in both $x$ and $p$
+    is not the Wigner function of any state.</p>
+  </article>
+
+  <article class="exp" data-setup="husimi">
+    <h3>11. Husimi versus Wigner</h3>
+    <p>The <em>Husimi function</em> $Q(x,p)=|\langle x,p|\psi\rangle|^2/2\pi\hbar$, the
+    probability of finding the state in the coherent state at $(x,p)$, is $W$ smoothed by a
+    coherent state's own Gaussian.  It is never negative, but it pays for that: the cat's fringes
+    are almost gone, and its marginals (dashed in the strips) are wider than $|\psi|^2$ and
+    $|\phi|^2$.  Switch between <em>Wigner W</em> and <em>Husimi Q</em>.</p>
+  </article>
+
+  <article class="exp" data-setup="tomography">
+    <h3>12. Tomography: shadows from every angle</h3>
+    <p>The blue curve is the shadow of $W$ on a line at angle $\theta$: the distribution of the
+    quadrature $X_\theta=x\cos\theta+(p/m\omega)\sin\theta$.  In an oscillator $W$ turns, so
+    $|\psi(x)|^2$ at time $t$ is the shadow at $\theta=\omega t$ of the initial $W$: watch the
+    top strip and the shadow agree.  A homodyne detector measures $X_\theta$ for a light
+    field, with $\theta$ set by a reference laser's phase; recording the shadows at all angles
+    and inverting them (the inverse Radon transform, as in a CT scan) reconstructs $W$ itself.
+    This is how the Wigner functions of real cat states of light are measured.</p>
+  </article>
+
+  <article class="exp" data-setup="typed">
+    <h3>13. Your own wave function</h3>
+    <p>Type any $\psi_0(x)$: a square box to start with.  Its sharp edges need high momenta, so
+    $W$ is wide in $p$, with fringes and negative regions, and the oscillator turns it all
+    rigidly.  Try <code>exp(-x^2/2) (1 + x)</code> or <code>exp(-(x-2)^2) + exp(-(x+2)^2)</code>.</p>
+  </article>
+
+  <h3>How it is computed</h3>
+  <p>$\psi$ evolves by the split-operator method, as in the 1D Schrödinger demo (on 1024 or 2048
+  points, between walls far outside the window).  $W$ is computed from $\psi$ every frame, one
+  FFT per column of the picture: with $y=kh$ the integral is a sum
+  $\frac{h}{\pi\hbar}\sum_k\psi^*(x-kh)\psi(x+kh)e^{-2ipkh/\hbar}$.  Because of the 2 in the
+  exponent the momenta reach only $\pm\pi\hbar/2h$, half the usual range, so $\psi$ is first
+  stripped of momenta beyond that, and then the sum is exact.  $Q$ is a windowed Fourier
+  transform.  The classical points move by the leapfrog method, which conserves phase-space
+  area exactly and energy to a part in $10^4$.</p>
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
