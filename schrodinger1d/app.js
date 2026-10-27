@@ -29,7 +29,7 @@ let shownLevels = [];         // the ones drawn: bound states, or all of them be
 let dtMax = 0.01;
 let maxSteps = 400;           // per frame, to keep the page responsive
 let classical = null;         // {x, p, alive}
-let scale = { density: 1, amplitude: 1, momentum: 1 };
+let scale = { density: 1, amplitude: 1, momentum: 1, current: 1e-6 };
 let started = false;          // has the clock run since the last restart?
 let slowed = false;           // could not keep up with the requested speed
 let frames = 0, slowFrames = 0;
@@ -168,6 +168,9 @@ function restart() {
   let pmax = 0;
   for (let i = 0; i < ph.re.length; i++) pmax = Math.max(pmax, ph.re[i] ** 2 + ph.im[i] ** 2);
   scale.momentum = pmax * 1.25 || 1;
+  // The current is at most |psi|^2 times a typical speed: start the scale there (a stationary
+  // state carries no current at all, and its plot should show that, not blow up the noise).
+  scale.current = (dmax * (Math.abs(o.p) + o.sp)) / state.mass || 1e-3;
   clearCarpet();
   measureSpeed();
   updateClock();
@@ -284,7 +287,14 @@ function drawMain() {
   for (let j = 0; j < sim.n; j++) dmax = Math.max(dmax, sim.re[j] ** 2 + sim.im[j] ** 2);
   // Let the scale grow when interference piles probability up (never shrink while running).
   if (dmax > scale.density) { scale.density = dmax * 1.15; scale.amplitude = Math.max(scale.amplitude, Math.sqrt(dmax) * 1.1); }
-  if (view === 'reim') { f.y0 = -scale.amplitude; f.y1 = scale.amplitude; }
+  let current = null;
+  if (view === 'current') {
+    current = sim.current();
+    let jmax = 0;
+    for (let j = 0; j < sim.n; j++) jmax = Math.max(jmax, Math.abs(current[j]));
+    if (jmax > scale.current) scale.current = jmax * 1.15;
+    f.y0 = -scale.current; f.y1 = scale.current;
+  } else if (view === 'reim') { f.y0 = -scale.amplitude; f.y1 = scale.amplitude; }
   else { f.y0 = 0; f.y1 = view === 'density' ? scale.density : scale.amplitude; }
   const [Elo, Ehi] = energyRange();
   const EY = (E) => f.bottom - ((E - Elo) / (Ehi - Elo)) * f.h;
@@ -361,6 +371,24 @@ function drawMain() {
     ctx.strokeStyle = c.ink;
     ctx.lineWidth = 1.2;
     ctx.stroke();
+  } else if (view === 'current') {
+    // The probability current j = (hbar/m) Im(psi* dpsi/dx): probability flowing right (up) or
+    // left (down).  |psi|^2 in grey for reference, scaled to fit.
+    ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.beginPath();
+    for (let px = 0; px <= xs; px++) {
+      const xv = f.invX(f.left + px), j = Math.max(0, Math.min(n - 1, Math.round((xv - sim.xmin) / sim.dx)));
+      const y = f.Y((scale.current * (sim.re[j] ** 2 + sim.im[j] ** 2)) / scale.density);
+      if (px === 0) ctx.moveTo(f.left, y); else ctx.lineTo(f.left + px, y);
+    }
+    ctx.stroke();
+    for (let px = 0; px < xs; px++) {
+      const xv = f.invX(f.left + px + 0.5), j = Math.round((xv - sim.xmin) / sim.dx);
+      if (j < 0 || j >= n) continue;
+      const v = current[j], y = f.Y(v);
+      ctx.fillStyle = v >= 0 ? c.accent : c.warn;
+      ctx.fillRect(f.left + px, Math.min(y, base), 1, Math.abs(base - y));
+    }
+    ctx.strokeStyle = c.ink2; ctx.beginPath(); ctx.moveTo(f.left, base); ctx.lineTo(f.right, base); ctx.stroke();
   } else {
     const line = (get, color, width = 1.4) => {
       ctx.beginPath();
@@ -410,7 +438,7 @@ function drawMain() {
   }
   ctx.restore(); // the clip
 
-  f.axes({ xlabel: 'x', ylabel: view === 'density' ? '|ψ|²' : view === 'amplitude' ? '|ψ|' : 'Re ψ, Im ψ' });
+  f.axes({ xlabel: 'x', ylabel: { density: '|ψ|²', amplitude: '|ψ|', reim: 'Re ψ, Im ψ', current: 'current j(x)' }[view] });
   f.rightAxis(Elo, Ehi, 'energy');
   if (hover) {
     ctx.font = '12px system-ui, sans-serif';
@@ -678,7 +706,7 @@ function choosePotential(p, { stateIndex = 0, keepRunning = true } = {}) {
 
 // What to show.
 const viewSelect = $('#view');
-for (const [k, v] of [['density', 'probability |ψ|²'], ['amplitude', 'amplitude |ψ|'], ['reim', 'real and imaginary parts']]) viewSelect.append(el('option', { value: k }, v));
+for (const [k, v] of [['density', 'probability |ψ|²'], ['amplitude', 'amplitude |ψ|'], ['reim', 'real and imaginary parts'], ['current', 'probability current j(x)']]) viewSelect.append(el('option', { value: k }, v));
 viewSelect.addEventListener('change', () => { state.view = viewSelect.value; kick(); });
 const showToggles = {
   levels: toggle('Levels', state.show.levels, (on) => { state.show.levels = on; kick(); }, 'The energies of the stationary states, with bars for the state\'s weight in each'),
