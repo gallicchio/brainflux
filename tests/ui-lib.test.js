@@ -28,6 +28,15 @@ test('fixedNum: powers of ten only when the fixed form would overflow its width'
     assert(fixedNum(v, 2, 8).length <= 8, `${v} -> ${fixedNum(v, 2, 8)} fits in 8`);
 });
 
+test('fixedNum: tiny values in powers of ten, for quantities that span decades', () => {
+  eq(fixedNum(1.818e-5, 3, 7, { tiny: true }), '1.82e−5');
+  eq(fixedNum(-1.818e-5, 3, 8, { tiny: true }), '−1.82e−5');
+  eq(fixedNum(0.25, 3, 7, { tiny: true }), '0.250');
+  eq(fixedNum(0, 3, 7, { tiny: true }), '0.000');
+  eq(fixedNum(2909.1, 3, 7, { tiny: true }), '2.909e3');
+  eq(fixedNum(1.818e-5, 3, 7), '0.000');
+});
+
 test('fixedNum: the same length for any sign with plus and pad', () => {
   const lens = [3.21, -3.21, 0, -0.001].map((v) => fixedNum(v, 2, 6, { plus: FIGURE_SPACE, pad: true }).length);
   assert(lens.every((n) => n === 6), `lengths ${lens}`);
