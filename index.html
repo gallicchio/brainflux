@@ -22,6 +22,10 @@
   .card p { margin: 0; color: var(--ink-2); }
   .card .tag { display: inline-block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
     color: var(--ink-3); margin-top: 8px; }
+  .card .beta { display: inline-block; vertical-align: 2px; margin-left: 6px; padding: 1px 7px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--warn); border: 1px solid currentColor; border-radius: 999px; }
+  .beta-note { color: var(--warn); font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.06em; }
   footer { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; color: var(--ink-3); font-size: 13px; }
 </style>
 </head>
@@ -31,7 +35,8 @@
     <h1>Brain<span>Flux</span></h1>
     <p>Interactive demonstrations for physics majors.  Each one opens already doing something
     worth watching; change anything and see what happens.  Every demo has a drawer of guided
-    experiments, each of which sets itself up with one click.</p>
+    experiments, each of which sets itself up with one click.  Demos marked
+    <span class="beta-note">beta</span> are new and still being checked.</p>
   </div>
   <div class="cards" id="cards">
     <a class="card" href="fft2d/">
@@ -92,10 +97,95 @@
         <span class="tag">Fourier analysis · sound</span>
       </div>
     </a>
+    <a class="card" href="thinfilms/">
+      <img src="docs/thinfilms.jpg" alt="A draining soap film in true colour beside the layer stack, the field inside it, and its reflectance against wavelength and angle">
+      <div class="body">
+        <h2>Interfaces and thin films<span class="beta">beta</span></h2>
+        <p>Stack layers of glass, water, metal or any index you type, and see what they
+        do to light: Brewster's angle, total internal reflection and tunnelling across a
+        gap, soap-film colours as the eye sees them, coatings, Bragg mirrors,
+        Fabry–Pérot filters and surface plasmons.</p>
+        <span class="tag">optics · electromagnetism</span>
+      </div>
+    </a>
+    <a class="card" href="dispersion/">
+      <img src="docs/dispersion.jpg" alt="A chirped pulse coloured by its local frequency, under the index of fused silica">
+      <div class="body">
+        <h2>Dispersion and Kramers–Kronig<span class="beta">beta</span></h2>
+        <p>Build $\varepsilon(\omega)$ from resonances you drag and watch the index, the
+        absorption and the reflectance follow; draw the absorption and causality draws
+        the index.  Send pulses through: the group delay, a chirp, a peak that leaves
+        early, and the precursors that arrive first.</p>
+        <span class="tag">optics · electromagnetism · causality</span>
+      </div>
+    </a>
+    <a class="card" href="interferometer/">
+      <img src="docs/interferometer.jpg" alt="A Michelson interferometer with white-light fringes on its screen, the spectrum, and the interferogram">
+      <div class="body">
+        <h2>Interferometers and coherence<span class="beta">beta</span></h2>
+        <p>Move a mirror and count fringes, hunt for the coloured fringes of white
+        light, draw a spectrum and watch its interferogram (or the other way round),
+        resolve the sodium doublet by Fourier-transform spectroscopy, and measure
+        Betelgeuse as Michelson did in 1920.</p>
+        <span class="tag">optics · Fourier analysis · astronomy</span>
+      </div>
+    </a>
+    <a class="card" href="imaging/">
+      <img src="docs/imaging.jpg" alt="Transparent cells, the Fourier plane with a Zernike phase dot, and the phase-contrast image">
+      <div class="body">
+        <h2>Imaging: Abbe and phase contrast<span class="beta">beta</span></h2>
+        <p>A microscope as two Fourier transforms: paint the pupil and watch the image.
+        Abbe's resolution limit, oblique light, dark field, schlieren, and Zernike's
+        phase dot making transparent cells appear.</p>
+        <span class="tag">optics · Fourier analysis · microscopy</span>
+      </div>
+    </a>
+    <a class="card" href="holography/">
+      <img src="docs/holography.jpg" alt="A hologram of Fourier's portrait, its transform with the image, twin and zero-order islands, and the portrait reconstructed">
+      <div class="body">
+        <h2>Holography<span class="beta">beta</span></h2>
+        <p>Record how light from an object interferes with a reference beam, then light
+        the recording and look through it: the object comes back, in depth, with its
+        twin.  Zone plates, Gabor's in-line hologram, the three islands of the off-axis
+        transform, parallax through a window, and a hologram cut to pieces.</p>
+        <span class="tag">optics · Fourier analysis</span>
+      </div>
+    </a>
+    <a class="card" href="tomography/">
+      <img src="docs/tomography.jpg" alt="A CT scanner turning round the Shepp–Logan phantom, its sinogram, Fourier space, and the back-projected and filtered reconstructions">
+      <div class="body">
+        <h2>Tomography<span class="beta">beta</span></h2>
+        <p>How a CT scanner sees inside: watch the sinogram fill as the scanner turns,
+        back-projection blur and the ramp filter sharpen, and each projection fill a
+        line of Fourier space.  Streaks from too few angles, the missing wedge, photon
+        noise, aliasing and metal.</p>
+        <span class="tag">imaging · Fourier analysis</span>
+      </div>
+    </a>
+    <a class="card" href="arrays/">
+      <img src="docs/arrays.jpg" alt="Waves from a line of antennas steered to 30 degrees, and the polar pattern of the beam">
+      <div class="body">
+        <h2>Antenna arrays and aperture synthesis<span class="beta">beta</span></h2>
+        <p>Place antennas and set their phases: the far-field pattern is the Fourier
+        transform of the layout.  Steer a beam, meet grating lobes, focus waves to a
+        spot; then put radio dishes on the turning Earth and image a black hole's ring.</p>
+        <span class="tag">electromagnetism · Fourier analysis · radio astronomy</span>
+      </div>
+    </a>
+    <a class="card" href="beams/">
+      <img src="docs/beams.jpg" alt="The crests of a Gaussian beam curving through its waist, with the Gouy phase below">
+      <div class="body">
+        <h2>Gaussian beams and laser cavities<span class="beta">beta</span></h2>
+        <p>Drag lenses, mirrors and glass along a laser beam and watch its waist,
+        wavefronts and Gouy phase.  Then trap it between two mirrors: the stability
+        diagram, rays, the modes a cavity selects, and their frequencies.</p>
+        <span class="tag">optics · lasers</span>
+      </div>
+    </a>
     <a class="card" href="action/">
       <img src="docs/action.jpg" alt="A path drawn between two events, with the history of its action, its phase-space portrait and its energy">
       <div class="body">
-        <h2>The principle of least action</h2>
+        <h2>The principle of least action<span class="beta">beta</span></h2>
         <p>Drag a path between two events and watch its action, recorded as you go.  Find the
         true path; see when "least" is really a saddle; the twin paradox, Fermat's principle,
         the brachistochrone, and Feynman's phasors.</p>
