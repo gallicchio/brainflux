@@ -115,13 +115,16 @@ async function loadPreset(id, opts = {}) {
   if (token !== loadToken) return;
   if (p.field) { base = made; ink = new Float64Array(N * N); } else { base = null; ink = made; }
   if (opts.row !== false) state.row = C - Math.round((p.rowY || 0) / DX);
-  rebright = true;
+  // A new object gets a new brightness in the Fourier plane; a slider moving its period does not.
+  if (opts.row !== false || opts.rebright) rebright = true;
+  // A transmission typed or given is shown as its phase if only its phase varies.
+  autoView = !!p.field && opts.row !== false;
   syncControls();
   dirty.object = true;
   schedule();
 }
 
-let rebright = true;
+let rebright = true, autoView = false;
 let tmax = 0, phaseCache = null;       // max |T|; the object's phase range
 function buildT() {
   const field = PRESETS[state.preset].field;
@@ -132,6 +135,14 @@ function buildT() {
   for (let o = 0; o < N * N; o++) { const m = T.re[o] * T.re[o] + T.im[o] * T.im[o]; if (m > tmax) tmax = m; }
   tmax = Math.sqrt(tmax);
   if (rebright) { fpAutoR = transformBrightness(T); rebright = false; }
+  if (autoView) {
+    autoView = false;
+    let lo = Infinity, hi = 0;
+    for (let o = 0; o < N * N; o++) { const a = Math.hypot(t.re[o], t.im[o]); lo = Math.min(lo, a); hi = Math.max(hi, a); }
+    const [p0, p1] = phaseRange();
+    state.objView = hi - lo < 0.01 && p1 - p0 > 0.01 ? 'phase' : 'amplitude';
+    objView.value = state.objView;
+  }
 }
 
 /** A brightness for a spectrum: bright enough that more than the zero order shows (as in fft2d). */
@@ -480,14 +491,16 @@ function drawFourier() {
       circle(sx, sy, state.condNA * k, 'rgba(120,200,255,0.9)', [4 * dd, 3 * dd]);
     }
     // A grating's orders are single points: ring and number them (white: through the pupil).
-    for (const { q, u, v, pass } of gratingOrderList() || []) {
+    // The diatom's pore lattice: ring where its six first orders fall.
+    for (const { q, u, v, pass } of gratingOrderList() || poreOrderList() || []) {
       const x = X(u), y = Y(v);
       if (x < 0 || x > w || y < 0 || y > w) continue;
       const col = pass ? 'rgba(255,255,255,0.95)' : 'rgba(255,110,110,0.95)';
-      ctx.strokeStyle = col; ctx.setLineDash([]); ctx.lineWidth = 1.2 * dd;
-      ctx.beginPath(); ctx.arc(x, y, 5 * dd, 0, 2 * Math.PI); ctx.stroke();
-      label(ctx, orderName(q), x, y - 15 * dd, 'center', col);
+      ctx.strokeStyle = col; ctx.setLineDash(q === null ? [3 * dd, 2 * dd] : []); ctx.lineWidth = 1.2 * dd;
+      ctx.beginPath(); ctx.arc(x, y, (q === null ? 7 : 5) * dd, 0, 2 * Math.PI); ctx.stroke();
+      if (q !== null) label(ctx, orderName(q), x, y - 15 * dd, 'center', col);
     }
+    ctx.setLineDash([]);
     if (state.tiltNA > 0 && state.illum !== 'incoherent') {
       ctx.strokeStyle = 'rgba(120,200,255,0.9)'; ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(sx), Y(sy)); ctx.stroke();
@@ -557,7 +570,7 @@ function profileReference() {
     for (let i = 0; i < N; i++) v[i] = a * a + 2 * a * Math.sin(al) * v[i];
     return { v, label: 'small-phase formula', axis: 'left' };
   }
-  return { v, label: 'phase φ − φ̄ (rad, right)', axis: 'right' };
+  return { v, label: 'phase φ − ⟨φ⟩ (rad, right)', axis: 'right' };
 }
 
 let profilePeriod = null, colors = null;   // the theme's colours, read once (and again when it changes)
@@ -619,8 +632,8 @@ function drawProfile() {
   for (let q = 1; q < N / 2; q++) { const p = re[C + q] ** 2 + im[C + q] ** 2; total += p; if (p > best) { best = p; kb = q; } }
   // Only when one period dominates the line (a grating, not a cell).
   profilePeriod = ['grating', 'formula'].includes(state.preset) && kb && best > 0.6 * total && mean > 0 && Math.sqrt(2 * best / N) > 0.01 * mean ? L / kb : null;
-  ctx.textAlign = 'right'; ctx.fillStyle = col.ink2;
-  ctx.fillText(profilePeriod ? `strongest period along the line: ${fmt(profilePeriod, 3)} µm` : '', f.right - 4, 9);
+  show('#profile-note', 'along the dashed line; drag on the image to move it' +
+    (profilePeriod ? ` · <b>strongest period along the line: ${fmt(profilePeriod, 3)} µm</b>` : ''));
 }
 
 // ------------------------------------------------------------------------------ readouts
@@ -637,6 +650,15 @@ function gratingOrderList() {
     out.push({ q, u: sx + q * m, v: sy, pass: Math.hypot(P.re[j * N + i], P.im[j * N + i]) > 1e-9 });
   }
   return out;
+}
+/** The diatom's pore lattice: its six first orders, 1/h from the zero order (h the row spacing). */
+function poreOrderList() {
+  if (state.preset !== 'diatom' || !P) return null;
+  const [sx, sy] = tiltPx(), G = L / ((state.spacing * Math.sqrt(3)) / 2), R = state.NA * kappa();
+  return [0, 1, 2, 3, 4, 5].map((k) => {
+    const a = (115 + 60 * k) * deg, u = sx + G * Math.cos(a), v = sy + G * Math.sin(a);
+    return { q: null, u, v, pass: Math.hypot(u, v) <= R };
+  });
 }
 function gratingOrders() {
   if (state.illum === 'incoherent') return null;
@@ -669,6 +691,7 @@ function readouts() {
   let fp;
   if (state.illum === 'incoherent') fp = `OTF reaches 2NA/λ = ${fmt((2 * state.NA) / state.lambda, 3)} cycles/µm`;
   else if (orders) fp = `orders through the pupil: ${orders.length ? orders.map(orderName).join(', ') : 'none'}`;
+  else if (state.preset === 'diatom') fp = `pore orders (rings) through the pupil: ${poreOrderList().filter((o) => o.pass).length} of 6`;
   else fp = `light through the pupil: ${fmt(100 * throughput(Ts, P, N), 3)}%`;
   fpNote = fp;
   if (!hover.fp) show('#fp-read', fp);
@@ -1083,6 +1106,7 @@ window.__app = {
   get partialDone() { return state.illum !== 'condenser' || partial.done; },
   get profilePeriod() { return profilePeriod; },
   orders: () => gratingOrders(),
+  poreOrders: () => poreOrderList().filter((o) => o.pass).length,
   timing,
   frameNow(what) { for (const w of what) if (w in dirty) dirty[w] = true; else need[w] = true; frame(); return { ...timing }; },
   set(values) {

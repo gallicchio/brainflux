@@ -60,3 +60,4 @@
   .side { grid-row: auto; display: flex; flex-direction: column; gap: 5px; }
   .bar h1 { font-size: 14px; }
 }
+#profile-note b { color: var(--ink-2); font-weight: 600; }
