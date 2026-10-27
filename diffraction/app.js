@@ -1,56 +1,64 @@
 // Diffraction: paint an aperture, move the screen.  Lengths in micrometres.
 
-import { propagate, sideView } from './optics.js';
-import { fft2Centered } from '../lib/fft.js';
+import { diffract, sideView, spectrumOf, sampleAperture, zoneCount, criticalDistance, pitchAt } from './optics.js';
 import { colorize } from '../lib/complexcolor.js';
 import { stroke as paintStroke, paint } from '../fft2d/tools.js';
 import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
 
 const N = 512;            // the grid
 const DX = 8;             // micrometres per pixel: the window is 4.096 mm across
-const SHOW = 256;         // the middle 256 pixels (2.05 mm) are drawn
+const SHOW = 256;         // the middle 256 pixels (2.05 mm) of the aperture are drawn, and the
+                          // middle half of the field's grid (which grows with z past z_c)
 const OFF = (N - SHOW) / 2;
+const ZMIN = 100, ZMAX = 1e7; // the screen's range, 0.1 mm to 10 m: at 10 m every aperture
+                          // here is in its far field (see the tests)
+const NZ = 96;            // rows of the side view
 
 const state = {
   z: 10000,               // screen distance, um
   lambda: 0.55,           // um
   white: false,
-  far: false,
   display: 'intensity',
   bright: 0,
   tool: 'open',
   brush: 6,
   preset: 'slit',
-  size: 200,              // the preset's characteristic size, um
+  size: 200,              // the preset's characteristic size, um (for the zone plate and the lens, f in mm)
 };
 
 const ap = { re: new Float64Array(N * N), im: new Float64Array(N * N) };
-const coord = (i) => (i - N / 2) * DX;
 
 // --------------------------------------------------------------------- presets
 
-// A soft-edged window so that apertures "open everywhere" (the disk, the edge) don't
-// diffract from the edges of the computing window.
-const window_ = (x, y) => {
-  const r = Math.max(Math.abs(x), Math.abs(y)), edge = (N / 2) * DX * 0.8;
-  return r < edge ? 1 : Math.max(0, Math.cos(((r - edge) / ((N / 2) * DX * 0.2)) * (Math.PI / 2)));
+// A soft-edged round beam, 3.3 mm across, for the apertures "open everywhere" (the edge, the
+// disk), so that they don't diffract from the edges of the computing window.
+const beam = (x, y) => {
+  const r = Math.hypot(x, y), R = (N / 2) * DX, edge = 0.8 * R;
+  return r < edge ? 1 : r < R ? Math.cos(((r - edge) / (R - edge)) * (Math.PI / 2)) : 0;
 };
 
+// A zone plate's rings go out to 0.8 mm, but none narrower than 2.5 pixels (see zoneCount):
+// with lambda = 550 nm, 17 zones at f = 50 mm.  A lens likewise bends light by at most
+// lambda / 4dx, the edge of the far-field view.  (f, lambda in um.)
+const zones = (f, lam) => zoneCount(f, lam, DX);
+const lensRadius = (f, lam) => Math.min(600, (lam * f) / (4 * DX));
+
+// f(x, y, size, lambda): the transmission, or with phase: true the phase (NaN where opaque).
 const PRESETS = {
   slit: { label: 'Slit', size: [20, 600, 200], f: (x, y, s) => +(Math.abs(x) < s / 2 && Math.abs(y) < 700) },
   double: { label: 'Two slits', size: [40, 800, 250], f: (x, y, s) => +((Math.abs(x - s / 2) < s / 8 || Math.abs(x + s / 2) < s / 8) && Math.abs(y) < 700) },
   hole: { label: 'Round hole', size: [20, 800, 300], f: (x, y, s) => +(x * x + y * y < (s / 2) ** 2) },
   square: { label: 'Square hole', size: [20, 800, 300], f: (x, y, s) => +(Math.abs(x) < s / 2 && Math.abs(y) < s / 2) },
-  edge: { label: 'Straight edge', size: [0, 0, 0], f: (x, y) => +(x > 0) * window_(x, y) },
-  disk: { label: 'Opaque disk', size: [100, 900, 500], f: (x, y, s) => +(x * x + y * y > (s / 2) ** 2) * window_(x, y) },
+  edge: { label: 'Straight edge', size: [0, 0, 0], f: (x, y) => +(x > 0) * beam(x, y) },
+  disk: { label: 'Opaque disk', size: [100, 900, 500], f: (x, y, s) => +(x * x + y * y > (s / 2) ** 2) * beam(x, y) },
   grating: { label: 'Grating', size: [16, 200, 48], f: (x, y, s) => (0.5 + 0.5 * Math.cos((2 * Math.PI * x) / s)) * +(Math.abs(x) < 750 && Math.abs(y) < 750) },
-  zone: { label: 'Zone plate', size: [10, 200, 50], fz: true, f: (x, y, s, lam) => { const n = (x * x + y * y) / (lam * s * 1000); return +(n < 24 && Math.floor(n) % 2 === 0); } },
-  lens: { label: 'Lens', size: [10, 200, 50], phase: true, f: (x, y, s, lam) => { const r2 = x * x + y * y; if (r2 > 600 * 600) return 0; const p = (-(2 * Math.PI) / lam) * r2 / (2 * s * 1000); return [Math.cos(p), Math.sin(p)]; } },
+  zone: { label: 'Zone plate', size: [10, 200, 50], fz: true, f: (x, y, s, lam) => { const n = (x * x + y * y) / (lam * s * 1000); return +(n < zones(s * 1000, lam) && Math.floor(n) % 2 === 0); } },
+  lens: { label: 'Lens', size: [10, 200, 50], fz: true, phase: true, f: (x, y, s, lam) => { const r2 = x * x + y * y; return r2 > lensRadius(s * 1000, lam) ** 2 ? NaN : (-(2 * Math.PI) / lam) * r2 / (2 * s * 1000); } },
   random: { label: 'Rough glass', size: [8, 80, 24], phase: true, f: (x, y, s) => {
-    if (x * x + y * y > 500 * 500) return 0;
+    if (x * x + y * y > 500 * 500) return NaN;
     const cx = Math.floor(x / s), cy = Math.floor(y / s);
-    let h = (cx * 73856093) ^ (cy * 19349663); h = (h ^ (h >>> 13)) * 1274126177; const p = ((h >>> 0) % 1000) / 1000 * 2 * Math.PI;
-    return [Math.cos(p), Math.sin(p)];
+    let h = (cx * 73856093) ^ (cy * 19349663); h = (h ^ (h >>> 13)) * 1274126177;
+    return ((h >>> 0) % 1000) / 1000 * 2 * Math.PI;
   } },
 };
 
@@ -58,19 +66,23 @@ function loadPreset(id, size) {
   const p = PRESETS[id];
   state.preset = id;
   if (size !== undefined) state.size = size;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const v = p.f(coord(i), -coord(j), state.size, state.lambda), o = j * N + i;
-    if (typeof v === 'number') { ap.re[o] = v; ap.im[o] = 0; } else { ap.re[o] = v[0]; ap.im[o] = v[1]; }
-  }
+  const [re, im] = sampleAperture(N, DX, (x, y) => p.f(x, y, state.size, state.lambda), { phase: !!p.phase });
+  ap.re.set(re); ap.im.set(im);
+  apertureChanged();
   for (const [k, b] of Object.entries(presetButtons)) b.setAttribute('aria-pressed', String(k === id));
   sizeSlider.hidden = !p.size[1];
   if (p.size[1]) { sizeSlider.setRange(p.size[0], p.size[1]); sizeSlider.value = state.size; sizeLabel(p); }
-  if (p.phase && state.display === 'intensity') { /* the aperture is drawn in colour anyway */ }
   update();
-  writeHash({ preset: id, size: state.size, z: Math.round(state.z) });
+  saveHash();
 }
 function sizeLabel(p) {
   sizeSlider.querySelector('label').textContent = p.fz ? 'focus f (mm)' : p.label === 'Grating' ? 'period (µm)' : p.label === 'Rough glass' ? 'grain (µm)' : 'size (µm)';
+}
+
+let hashTimer = 0;
+function saveHash() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => writeHash({ preset: state.preset, size: state.size, z: Math.round(state.z) }), 300);
 }
 
 // --------------------------------------------------------------------- computing
@@ -90,15 +102,25 @@ function wavelengthRGB(lam) {
   return [r * f, g * f, b * f];
 }
 
-let fields = [];      // per wavelength: {re, im, rgb}
-let sideData = null;  // per wavelength intensities for the side view
+let fields = [];      // per wavelength: {re, im, pitch, rgb, lam}
+let sideData = null;  // the side view: {z, rows: per wavelength {I, lam, rgb}}
+
+// The aperture's angular spectrum at each wavelength, kept while the aperture stays the same:
+// moving the screen then costs one transform per frame.
+let spectra = new Map();
+function apertureChanged() { spectra = new Map(); }
 
 function update() {
+  const old = spectra;
+  spectra = new Map();
   fields = wavelengths().map(([lam, rgb]) => {
-    const re = Float64Array.from(ap.re), im = Float64Array.from(ap.im);
-    if (state.far) fft2Centered(re, im, N, N);
-    else propagate(re, im, N, DX, lam, state.z);
-    return { re, im, rgb, lam };
+    let sp = old.get(lam);
+    if (!sp && state.z <= criticalDistance(N, DX, lam)) sp = spectrumOf(ap.re, ap.im, N);
+    if (sp) spectra.set(lam, sp);
+    // Without the curvature of the spherical wave: past z_c its phase turns faster than the
+    // pixels, and the intensity doesn't need it.
+    const f = diffract(ap.re, ap.im, N, DX, lam, state.z, { curvature: false, spectrum: sp });
+    return { ...f, rgb, lam };
   });
   drawAperture(); drawField(); updateNotes();
   scheduleSide();
@@ -108,11 +130,14 @@ let sideTimer = 0;
 function scheduleSide() {
   clearTimeout(sideTimer);
   sideTimer = setTimeout(() => {
-    const zs = Array.from({ length: 96 }, (_, a) => ((a + 0.5) / 96) * 2 * state.z);
-    sideData = wavelengths().map(([lam, rgb]) => ({ I: sideView(ap.re, ap.im, N, DX, lam, zs), rgb }));
+    const z = state.z, zs = Array.from({ length: NZ }, (_, a) => ((a + 0.5) / NZ) * 2 * z);
+    sideData = { z, rows: wavelengths().map(([lam, rgb]) => ({ I: sideView(ap.re, ap.im, N, DX, lam, zs), lam, rgb })) };
     drawSide();
   }, 120);
 }
+
+/** The screen's pixel at distance z: the field's pitch (in white light the blue's, the finest). */
+const screenPitch = (z = state.z) => pitchAt(N, DX, Math.min(...wavelengths().map(([lam]) => lam)), z);
 
 // --------------------------------------------------------------------- drawing
 
@@ -123,11 +148,12 @@ function canvasSize(cv) {
   return [w, h];
 }
 
-function blit(cv, img, m) {
+// smooth: interpolate between pixels (the field is band-limited: square pixels would be wrong).
+function blit(cv, img, m, smooth = false) {
   const [w, h] = canvasSize(cv), ctx = cv.getContext('2d');
   const c = document.createElement('canvas'); c.width = m; c.height = img.height;
   c.getContext('2d').putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = smooth;
   ctx.drawImage(c, 0, 0, w, h);
   return ctx;
 }
@@ -145,12 +171,20 @@ function drawAperture() {
   scaleBar(ctx, cv.width, cv.height, SHOW * DX);
 }
 
-function scaleBar(ctx, w, h, span) {
-  const dpr = window.devicePixelRatio || 1, len = 500, px = (len / span) * w;
+const round125 = (v) => { const e = 10 ** Math.floor(Math.log10(v)), m = v / e; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * e; };
+const fmtLen = (um) => (um < 100 ? `${fmt(um, 3)} µm` : `${fmt(um / 1000, 3)} mm`);
+
+// A scale bar about a quarter of the width: a round length; or, given the screen's distance z
+// once the screen spans a fixed range of angles (past z_c), a round angle and its length there.
+function scaleBar(ctx, w, h, span, z = 0) {
+  const dpr = window.devicePixelRatio || 1;
+  let len, text;
+  if (z) { const mrad = round125((span / z) * 250); len = (mrad / 1000) * z; text = `${mrad} mrad (${fmtLen(len)})`; }
+  else { len = round125(span / 4); text = fmtLen(len); }
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fillRect(10 * dpr, h - 14 * dpr, px, 3 * dpr);
+  ctx.fillRect(10 * dpr, h - 14 * dpr, (len / span) * w, 3 * dpr);
   ctx.font = `${11 * dpr}px system-ui, sans-serif`;
-  ctx.fillText(span > 50000 ? '' : '0.5 mm', 10 * dpr, h - 20 * dpr);
+  ctx.fillText(text, 10 * dpr, h - 20 * dpr);
 }
 
 /** Intensities of the fields over the drawn region, to a coloured image. */
@@ -167,61 +201,87 @@ function intensityImage(getI, m, rgbs, ref) {
   return img;
 }
 
-function drawField() {
-  const cv = $('#field');
-  // The far field: the middle of the transform; else the middle of the window.
-  const pick = (f, o) => { const j = Math.floor(o / SHOW) + OFF, i = (o % SHOW) + OFF; return [f.re[j * N + i], f.im[j * N + i]]; };
-  let ref = 0;
-  const Is = fields.map((f) => {
-    const I = new Float64Array(SHOW * SHOW);
-    for (let o = 0; o < SHOW * SHOW; o++) { const [a, b] = pick(f, o); I[o] = a * a + b * b; }
+/**
+ * The intensity of each field on the screen, SHOW x SHOW pixels of pitch P, the middle half of
+ * the finest field's grid.  The other wavelengths' grids are coarser (their pitch is
+ * lambda z / (n dx)): their intensities are interpolated.
+ */
+function screenIntensities(P) {
+  return fields.map((f) => {
+    const I = new Float64Array(SHOW * SHOW), r = P / f.pitch;
+    const at = (o) => f.re[o] * f.re[o] + f.im[o] * f.im[o];
+    for (let j = 0; j < SHOW; j++) {
+      const v = (j - SHOW / 2) * r + N / 2, j0 = Math.floor(v), fv = v - j0;
+      for (let i = 0; i < SHOW; i++) {
+        const u = (i - SHOW / 2) * r + N / 2, i0 = Math.floor(u), fu = u - i0, o = j0 * N + i0;
+        I[j * SHOW + i] = r === 1 ? at(o) : (1 - fv) * ((1 - fu) * at(o) + fu * at(o + 1)) + fv * ((1 - fu) * at(o + N) + fu * at(o + N + 1));
+      }
+    }
     return I;
   });
-  for (const I of Is) { const s = Float64Array.from(I).sort(); ref = Math.max(ref, s[Math.floor(0.995 * (s.length - 1))]); }
+}
+
+function percentile(I, from = 0) {
+  const s = Float64Array.from(I.subarray(from)).sort();
+  return s[Math.floor(0.995 * (s.length - 1))];
+}
+
+function drawField() {
+  const cv = $('#field'), P = screenPitch();
+  const Is = screenIntensities(P);
+  let ref = 0;
+  for (const I of Is) ref = Math.max(ref, percentile(I));
   ref = (ref || 1) * 10 ** -state.bright;
   let img;
   if (state.display === 'complex' && fields.length === 1) {
+    // One wavelength: the screen's pixels are the field's own.
     img = new ImageData(SHOW, SHOW);
-    const re = new Float64Array(SHOW * SHOW), im = new Float64Array(SHOW * SHOW);
-    for (let o = 0; o < SHOW * SHOW; o++) { const [a, b] = pick(fields[0], o); re[o] = a; im[o] = b; }
+    const re = new Float64Array(SHOW * SHOW), im = new Float64Array(SHOW * SHOW), f = fields[0];
+    for (let j = 0; j < SHOW; j++) for (let i = 0; i < SHOW; i++) { const o = (j + OFF) * N + i + OFF; re[j * SHOW + i] = f.re[o]; im[j * SHOW + i] = f.im[o]; }
     colorize(re, im, img.data, Math.sqrt(ref) * 0.5, 'complex');
   } else img = intensityImage((w, o) => Is[w][o], SHOW, fields.map((f) => f.rgb), ref);
-  const ctx = blit(cv, img, SHOW);
-  if (!state.far) scaleBar(ctx, cv.width, cv.height, SHOW * DX);
-  else {
-    // Angles: the transform's pixel is lambda / (N dx) radians.
-    const dpr = window.devicePixelRatio || 1, lam = fields[0].lam, step = (lam / (N * DX)) * 1000; // mrad per pixel
-    const mrad = 5, px = (mrad / step / SHOW) * cv.width;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillRect(10 * dpr, cv.height - 14 * dpr, px, 3 * dpr);
-    ctx.font = `${11 * dpr}px system-ui, sans-serif`;
-    ctx.fillText(`${mrad} mrad${state.white ? ' (green)' : ''}`, 10 * dpr, cv.height - 20 * dpr);
+  const ctx = blit(cv, img, SHOW, true);
+  scaleBar(ctx, cv.width, cv.height, SHOW * P, P > DX ? state.z : 0);
+}
+
+// One row of the side view on the screen's pixels (pitch P) from a row of the computed field
+// (pitch p, centred at N/2): interpolated where p is coarser, averaged where finer, and dark
+// outside the middle half of the row's grid, the angles the grid follows reliably.
+function resampleRow(I, off, p, P, out, outOff, gain) {
+  const half = N / 4, c = off + N / 2;
+  for (let i = 0; i < SHOW; i++) {
+    const x = (i - SHOW / 2) * P;
+    let v = 0;
+    if (P <= p) {
+      const u = x / p, u0 = Math.floor(u), fu = u - u0;
+      if (Math.abs(u) <= half) v = (1 - fu) * I[c + u0] + fu * I[c + u0 + 1];
+    } else {
+      const lo = Math.max(-half, Math.ceil((x - P / 2) / p)), hi = Math.min(half, Math.ceil((x + P / 2) / p) - 1);
+      for (let u = lo; u <= hi; u++) v += I[c + u];
+      if (hi >= lo) v /= hi - lo + 1;
+    }
+    out[outOff + i] = v * gain;
   }
 }
 
 function drawSide() {
   const cv = $('#side');
   if (!sideData) return;
-  const nz = 96, m = SHOW;
-  const img = new ImageData(m, nz), d = img.data;
+  const { z, rows } = sideData, P = screenPitch(z), m = SHOW, zs = Array.from({ length: NZ }, (_, a) => ((a + 0.5) / NZ) * 2 * z);
+  // Past z_c the light spreads over an area growing as z^2: each row is brightened by
+  // (pitch / dx)^2 to make up for it, so the far field's rays stay equally bright.
+  const Is = rows.map(({ I, lam }) => {
+    const out = new Float64Array(NZ * m);
+    zs.forEach((zz, a) => { const p = pitchAt(N, DX, lam, zz); resampleRow(I, a * N, p, P, out, a * m, (p / DX) ** 2); });
+    return out;
+  });
   let ref = 0;
-  for (const { I } of sideData) {
-    // Ignore the very first rows (the aperture itself) when choosing the brightness.
-    const s = Float64Array.from(I.subarray(N * 4)).sort();
-    ref = Math.max(ref, s[Math.floor(0.995 * (s.length - 1))]);
-  }
+  // Ignore the very first rows (the aperture itself) when choosing the brightness.
+  for (const I of Is) ref = Math.max(ref, percentile(I, m * 4));
   ref = (ref || 1) * 10 ** -state.bright;
-  for (let a = 0; a < nz; a++) for (let i = 0; i < m; i++) {
-    let r = 0, g = 0, b = 0;
-    for (const { I, rgb } of sideData) {
-      const v = Math.min(1, Math.sqrt(I[a * N + i + OFF] / ref));
-      r += rgb[0] * v; g += rgb[1] * v; b += rgb[2] * v;
-    }
-    const o = (a * m + i) * 4;
-    d[o] = 255 * Math.min(1, r); d[o + 1] = 255 * Math.min(1, g); d[o + 2] = 255 * Math.min(1, b); d[o + 3] = 255;
-  }
+  const img = intensityImage((w, o) => Is[w][o], m, rows.map((r) => r.rgb), ref);
   const [w, h] = canvasSize(cv), ctx = cv.getContext('2d');
-  const c = document.createElement('canvas'); c.width = m; c.height = nz;
+  const c = document.createElement('canvas'); c.width = m; c.height = NZ;
   c.getContext('2d').putImageData(img, 0, 0);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(c, 0, 0, w, h);
@@ -231,25 +291,36 @@ function drawSide() {
   ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = `${11 * dpr}px system-ui, sans-serif`;
   ctx.fillText('z = 0', 6 * dpr, 13 * dpr);
-  ctx.fillText(`z = ${fmtZ(state.z)} (the screen)`, 6 * dpr, h / 2 - 4 * dpr);
-  ctx.fillText(`${fmtZ(2 * state.z)}`, 6 * dpr, h - 5 * dpr);
+  ctx.fillText(`z = ${fmtZ(z)} (the screen)`, 6 * dpr, h / 2 - 4 * dpr);
+  ctx.fillText(`${fmtZ(2 * z)}`, 6 * dpr, h - 5 * dpr);
+  const zc = criticalDistance(N, DX, state.white ? 0.45 : state.lambda);
+  $('#side-note').textContent = 'the middle row of the screen, as z goes from 0 (top) to twice the screen\'s distance (bottom)' +
+    (2 * z > zc ? `; past ${fmtZ(zc)} brightened ∝ z², against the spreading` : '');
 }
 
-function fmtZ(z) { return z >= 1000 ? `${fmt(z / 1000, 3)} mm` : `${fmt(z, 3)} µm`; }
+function fmtZ(z) { return z >= 1e6 ? `${fmt(z / 1e6, 3)} m` : z >= 1000 ? `${fmt(z / 1000, 3)} mm` : `${fmt(z, 3)} µm`; }
 
 function updateNotes() {
-  $('#field-title').textContent = state.far ? 'Far field (Fraunhofer)' : 'Light at distance z';
-  $('#field-note').textContent = state.far ? 'the Fourier transform of the aperture; angles in milliradians' : `z = ${fmtZ(state.z)}`;
-  const p = PRESETS[state.preset] || { size: [0, 0, 0] };   // painted by hand: no one size
-  const a = p.size[1] ? (p.fz ? null : state.size / 2) : null;
-  const lam = state.white ? 0.55 : state.lambda;
+  const P = screenPitch(), span = SHOW * P, far = P > DX;
+  $('#field-note').textContent = `z = ${fmtZ(state.z)}` +
+    (far ? `: ${fmtLen(span)} across, ±${fmt((span / 2 / state.z) * 1000, 3)} mrad` : '') +
+    (state.z >= ZMAX ? ', the far field' : '');
+  const p = PRESETS[state.preset];   // undefined when painted by hand
+  const lam = state.white ? 0.55 : state.lambda, z = state.z;
   let text = '';
-  if (a) {
-    const NF = (a * a) / (lam * state.z);
+  if (p?.fz) {
+    const f = state.size * 1000;
+    if (state.preset === 'zone') {
+      const M = zones(f, lam), R = Math.sqrt(M * lam * f);
+      text = `Focus at f = ${fmt(state.size, 3)} mm (and f/3, f/5...): ${Math.ceil(M / 2)} open rings out to r = ${fmt(R / 1000, 2)} mm, the outermost ${fmt(R - Math.sqrt((M - 1) * lam * f), 2)} µm wide`;
+    } else text = `Focus at f = ${fmt(state.size, 3)} mm; the lens is ${fmt((2 * lensRadius(f, lam)) / 1000, 2)} mm across`;
+  } else if (state.preset === 'grating') text = `Talbot length 2d²/λ = ${fmtZ((2 * state.size * state.size) / lam)}`;
+  else if (state.preset === 'edge') text = `Fringes about √(λz) = ${fmtLen(Math.sqrt(lam * z))} apart`;
+  else if (p?.size[1] && !p.phase) {
+    const a = state.size / 2, NF = (a * a) / (lam * z);
     text = `Fresnel number a²/λz = ${fmt(NF, 3)} (a = ${fmt(a, 3)} µm): ${NF > 3 ? 'near field, a sharp shadow' : NF > 0.3 ? 'in between' : 'far field: the pattern is the Fourier transform'}`;
-  } else if (p.fz) text = `Focus at f = ${fmt(state.size, 3)} mm${state.preset === 'zone' ? ' (and f/3, f/5...)' : ''}`;
-  const spread = (lam / 30) * state.z;  // a 30 um feature's diffraction angle times z
-  if (!state.far && spread > (N * DX) / 3) text += ' · the light has spread past the window: try Far field';
+  }
+  if (far && state.display === 'complex' && !state.white) text += `${text ? '. ' : ''}The phase is shown relative to a spherical wave from the aperture`;
   $('#fresnel').textContent = text;
 }
 
@@ -270,6 +341,7 @@ apCanvas.addEventListener('pointerdown', (e) => {
   last = [i, j];
   state.preset = 'custom';
   for (const b of Object.values(presetButtons)) b.setAttribute('aria-pressed', 'false');
+  apertureChanged();
   requestUpdate();
 });
 apCanvas.addEventListener('pointermove', (e) => {
@@ -277,6 +349,7 @@ apCanvas.addEventListener('pointermove', (e) => {
   const [i, j] = apPixel(e);
   paintStroke(ap.re, ap.im, N, last[0], last[1], i, j, { shape: 'round', size: state.brush }, state.tool === 'open' ? 1 : 0, 0);
   last = [i, j];
+  apertureChanged();
   requestUpdate();
 });
 const stop = () => { painting = false; };
@@ -289,11 +362,12 @@ function requestUpdate() {
 
 // --------------------------------------------------------------------- controls
 
-const zSlider = slider({ label: 'z (mm)', min: 0.1, max: 3000, log: true, value: state.z / 1000, title: 'The distance from the aperture to the screen',
-  onInput: (v) => { state.z = v * 1000; if (state.far) { state.far = false; farToggle.on = false; } requestUpdate(); } });
+function setZ(z) { state.z = z; zSlider.value = z / 1000; requestUpdate(); saveHash(); }
+const zSlider = slider({ label: 'z (mm)', min: ZMIN / 1000, max: ZMAX / 1000, log: true, value: state.z / 1000, title: 'The distance from the aperture to the screen, 0.1 mm to 10 m',
+  onInput: (v) => setZ(v * 1000) });
 $('#z-box').append(zSlider);
-const farToggle = toggle('Far field', state.far, (on) => { state.far = on; requestUpdate(); }, 'Infinitely far: the Fraunhofer pattern, the Fourier transform of the aperture');
-$('#far-box').append(farToggle);
+$('#far-box').append(el('button', { type: 'button', onclick: () => setZ(ZMAX),
+  title: 'Move the screen to the end of the range, 10 m away, where the pattern is the Fraunhofer pattern (the Fourier transform of the aperture) to within about 1%' }, 'Far field'));
 
 const lambdaSlider = slider({ label: 'λ (nm)', min: 400, max: 700, step: 1, value: state.lambda * 1000,
   onInput: (v) => { state.lambda = v / 1000; if (PRESETS[state.preset]?.fz || PRESETS[state.preset]?.phase) loadPreset(state.preset); else requestUpdate(); } });
@@ -312,12 +386,12 @@ $('#preset-size').append(sizeSlider);
 const toolSeg = segmented([
   { value: 'open', label: 'Open', title: 'Paint light through' }, { value: 'close', label: 'Close', title: 'Paint darkness' },
 ], state.tool, (v) => { state.tool = v; }, { label: 'Tool' });
-$('#tool-box').append(toolSeg, el('button', { type: 'button', onclick: () => { ap.re.fill(0); ap.im.fill(0); state.preset = 'custom'; for (const b of Object.values(presetButtons)) b.setAttribute('aria-pressed', 'false'); update(); } }, 'Close all'));
+$('#tool-box').append(toolSeg, el('button', { type: 'button', onclick: () => { ap.re.fill(0); ap.im.fill(0); state.preset = 'custom'; for (const b of Object.values(presetButtons)) b.setAttribute('aria-pressed', 'false'); apertureChanged(); update(); } }, 'Close all'));
 $('#brush-box').append(slider({ label: 'brush', min: 1, max: 40, step: 1, value: state.brush, onInput: (v) => { state.brush = Math.round(v); } }));
 
 const displaySeg = segmented([
   { value: 'intensity', label: 'Intensity' }, { value: 'complex', label: 'Field (phase)' },
-], state.display, (v) => { state.display = v; drawField(); }, { label: 'Show' });
+], state.display, (v) => { state.display = v; drawField(); updateNotes(); }, { label: 'Show' });
 $('#show-box').append(displaySeg);
 $('#bright-box').append(slider({ label: 'Brightness', min: -2, max: 2, step: 0.01, value: 0, onInput: (v) => { state.bright = v; drawField(); drawSide(); } }));
 
@@ -325,10 +399,9 @@ window.addEventListener('resize', () => { drawAperture(); drawField(); drawSide(
 
 // --------------------------------------------------------------------- experiments
 
-function go(preset, { z = 10000, size, white = false, far = false, lambda = 0.55 } = {}) {
+function go(preset, { z = 10000, size, white = false, lambda = 0.55 } = {}) {
   state.z = z; zSlider.value = z / 1000;
   state.white = white; whiteToggle.on = white;
-  state.far = far; farToggle.on = far;
   state.lambda = lambda; lambdaSlider.value = lambda * 1000;
   loadPreset(preset, size ?? PRESETS[preset].size[2]);
 }
@@ -354,4 +427,4 @@ else {
   const id = PRESETS[hash.preset] ? hash.preset : 'slit';
   loadPreset(id, +hash.size > 0 ? +hash.size : PRESETS[id].size[2]);
 }
-window.__app = { state, setups, ap, get fields() { return fields; }, ready: true };
+window.__app = { state, setups, ap, ZMAX, DX, screenPitch, get fields() { return fields; }, get sideData() { return sideData; }, ready: true };
