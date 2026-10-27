@@ -202,14 +202,16 @@
 
   <article class="exp" data-setup="tomography">
     <h3>12. Tomography: shadows from every angle</h3>
-    <p>The blue curve is the shadow of $W$ on a line at angle $\theta$: the distribution of the
+    <p>The blue curve is the shadow of $W$ on the line at angle $\theta$: the distribution of the
     quadrature $X_\theta=x\cos\theta+(p/m\omega)\sin\theta$.  In an oscillator $W$ turns, so the
-    shadow at $\theta$ now is what $|\psi(x)|^2$ will be a time $\theta/\omega$ later.  Set
-    $\theta=45°$, note the shadow, and press <em>Play</em>: at $t=\pi/4=0.79$ the top strip has
-    that shape.  A homodyne detector measures $X_\theta$ for a light field, with $\theta$ set by
-    the phase of a reference laser.  Recording the shadows at all angles and inverting them (the
-    inverse Radon transform, as in a CT scan) gives $W$ itself: this is how the Wigner functions
-    of cat states of light have been measured.  (A demo of this tomography is planned.)</p>
+    shadow at angle $\theta$ is what $|\psi(x)|^2$ will be a time $\theta/\omega$ later.  Here
+    $\theta=45°$: note the shadow's shape, press <em>Play</em> and watch the top strip.  At
+    $t=\pi/4=0.79$ it has that shape (<em>Restart</em> to compare again).  Drag $\theta$ round:
+    every shadow is a probability distribution that can be measured.  A homodyne detector
+    measures $X_\theta$ for a light field, with $\theta$ set by the phase of a reference laser;
+    recording the shadows at all angles and inverting them (the inverse Radon transform, the
+    mathematics of a CT scan) gives $W$ itself.  This is how the Wigner functions of cat states
+    of light have been measured.</p>
   </article>
 
   <article class="exp" data-setup="typed">
@@ -228,9 +230,14 @@
   in the exponent, the momenta reach only $\pm\pi\hbar/2h$, half the usual range, so $\psi$ is
   first stripped of momenta beyond that (twice the window's), and then the sum is exact.  $Q$
   is a windowed Fourier transform, interpolated to the picture (to a few parts in a thousand of
-  its peak).  The classical
-  points move by the leapfrog method, which keeps phase-space area exactly and energy to a few
-  parts in a million.  The quadrature shadow integrates $W$ along lines across the window.</p>
+  its peak).  The stationary states come from the 1D demo's finite-difference eigenvalue solver;
+  their energies are good to $10^{-4}$ or better here.  Being the finite-difference states, not
+  quite those of the exact kinetic energy, they do change a little as they evolve: by
+  $10^{-4}$ to $3\times10^{-3}$ of their size by $t=10$.  The
+  classical points move by the leapfrog method, which keeps phase-space area exactly and energy
+  to a few parts in a million.  The quadrature shadow integrates $W$ along lines across the
+  window.  On a slow computer the picture of $W$ is computed on a coarser grid, to keep the page
+  responsive.</p>
 
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>

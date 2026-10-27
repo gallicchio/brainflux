@@ -745,11 +745,11 @@ let frameCount = 0;
 // On a slow device, a coarser grid for W: the work of a frame is kept under about 25 ms (so
 // the page still answers the pointer at 30 frames a second or more).  Checked once a second,
 // after the first two (while the JavaScript engine is still compiling, everything is slow).
-let quality = 1, workAvg = 0, lastAdapt = 0;
+let quality = 1, workAvg = 0, lastAdapt = 0, adaptive = true;
 const started = performance.now();
 function adapt(now, work) {
   workAvg = workAvg ? 0.9 * workAvg + 0.1 * work : work;
-  if (now - lastAdapt < 1000 || now - started < 2000) return;
+  if (!adaptive || now - lastAdapt < 1000 || now - started < 2000) return;
   lastAdapt = now;
   const q = workAvg > 25 ? Math.max(0.4, quality * 0.8) : workAvg < 12 ? Math.min(1, quality * 1.25) : quality;
   if (q !== quality) { quality = q; layout = null; }
@@ -862,16 +862,16 @@ quadSlider.hidden = !state.show.quadrature;
 $('#quad-box').append(quadSlider);
 
 // Numerics.
-const dotsSlider = slider({ label: 'points', min: 200, max: 10000, step: 100, log: true, value: state.dots, title: 'How many classical points', onInput: (v) => { state.dots = Math.round(v); sampleDots(); kick(); } });
+const dotsSlider = slider({ label: 'points', min: 200, max: 10000, step: 100, log: true, value: state.dots, title: 'How many classical points', onInput: (v) => { state.dots = Math.round(v); restartLive(); } });
 const scaleSeg = segmented([
   { value: 'fixed', label: 'Colours to ±1/πħ', title: 'Full colour at |W| = 1/πħ, the largest value W can take' },
   { value: 'auto', label: 'Auto', title: 'Full colour at the largest |W| shown' },
 ], state.scale, (v) => { state.scale = v; kick(); updateHash(); }, { label: 'Colour scale' });
-const zoomSlider = slider({ label: 'window', min: 0.4, max: 3, log: true, value: state.zoom, title: 'The size of the window of phase space, relative to the preset', onInput: (v) => { state.zoom = v; gridKey = ''; ensureGrid(); syncKindControls(); sampleDots(); kick(); updateHash(); } });
+const zoomSlider = slider({ label: 'window', min: 0.4, max: 3, log: true, value: state.zoom, title: 'The size of the window of phase space, relative to the preset', onInput: (v) => { state.zoom = v; restartLive(() => { computeLevels(sim.V); syncKindControls(); }); } });
 const proxySeg = segmented([
   { value: 'Q', label: 'Husimi Q', title: 'W smoothed by a coherent state: positive, keeps the shape, but adds about ħω/2 of energy' },
   { value: 'product', label: '|ψ|²|φ|²', title: 'x and p drawn independently from their own distributions: the right marginals and mean energy, but no correlation between x and p' },
-], state.proxy, (v) => { state.proxy = v; sampleDots(); kick(); updateHash(); }, { label: 'Where W is negative, draw the points from' });
+], state.proxy, (v) => { state.proxy = v; restart(); kick(); }, { label: 'Where W is negative, draw the points from' });
 const gridNote = el('div', { class: 'note' });
 $('#numerics-box').append(dotsSlider, el('div', { class: 'note' }, 'Where W < 0 the points come from:'), proxySeg, scaleSeg, zoomSlider, gridNote);
 function updateGridNote() {
@@ -1028,7 +1028,7 @@ const setups = {
   tunnel: () => go('double', { init: { kind: 'two', n: 0, m: 1 }, speed: 6, proxy: 'product' }),
   uncertainty: () => go('harmonic', { init: { kind: 'squeezed', x0: 0, p0: 0, r: 1.2, theta: 30 }, show: { dots: false }, speed: 0.5 }),
   husimi: () => go('harmonic', { init: { kind: 'cat', x0: 3, p0: 0, phi: 0 }, view: 'Q', show: { dots: false }, run: false }),
-  tomography: () => go('harmonic', { init: { kind: 'cat', x0: 3, p0: 0, phi: 0 }, show: { dots: false, quadrature: true }, quad: 0, speed: 0.5 }),
+  tomography: () => go('harmonic', { init: { kind: 'cat', x0: 3, p0: 0, phi: 0 }, show: { dots: false, quadrature: true }, quad: 45, speed: 0.25, run: false }),
   typed: () => go('harmonic', { init: { kind: 'typed', psi: TYPED_PSI, params: { a: 2 } }, show: { dots: false }, speed: 0.5 }),
 };
 drawer($('#help'), $('#help-button'), setups);
@@ -1096,5 +1096,6 @@ window.__app = {
   get sim() { return sim; }, get grid() { return grid; }, get ens() { return ens; }, get levels() { return levels; },
   get Wstats() { return Wstats; }, get dotsFrom() { return dotsFrom; }, get error() { return errorText; }, get table() { return table; }, get omegaRef() { return omegaRef; },
   computePhase, draw, frames: () => frameCount, frame: () => frame, get quality() { return quality; }, get work() { return workAvg; },
+  fixQuality(q) { adaptive = false; quality = q; layout = null; dirty = true; },
   ready: true,
 };

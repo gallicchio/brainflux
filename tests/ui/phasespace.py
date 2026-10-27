@@ -39,6 +39,8 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     print(f'note  {fps:.0f} frames per second in headless Chromium (software rendering); the page works {work:.1f} ms a frame (W grid at {quality:.2f} of full resolution)')
     b.screenshot('build/ps-start.png')
 
+    # The physics checks below at full resolution, whatever the load on this machine.
+    b.eval('__app.fixQuality(1)')
     names = b.eval('Object.keys(__app.setups)')
     check(len(names) >= 8, f'{len(names)} experiments')
     for name in names:
@@ -142,6 +144,36 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     i = b.eval(INFO)
     check(abs(st['x0'] + 2) < 0.1 and abs(st['p0'] - 1.5) < 0.1 and abs(i['E'] - (4 + 2.25 + 1) / 2) < 0.15,
           f"dragging moves the coherent state to ({st['x0']:.2f}, {st['p0']:.2f}), <E> = {i['E']:.3f}")
+
+    # The arrow keys move it too.
+    b.eval('document.getElementById("plot").focus()')
+    x0 = b.eval('__app.state.init.x0')
+    b.key('ArrowRight', 'ArrowRight'); b.sleep(0.3)
+    check(b.eval('__app.state.init.x0') > x0 + 0.1, f"the right arrow key moves the state ({x0:.2f} -> {b.eval('__app.state.init.x0'):.2f})")
+    # Hovering reads W off the plot.
+    hx, hy = b.point('#plot', (0.5, 0.55))
+    b.mouse('mouseMoved', hx, hy); b.sleep(0.3)
+    hov = b.eval('document.getElementById("hover").textContent')
+    check('W =' in hov and '/πħ' in hov, f'hovering shows W: "{hov}"')
+
+    # Typed wave functions, the help's examples.
+    b.eval('__app.setups.typed()'); b.eval('__app.state.running = false')
+    for src, w00 in [('exp(-x^2/2) (1 + x)', None), ('exp(-(x-2)^2) + exp(-(x+2)^2)', 1), ('exp(-x^2/2) cos(k x)', 1), ('x exp(-x^2/2)', -1)]:
+        b.eval(f'(() => {{ const i = document.querySelector("#state-box .expr input"); i.value = {json.dumps(src)}; i.dispatchEvent(new Event("change")); }})()')
+        b.sleep(0.4)
+        b.eval('__app.restart()')
+        i = b.eval(INFO)
+        ok = not b.eval('__app.error') and abs(i['norm'] - 1) < 1e-9 and (w00 is None or abs(i['W00'] - w00) < 1e-3)
+        check(ok, f"typed psi0 = {src}: normalised, pi W(0,0) = {i['W00']:.4f}" + ('' if w00 is None else f' (the parity, {w00:+d})'))
+
+    # A wider window: more levels fit, and the points start again with the state.
+    b.eval('__app.setups.number()'); b.sleep(0.3)
+    before = b.eval('[__app.levels.length, __app.grid.x1]')
+    b.eval('''(() => { const box = [...document.querySelectorAll("#numerics-box .slider")].find((d) => d.textContent.includes("window")).querySelector("input[type=number]");
+      box.value = 2; box.dispatchEvent(new Event("change")); })()''')
+    b.sleep(0.6)
+    after = b.eval('[__app.levels.length, __app.grid.x1, __app.ens.N, __app.state.zoom]')
+    check(after[0] > before[0] and after[1] > 1.5 * before[1] and after[2] > 0, f'zooming out: {before[0]} -> {after[0]} levels in the window, x up to {before[1]:.1f} -> {after[1]:.1f}, {after[2]} points')
 
     # A link carries the set-up.
     b.eval("__app.go('morse', { init: { kind: 'squeezed', x0: 1, p0: 1, r: 0.4, theta: 20 }, view: 'Q', show: { dots: false, quadrature: true }, quad: 45, run: false })")
