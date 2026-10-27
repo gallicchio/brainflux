@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive the dispersion demo: every experiment, the handles, drawing for Kramers-Kronig, pulses,
 the address, speed, and a phone-sized screen."""
-import json, math, os, sys
+import json, math, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
 
@@ -12,6 +12,30 @@ def check(cond, msg):
 
 def run(b, name, wait=0.8):
     b.eval(f'__app.setups[{json.dumps(name)}]()'); b.sleep(wait)
+
+# The words of a read-out with its numbers taken out: it may move when these change, not when
+# only the numbers do.
+def phrase(text):
+    return re.sub(r'[−+-]?\d[\d.]*(?:e[−+-]?\d+)?', '#', text)
+
+def keeps_still(b, sel, steps, settle=0.25):
+    """Run steps (callables that change the numbers shown) and compare the boxes of the elements
+    matching sel, after every step, with those first seen with the same words.  Returns (the
+    largest shift in px, the steps compared, the distinct texts seen)."""
+    texts = f"[...document.querySelectorAll({json.dumps(sel)})].map((e) => e.textContent).join(' | ')"
+    t0 = b.eval(texts)
+    first = {phrase(t0): b.rects(sel)}
+    worst, compared, seen = 0.0, 0, {t0}
+    for step in steps:
+        step(); b.sleep(settle)
+        r, t = b.rects(sel), b.eval(texts)
+        seen.add(t)
+        r0 = first.setdefault(phrase(t), r)
+        if r0 is r or len(r) != len(r0):
+            continue
+        compared += 1
+        worst = max([worst] + [abs(x - y) for a, c in zip(r0, r) for x, y in zip(a, c)])
+    return worst, compared, seen
 
 with Browser('dispersion/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1.5)
@@ -29,8 +53,33 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
         run(b, name, 1.2)
         b.screenshot(f'build/dsp-exp-{name}.png')
         text = b.eval("document.querySelector('#readout').textContent")
-        if 'NaN' in text or 'Infinity' in text or 'undefined' in text: bad.append(f'{name}: {text[:120]}')
+        slots = b.eval("[...document.querySelectorAll('#readout .fixnum')].map((e) => e.textContent)")
+        if 'NaN' in text or 'Infinity' in text or 'undefined' in text or any(t in ('–', '∞', '−∞') for t in slots): bad.append(f'{name}: {text[:120]}')
     check(not bad, 'every experiment\'s read-out is made of numbers' + ('' if not bad else ': ' + ' | '.join(bad)))
+
+    # ---- the read-out keeps still: while the pulse travels, the pointer reads off the medium, or the
+    # time axis is refitted, every line, number and the words after them keep their places (as long
+    # as the words stay the same); Play and Pause leave the button beside them where it was.
+    RO = '#readout > div, #readout .fixnum'
+    def hover(fx):
+        def go():
+            x, y, w, h = b.box('#resp'); b.mouse('mouseMoved', x + fx * w, y + 0.5 * h)
+        return go
+    for name, steps in (('delay', [lambda: b.sleep(0.35)] * 10),
+                        ('precursors', [lambda: b.sleep(0.35)] * 8),
+                        ('one', [hover(f) for f in (0.12, 0.3, 0.47, 0.5, 0.53, 0.7, 0.93)]),
+                        ('glass', [hover(f) for f in (0.08, 0.15, 0.4, 0.75, 0.97)]),
+                        ('superluminal', [lambda: b.sleep(0.35)] * 6 + [hover(f) for f in (0.2, 0.45, 0.5, 0.8)])):
+        run(b, name, 1.0)
+        b.eval("__app.state.playing = true; document.querySelector('#play').textContent = 'Pause'")
+        worst, compared, seen = keeps_still(b, RO, steps)
+        check(worst <= 0.5 and compared >= len(steps) - 4 and len(seen) >= len(steps) // 2,
+              f'{name}: the read-out keeps still while its numbers change (largest shift {worst:.1f} px over {compared} of {len(steps)} changes, {len(seen)} different readings)')
+    b.mouse('mouseMoved', 2, 2)
+    run(b, 'delay', 0.6)
+    fit0 = b.box('#fit'); b.click('#play'); b.sleep(0.2); fit1 = b.box('#fit'); b.click('#play'); b.sleep(0.2); fit2 = b.box('#fit')
+    check(max(abs(a - c) for a, c in zip(fit0, fit1)) <= 0.5 and max(abs(a - c) for a, c in zip(fit0, fit2)) <= 0.5,
+          f'Play and Pause leave the "Fit time axis" button in its place ({fit0[0]:.1f}, {fit1[0]:.1f}, {fit2[0]:.1f})')
 
     # ---- the handles: drag a line sideways (strength kept), up (stronger), its width (area kept)
     run(b, 'sumrule')

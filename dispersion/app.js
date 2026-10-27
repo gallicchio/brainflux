@@ -7,8 +7,8 @@ import {
   FreqGrid, kkImToRe, kkReToIm, impulseResponse, sampleOnGrid, sumRuleOscillators, sumRuleGrid, strength,
 } from './medium.js';
 import { incident, planGrid, Propagator, peakTime, moments, maxBefore, causalEnvelope } from './pulse.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, fixedNum, setSlots } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, fillSlots } from '../lib/plot.js';
 import { texToMathML } from '../lib/mathml.js';
 
 // ------------------------------------------------------------------ units and media
@@ -154,8 +154,8 @@ function legend(ctx, f, items, x = f.left + 8, y = f.top + 6) {
     ctx.strokeStyle = it.color; ctx.lineWidth = it.width || 2.2; ctx.setLineDash(it.dash || []);
     ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x + 16, y + 6); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = colors.ink2; ctx.fillText(it.label, x + 21, y + 6);
-    x += 30 + ctx.measureText(it.label).width;
+    ctx.fillStyle = colors.ink2;
+    x += 30 + (Array.isArray(it.label) ? fillSlots(ctx, it.label, x + 21, y + 6) : (ctx.fillText(it.label, x + 21, y + 6), ctx.measureText(it.label).width));
   }
   ctx.restore();
 }
@@ -833,7 +833,8 @@ function drawPulse() {
   vline(ctx, f, at(-tc), colors.accent, [2, 3], 'z/c');
   if (at(-tc) < f.x0) {
     ctx.save(); ctx.fillStyle = colors.accent; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(`← light through vacuum arrived ${fmt(tc * tS, 3)}${U().tu ? ' ' + U().tu : ''} earlier`, f.left + 4, f.top + 20); ctx.restore();
+    const { dec, w } = timeSlot();
+    fillSlots(ctx, ['← light through vacuum arrived ', { v: tc * tS, dec, w }, `${U().tu ? ' ' + U().tu : ''} earlier`], f.left + 4, f.top + 20); ctx.restore();
   }
   if (Number.isFinite(ms.predicted) && z > 0 && sh !== 'step') vline(ctx, f, at(ms.predicted), colors.ng, [6, 3], 'z/v_g', 'bottom');
   if (sh === 'step' && z > 0) {
@@ -844,7 +845,7 @@ function drawPulse() {
   }
   ctx.restore();
   f.axes({ xlabel: state.pulse.frame === 'group' ? `${U().t} − z/v_g (moving with the pulse)` : `${U().t} − z/c (after light through vacuum would arrive)`, colors, yTicks: log, ylabel: log ? 'log₁₀ |E|' : '' });
-  const items = [{ label: log ? 'log₁₀ |E| in the medium' : 'E in the medium' + (scale !== 1 ? `  (×${fmt(scale)})` : ''), color: colors.ink, width: 1.5 },
+  const items = [{ label: log ? 'log₁₀ |E| in the medium' : scale !== 1 ? ['E in the medium  (×', { text: fmt(scale), w: 6 }, ')'] : 'E in the medium', color: colors.ink, width: 1.5 },
     { label: 'the same pulse in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
   legend(ctx, f, items, f.left + 4, 2);
   if (absorbed && z > 0) {
@@ -910,69 +911,102 @@ function fitView() {
 
 // ---------------------------------------------------------------------- read-outs
 
+// Every number in a slot of its own, a fixed number of characters wide, with decimals fixed for
+// the quantity (from the scale of the medium, the distance or the time axis), so that the words
+// keep their places, and the lines their breaks, while the numbers change: only a change of words
+// moves anything.  (The widths stay the same when a scale changes and the decimals with it.)
+/** Decimals for about sig figures in numbers up to scale, in a slot w characters wide. */
+function slotFor(scale, sig, w) {
+  const ints = Math.max(1, Math.floor(Math.log10(Math.max(scale, 1e-12))) + 1);
+  return { dec: Math.max(0, Math.min(5, sig - ints)), w };
+}
+const timeSlot = () => { const v = state.pulse.view; return slotFor(Math.max(Math.abs(v[0]), Math.abs(v[1])) * U().tS, 4, 6); };
+const zSlot = () => slotFor(state.pulse.zmax * U().zS, 4, 6);
+/** Frequencies to about four figures over the plotted range (three decimals from 1 to 100). */
+const wSlot = () => { const W = state.wmax; return { dec: W < 1 ? 4 : W < 100 ? 3 : W < 1000 ? 2 : 1, w: 6 }; };
+/** The sum rule's numbers, (π/2) ω_p², scale as the square of the range. */
+const sumSlot = () => slotFor(state.wmax ** 2, 5, 7);
+const sub = (t) => ({ html: `<sub>${t}</sub>` });
+const num = (v, dec, w, extra = {}) => ({ v, dec, w, ...extra });
+const bold = (p) => ({ ...p, class: 'b' });
+
 function readout() {
-  const box = $('#readout'), u = U(), parts = [];
-  const zz = (z) => `${fmt(z * u.zS, 4)}${u.zu ? ' ' + u.zu : ''}`, tt = (t) => `${fmt(t * u.tS, 3)}${u.tu ? ' ' + u.tu : ''}`;
+  const box = $('#readout'), u = U(), lines = [];
+  const zz = (z) => [bold(num(z * u.zS, zSlot().dec, zSlot().w)), u.zu ? ' ' + u.zu : ''];
+  const tt = (t) => [bold(num(t * u.tS, timeSlot().dec, timeSlot().w)), u.tu ? ' ' + u.tu : ''];
+  const ws = wSlot();
   if (state.view === 'medium' || (state.view === 'pulse' && state.probe !== null)) {
     if (state.probe !== null) {
       const w = state.probe, o = optics(resp, Float64Array.of(Math.max(w, 1e-9))), ng = ngAt(w);
-      const absorb = o.k[0] > 1e-12 ? ` · absorption length c/(2κω) = ${lengthStr(1 / (2 * o.k[0] * Math.max(w, 1e-9)))}` : '';
-      parts.push(`At ${u.w.split(' ')[0]} = <b>${fmt(w, 4)}</b>: ε = ${fmt(o.er[0], 4)} ${o.ei[0] < 0 ? '−' : '+'} ${fmt(Math.abs(o.ei[0]), 3)}i · ñ = ${fmt(o.n[0], 4)} ${o.k[0] < 0 ? '−' : '+'} ${fmt(Math.abs(o.k[0]), 3)}i · R = ${fmt(o.R[0], 3)} · n<sub>g</sub> = ${fmt(ng, 4)}${absorb}`);
-    } else parts.push('<span class="muted">Tap or point at the plot to read off ε, ñ, R and n<sub>g</sub> at one frequency.</span>');
+      const sign = (v) => ({ text: v < 0 ? '−' : '+', w: 1 });
+      const line = [`At ${u.w.split(' ')[0]} = `, bold(num(w, ws.dec, ws.w)), ': ε = ', num(o.er[0], 3, 7), ' ', sign(o.ei[0]), ' ', num(Math.abs(o.ei[0]), 3, 6), 'i · ñ = ',
+        num(o.n[0], 4, 6), ' ', sign(o.k[0]), ' ', num(Math.abs(o.k[0]), 3, 6), 'i · R = ', num(o.R[0], 3, 5), ' · n', sub('g'), ' = ', num(ng, 3, 7)];
+      if (o.k[0] > 1e-12) line.push(' · absorption length c/(2κω) = ', ...lengthParts(1 / (2 * o.k[0] * Math.max(w, 1e-9))));
+      lines.push(line);
+    } else lines.push({ cls: 'muted', parts: ['Tap or point at the plot to read off ε, ñ, R and n', sub('g'), ' at one frequency.'] });
   }
   if (state.view === 'medium') {
-    const sr = sumRule(), lines = media().lines && state.units === MEDIA[state.medium].units ? media().lines : [];
-    let s = `Sum rule: ∫<sub>0</sub><sup>∞</sup> ω ε″ dω = <b>${fmt(sr.integral, 4)}</b> = (π/2) × ${fmt(sr.integral / (Math.PI / 2), 4)}`;
-    if (sr.wp2 !== null) s += `, and Σ ω<sub>pj</sub>² = ${fmt(sr.wp2, 4)}`;
+    const sr = sumRule(), media_ = media(), lns = media_.lines && state.units === MEDIA[state.medium].units ? media_.lines : [];
+    const S = sumSlot();
+    const line = ['Sum rule: ∫', sub('0'), { html: '<sup>∞</sup>' }, ' ω ε″ dω = ', bold(num(sr.integral, S.dec, S.w)), ' = (π/2) × ', num(sr.integral / (Math.PI / 2), S.dec, S.w)];
+    if (sr.wp2 !== null) line.push(', and Σ ω', sub('pj'), { html: '<sup>2</sup>' }, ' = ', num(sr.wp2, S.dec, S.w));
     const zeros = epsZeros();
-    if (zeros.length) s += ` · ε′ = 0 going up at ${zeros.map((w) => fmt(w, 4)).join(', ')}`;
-    parts.push(s);
-    if (lines.length) {
-      const o = optics(resp, Float64Array.from(lines, (l) => l[0]));
-      parts.push(lines.map((l, i) => `n(${l[1]}) = <b>${o.n[i].toFixed(4)}</b>`).join(' · '));
+    if (zeros.length) line.push(' · ε′ = 0 going up at ', ...zeros.flatMap((w, i) => [...(i ? [', '] : []), num(w, ws.dec, ws.w)]));
+    lines.push(line);
+    if (lns.length) {
+      const o = optics(resp, Float64Array.from(lns, (l) => l[0]));
+      lines.push(lns.flatMap((l, i) => [...(i ? [' · '] : []), `n(${l[1]}) = `, bold(num(o.n[i], 4, 7))]));
     }
   }
   if (state.view === 'kk') {
     const a = cache.acausal || { before: 0, after: 1 }, frac = a.after > 0 ? a.before / a.after : 0;
     const causal = frac < 0.01;
-    parts.push(`χ(t) before the kick: largest |χ| is <b>${frac < 1e-3 ? frac.toExponential(1) : (frac * 100).toFixed(1) + '%'}</b> of that after it: ` +
-      (causal ? 'causal.' : '<span class="warn">not causal: the medium responds before it is kicked.</span>'));
-    const sr = sumRule();
-    parts.push(`Sum rule: ∫<sub>0</sub><sup>∞</sup> ω Im χ dω = (π/2) × ${fmt(sr.integral / (Math.PI / 2), 4)}, so ω<sub>p</sub>² = ${fmt(sr.integral / (Math.PI / 2), 4)} · the medium is ${state.source === 'drawn' ? 'drawn by hand' : state.source === 'typed' ? 'typed' : 'the oscillators'}`);
+    const shown = frac < 1e-3 ? frac.toExponential(1).replace('e-', 'e−').replace('e+', 'e') : `${(frac * 100).toFixed(1)}%`;
+    lines.push(['χ(t) before the kick: largest |χ| is ', bold({ text: shown, w: 6 }), ' of that after it: ',
+      causal ? 'causal.' : { html: '<span class="warn">not causal: the medium responds before it is kicked.</span>' }]);
+    const sr = sumRule(), S = sumSlot();
+    lines.push(['Sum rule: ∫', sub('0'), { html: '<sup>∞</sup>' }, ' ω Im χ dω = (π/2) × ', num(sr.integral / (Math.PI / 2), S.dec, S.w), ', so ω', sub('p'), { html: '<sup>2</sup>' }, ' = ',
+      num(sr.integral / (Math.PI / 2), S.dec, S.w), ` · the medium is ${state.source === 'drawn' ? 'drawn by hand' : state.source === 'typed' ? 'typed' : 'the oscillators'}`]);
     // Lines narrower than the grid cannot survive being drawn on.
     const dw = kkGrid().dw, thin = state.source === 'osc' ? state.oscs.filter((o) => o.w0 > 0 && o.wp > 0 && o.g < 2 * dw) : [];
-    if (thin.length) parts.push(`<span class="warn">${thin.length === 1 ? 'A line is' : 'Some lines are'} narrower than the grid (γ < 2Δω = ${fmt(2 * dw, 2)}): drawing would lose ${thin.length === 1 ? 'it' : 'them'}.</span>`);
+    if (thin.length) lines.push({ cls: 'warn', parts: [`${thin.length === 1 ? 'A line is' : 'Some lines are'} narrower than the grid (γ < 2Δω = `, num(2 * dw, 3, 6, { tiny: true }), `): drawing would lose ${thin.length === 1 ? 'it' : 'them'}.`] });
   }
   if (state.view === 'pulse' && lastPulse) {
     const L = lastPulse, sh = state.pulse.shape;
-    let s = `z = <b>${zz(L.z)}</b> · n<sub>g</sub>(ω₀) = ${fmt(L.ng, 4)}`;
-    if (L.absorbed && L.z > 0) s += ' · <span class="warn">the pulse is absorbed</span>';
+    const line = ['z = ', ...zz(L.z), ' · n', sub('g'), '(ω₀) = ', num(L.ng, 4, 7)];
+    if (L.absorbed && L.z > 0) line.push(' · ', { html: '<span class="warn">the pulse is absorbed</span>' });
     else if (sh !== 'step') {
-      s += ` · after z/c, the group velocity predicts the peak at z(n<sub>g</sub> − 1)/c = <b>${tt(L.predictedVac)}</b>; it arrives at <b>${tt(L.peakVac)}</b>,` +
-        ` ${fmt(L.height, 3)} as high as in vacuum, with ${fmt(L.energy * 100, 3)}% of the energy, ${fmt(L.stretch, 3)} times as long (r.m.s.)`;
+      line.push(' · after z/c, the group velocity predicts the peak at z(n', sub('g'), ' − 1)/c = ', ...tt(L.predictedVac), '; it arrives at ', ...tt(L.peakVac), ', ',
+        num(L.height, 3, 6, { tiny: true }), ' as high as in vacuum, with ', num(L.energy * 100, 1, 5, { tiny: true }), '% of the energy, ', num(L.stretch, 2, 5), ' times as long (r.m.s.)');
     } else {
-      s += ` · after z/c: the Sommerfeld precursor at once, the Brillouin precursor near n(0)z/c, <b>${tt(lastPulse.brillouin ?? 0)}</b>`;
+      line.push(' · after z/c: the Sommerfeld precursor at once, the Brillouin precursor near n(0)z/c, ', ...tt(lastPulse.brillouin ?? 0));
       // (In so dense a medium the carrier sets in before the group delay: Brillouin's signal velocity is not v_g.)
-      if (L.ng > 1) s += `; the group delay at the carrier would be z(n<sub>g</sub> − 1)/c = <b>${tt(L.predictedVac)}</b>`;
+      if (L.ng > 1) line.push('; the group delay at the carrier would be z(n', sub('g'), ' − 1)/c = ', ...tt(L.predictedVac));
     }
-    parts.push(s);
-    if (sh !== 'gauss') parts.push(`Largest field before the front arrives (t < ${sh === 'front' ? 't_f + ' : ''}z/c): <b>${L.before > 0 ? L.before.toExponential(1) : '0'}</b> of the peak.`);
-    else {
+    lines.push(line);
+    if (sh !== 'gauss') {
+      const before = L.before > 0 ? L.before.toExponential(1).replace('e-', 'e−').replace('e+', 'e') : '0';
+      lines.push([`Largest field before the front arrives (t < ${sh === 'front' ? 't_f + ' : ''}z/c): `, bold({ text: before, w: 7 }), ' of the peak.']);
+    } else {
       const o = optics(resp, Float64Array.of(state.pulse.w0));
-      if (o.k[0] > 0.5 * o.n[0] && o.k[0] > 0.05) parts.push(`<span class="warn">At the carrier κ = ${fmt(o.k[0], 3)} and n = ${fmt(o.n[0], 3)}: the wave hardly propagates (it is evanescent or strongly absorbed), and the group velocity means nothing here.</span>`);
-      else if (L.z > 0 && L.ng < 1) parts.push(`<span class="warn">n<sub>g</sub> ${L.ng < 0 ? '&lt; 0' : '&lt; 1'}: the group velocity c/n<sub>g</sub> is ${L.ng < 0 ? 'negative' : 'faster than c'}.</span>`);
+      if (o.k[0] > 0.5 * o.n[0] && o.k[0] > 0.05) lines.push({ cls: 'warn', parts: ['At the carrier κ = ', num(o.k[0], 3, 7), ' and n = ', num(o.n[0], 3, 7), ': the wave hardly propagates (it is evanescent or strongly absorbed), and the group velocity means nothing here.'] });
+      else if (L.z > 0 && L.ng < 1) lines.push({ cls: 'warn', parts: ['n', sub('g'), ` ${L.ng < 0 ? '< 0' : '< 1'}: the group velocity c/n`, sub('g'), ` is ${L.ng < 0 ? 'negative' : 'faster than c'}.`] });
     }
   }
-  box.innerHTML = parts.join('<br>');
+  // One line of its own for each; a line's words and slots are made again only when they change.
+  const all = lines.map((l) => (Array.isArray(l) ? { cls: '', parts: l } : l));
+  if (box.children.length !== all.length) box.replaceChildren(...all.map(() => el('div')));
+  all.forEach((l, i) => { const d = box.children[i]; if (d.className !== l.cls) d.className = l.cls; setSlots(d, l.parts); });
 }
 
-/** A distance in simulation units, with a sensible SI prefix when the medium has real units. */
-function lengthStr(z) {
+/** A distance in simulation units, with a sensible SI prefix when the medium has real units: parts
+ *  for setSlots, the number in a slot of fixed width. */
+function lengthParts(z) {
   const metres = { eV: 1.97327e-7, MHz: 47.7135, THz: 4.77135e-5 }[state.units];
-  if (!metres) return fmt(z, 3);
+  if (!metres) return [num(z, 2, 7, { tiny: true })];
   const m = z * metres;
-  for (const [f, u] of [[1e3, 'km'], [1, 'm'], [1e-3, 'mm'], [1e-6, 'μm'], [1e-9, 'nm']]) if (m >= f || u === 'nm') return `${fmt(m / f, 3)} ${u}`;
-  return `${fmt(m, 3)} m`;
+  for (const [f, u] of [[1e3, 'km'], [1, 'm'], [1e-3, 'mm'], [1e-6, 'μm'], [1e-9, 'nm']]) if (m >= f || u === 'nm') return [num(m / f, 2, 6, { tiny: true }), ` ${u}`];
+  return [num(m, 2, 6), ' m'];
 }
 
 function sumRule() {
