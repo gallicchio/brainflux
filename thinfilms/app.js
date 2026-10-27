@@ -32,8 +32,11 @@ const state = {
 const H_START = 1500;          // a fresh film's thickness at the bottom of the frame
 
 const nLayers = () => state.layers.length;
+let lastLayer = 0;             // the layer selected last: the white-light picture varies it
 const medium = (i) => (i < 0 ? state.inc : i >= nLayers() ? state.sub : state.layers[i]);
 const isLayer = (i) => i >= 0 && i < nLayers();
+/** The layer whose thickness the white-light picture varies (-1 if there are none). */
+function filmJ() { return isLayer(state.sel) ? state.sel : isLayer(lastLayer) ? lastLayer : nLayers() ? 0 : -1; }
 
 // ------------------------------------------------------------------------ materials
 
@@ -220,7 +223,7 @@ function stackXYZ() {
 
 /** Film rows: XYZ of R and T for the selected layer at each of the thicknesses hs. */
 function filmXYZ(hs) {
-  const cm = meter(5), nms = cm.nms, j = state.sel, rows = hs.length;
+  const cm = meter(5), nms = cm.nms, j = filmJ(), rows = hs.length;
   const XR = new Float64Array(rows * 3), XT = new Float64Array(rows * 3);
   const R = new Float64Array(rows), T = new Float64Array(rows), tab = stackTable(nms), s = Math.sin(state.theta * DEG);
   for (let i = 0; i < nms.length; i++) {
@@ -246,11 +249,12 @@ function filmXYZ(hs) {
 // changes.
 let exposureKey = '', exposure = { R: 1, T: 1 };
 function updateExposure() {
-  const key = JSON.stringify([state.inc, state.sub, state.layers.map((m, j) => (j === state.sel ? m.mat : m)), state.sel, state.theta, state.illum, state.film.profile, state.film.dmax]);
+  const fj = filmJ();
+  const key = JSON.stringify([state.inc, state.sub, state.layers.map((m, j) => (j === fj ? m.mat : m)), fj, state.theta, state.illum, state.film.profile, state.film.dmax]);
   if (key === exposureKey) return;
   exposureKey = key;
   let YR = 0, YT = 0;
-  if (isLayer(state.sel)) {
+  if (isLayer(fj)) {
     const top = state.film.profile === 'wedge' ? Math.max(state.film.dmax, 50) : H_START;
     const hs = Float64Array.from({ length: 121 }, (_, i) => (top * i) / 120);
     const { XR, XT } = filmXYZ(hs);
@@ -283,7 +287,8 @@ function compute() {
   const stackKey = JSON.stringify([state.inc, state.layers, state.sub]);
   // The stack without the selected layer's thickness: what the film picture and the plot against
   // thickness depend on.
-  const selFree = JSON.stringify([state.inc, state.layers.map((m, j) => (j === state.sel ? { ...m, d: 0 } : m)), state.sub, state.sel]);
+  const free = (k) => JSON.stringify([state.inc, state.layers.map((m, j) => (j === k ? { ...m, d: 0 } : m)), state.sub, k]);
+  const selFree = free(state.sel), filmFree = free(filmJ());
   const mSpec = clamp(Math.round((comp.specWidth || 600) * 1.25), 200, 1400), mAng = clamp(Math.round(comp.angWidth || 600), 150, 900);
   comp.spec = T('spec', () => cached('spec', JSON.stringify([stackKey, state.theta, state.lrange, mSpec]), () => computeSpectrum(mSpec)));
   comp.x2kind = state.x2 === 'thickness' && isLayer(state.sel) ? 'thickness' : 'angle';
@@ -295,8 +300,8 @@ function compute() {
   if (state.show.film) {
     T('exposure', updateExposure);
     const rows = 180, f = state.film;
-    comp.film = T('film', () => cached('film', JSON.stringify([selFree, state.theta, state.illum, f.profile, f.hBottom, f.dmax, rows]), () => {
-      if (!isLayer(state.sel)) return null;
+    comp.film = T('film', () => cached('film', JSON.stringify([filmFree, state.theta, state.illum, f.profile, f.hBottom, f.dmax, rows]), () => {
+      if (!isLayer(filmJ())) return null;
       const hs = Float64Array.from({ length: rows }, (_, k) => filmThickness((k + 0.5) / rows));
       return { hs, ...filmXYZ(hs) };
     }));
@@ -683,6 +688,7 @@ function drawPlots() {
     frames.ang = drawCurves($('#ang'), comp.x2, { x0: 0, x1: 90, xlabel: 'angle of incidence (°)', marker: state.theta, markerText: `${fmt(state.theta, 3)}°`, kind: 'angle' });
   }
   $('#x2-title').textContent = comp.x2kind === 'thickness' ? 'Against thickness' : 'Against angle';
+  x2Seg.value = comp.x2kind;
   $('#spec-note').textContent = state.theta ? `at ${fmt(state.theta, 3)}°` : 'at normal incidence';
 }
 
@@ -735,13 +741,13 @@ function drawFilm() {
     ctx.beginPath(); ctx.moveTo(fx + fw + 2, py); ctx.lineTo(fx + fw + 6, py); ctx.stroke();
     ctx.fillText(String(t), fx + fw + 8, py);
   }
-  ctx.fillText('nm', fx + fw + 8, fy + fh + 8);
+  ctx.fillText('nm', fx + fw + 8, fy - 7);
   if (state.film.profile === 'drain') {
     const yb = (25 / state.film.hBottom) ** 2;
     if (yb * fh > 14) { ctx.fillStyle = '#999'; ctx.textAlign = 'center'; ctx.fillText('black film', fx + fw / 2, fy + Math.min(yb * fh / 2, fh / 2)); }
   }
   // The probe: where the selected layer's present thickness is.
-  const d = state.layers[state.sel].d, y = filmHeightOf(d);
+  const d = state.layers[filmJ()].d, y = filmHeightOf(d);
   if (y !== null) {
     const py = fy + y * fh;
     ctx.strokeStyle = view === 'T' ? '#000' : '#fff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
@@ -825,18 +831,19 @@ function readouts() {
 
 let raf = 0, lastT = 0, needCompute = true, blackSince = 0;
 function kick(recompute = true) { if (recompute) needCompute = true; if (!raf) raf = requestAnimationFrame(frame); }
-function animating() { return state.fieldMode === 'wave' || (state.show.film && state.film.profile === 'drain' && state.film.running && isLayer(state.sel)); }
+function draining() { return state.show.film && state.film.profile === 'drain' && state.film.running && filmJ() >= 0; }
+function animating() { return state.fieldMode === 'wave' || draining(); }
 
 function frame(now) {
   raf = 0;
   const dt = lastT ? Math.min(0.1, (now - lastT) / 1000) : 0;
   lastT = now;
-  if (state.show.film && state.film.profile === 'drain' && state.film.running && isLayer(state.sel)) {
+  if (draining()) {
     // The film thins (steadily in log thickness), turns black, and a new film is drawn.
     if (state.film.hBottom > 25) { state.film.hBottom *= Math.exp(-dt / 9); blackSince = 0; }
     else if ((blackSince += dt) > 2) state.film.hBottom = H_START;
     hbSlider.value = state.film.hBottom;
-    state.layers[state.sel].d = drainingThickness(state.film.probe, state.film.hBottom);
+    state.layers[filmJ()].d = drainingThickness(state.film.probe, state.film.hBottom);
     syncThickness();
     needCompute = true;
   }
@@ -917,7 +924,7 @@ $('#thick-box').append(thickSlider);
 function setThickness(j, d, { fromFilm = false } = {}) {
   if (!isLayer(j)) return;
   state.layers[j].d = d;
-  if (!fromFilm) pauseDrain();
+  if (!fromFilm && j === filmJ()) pauseDrain();
   designLive = false;
   syncThickness();
   kick();
@@ -961,6 +968,7 @@ function deleteLayer() {
 
 function selectMedium(i) {
   state.sel = clamp(i, -1, nLayers());
+  if (isLayer(state.sel)) lastLayer = state.sel;
   refreshEditor();
   if (state.x2 === 'thickness') fitThicknessRange();
   kick();
@@ -970,7 +978,7 @@ $('#sel-next').addEventListener('click', () => selectMedium(state.sel + 1));
 
 function refreshEditor() {
   const i = state.sel, m = medium(i), L = nLayers();
-  $('#sel-what').textContent = i < 0 ? 'The light comes through' : i >= L ? 'The substrate' : `Layer ${i + 1} of ${L}`;
+  $('#sel-what').textContent = i < 0 ? 'Incident medium' : i >= L ? 'Substrate' : `Layer ${i + 1} of ${L}`;
   $('#sel-prev').disabled = i <= -1; $('#sel-next').disabled = i >= L;
   // The incident medium must be transparent: no metals there.
   for (const o of matSelect.options) o.disabled = i < 0 && MATERIALS[o.value]?.kind === 'metal';
@@ -1087,8 +1095,8 @@ function syncFilmControls() {
 }
 // Where the probe sits for the selected layer's present thickness.
 function syncProbe() {
-  if (!isLayer(state.sel)) return;
-  const y = filmHeightOf(state.layers[state.sel].d);
+  if (filmJ() < 0) return;
+  const y = filmHeightOf(state.layers[filmJ()].d);
   if (y !== null) state.film.probe = y;
 }
 
@@ -1147,6 +1155,19 @@ const endStackDrag = () => { if (dragging >= 0) { dragging = -1; zFrozen = null;
 stackCanvas.addEventListener('pointerup', endStackDrag);
 stackCanvas.addEventListener('pointercancel', endStackDrag);
 stackCanvas.addEventListener('pointerleave', () => { if (hoverHandle >= 0 && dragging < 0) { hoverHandle = -1; kick(false); } });
+// Keys on the drawing: left and right change the selected layer's thickness (1 nm, 10 with
+// shift), up and down select the previous and next layer.
+stackCanvas.addEventListener('keydown', (e) => {
+  const step = e.shiftKey ? 10 : 1;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (!isLayer(state.sel)) return;
+    e.preventDefault();
+    setThickness(state.sel, Math.max(0, Math.round(state.layers[state.sel].d) + (e.key === 'ArrowRight' ? step : -step)));
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectMedium(state.sel + (e.key === 'ArrowDown' ? 1 : -1));
+  }
+});
 
 function plotPointer(cv, key) {
   const set = (e) => {
@@ -1168,10 +1189,10 @@ plotPointer($('#ang'), 'ang');
 const filmCanvas = $('#film');
 function filmPointer(e) {
   const g = frames.film;
-  if (!g || !isLayer(state.sel)) return;
+  if (!g || filmJ() < 0) return;
   const r = filmCanvas.getBoundingClientRect(), y = clamp((e.clientY - r.top - g.fy) / g.fh, 0, 1);
   state.film.probe = y;
-  setThickness(state.sel, +filmThickness(y).toFixed(1), { fromFilm: true });
+  setThickness(filmJ(), +filmThickness(y).toFixed(1), { fromFilm: true });
 }
 filmCanvas.addEventListener('pointerdown', (e) => { filmDrag = true; filmCanvas.setPointerCapture(e.pointerId); filmPointer(e); });
 filmCanvas.addEventListener('pointermove', (e) => { if (filmDrag) filmPointer(e); });
@@ -1198,6 +1219,7 @@ function apply(o) {
   state.film = { profile: 'wedge', hBottom: H_START, running: false, probe: 0.3, dmax: 1000, view: 'R', bright: 1, ...(o.film || {}) };
   state.illum = 'd65';
   state.sel = o.sel ?? (nLayers() ? 0 : nLayers());
+  lastLayer = o.filmLayer ?? (isLayer(state.sel) ? state.sel : 0);
   designLive = false;
   $('#design-panel').open = !!o.design;
   if (o.design) {
@@ -1213,7 +1235,7 @@ function apply(o) {
   if (o.dmaxPlot) state.dmaxPlot = o.dmaxPlot; else fitThicknessRange();
   syncAll();
   setFilmShown(o.filmShown ?? false);
-  if (state.film.running && isLayer(state.sel)) state.layers[state.sel].d = drainingThickness(state.film.probe, state.film.hBottom);
+  if (state.film.running && filmJ() >= 0) state.layers[filmJ()].d = drainingThickness(state.film.probe, state.film.hBottom);
   refreshEditor();
   exposureKey = '';
   kick();

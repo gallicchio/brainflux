@@ -138,6 +138,45 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     d = b.eval('__app.state.layers[0].d')
     check(500 < d < 700, f'clicking half-way down the oil wedge (0 to 1200 nm) gives {d} nm')
 
+    # The numbers the help text quotes.
+    def readout(): return b.eval("document.getElementById('readouts').innerText").replace('\n', '  ')
+    setup(b, 'tir')
+    phases = []
+    for th in (47.7, 55.3):
+        typed_number(b, '#light-box .slider:nth-child(2) input[type=number]', th); b.sleep(0.25)
+        phases.append(readout().split('phase s − p ')[1].split('°')[0])
+    typed_number(b, '#light-box .slider:nth-child(2) input[type=number]', 45); b.sleep(0.25)
+    check(phases == ['45.0', '45.0'] and '224 nm' in readout(), f'help, TIR: s-p phase {phases} at 47.7 and 55.3 deg; decay 224 nm at 45 deg')
+    setup(b, 'oil'); typed_number(b, '#thick-box input[type=number]', 0.5); b.sleep(0.3)
+    check(readout().startswith('R 2.06%'), 'help, oil: the thinnest oil reflects 2.1% (' + readout()[:8] + ')')
+    setup(b, 'bragg'); Rs = []
+    for N in (1, 2, 3, 5):
+        typed_number(b, '#design-sliders .slider:nth-child(2) input[type=number]', N); b.sleep(0.25)
+        Rs.append(readout().split('  ')[0])
+    check(Rs == ['R 76.8%', 'R 92.3%', 'R 97.6%', 'R 99.8%'], f'help, Bragg mirror: {Rs}')
+    b.eval("(() => { const s = document.getElementById('design-H'); s.value = 'bk7'; s.dispatchEvent(new Event('change')); })()"); b.sleep(0.3)
+    check(round(point(b)['Rs'] * 100) == 15, f"help, Bragg mirror with BK7 for H: R = {point(b)['Rs']:.3f}")
+    setup(b, 'filter'); widths = []
+    peak = b.eval('Math.max(...__app.comp.field.E2)')
+    for N in (3, 4, 5):
+        typed_number(b, '#design-sliders .slider:nth-child(2) input[type=number]', N); b.sleep(0.3)
+        widths.append(round(b.eval('__app.comp.finesse.fwhm'), 2))
+    check(widths == [3.75, 1.12, 0.34] and round(peak) == 74, f'help, filter: widths {widths} nm, field {peak:.1f} times')
+    setup(b, 'etalon'); F1 = b.eval('__app.comp.finesse')
+    for j in (0, 2):
+        b.eval(f'__app.selectMedium({j})'); typed_number(b, '#thick-box input[type=number]', 55); b.sleep(0.2)
+    b.sleep(0.3); F2 = b.eval('__app.comp.finesse')
+    check(round(F1['F']) == 19 and round(F2['F']) == 35 and round(F1['Tmax'] * 100) == 41 and round(F2['Tmax'] * 100) == 16 and round(F1['spacing']) == 73,
+          f"help, etalon: finesse {F1['F']:.1f} -> {F2['F']:.1f}, peaks {F1['Tmax']:.3f} -> {F2['Tmax']:.3f}, spacing {F1['spacing']:.1f}")
+    setup(b, 'silver'); Rsil = {}
+    for lam in (320, 450, 600):
+        typed_number(b, '#light-box .slider:nth-child(1) input[type=number]', lam); b.sleep(0.2)
+        Rsil[lam] = round(point(b)['Rs'] * 100)
+    typed_number(b, '#light-box .slider:nth-child(1) input[type=number]', 550); b.sleep(0.3)
+    m = b.eval('__app.comp.rpMin')
+    check(Rsil == {320: 12, 450: 92, 600: 96} and round(m['R'] * 100) == 91 and round(m['theta']) == 71,
+          f'help, silver: R {Rsil} %, R_p least {m and round(m["R"] * 100)}% at {m and round(m["theta"], 1)} deg (550 nm)')
+
     # The computing time of one update while dragging a thickness, the wavelength or the angle
     # (each part is kept until something it depends on changes).  Drawing comes on top; this
     # headless browser draws without a GPU, so its frame rate says little about a laptop's.
