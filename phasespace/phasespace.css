@@ -1,0 +1,49 @@
+.ps {
+  display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px;
+  padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 6px; min-width: 0; position: sticky; top: 56px; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.plot-wrap canvas { width: 100%; height: 100%; }
+.main-wrap { height: max(380px, calc(100vh - 150px)); }
+#plot { cursor: crosshair; }
+#plot.dragging { cursor: grabbing; }
+#plot:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.readouts {
+  display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--ink-2); min-height: 1.5em;
+  padding: 2px 4px;
+}
+.readouts b { color: var(--ink); font-weight: 600; }
+.readouts .neg b { color: #2166ac; }
+.readouts .slow { color: var(--ink-3); }
+
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; color: var(--ink-2); padding: 0 4px; min-height: 1.6em; }
+.legend .cbar { display: inline-flex; align-items: center; gap: 6px; }
+.legend canvas { width: 120px; height: 12px; border-radius: 2px; }
+#hover { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-3); }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+.seg.kinds { display: grid; grid-template-columns: repeat(3, 1fr); }
+.seg.kinds > button { margin: 0 0 -1px -1px; border-radius: 0; font-size: 13px; padding: 3px 4px; }
+.seg.kinds > button:first-child { border-radius: 6px 0 0 0; }
+.seg.kinds > button:nth-child(3) { border-radius: 0 6px 0 0; }
+.seg.kinds > button:nth-child(4) { border-radius: 0 0 0 6px; }
+.seg.kinds > button:last-child { border-radius: 0 0 6px 0; }
+#shows button { font-size: 13px; padding: 3px 8px; }
+details.panel summary { cursor: pointer; }
+details.panel[open] summary { margin-bottom: 6px; }
+.note { font-size: 12px; color: var(--ink-3); }
+
+@media (prefers-color-scheme: dark) {
+  .readouts .neg b { color: #78c8ff; }
+}
+
+@media (max-width: 900px) {
+  .ps { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  .stage { position: static; }
+  .main-wrap { height: auto; aspect-ratio: 1 / 1.08; max-height: 80vh; }
+}
