@@ -70,6 +70,9 @@ test('setSlots: numbers in fixed slots; the words and slots stay put as the numb
     eq(box.children[1].textContent, '0.0');
     setSlots(box, ['y = ', { text: 'n/a', w: 4 }]);
     eq(box.textContent, 'y = n/a');
+    box.textContent = '';                     // the content replaced from outside: built again
+    setSlots(box, ['y = ', { text: 'n/a', w: 4 }]);
+    eq(box.textContent, 'y = n/a');
     assert(numSlot(5).style.width === '5.5ch' && numSlot(5).classList.contains('fixnum'), 'numSlot: a fixnum 5.5ch wide');
   } finally { box.remove(); css.remove(); }
 });
