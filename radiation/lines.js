@@ -82,6 +82,7 @@ export function traceCurve(dir, x0, y0, opts, out) {
   return n;
 }
 const SCRATCH = new Float64Array(2);
+let BUF = new Float64Array(6000);
 
 /**
  * The field lines of the charge at time t, in the plane z = 0.
@@ -97,7 +98,7 @@ export function fieldLines(lw, t, part, count, box, opts = {}) {
   traj.at(t, true);
   const qx = traj.wx, qy = traj.wy, vx = traj.vx, vy = traj.vy;
   const [x0, x1, y0, y1] = box;
-  const hmax = opts.hmax ?? 0.8, tol = opts.tol ?? 2e-3;
+  const hmax = opts.hmax ?? 2, tol = opts.tol ?? 2e-3;
   const diag = Math.hypot(x1 - x0, y1 - y0);
   const maxLength = opts.maxLength ?? 3 * diag, maxPoints = opts.maxPoints ?? 3000;
   const eps = opts.start ?? 0.02;
@@ -115,22 +116,25 @@ export function fieldLines(lw, t, part, count, box, opts = {}) {
     out[0] = ex / m; out[1] = ey / m;
     return true;
   };
-  // A step of length s moves the retarded time by up to s/(cκ).  If the charge accelerated at
-  // all in that span of its history, keep steps short enough to see how fast it changed, so
-  // that no step jumps over a thin shell of radiation.
+  // A step of length s moves the retarded time by up to s/(cκ), κ ≥ 1 − β.  So that no step
+  // jumps over a thin shell of radiation: a step may reach the nearest moment the charge was
+  // accelerating, but no further; and where it was, steps stay short enough to follow how fast
+  // its acceleration changed.
   const limit = () => {
-    if (velocityOnly || !traj.activity) return Infinity;
+    if (velocityOnly || !traj.quietFor) return Infinity;
     const b = Math.hypot(lw.bx, lw.by), kmin = Math.max(1 - b, 1 - BETA_MAX) * 0.5;
-    const span = hmax / (c * kmin);
-    const [amax, jmax] = traj.activity(lw.tr - span, lw.tr + span);
-    if (amax <= aQuiet) return Infinity;
+    const gap = traj.quietFor(lw.tr, hmax / (c * kmin), aQuiet);
+    if (gap === Infinity) return Infinity;
+    const w = gap + 32 * h, act = traj.activity(lw.tr - w, lw.tr + w), amax = act[0], jmax = act[1];
     const tau = Math.max(2 * h, jmax > 0 ? (h * amax) / jmax : Infinity);
-    return Math.max(0.01, 0.5 * c * Math.max(lw.kappa, 1 - BETA_MAX) * tau);
+    const safe = Math.max(0.01, 0.5 * c * Math.max(lw.kappa, 1 - BETA_MAX) * tau);
+    return Math.max(safe, c * kmin * gap);
   };
   const margin = 0.05 * diag;
   const keep = (x, y) => x > x0 - margin && x < x1 + margin && y > y0 - margin && y < y1 + margin;
   const lines = [];
-  const buf = new Float64Array(2 * maxPoints);
+  if (BUF.length < 2 * maxPoints) BUF = new Float64Array(2 * maxPoints);
+  const buf = BUF;
   for (let k = 0; k < count; k++) {
     const th0 = (opts.angle0 ?? 0) + (2 * Math.PI * (k + 0.5)) / count;
     const [dx, dy] = seedDirection(th0, vx, vy, c);

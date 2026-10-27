@@ -121,6 +121,25 @@ export class Trajectory {
     ACT[0] = amax; ACT[1] = jmax;
     return ACT;
   }
+
+  /** How far (in time) from t to the nearest block of samples, within [t − span, t + span],
+   *  where |a| (as |ax| + |ay|) exceeds aQuiet: 0 inside one, Infinity if there is none. */
+  quietFor(t, span, aQuiet) {
+    const h = this.h, kS = this.kStart, kE = this.n - 1, nb = this.nb;
+    const b0 = Math.floor((t - this.t0) / h / BLOCK);
+    const bS = Math.floor(kS / BLOCK), bE = Math.floor(kE / BLOCK), reach = Math.ceil(span / (h * BLOCK)) + 1;
+    for (let d = 0; d <= reach; d++) {
+      for (let side = d ? -1 : 1; side <= 1; side += 2) {
+        const b = b0 + side * d;
+        if (b < bS || b > bE || this.blkA[b % nb] <= aQuiet) continue;
+        if (d === 0) return 0;
+        // The gap from t to the near edge of block b.
+        const edge = b < b0 ? this.t0 + (b + 1) * BLOCK * h : this.t0 + b * BLOCK * h;
+        return Math.max(0, Math.abs(edge - t) - h);
+      }
+    }
+    return Infinity;
+  }
 }
 
 const BLOCK = 16;
@@ -153,55 +172,63 @@ export class LW {
     this.path = path;
     this.c = c;
     this.tol = 1e-13;     // relative tolerance on the retarded time
+    this.atol = 0;        // and an absolute one (seconds), for pictures that need less
     this.iterations = 0;  // Newton iterations of the last solve (for the tests)
     this.tr = 0;
+    this.last = 0;        // the time at which the path was last evaluated
   }
 
   /**
    * The retarded time: the unique t_r < t with |r − w(t_r)| = c (t − t_r).  The function
-   * g(t_r) = c (t − t_r) − |r − w(t_r)| falls monotonically (g' = −c(1 − n·β) < 0), so Newton's
-   * method, kept inside a shrinking bracket, always converges; `guess` (a neighbour's t_r)
-   * makes it take two or three steps.
+   * g(t_r) = c (t − t_r) − |r − w(t_r)| falls monotonically, with a slope between −c(1 + β) and
+   * −c(1 − β), β ≤ BETA_MAX, so every evaluation brackets the root, and Newton's method kept
+   * inside the bracket always converges; `guess` (a neighbour's t_r) makes it take two or three
+   * steps.  The path is left evaluated (with its acceleration) at this.last, within the
+   * tolerance of the returned time.
    */
   retarded(x, y, z, t, guess = NaN) {
     const P = this.path, c = this.c;
-    P.at(t, false);
-    let dx = x - P.wx, dy = y - P.wy;
-    const D = Math.sqrt(dx * dx + dy * dy + z * z);
-    // |w(t) − w(t_r)| ≤ β c (t − t_r) puts the root in [t − D/(c(1 − β)), t], β ≤ BETA_MAX
-    // (with a little room).
     const b = BETA_MAX + 0.005, sFast = c * (1 + b), sSlow = c * (1 - b);
-    let lo = t - D / sSlow - 1e-12, hi = t;
-    let tr = guess > lo && guess < hi ? guess : t - D / c;
-    const tol = this.tol * (1 + Math.abs(t));
-    let it = 0;
+    let tr = guess;
+    if (!(guess < t)) {
+      // No guess: the time light from the present position would take.
+      P.at(t, false);
+      const dx = x - P.wx, dy = y - P.wy;
+      tr = t - Math.sqrt(dx * dx + dy * dy + z * z) / c;
+    }
+    let lo = -Infinity, hi = t, step = 0, it = 0;
+    const tol = Math.max(this.tol * (1 + Math.abs(t)), this.atol);
     for (; it < 60; it++) {
-      P.at(tr, false);
-      dx = x - P.wx; dy = y - P.wy;
+      P.at(tr, true);
+      this.last = tr;
+      const dx = x - P.wx, dy = y - P.wy;
       const R = Math.sqrt(dx * dx + dy * dy + z * z), g = c * (t - tr) - R;
-      // The slope of g lies between −c(1 + β) and −c(1 − β): that brackets the root.
       if (g > 0) { lo = Math.max(lo, tr + g / sFast); hi = Math.min(hi, tr + g / sSlow); }
       else { hi = Math.min(hi, tr + g / sFast); lo = Math.max(lo, tr + g / sSlow); }
       const gp = R > 0 ? -c + (dx * P.vx + dy * P.vy) / R : -c;
-      const step = -g / gp;
-      if (Math.abs(step) <= tol) { tr += step; break; }
+      step = -g / gp;
+      if (Math.abs(step) <= tol) break;
       let next = tr + step;
       if (!(next >= lo && next <= hi)) next = 0.5 * (lo + hi);
-      tr = next;
+      step = next - tr;
       if (hi - lo <= tol) break;
+      tr = next;
     }
     this.iterations = it + 1;
-    return tr;
+    return tr + step;
   }
 
   /** The fields at (x, y, z) at time t; see the class comment for what is set. */
   field(x, y, z, t, guess = NaN) {
     const tr = this.retarded(x, y, z, t, guess);
     const P = this.path, c = this.c;
-    P.at(tr, true);
-    const dx = x - P.wx, dy = y - P.wy, R = Math.sqrt(dx * dx + dy * dy + z * z);
+    // The path was evaluated at this.last, a hair's breadth from tr: carry it on by Taylor.
+    const s = tr - this.last, ax = P.ax, ay = P.ay;
+    const vx = P.vx + ax * s, vy = P.vy + ay * s;
+    const wx = P.wx + (P.vx + 0.5 * ax * s) * s, wy = P.wy + (P.vy + 0.5 * ay * s) * s;
+    const dx = x - wx, dy = y - wy, R = Math.sqrt(dx * dx + dy * dy + z * z);
     const nx = dx / R, ny = dy / R, nz = z / R;
-    const bx = P.vx / c, by = P.vy / c, ax = P.ax, ay = P.ay;
+    const bx = vx / c, by = vy / c;
     const kappa = 1 - nx * bx - ny * by, k3 = kappa * kappa * kappa;
     const ux = nx - bx, uy = ny - by, uz = nz;
     const fv = (1 - bx * bx - by * by) / (k3 * R * R);
@@ -211,7 +238,7 @@ export class LW {
     this.eax = (ux * na - ax * kappa) * fa; this.eay = (uy * na - ay * kappa) * fa; this.eaz = uz * na * fa;
     this.ex = this.evx + this.eax; this.ey = this.evy + this.eay; this.ez = this.evz + this.eaz;
     this.tr = tr; this.R = R; this.nx = nx; this.ny = ny; this.nz = nz; this.kappa = kappa;
-    this.px = P.wx; this.py = P.wy; this.bx = bx; this.by = by; this.ax = ax; this.ay = ay;
+    this.px = wx; this.py = wy; this.bx = bx; this.by = by; this.ax = ax; this.ay = ay;
     return this;
   }
 
