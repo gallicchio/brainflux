@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Least Action · BrainFlux</title>
-<meta name="description" content="Draw a path between two events and watch its action; find the path nature takes.">
+<meta name="description" content="Draw a path between two events, in place and in time, and watch its action: nature takes the path where it is stationary.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../lib/style.css">
 <link rel="stylesheet" href="action.css">
@@ -20,7 +20,7 @@
 <main class="act">
   <section class="plots">
     <div class="readout" id="readout" aria-live="polite"></div>
-    <div class="plot-wrap path-wrap"><canvas id="path" tabindex="0" aria-label="The path: drag its knots up and down"></canvas></div>
+    <div class="plot-wrap path-wrap"><canvas id="path" tabindex="0" aria-label="The path.  Drag a knot up or down to change where the path goes, sideways to change when it gets there.  Keyboard: [ and ] choose a knot, the arrow keys move it."></canvas></div>
     <div class="row3">
       <div class="plot-wrap small-wrap"><canvas id="history" aria-label="The action of every path you have drawn, newest on the right"></canvas><canvas id="phasor" width="64" height="64" aria-label="The phasor exp(iS/ħ)"></canvas></div>
       <div class="plot-wrap small-wrap" id="phase-wrap"><canvas id="phase" aria-label="The path in phase space, over the energy contours"></canvas></div>
@@ -39,12 +39,15 @@
     </div>
     <div class="panel">
       <div class="label">The path you draw</div>
-      <div class="row">
-        <button type="button" id="roll" aria-pressed="false" title="Let every knot slide downhill in the action, steepest first">Roll downhill</button>
-        <button type="button" id="straight" title="Back to a straight line between the end points">Straight line</button>
+      <div id="howto" class="small muted"></div>
+      <div class="button-grid">
+        <button type="button" id="roll" aria-pressed="false" title="Let every knot slide downhill in the action, up or down and in time, steepest first">Roll downhill</button>
+        <button type="button" id="reset" title="Put the path back on the true path, where every experiment starts">Back to true path</button>
+        <button type="button" id="bend" title="Bend the whole path by half a sine wave (a whole one for a loop).  Shift-click bends it the other way.">Bend it</button>
+        <button type="button" id="straight" title="A straight line between the end points: constant speed">Straight line</button>
       </div>
       <div id="knot-box"></div>
-      <div id="mode-box"></div>
+      <div id="mode-box" class="stack"></div>
     </div>
     <div class="panel">
       <div class="label">Show</div>
@@ -64,123 +67,179 @@
   changes $S$ only at second order.  The condition is the Euler-Lagrange equation
   $\frac{d}{dt}\frac{\partial L}{\partial\dot x}=\frac{\partial L}{\partial x}$, which for $L=\tfrac12
   m\dot x^2-V$ is Newton's $m\ddot x=-V'(x)$.</p>
-  <p>Drag the knots (anywhere above or below one works; the end points move too, except where the brachistochrone's bead starts from rest) and watch $S$.
-  Every change is added to the chart at the bottom left, so you can see yourself going
-  downhill.</p>
+  <p><strong>Drawing a path.</strong>  The path runs through <em>knots</em>, and each knot is an
+  event: a place and a time.  Drag a knot up or down to change where the particle is; drag it
+  sideways to change <em>when</em> it gets there, sooner or later.  The knots keep their order in
+  time, and the two end events keep their times (their places can move).  Press anywhere: the
+  nearest knot follows the pointer; hold Shift to move it in one direction only.  From the
+  keyboard, click the plot, choose a knot with <kbd>[</kbd> and <kbd>]</kbd> and move it with
+  the arrow keys.</p>
+  <p><strong>Setting the velocity.</strong>  The velocity is the slope of the path,
+  $\dot x=dx/dt$.  Point at the path and its tangent shows, with the velocity there; while you
+  drag a knot, the velocities just before and after it show.  To make the particle faster
+  between two knots, make the path between them steeper: move the later knot further, or
+  sooner.</p>
+  <p>Every experiment starts on the true path (dashed), so whatever you do shows what it
+  costs.  <em>Back to true path</em> returns to it; <em>Bend it</em> and <em>Straight line</em>
+  start you somewhere else.  Every change is added to the chart at the bottom left, so you can
+  see yourself going up or down.  A few knots can only approximate a curved true path, so the
+  path through them may have a little more action than the true one: the readout's $\Delta S$
+  says how much.  Sliding knots along the path can win a little of that back, but where the
+  true path is a minimum nothing gets below it.</p>
 
   <article class="exp" data-setup="find">
-    <h3>1. Find the path</h3>
-    <p>A free particle must get from $x=0$ to $x=4$ in 2 seconds; the path starts out bent.
-    Straighten it by dragging the knots and watch the action fall to its least value,
-    $m(\Delta x)^2/2T=4$: constant speed is the cheapest way.  Then turn on <em>True path</em> to
-    check.</p>
+    <h3>1. Try to beat the straight line</h3>
+    <p>A free particle must get from $x=0$ to $x=4$ in 2 seconds.  It starts on the true path,
+    a straight line at constant speed, with $S=m(\Delta x)^2/2T=4$.  Try to beat it.  A detour
+    up or down costs action.  Drag a knot sideways: the particle reaches it early and must
+    dawdle afterwards, or the other way round, and fast-then-slow always costs more than
+    steady, because the kinetic energy goes as $v^2$.  Slide a knot along the line itself,
+    though, and hardly anything changes: it is the same path, through a different point of
+    it.</p>
   </article>
 
   <article class="exp" data-setup="throw">
     <h3>2. Throw and catch</h3>
-    <p>A ball thrown up and caught at the same height two seconds later.  Shape the path, and
-    watch the readout split $S$ into $\int T\,dt$ and $-\int V\,dt$: going higher earns potential
-    energy (lowering $S$) but costs kinetic energy (raising it).  The parabola,
-    $x=\tfrac12 gt(T-t)$, is the best compromise, with $S=-mg^2T^3/24$.</p>
+    <p>A ball thrown up and caught at the same height two seconds later, on its parabola
+    $x=\tfrac12 gt(T-t)$, with $S=-mg^2T^3/24$.  The readout splits $S$ into $\int T\,dt$ and
+    $-\int V\,dt$.  Drag the top knot higher: you gain potential energy (lowering $S$) but pay
+    more in kinetic energy.  Lower: you save kinetic energy but lose more potential energy.
+    The parabola is the best compromise.</p>
   </article>
 
   <article class="exp" data-setup="hints">
     <h3>3. Which way is downhill?</h3>
-    <p>The arrows show where each knot would have to go to lower the action most, if the others
-    stayed put.  Follow them, or press <em>Roll downhill</em> and let every knot slide at once:
-    the path settles onto the true one.  The arrows are the Euler-Lagrange equation:
+    <p>The path starts bent this time.  The arrows show which way each knot should move to
+    lower the action fastest, up or down and sooner or later, the longest where the action is
+    steepest.  Follow them, or press <em>Roll downhill</em> and let every knot slide at once,
+    in place and in time: the path settles onto the true one.  The arrows are the
+    Euler-Lagrange equation:
     $\delta S=\int\left(\frac{\partial L}{\partial x}-\frac{d}{dt}\frac{\partial L}{\partial\dot x}\right)\delta x\,dt$,
-    and where the bracket vanishes, no small change helps.</p>
+    and where the bracket vanishes, no small change helps.  (Sideways, the slope of $S$ is the
+    jump in energy at the knot: see the next experiment.)</p>
   </article>
 
   <article class="exp" data-setup="energy">
     <h3>4. Only the true path conserves energy</h3>
     <p>The panel at the bottom right plots the energy $E=\dot x\,\partial L/\partial\dot x-L$
-    along your path.  It wanders up and down; on the true path (dashed) it is flat.  Energy
-    conservation is a consequence of the action principle, when $L$ does not depend on $t$
-    (Noether's theorem).</p>
+    along your path.  On the true path it is flat; drag a knot and it wanders.  Now choose
+    <em>Straight segments</em> and drag a knot sideways: the energy jumps at that knot, and the
+    slope of $S$ in the knot's time is exactly the jump, $\partial S/\partial t_k=E_{\text{after}}-E_{\text{before}}$
+    (with $V$ averaged over each segment).  So asking $S$ to be stationary as the knots move in
+    time is asking the energy not to jump: energy conservation, which the action principle
+    gives whenever $L$ does not depend on $t$ (Noether's theorem).</p>
   </article>
 
   <article class="exp" data-setup="phase">
     <h3>5. Phase space</h3>
     <p>The middle panel draws your path in phase space, $(x,p)$ with
     $p=\partial L/\partial\dot x$, over the contours of the Hamiltonian $H(x,p)$.  The true path
-    runs along one contour.  Yours crosses them, and every crossing is a place where your path
-    gains or loses energy that no force supplied.</p>
+    runs along one contour.  Drag a knot and yours crosses them: every crossing is energy gained
+    or lost with no force to supply it.  With its two ends at different places, the true path
+    covers only an arc of its contour.</p>
+  </article>
+
+  <article class="exp" data-setup="orbit">
+    <h3>6. A closed orbit</h3>
+    <p>To close up in phase space a path must end where it began, $x(T)=x(0)$, with the same
+    momentum, after a whole period.  Choose <em>Periodic</em>: the first and last knots become
+    one point (drag either), and the path a loop, smooth across its ends.  Leaving that point
+    free, the action principle itself closes the loop: $\partial S/\partial x(0)=p(T)-p(0)$,
+    which vanishes on a true orbit.</p>
+    <p>Here a pendulum.  Its period grows with the swing, from $2\pi$ for small ones, so a trip
+    of $T=8$ picks the swing that takes 8, and the true orbit runs once round its contour, with
+    $S=\oint p\,d\theta-ET$, the area of the loop less $ET$.  Drag the start point: the true
+    orbit through it is the same loop, with the same action.  Shorter than $2\pi$, no swing
+    fits; longer than $4\pi$, one going round twice fits too.  A closed orbit is a saddle point
+    of $S$.  <em>Bend it</em> and $S$ rises, but nudge the start point and <em>Roll
+    downhill</em> carries the whole loop up to the top: balanced upside down, $\theta=\pi$, the
+    pendulum has the least action of all, $S=-T$.</p>
+    <p>For the harmonic oscillator every swing takes $2\pi/\omega$: there <em>Periodic</em>
+    fixes $T$ at one period, and every amplitude is a true orbit, all with $S=0$.  <em>Bend
+    it</em> and the loop grows, with $S$ unchanged.</p>
   </article>
 
   <article class="exp" data-setup="saddle">
-    <h3>6. When the action is not least</h3>
-    <p>A harmonic oscillator, but now the trip takes $T=4$, longer than half a period
-    ($\pi$).  The true path still makes $S$ stationary, but it is a saddle: press <em>Roll
-    downhill</em> and the path runs away, its action falling below the true path's without
-    end.  Lower $T$ below $\pi$ and the true path becomes a minimum again.  The point $t=\pi$,
-    where every path from the start refocuses, is a <em>conjugate point</em>.  "Least action" is
-    really "stationary action".</p>
+    <h3>7. When the action is not least</h3>
+    <p>A harmonic oscillator, but now the trip takes $T=4$, longer than half a period ($\pi$).
+    The path starts on the true path, which still makes $S$ stationary, but as a saddle.  Drag
+    a single knot: $S$ goes up, as at a minimum.  Now press <em>Bend it</em>, which moves every
+    knot at once along half a sine wave: $S$ goes down, below the true path's, and
+    <em>Roll downhill</em> runs away.  Lower $T$ below $\pi$ and bending raises $S$ again.  The
+    point $t=\pi$, where every path from the start refocuses, is a <em>conjugate point</em>.
+    "Least action" is really "stationary action".</p>
   </article>
 
   <article class="exp" data-setup="pendulum">
-    <h3>7. More than one true path</h3>
+    <h3>8. More than one true path</h3>
     <p>A pendulum, from $\theta=0$ to $\theta=1$ in 8 seconds.  Several motions do it: swinging
     once, twice, the other way first.  Each is a true path, a stationary point of $S$, listed
-    under <em>Show</em> with its action and its Morse index (how many independent directions lower
-    $S$).  Drag your path near each one in turn.</p>
+    under <em>Show</em> with its action and its Morse index (how many independent directions
+    lower $S$).  The path starts on the one of least action; click another to put your path on
+    it.  On a saddle, some changes (try <em>Bend it</em>, both ways) lower $S$.</p>
   </article>
 
   <article class="exp" data-setup="twin">
-    <h3>8. The twin paradox</h3>
+    <h3>9. The twin paradox</h3>
     <p>Time runs up, space across; the end points are two events at the same place, 10 years
-    apart.  A free particle's action is $-mc^2\tau$, where $\tau$ is the time its own clock
-    shows.  The twin who stays home (the straight world line) has the least action and so the
-    longest $\tau$: every journey away and back ages the traveller less.  Paths steeper than
-    the light cone (45°) are impossible, and get no action at all.</p>
+    apart, and the world line starts as the twin who stays home.  It is drawn in straight legs,
+    the traveller at constant speed on each.  A free particle's action is $-mc^2\tau$, where
+    $\tau$ is the time its own clock shows.  Drag an event sideways and the traveller goes away
+    and back: $\tau$ falls, $S$ rises.  The stay-at-home has the least action and so the
+    longest $\tau$.  Drag an event up or down to change when the traveller is there.  A leg
+    tilted more than 45° from the vertical (outside the light cone) would be faster than light,
+    and gets no action at all.</p>
   </article>
 
   <article class="exp" data-setup="light">
-    <h3>9. Fermat's principle</h3>
+    <h3>10. Fermat's principle</h3>
     <p>Light from one point to another takes the path of least optical length $\int n\,ds$.
-    Here air is above and glass ($n=1.5$) below, and the true ray bends at the surface.  In
-    the phase-space panel the conserved quantity is $-n\cos\phi$, $\phi$ measured from the
+    Here air is above and glass ($n=1.5$) below, and the true ray bends at the surface.  Here
+    $x$ plays the part of time: a knot is a point the ray passes through, and dragging it
+    sideways moves it across (the knots stay in order, so the ray runs left to right).  In the
+    phase-space panel the conserved quantity is $-n\cos\phi$, $\phi$ measured from the
     surface: that is Snell's law, $n_1\sin\theta_1=n_2\sin\theta_2$.  Try the mirage too.</p>
   </article>
 
   <article class="exp" data-setup="brach">
-    <h3>10. The brachistochrone</h3>
-    <p>A bead slides without friction from rest at the top left to the bottom right.  Which
-    curve gets it there first?  The "action" is now the time.  The straight line is not the
-    fastest: diving steeply at first gains speed early.  The fastest curve is a cycloid,
-    $\pi\sqrt{a/g}$ here.</p>
+    <h3>11. The brachistochrone</h3>
+    <p>A bead slides without friction from rest at the top left to the bottom right, and the
+    "action" is the time it takes.  The curve starts as the fastest, a cycloid, $\pi\sqrt{a/g}$
+    here.  Press <em>Straight line</em>: the incline is shorter but slower; diving steeply at
+    first gains speed early.  As for light, $x$ plays the part of time; the start stays put.</p>
   </article>
 
   <article class="exp" data-setup="segments">
-    <h3>11. Straight segments</h3>
+    <h3>12. Straight segments</h3>
     <p>Feynman's way of thinking, and E. F. Taylor's way of teaching: a path of straight
-    segments, the particle moving at constant speed along each.  With a few segments, the best
-    you can do is a little above the true action; add segments (the <em>Knots</em> slider) and
-    the minimum comes down to it.</p>
+    segments, the particle moving at constant speed along each.  The path starts as the best
+    one through these knots, a little above the true action; add knots (the <em>Knots</em>
+    slider) and it comes down to it.</p>
   </article>
 
   <article class="exp" data-setup="feynman">
-    <h3>12. Feynman's phasors</h3>
+    <h3>13. Feynman's phasors</h3>
     <p>In quantum mechanics every path contributes, with weight $e^{iS/\hbar}$.  The little
-    clock beside the chart shows that arrow for your path.  Drag a knot near the true path: the
-    arrow barely turns, because $S$ is stationary there, so nearby paths add up in step.  Far
-    from it, the arrow spins, and the paths cancel.  Make $\hbar$ smaller and only paths ever
-    closer to the true one survive: the classical limit.</p>
+    clock beside the chart shows that arrow for your path.  Drag a knot a little: on the true
+    path the arrow barely turns, because $S$ is stationary there, so nearby paths add up in
+    step.  Bend the path a few times and drag again: now the arrow spins, and nearby paths
+    cancel.  Make $\hbar$ smaller and only paths ever closer to the true one survive: the
+    classical limit.</p>
   </article>
 
   <article class="exp" data-setup="damped">
-    <h3>13. Friction from a Lagrangian</h3>
+    <h3>14. Friction from a Lagrangian</h3>
     <p>$L=e^{\gamma t}(\tfrac12\dot x^2-\tfrac12x^2)$ looks like a curiosity, but its
     Euler-Lagrange equation is $\ddot x+\gamma\dot x+x=0$: a damped oscillator.  Here the energy
     (bottom right) is not conserved, because $L$ depends on $t$.</p>
   </article>
 
   <article class="exp" data-setup="typed">
-    <h3>14. Your own potential</h3>
+    <h3>15. Your own potential</h3>
     <p>Type any $V(x,t)$: a double well $\tfrac14x^4-x^2$ to start with.  The true paths are found
-    numerically (by shooting: trying every starting speed and keeping those that arrive).  A
-    potential that depends on $t$ does not conserve energy.</p>
+    numerically (by shooting: trying every starting speed and keeping those that arrive), and
+    the path starts on the one of least action.  A potential that depends on $t$ does not
+    conserve energy.</p>
   </article>
 
   <p class="small muted">New in 2026 for BrainFlux.  Source:
