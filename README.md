@@ -25,6 +25,7 @@ beta are new and still being checked.
 - [Holography](https://gallicchio.github.io/brainflux/holography/) (beta)
 - [Tomography](https://gallicchio.github.io/brainflux/tomography/) (beta)
 - [Gaussian beams and laser cavities](https://gallicchio.github.io/brainflux/beams/) (beta)
+- [Drums and billiards](https://gallicchio.github.io/brainflux/drums/) (beta)
 - [Quantum phase space](https://gallicchio.github.io/brainflux/phasespace/) (beta)
 - [The principle of least action](https://gallicchio.github.io/brainflux/action/) (beta)
 
