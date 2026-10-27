@@ -1,5 +1,5 @@
 import { test, assert } from './harness.js';
-import { fixedNum, FIGURE_SPACE, numSlot, setSlots } from '../lib/ui.js';
+import { fixedNum, FIGURE_SPACE, numSlot, setSlots, setGroups } from '../lib/ui.js';
 import { fillSlots, slotsWidth } from '../lib/plot.js';
 
 const eq = (got, want) => assert(got === want, `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
@@ -107,6 +107,24 @@ test('setSlots: a line that wraps never parts a number from the words touching i
     }
     assert(lines.size > 1, 'the line did wrap at some widths');
   } finally { box.remove(); css.remove(); }
+});
+
+test('setGroups: groups kept whole, joined by spaces; only the numbers change after the first time', () => {
+  const box = document.createElement('div');
+  document.body.append(box);
+  try {
+    const show = (v) => setGroups(box, ['the baseline', ['B = ', { v, dec: 3, w: 6 }, '\u00a0m'], ['(', { v: 2 * v, dec: 1, w: 5 }, ' fringes)']]);
+    show(1.0644);
+    eq(box.textContent, 'the baseline B = 1.064\u00a0m (2.1 fringes)');
+    const spans = [...box.children];
+    assert(spans.length === 2 && spans.every((g) => g.className === 'nobr'), 'two groups, each a span.nobr');
+    show(-1.25);
+    assert(box.children[0] === spans[0] && box.children[1] === spans[1], 'the groups are kept');
+    eq(box.textContent, 'the baseline B = −1.250\u00a0m (−2.5 fringes)');
+    box.innerHTML = '&nbsp;';
+    show(2);
+    eq(box.textContent, 'the baseline B = 2.000\u00a0m (4.0 fringes)');
+  } finally { box.remove(); }
 });
 
 test('fillSlots: a canvas line is the same width, its words in the same places, for any numbers', () => {
