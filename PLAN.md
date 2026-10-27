@@ -164,3 +164,36 @@ Then superposition (standing waves, fringes) and a 1D packet with a chosen dispe
   true paths against closed forms, the Born amplitude for a weak Gaussian against the numerical
   one, the hard-disk phase shifts.
 - Screenshots of every demo by headless Chromium, looked at, kept in `docs/` for the log.
+
+## Status, 2026-10-27
+
+All five demos are built, tested and committed; each has a drawer of guided experiments
+(13, 18, 14, 12 and 10), `#setup=<name>` links, light and dark themes, and a layout that
+works on a phone.
+
+What the plan said and what happened instead:
+
+- **Sharp potentials (1D).**  The split-operator method, given a step potential, heats a bound
+  state (its energy rose tenfold in ten time units at dt = 0.02, worse on finer grids).  Measured,
+  not guessed: potentials with jumps are band-limited at k = 16 (k = 40 for the delta), which
+  keeps the sharp step's reflection exact for k < 5 (R = 0.0941 against 0.0943), walls taller
+  than 30 are rounded over 0.05 instead (band-limiting would ring and bind spurious states),
+  static potentials are cell-averaged so an edge sits where it was typed, and the time step is
+  1.2 m / kc^2 when there are jumps, and keeps |V - <E>| dt < 1/3 where psi is.  In 2D the same
+  band limit is enough on its own (tested with the double slit's walls).
+- **The 2D partial waves** needed the beam's own partial-wave content (a Gaussian beam carries
+  less of the high m than a plane wave: 4.5% at m = 3 for this beam); with it, |S_m| = 1 to
+  0.4% and the optical theorem agrees with the partial-wave sum to 0.05%.
+- **Phase space in the action demo** is a view of the drawn q(t), not where it is drawn: the
+  Lagrangian action is the one that is minimal; the phase-space action is a saddle.
+- **The colour map** keeps the old applet's HSV hues (with its sin 3φ / 5 bend) and adds one
+  perceptual correction (each hue reaches full colour at a magnitude leaning towards its own
+  lightness); a fully perceptual map was tried and came out muddy.
+- **Photographs** in the FFT demo are drawn in grey until an edit makes them complex.
+
+Not done yet (from "Later"): the diffraction demo (the old LightPropagation applet) and the
+Fourier-series-with-sound demo (SoundFourier).  Both would reuse `lib/` almost entirely.
+
+Testing: 49 unit tests (`tools/run_page.py tests/index.html`, Chromium and Firefox), and a
+scripted run of every demo and every experiment (`tests/ui/*.py`) that checks the physics as it
+goes (Parseval, unitarity, Born, optical theorem, group velocity...).

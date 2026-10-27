@@ -3,6 +3,7 @@
 
     tools/run_page.py tests/index.html            # all tests
     tools/run_page.py "tests/index.html?only=fft" # one file
+    BROWSER=firefox tools/run_page.py tests/index.html
 
 The page sends its report with fetch('/__report', {method: 'POST', body: text}).  The report is
 printed and the exit status is 0 if it contains "SUMMARY: ... 0 failed" (or no SUMMARY at all).
@@ -58,12 +59,17 @@ def main():
         port = server.server_address[1]
         threading.Thread(target=server.serve_forever, daemon=True).start()
         url = f'http://127.0.0.1:{port}/{page}'
-        profile = tempfile.mkdtemp(prefix='bf-chrome-', dir=os.environ.get('TMPDIR'))
-        proc = subprocess.Popen(
-            [chromium(), '--headless', '--disable-gpu', '--no-first-run',
-             '--no-default-browser-check', f'--user-data-dir={profile}',
-             '--window-size=1400,1000', url],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # A profile inside the repository's build/ (snap-packaged browsers can't see /tmp).
+        os.makedirs(os.path.join(ROOT, 'build'), exist_ok=True)
+        profile = tempfile.mkdtemp(prefix='bf-browser-', dir=os.path.join(ROOT, 'build'))
+        if os.environ.get('BROWSER') == 'firefox':
+            cmd = [shutil.which('firefox'), '--headless', '--new-instance', '--no-remote',
+                   '--profile', profile, '--window-size=1400,1000', url]
+        else:
+            cmd = [chromium(), '--headless', '--disable-gpu', '--no-first-run',
+                   '--no-default-browser-check', f'--user-data-dir={profile}',
+                   '--window-size=1400,1000', url]
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         ok = done.wait(timeout)
         proc.terminate()
         try:

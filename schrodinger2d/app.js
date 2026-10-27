@@ -124,7 +124,9 @@ function loop(now) {
       if (sim.t >= tEnd) { finished = true; setRunning(false); break; }
     }
     frames++;
-    if (frames % 8 === 0 || finished) analyse();
+    // The partial waves come from time Fourier transforms over the whole collision: only once
+    // the packet has gone do they mean anything.
+    if (finished) analyse();
   }
   draw();
   if (state.running) raf = requestAnimationFrame(loop);
@@ -337,9 +339,10 @@ function updateReadouts() {
     rows.push(['scattered flux, ∫ dσ/dθ', tot.scattered], ['shadow: flux lost forward', tot.shadow]);
   }
   if (pwResult) rows.push(['partial waves, (1/k) Σ |S−1|²', pwResult.sigma], ['optical theorem, from f(0)', pwResult.optical]);
+  else if (!state.target.extended && detector.fluence > 1e-6) rows.push(['partial waves and optical theorem', NaN]);
   if (born) rows.push(['first Born approximation', born.reduce((s, v) => s + v * dth, 0)]);
   if (exact) rows.push([`exact hard disk, a = ${fmt(exact.a, 3)}`, exact.pw.sigma]);
-  $('#sigmas').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${fmt(v, 4)}</td></tr>`).join('')
+  $('#sigmas').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${Number.isNaN(v) ? 'when the packet has gone' : fmt(v, 4)}</td></tr>`).join('')
     + (rows.length ? '<tr><td colspan="2" class="muted">σ is a length in 2D</td></tr>' : '');
   const legend = [['flux', 'measured'], ['pw', '|f|² at k₀'], ['born', 'Born']];
   if (exact) legend.push(['exact', 'hard disk']);
