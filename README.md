@@ -15,6 +15,7 @@ beta are new and still being checked.
 - [Plane waves](https://gallicchio.github.io/brainflux/planewave/)
 - [Diffraction](https://gallicchio.github.io/brainflux/diffraction/)
 - [Fourier series you can hear](https://gallicchio.github.io/brainflux/fourier/)
+- [Maxwell's equations in 2D](https://gallicchio.github.io/brainflux/maxwell2d/) (beta)
 - [Radiation from a moving charge](https://gallicchio.github.io/brainflux/radiation/) (beta)
 - [Antenna arrays and aperture synthesis](https://gallicchio.github.io/brainflux/arrays/) (beta)
 - [Interfaces and thin films](https://gallicchio.github.io/brainflux/thinfilms/) (beta)

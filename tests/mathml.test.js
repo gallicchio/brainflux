@@ -29,7 +29,7 @@ test('every formula in every demo translates without an error', async () => {
   // ?page=name checks one demo's page, listed here or not.
   const one = new URLSearchParams(location.search).get('page');
   const pages = one ? [one] : ['fft2d', 'schrodinger1d', 'action', 'schrodinger2d', 'planewave', 'diffraction', 'fourier',
-    'thinfilms', 'dispersion', 'interferometer', 'imaging', 'holography', 'tomography', 'arrays', 'beams', 'phasespace', 'radiation'];
+    'thinfilms', 'dispersion', 'interferometer', 'imaging', 'holography', 'tomography', 'arrays', 'beams', 'phasespace', 'radiation', 'maxwell2d'];
   let count = 0;
   for (const p of pages) {
     const html = await (await fetch(`../${p}/index.html`)).text();
