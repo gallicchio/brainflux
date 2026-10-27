@@ -147,7 +147,7 @@ with Browser('fft2d/index.html', size=(1400, 950)) as b:
         def hover(fx, fy):
             b.mouse('mouseMoved', x + fx * w, y + fy * h)
             b.sleep(0.15)
-        words = [', y', '|f|', '∠'] if name == 'image' else [', ky', '|F|', '∠', 'λ', ' px']
+        words = [' y', '|f|', '∠'] if name == 'image' else [' ky', '|F|', '∠', 'λ', ' px']
         hover(0.1, 0.1)
         at = [b.text_x(f'{side} .readout', words)]
         def step(p):
