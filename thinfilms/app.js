@@ -314,7 +314,7 @@ function compute() {
   comp.rpMin = T('rpMin', () => (comp.x2kind === 'angle' ? cached('rpMin', JSON.stringify([stackKey, state.lambda, mAng]), rpMinimum) : null));
   comp.finesse = T('finesse', () => finesse(JSON.stringify([stackKey, state.theta, state.lrange, mSpec])));
   comp.swatch = T('swatch', swatchColors);
-  comp.ms = ms;
+  comp.ms = ms;                // milliseconds per part, for the tests and for profiling
 }
 
 // The angle of least R_p, refined, if there is a clear dip (the Brewster angle, a plasmon).
@@ -860,7 +860,7 @@ function frame(now) {
     time('readouts', readouts); scheduleHash();
   }
   time('stack', () => drawStack(now));
-  comp.drawMs = t;
+  comp.drawMs = t;             // milliseconds per drawing step, likewise
   if (animating()) raf = requestAnimationFrame(frame); else lastT = 0;
 }
 
