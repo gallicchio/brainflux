@@ -4,6 +4,7 @@
 import { Trajectory, LW, lienardPower, larmorPower, dPdOmega, BETA_MAX } from './lw.js';
 import { fieldLines } from './lines.js';
 import { PRESETS, Follower, PointerPath, typedMotion, prefill } from './motions.js';
+import { fixed } from './format.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
 
@@ -374,6 +375,9 @@ function arrow(ctx, x0, y0, x1, y1, col) {
 // ----------------------------------------------------------- the angular distribution
 
 const polarCanvas = $('#polar'), POLAR = new Float64Array(720);
+// Fonts for the plots' labels, and where those labels went (for the tests).
+const FONT = '12px system-ui, sans-serif', MONO = '12px ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+const canvasLabels = {};
 function drawPolar() {
   const { ctx, width, height } = fitCanvas(polarCanvas), col = themeColors();
   ctx.clearRect(0, 0, width, height);
@@ -406,7 +410,12 @@ function drawPolar() {
     ctx.fillStyle = col.accent; ctx.globalAlpha = 0.25; ctx.fill(); ctx.globalAlpha = 1;
     ctx.strokeStyle = col.accent; ctx.lineWidth = 1.6; ctx.stroke();
     ctx.fillStyle = col.ink3; ctx.textBaseline = 'bottom';
-    ctx.fillText(`max ${fmt(max, 3)}`, 6, height - 3);
+    ctx.fillText('max', 6, height - 3);
+    ctx.font = MONO; ctx.textAlign = 'right';
+    const right = 6 + ctx.measureText('max 0000000000').width;
+    ctx.fillText(fixed(max, 5, 10), right, height - 3);
+    ctx.textAlign = 'left'; ctx.font = '11px system-ui, sans-serif';
+    canvasLabels.polar = [6, right];
   }
   // The velocity (as β, the whole radius being c) and the direction of the acceleration.
   const b = Math.hypot(vx, vy) / c;
@@ -443,11 +452,18 @@ function logPower() {
 function drawPower() {
   const { ctx, width, height } = fitCanvas(powerCanvas), col = themeColors();
   ctx.clearRect(0, 0, width, height);
-  // The two labels on one line if they fit, else on two.
-  ctx.font = '12px system-ui, sans-serif';
+  // The labels and their numbers sit in fixed places (they do not depend on the values):
+  // on one line if they fit, else on two.
   const last = powerLog[powerLog.length - 1] || [0, 0, 0];
-  const lab1 = `Liénard P = ${fmt(last[1], 3)}`, lab2 = `Larmor (2/3)q²a²/c³ = ${fmt(last[2], 3)}`;
-  const oneLine = 54 + ctx.measureText(lab1).width + 24 + ctx.measureText(lab2).width < width;
+  const lab1 = 'Liénard P =', W = 9;
+  ctx.font = MONO; const wn = ctx.measureText('0'.repeat(W)).width;
+  ctx.font = FONT;
+  // (On a narrow chart, Larmor's formula is left out of its label.)
+  const long = 'Larmor (2/3)q²a²/c³ =', lab2 = 54 + ctx.measureText(long).width + 5 + wn < width - 6 ? long : 'Larmor =';
+  const w1 = ctx.measureText(lab1).width, w2 = ctx.measureText(lab2).width;
+  const x1 = 54, n1 = x1 + w1 + 5 + wn, oneLine = n1 + 24 + w2 + 5 + wn < width - 6;
+  const x2 = oneLine ? n1 + 24 : x1, y2 = oneLine ? 16 : 31, n2 = x2 + w2 + 5 + wn;
+  canvasLabels.power = [x1, n1, x2, n2, y2];
   const f = new Frame(ctx, width, height, { left: 50, right: 12, top: oneLine ? 26 : 40, bottom: 30 });
   const t1 = traj.tEnd, t0 = t1 - WINDOW;
   let top = 0;
@@ -471,11 +487,15 @@ function drawPower() {
   line(1, col.accent, []);
   ctx.restore();
   f.axes({ xlabel: 't − now (s)', yTicks: powerTop > 0 });
-  ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = col.accent; ctx.fillText(lab1, f.left + 4, 16);
-  ctx.fillStyle = col.ink2;
-  if (oneLine) ctx.fillText(lab2, f.left + 4 + ctx.measureText(lab1).width + 24, 16);
-  else ctx.fillText(lab2, f.left + 4, 31);
+  ctx.textBaseline = 'alphabetic';
+  const put = (lab, x, n, y, v, color) => {
+    ctx.fillStyle = color; ctx.font = FONT; ctx.textAlign = 'left'; ctx.fillText(lab, x, y);
+    ctx.font = MONO; ctx.textAlign = 'right'; ctx.fillText(fixed(v, 4, W), n, y);
+    ctx.textAlign = 'left';
+  };
+  put(lab1, x1, n1, 16, last[1], col.accent);
+  put(lab2, x2, n2, y2, last[2], col.ink2);
+  ctx.font = FONT;
   if (!(powerTop > 0)) {
     ctx.fillStyle = col.ink3; ctx.textAlign = 'center';
     ctx.fillText('no acceleration, no radiation', f.left + f.w / 2, f.top + f.h / 2);
@@ -485,7 +505,6 @@ function drawPower() {
 
 // ---------------------------------------------------------------------- read-outs
 
-let lastReadout = '';
 /** The present velocity and acceleration (an acceleration below 1e-6 c per second, like the
  *  tail of the hand's smoothing, counts as none). */
 function present() {
@@ -494,19 +513,40 @@ function present() {
   return { vx: traj.vx, vy: traj.vy, ax: tiny ? 0 : traj.ax, ay: tiny ? 0 : traj.ay };
 }
 
+// The read-outs: each quantity has its own slot, a fixed number of characters wide, and its
+// numbers have a fixed layout (format.js), so nothing moves as the values change.  The probe's
+// slots are kept (invisible) when the probe is off, so that turning it on moves nothing.
+const RO = {};
+function readoutSlot(key, label, decimals, width, suffix = '') {
+  const lab = el('span', { class: 'lab' }), num = el('span', { class: 'num', style: { width: `${width}ch` } });
+  lab.innerHTML = label;
+  const item = el('span', { class: 'ro' }, lab, num, suffix ? el('span', { class: 'lab' }, suffix) : null);
+  RO[key] = { item, num, decimals, width, text: '' };
+  return item;
+}
+$('#readout').append(
+  readoutSlot('beta', 'β =', 3, 5),
+  readoutSlot('gamma', 'γ =', 3, 5),
+  readoutSlot('a', '|a| =', 2, 7),
+  readoutSlot('ratio', 'P/P<sub>Larmor</sub> =', 3, 8),
+  readoutSlot('ev', '<i class="sw vel"></i>probe |E<sub>vel</sub>| =', 4, 7),
+  readoutSlot('ea', '<i class="sw acc"></i>|E<sub>acc</sub>| =', 4, 7),
+  readoutSlot('peak', 'peak', 4, 7),
+  readoutSlot('ago', '<i>t</i> − <i>t</i><sub>r</sub> =', 3, 6, 's'),
+);
+function show(key, v) {
+  const r = RO[key], text = fixed(v, r.decimals, r.width);
+  if (text !== r.text) { r.num.textContent = text; r.text = text; }
+}
+
 function updateReadout() {
   const { vx, vy, ax, ay } = present(), c = state.c, b = Math.hypot(vx, vy) / c, g = 1 / Math.sqrt(1 - b * b);
   const P = lienardPower(vx, vy, ax, ay, c), L = larmorPower(ax, ay, c);
-  const parts = [`β = <b>${b.toFixed(3)}</b>`, `γ = <b>${g.toFixed(3)}</b>`, `|a| = <b>${fmt(Math.hypot(ax, ay), 3)}</b>`];
-  if (L > 1e-12) parts.push(`P/P<sub>Larmor</sub> = <b>${fmt(P / L, 4)}</b>`);
-  if (state.probe && probeInfo) {
-    const f = probeInfo;
-    parts.push(`<i class="sw vel"></i>probe: |E<sub>vel</sub>| = <b>${fmt(f.ev, 3)}</b>`,
-      `<i class="sw acc"></i>|E<sub>acc</sub>| = <b>${fmt(f.ea, 3)}</b> (peak in 3 s: ${fmt(f.peak, 3)})`,
-      `the light arriving there left ${fmt(traj.tEnd - f.tr, 3)} s ago`);
-  }
-  const html = parts.map((p) => `<span>${p}</span>`).join('');
-  if (html !== lastReadout) { $('#readout').innerHTML = html; lastReadout = html; }
+  show('beta', b); show('gamma', g); show('a', Math.hypot(ax, ay));
+  show('ratio', L > 1e-12 ? P / L : NaN);   // undefined without acceleration: a dash
+  const probe = state.probe && probeInfo;
+  for (const k of ['ev', 'ea', 'peak', 'ago']) RO[k].item.style.visibility = probe ? '' : 'hidden';
+  if (probe) { show('ev', probeInfo.ev); show('ea', probeInfo.ea); show('peak', probeInfo.peak); show('ago', traj.tEnd - probeInfo.tr); }
 }
 
 // ------------------------------------------------------------------------ the loop
@@ -775,7 +815,7 @@ window.__app = {
   state, setups, traj, values,
   get mode() { return mode; }, get lines() { return lines; }, get lineEvals() { return lineEvals; },
   get frameMs() { return lastFrameMs; }, timing, get mapCell() { return mapCell; }, get probe() { return probeInfo; },
-  get powerLog() { return powerLog; },
+  get powerLog() { return powerLog; }, canvasLabels,
   startMotion, setRunning, grab,
   setProbe(x, y) { state.probeAt = [x, y]; probeHist.length = 0; dirty = true; },
   /** The field at a point of the plane now (for the tests). */

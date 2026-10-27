@@ -3,9 +3,13 @@
   padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start;
 }
 .stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
-.readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 16px; padding: 0 4px; min-height: 1.6em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.readout b { color: var(--ink); font-weight: 600; }
-.readout .warn { color: var(--warn); }
+.readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; padding: 0 4px; min-height: 1.6em; color: var(--ink-2); font-size: 13px; }
+/* Every read-out has a slot of fixed width: the numbers change, nothing moves. */
+.readout .ro { white-space: nowrap; }
+.readout .num {
+  display: inline-block; text-align: right; white-space: pre; margin: 0 0.3em;
+  font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600;
+}
 .readout .sw { display: inline-block; width: 14px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
 .readout .sw.vel { background: #3d95f0; }
 .readout .sw.acc { background: #f08a20; }

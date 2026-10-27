@@ -2,6 +2,7 @@ import { test, assert, close } from './harness.js';
 import { Trajectory, AnalyticPath, LW, lienardPower, larmorPower, dPdOmega, seedDirection, BETA_MAX } from '../radiation/lw.js';
 import { fieldLines } from '../radiation/lines.js';
 import { PRESETS, Follower, PointerPath, typedMotion, prefill, gaussLegendre } from '../radiation/motions.js';
+import { fixed } from '../radiation/format.js';
 
 const PI = Math.PI;
 
@@ -459,4 +460,24 @@ test('radiation: a typed path is differentiated accurately', () => {
     close(o[2], -3 * Math.sin(1.5 * t), 1e-6); close(o[3], 3 * Math.cos(3 * t) + 0.2 * t, 1e-6);
     close(o[4], -4.5 * Math.cos(1.5 * t), 1e-5); close(o[5], -9 * Math.sin(3 * t) + 0.2, 1e-5);
   }
+});
+
+test('radiation: read-out numbers keep one layout (fixed width, decimals and sign place)', () => {
+  // Every value of a quantity takes the same number of characters, so in a fixed slot nothing moves.
+  const vals = [0, 1e-9, 0.0004, 0.5, 0.98, 1, 9.999, 12.3456, 999.9, 16049.8, 1.2e7, 3e12, -0, -0.00001];
+  for (const [d, w] of [[3, 5], [2, 8], [4, 9]]) {
+    for (const v of vals) {
+      const s = fixed(v, d, w);
+      assert(s.length === w, `${v} with ${d} decimals in ${w}: "${s}"`);
+      if (Math.abs(v) < 10 ** (w - d - 2)) assert(s.endsWith(Math.abs(v).toFixed(d)), `"${s}" keeps ${d} decimals`);
+    }
+  }
+  // Signed: + and − take the same place, and the digits do not move across zero.
+  for (const v of [0.25, 3.5, 12.125]) {
+    const p = fixed(v, 3, 8, true), m = fixed(-v, 3, 8, true), digits = v.toFixed(3), at = 8 - digits.length - 1;
+    assert(p.length === 8 && m.length === 8 && p.endsWith(digits) && m.endsWith(digits) && p[at] === ' ' && m[at] === '−', `"${p}" / "${m}"`);
+  }
+  assert(fixed(-0.0001, 3, 7, true) === fixed(0, 3, 7, true), 'no −0.000');
+  assert(fixed(NaN, 2, 6) === '     —', 'undefined: a dash in the same slot');
+  assert(fixed(1.2e7, 2, 8) === '1.2000e7', `too big: exponent form, as many digits as fit (${fixed(1.2e7, 2, 8)})`);
 });
