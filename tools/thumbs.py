@@ -27,6 +27,7 @@ DEMOS = {
     'arrays': ('#setup=steer', 3),
     'beams': ('#setup=waist', 3),
     'phasespace': ('#setup=anharmonic&t=8', 3),
+    'radiation': ('#setup=fastdipole', 3),
     'schrodinger2d': ('#setup=crystal', 1, '__app.runUntil(0.55 * __app.tEnd)'),
 }
 
