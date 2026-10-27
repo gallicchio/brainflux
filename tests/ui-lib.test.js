@@ -1,6 +1,6 @@
 import { test, assert } from './harness.js';
 import { fixedNum, FIGURE_SPACE, numSlot, setSlots } from '../lib/ui.js';
-import { fillSlots } from '../lib/plot.js';
+import { fillSlots, slotsWidth } from '../lib/plot.js';
 
 const eq = (got, want) => assert(got === want, `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
 
@@ -77,6 +77,38 @@ test('setSlots: numbers in fixed slots; the words and slots stay put as the numb
   } finally { box.remove(); css.remove(); }
 });
 
+test('setSlots: a line that wraps never parts a number from the words touching it', () => {
+  const box = document.createElement('div');
+  box.style.cssText = 'position: absolute; left: 0; top: 0; font: 14px system-ui, sans-serif';
+  const css = document.createElement('style');     // as in lib/style.css
+  css.textContent = '.fixnum { display: inline-block; text-align: right; white-space: pre; } .nobr { white-space: nowrap; }';
+  document.head.append(css);
+  document.body.append(box);
+  try {
+    const range = document.createRange();
+    const topOf = (w) => {
+      const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+      for (let n; (n = walk.nextNode());) {
+        const i = n.data.indexOf(w);
+        if (i >= 0) { range.setStart(n, i); range.setEnd(n, i + w.length); return range.getBoundingClientRect().top; }
+      }
+      return NaN;
+    };
+    let lines = new Set();
+    for (let ch = 6; ch <= 40; ch++) {
+      box.style.width = `${ch}ch`;
+      setSlots(box, ['the screen at ±', { v: -12.5, dec: 2, w: 7 }, '\u00a0mm, its width ', { v: 3.25, dec: 3, w: 6 }, ' µm across']);
+      const slots = box.querySelectorAll('.fixnum'), r = slots[0].getBoundingClientRect();
+      lines.add(Math.round(box.getBoundingClientRect().height));
+      const on = (w) => topOf(w) >= r.top - 1 && topOf(w) < r.bottom;
+      assert(on('±') && on('mm,'), `${ch}ch: "±" and "mm," on the first number's line (${topOf('±')}, ${topOf('mm,')}; the number ${r.top} to ${r.bottom})`);
+      assert(slots[0].parentNode.className === 'nobr' && slots[1].parentNode.className === 'nobr', 'each number in a span.nobr');
+      assert(box.textContent === 'the screen at ±−12.50\u00a0mm, its width 3.250 µm across', box.textContent);
+    }
+    assert(lines.size > 1, 'the line did wrap at some widths');
+  } finally { box.remove(); css.remove(); }
+});
+
 test('fillSlots: a canvas line is the same width, its words in the same places, for any numbers', () => {
   const ctx = document.createElement('canvas').getContext('2d');
   ctx.font = '12px system-ui, sans-serif';
@@ -94,6 +126,7 @@ test('fillSlots: a canvas line is the same width, its words in the same places, 
     }
   }
   assert(widths.every((w) => w === widths[0]), `widths ${widths}`);
+  assert(slotsWidth(ctx, ['v = ', { v: 3, dec: 2, w: 7 }, ' m/s']) === widths[0], 'slotsWidth: the same width, without drawing');
   for (let i = 0; i < 3; i++) {
     const xs = words.filter((_, k) => k % 3 === i);
     assert(xs.every((x) => Math.abs(x - xs[0]) < 1e-9), `the unit stays put (${xs})`);
