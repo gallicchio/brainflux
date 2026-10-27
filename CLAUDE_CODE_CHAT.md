@@ -160,6 +160,28 @@ drawn path itself; in the 2D demo the typed target and the packet.  Copy the add
 homework and students open exactly that.  `#setup=<name>` opens a guided experiment.  Also a
 probability-current view in 1D (blue flowing right, red flowing left: tunnelling made visible).
 
+**An independent review** (a second agent given the code, not my conclusions, 2026-10-27)
+found about 30 bugs, 15 of them serious, and I fixed all of them, each with a test where a
+test could catch it again.  The ones worth knowing about:
+
+- *Chained comparisons*: `-1 < x < 1` meant `((-1 < x) < 1)`, the complement of the box, while
+  the preview showed what you typed.  Now it means what it says, in every demo.
+- *Plane-wave packets*: the k < 0 components ran the wrong way (a sign), so wide packets moved
+  at twice dω/dk.
+- *Slow packets in 2D* reflected off an absorbing border thinner than their wavelength (σ for
+  V = 0 came out −0.71).  The border now grows with the wavelength; and the 2D demo now
+  computes, for any potential of r alone, the exact phase shifts of the stationary problem from
+  the radial equation: the movie's S_m agree with them to 8e-3, σ to 0.1%.
+- *The FFT demo's mirror* (keep the picture real) was a pixel off for even brush sizes, and
+  switching tools by key in the middle of a drag crashed or zeroed the picture.
+- *1D*: the "run it backwards" experiment never reached the barrier (its fast-forward was capped
+  by the frame budget); measuring the position reset the clock; the delta's numbers in the help
+  were for a different grid (it is now a Gaussian of exact area α, and the help quotes what
+  the demo shows: level −0.465, transmission 0.51).
+- *Help text*: for Schrödinger waves crests are born at the front of a packet (I had the back),
+  a real image's transform pairs yellow-green with violet (not red with cyan), the mirage's ray
+  dips.
+
 ### Where it stands
 
 `~/mudd/brainflux` is a git repository (17 commits so far, all as you, with the attribution
@@ -191,6 +213,9 @@ now: `cd ~/mudd/brainflux && python3 -m http.server` and open <http://localhost:
 4. **The U. Iowa instrument recordings** in `java/Resources/sound/`: the sound demo synthesises
    instead.  If you want recorded instruments, I'll check their current terms.
 5. **Your courses**: potentials, paths or targets you assign in homework that should be presets.
+
+Everything is tested by `tools/test_all.sh` (unit tests in Chromium and Firefox, then a
+scripted run of every demo and experiment); it passes.
 
 ### What I'd do next
 

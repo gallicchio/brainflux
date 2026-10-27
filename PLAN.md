@@ -167,7 +167,8 @@ Then superposition (standing waves, fringes) and a 1D packet with a chosen dispe
 
 ## Status, 2026-10-27
 
-All five demos are built, tested and committed; each has a drawer of guided experiments
+All five demos (and two more from the old site, diffraction and Fourier series with sound) are
+built, tested and committed; each has a drawer of guided experiments
 (13, 18, 14, 12 and 10), `#setup=<name>` links, light and dark themes, and a layout that
 works on a phone.
 
@@ -191,9 +192,9 @@ What the plan said and what happened instead:
   lightness); a fully perceptual map was tried and came out muddy.
 - **Photographs** in the FFT demo are drawn in grey until an edit makes them complex.
 
-Not done yet (from "Later"): the diffraction demo (the old LightPropagation applet) and the
-Fourier-series-with-sound demo (SoundFourier).  Both would reuse `lib/` almost entirely.
+Done since (from "Later"): the diffraction demo (the old LightPropagation applet) and the
+Fourier-series-with-sound demo (SoundFourier), both reusing `lib/`.
 
-Testing: 49 unit tests (`tools/run_page.py tests/index.html`, Chromium and Firefox), and a
+Testing: 57 unit tests (`tools/run_page.py tests/index.html`, Chromium and Firefox), and a
 scripted run of every demo and every experiment (`tests/ui/*.py`) that checks the physics as it
 goes (Parseval, unitarity, Born, optical theorem, group velocity...).
