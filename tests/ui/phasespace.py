@@ -29,7 +29,8 @@ def local_maxima(values, floor):
 
 with Browser('phasespace/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready')
-    b.sleep(1.5)
+    try: b.wait('__app.sim.t > 0.2', timeout=15)
+    except TimeoutError: pass
     info = b.eval(INFO)
     check(info['t'] > 0.2, f"it opens running (t = {info['t']:.2f}): a coherent state in the quartic well")
     t0, f0 = time.time(), b.eval('__app.frames()')
@@ -193,7 +194,7 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     b.goto('phasespace/index.html#setup=tunnel&t=28.09')
     b.wait('window.__app && __app.ready'); b.sleep(0.3)
     i = b.eval('({ t: __app.sim.t, left: __app.sim.probabilityLeftOf(0) })')
-    check(i['t'] >= 28.09 and i['left'] < 0.02, f"#setup=tunnel&t=28.09 opens it at t = {i['t']:.2f}, tunnelled (P(x < 0) = {i['left']:.4f})")
+    check(abs(i['t'] - 28.09) < 1e-6 and i['left'] < 0.02, f"#setup=tunnel&t=28.09 opens it paused at t = {i['t']:.2f}, tunnelled (P(x < 0) = {i['left']:.4f})")
 
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))

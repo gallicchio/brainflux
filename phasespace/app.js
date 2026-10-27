@@ -1096,9 +1096,9 @@ function fromHash(h) {
 
 const hash = readHash();
 if (setups[hash.setup]) {
-  // #setup=name&t=8 opens the experiment already run to t = 8 (to link to a moment).
+  // #setup=name&t=8 opens the experiment run to t = 8 and paused there (to link to a moment).
   setups[hash.setup]();
-  if (+hash.t > 0) { runTo(Math.min(+hash.t, 1000)); kick(); }
+  if (+hash.t > 0) { runTo(Math.min(+hash.t, 1000)); setRunning(false); kick(); }
 }
 else if (!fromHash(hash)) go('quartic', { init: { kind: 'coherent', x0: 3, p0: 0 }, speed: 2 });
 setInterval(() => { updateGridNote(); slowNote = slowFrames > 20 ? '(slower than the speed asked for: this computer cannot keep up)' : ''; slowFrames = 0; }, 1000);
