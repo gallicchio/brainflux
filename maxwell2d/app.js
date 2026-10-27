@@ -167,7 +167,7 @@ function draw() {
   const { ctx, width, height } = fitCanvas(viewCanvas);
   const s = width / scene.W, X = (x) => (x + scene.W / 2) * s, Y = (y) => (scene.H / 2 - y) * s;
   // Brightness: a typical size of the field, followed smoothly.
-  if (frameCount % 4 === 0) {
+  if (frameCount % 4 === 0 || !state.running) {
     if (state.view === 'intensity' && sim.intensity) {
       const T = typical(sim.intensity, scene, sim.nx, 0.995) * 0.5;
       brightI = T > 2 * brightI ? T : brightI + 0.15 * (T - brightI);
@@ -733,7 +733,7 @@ for (const [key, m] of Object.entries(MATERIALS)) {
   $('#materials').append(b);
 }
 function setBrush(key) {
-  state.brush = state.brush === key ? null : key;
+  state.brush = key;
   for (const [k, b] of Object.entries(matButtons)) b.setAttribute('aria-pressed', String(k === state.brush));
   brushNSlider.hidden = state.brush !== 'typed';
 }
@@ -938,12 +938,12 @@ const setups = {
   // The reflected beam leaves the gap at -40°; the transmitted one goes on at 40° above it.
   ftir: () => go({ W: 14, H: 11, ppw: 30, shape: 'gap', p: 0.3, src: aimed(40, 5, 0, -0.15, { width: 1.2 }),
     meters: [across(0, 1.4, 90, 6.4), across(3.5 * Math.cos(40 * deg), -0.15 - 3.5 * Math.sin(40 * deg), -40, 2.5)] }),
-  brewster: () => go({ W: 14, H: 10, ppw: 30, mode: 'TE', shape: 'surface', src: aimed(-(90 - 56.3), 4.6, 0, 0, { width: 1.2 }),
-    meters: [across(4 * Math.cos(33.7 * deg), 4 * Math.sin(33.7 * deg), 33.7, 2)] }),
+  brewster: () => go({ W: 16, H: 10, ppw: 30, mode: 'TE', shape: 'surface', src: aimed(-(90 - 56.3), 5.2, -1.5, 0, { width: 1.2 }),
+    meters: [across(0, -0.5, -90, 7.7)] }),
   guide: () => {
     const W = 14, H = 10, x0 = GUIDE_START(W), y0 = BEND_Y(H);
     go({ W, H, ppw: 30, shape: 'bend', p: 2.5, src: { type: 'beam', x: x0 - 0.25, y: y0, angle: 0, width: 0.35 },
-      meters: [across(x0 + 3, y0, 0, 1.2), across(W / 2 - 2.2, 2.5, 90, 1.2)] });
+      meters: [across(x0 + 3, y0, 0, 1.2), across(W / 2 - 2.2, 2.5, 90, 1.2)], speed: 4 });
   },
   cutoff: () => go({ W: 12, H: 6, ppw: 30, shape: 'metalguide', p: 0.4, src: aimed(0, 2.6, -2, 0, { width: 0.8 }),
     meters: [across(3.2, 0, 0, 2.6)] }),
@@ -952,8 +952,7 @@ const setups = {
   slits: () => go({ W: 16, H: 12, ppw: 24, shape: 'slits', p: 2.5, src: aimed(0, 2.6, -4, 0, { width: 4 }) }),
   crystal: () => go({ W: 10, H: 8, ppw: 48, shape: 'crystal', p: 0.37, n: 3, src: aimed(0, 2.4, -1, 0, { width: 1.2 }),
     meters: [across(4, 0, 0, 2.5)] }),
-  pcbend: () => go({ W: 10, H: 8, ppw: 48, shape: 'pcbend', p: 0.37, n: 3, src: { type: 'point', x: -3.15, y: 0 },
-    meters: [across(Math.round(1 / 0.37) * 0.37, 2.6, 90, 0.5)] }),
+  pcbend: () => go({ W: 10, H: 8, ppw: 48, shape: 'pcbend', p: 0.37, n: 3, src: { type: 'point', x: -3.15, y: 0 } }),
   cavity: () => go({ W: 4, H: 3, ppw: 41, shape: 'cavity', p: 0.4, src: { type: 'point', x: 0, y: 0, wave: 'pulse' }, probe: { x: 0.18, y: 0.18 }, speed: 3 }),
   cherenkov: () => go({ W: 16, H: 9, ppw: 24, shape: 'fill', n: 1.5, src: { type: 'moving', x: -7, y: 0, angle: 0, beta: 0.9, mwave: 'steady' } }),
 };

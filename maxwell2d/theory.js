@@ -70,8 +70,11 @@ export function beamAverage(f, theta0, n, w) {
   const sigma = 1 / (2 * Math.PI * n * w), M = 200;
   let s = 0, sw = 0;
   for (let q = -M; q <= M; q++) {
-    const d = (5 * sigma * q) / M, wt = Math.exp(-(d * d) / (2 * sigma * sigma));
-    s += wt * f(theta0 + d); sw += wt;
+    const d = (5 * sigma * q) / M, wt = Math.exp(-(d * d) / (2 * sigma * sigma)), th = theta0 + d;
+    // Only the plane waves that reach the surface (a very wide spread would include grazing
+    // ones, for which the formulas mean nothing).
+    if (Math.abs(th) >= Math.PI / 2 - 1e-3) continue;
+    s += wt * f(th); sw += wt;
   }
   return s / sw;
 }

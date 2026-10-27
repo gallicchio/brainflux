@@ -232,7 +232,7 @@ test('a quarter-wave slab reflects ((n^2-1)/(n^2+1))^2, a half-wave slab nothing
 function surfaceRun({ mode = 'TM', n = 1.5, theta, fromGlass = false, width = 1.2, ppw = 30, periods = 20, shapes = null, lines = [], extra = 0 }) {
   const d = Math.max(3, 2.6 * width * Math.tan(theta) + 0.5);
   const W = 2 * (d * Math.sin(theta) + 2.6 * width * Math.cos(theta) + 1) + extra;
-  const H = 2 * (d * Math.cos(theta) + 2.6 * width * Math.sin(theta) + 0.6);
+  const H = 2 * (d * Math.cos(theta) + 2.6 * width * Math.sin(theta) + 0.6) + extra;
   const scene = new Scene({ W, H, ppw, pml: 16 });
   scene.setShapes(shapes ? shapes(scene) : SHAPES.surface.build(0, n, scene.W, scene.H));
   const sim = simOf(scene, mode);
@@ -279,12 +279,13 @@ test('oblique reflection: Fresnel s (TM) and p (TE), and nothing reflected at Br
   const thetaB = brewsterAngle(1, 1.5), w = 1.6;
   for (const [mode, theta] of [['TM', 45 * deg], ['TE', 45 * deg], ['TM', thetaB], ['TE', thetaB]]) {
     // The power through a line inside the glass is what was not reflected.
-    const { meters, P } = surfaceRun({ mode, theta, width: w, periods: 20, lines: [across(-1, false)] });
+    // (A box with room to spare: a beam keeps widening, and its wings must not be lost to the edges.)
+    const { meters, P } = surfaceRun({ mode, theta, width: w, periods: 20, extra: 4, lines: [across(-0.5, false)] });
     const R = 1 - meters[0].power / P;
     const want = beamAverage((t) => reflectance(1, 1.5, t, mode), theta, 1, w);
     // The interface on the grid reflects a few per cent more or less than a true one (an error
     // of order (k dx)^2: at normal incidence |r| is 1.6% off at 20 cells a wavelength in the glass).
-    close(R, want, 0.003 + 0.03 * want, `${mode} at ${(theta / deg).toFixed(1)}°: R`);
+    close(R, want, 0.002 + 0.03 * want, `${mode} at ${(theta / deg).toFixed(1)}°: R`);
     notes.push(`${mode} ${(theta / deg).toFixed(1)}°: R = ${R.toFixed(4)} (Fresnel, for this beam: ${want.toFixed(4)}; plane wave ${reflectance(1, 1.5, theta, mode).toFixed(4)})`);
   }
   return notes.join('; ');
