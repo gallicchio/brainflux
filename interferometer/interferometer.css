@@ -28,6 +28,8 @@
 .small-btn { padding: 1px 8px; min-height: 24px; font-size: 12px; }
 .counter-row { flex-wrap: nowrap; }
 .counter-row .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* The counter's two halves each keep together (setGroups); on a narrow screen they take two lines. */
+.counter-row #counter-readout { white-space: normal; }
 
 .box { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .box canvas { width: 100%; height: 100%; }
@@ -51,6 +53,9 @@
 #fts-readout, #st-readout { color: var(--ink-2); line-height: 1.5; }
 #mirror-readout, #counter-readout { color: var(--ink-2); }
 .warn-text { color: var(--warn); }
+/* Buttons whose words change keep one width, so that the buttons after them keep still. */
+#scan { min-width: 7.4em; }
+#st-play { min-width: 8.4em; }
 
 @media (max-width: 900px) {
   .ifm { grid-template-columns: minmax(0, 1fr); }

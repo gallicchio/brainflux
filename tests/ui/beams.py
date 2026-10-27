@@ -19,6 +19,52 @@ LAM = 633e-6
 def waists(b):
     return b.eval("import('/beams/gauss.js').then(g => g.waists(__app.bench.trace).map(w => ({ z: w.z, w0: w.w0, zR: w.zR, real: w.real })))")
 
+# Read-outs that keep still: the boxes of the read-outs' parts (lines, number slots, the table's
+# cells, the chips) are recorded after each step that changes the numbers; snapshots that show the
+# same words (numbers taken out: a change of unit is a change of words) must have every box in the
+# same place, to 0.5 px.
+NUMS = r"/[−+-]?\d[\d.,]*(?:e[−+-]?\d+)?/g"
+def snapshot(b, sel, text_sel):
+    return b.eval(f"""(() => {{
+        const texts = [...document.querySelectorAll({json.dumps(text_sel)})].map((e) => e.textContent).join(' | ');
+        const boxes = [...document.querySelectorAll({json.dumps(sel)})].map((e) => e.getBoundingClientRect())
+          .map((r) => [r.left + scrollX, r.top + scrollY, r.width, r.height].map((v) => Math.round(v * 10) / 10));
+        return [texts.replace({NUMS}, '#'), boxes, texts];
+    }})()""")
+
+def settle(b, text_sel, cap=10):
+    """Wait until the read-outs stop changing (the page redraws on the next frame, the element
+    panel 30 ms later): two equal readings 0.25 s apart, or give up after cap seconds."""
+    t0, last = time.time(), None
+    while time.time() - t0 < cap:
+        now = b.eval(f"[...document.querySelectorAll({json.dumps(text_sel)})].map((e) => e.textContent).join('|')")
+        if now == last: return True
+        last = now; time.sleep(0.25)
+    return False
+
+def still(b, name, sel, text_sel, steps, min_compared=3, wait=True):
+    base, moved, texts, compared, slow = {}, [], set(), 0, 0
+    for step in [None] + steps:
+        if step: step()
+        if wait and not settle(b, text_sel): slow += 1
+        words, boxes, text = snapshot(b, sel, text_sel)
+        texts.add(text)
+        if words not in base: base[words] = boxes; continue
+        compared += 1
+        first = base[words]
+        if len(first) != len(boxes): moved.append(f'{len(first)} -> {len(boxes)} boxes'); continue
+        for k, (a, c) in enumerate(zip(first, boxes)):
+            d = [round(y - x, 1) for x, y in zip(a, c)]
+            if max(abs(v) for v in d) > 0.5: moved.append(f'box {k} by {d} at "{text[:90]}"'); break
+    check(not moved and compared >= min_compared and len(texts) > compared // 2,
+          f'{name}: the read-outs keep still while their numbers change ({len(texts)} different texts, {compared} compared with the same words, '
+          f'{len(base)} wordings{", " + str(slow) + " slow to settle" if slow else ""})' + (f'; moved: {moved[:2]}' if moved else ''))
+
+def set_box(b, panel, label, value):
+    """Type a value into the number box of the slider labelled label (in panel), as a student would."""
+    return lambda: b.eval(f"""(() => {{ const s = [...document.querySelectorAll({json.dumps(panel + ' .slider')})].find((x) => x.querySelector('label').textContent.trim() === {json.dumps(label)});
+        const n = s.querySelector('input[type=number]'); n.value = {value}; n.dispatchEvent(new Event('change')); }})()""")
+
 with Browser('beams/index.html', size=SIZE) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1)
     b.screenshot(f'build/beams{TAG}-start.png')
@@ -74,7 +120,7 @@ with Browser('beams/index.html', size=SIZE) as b:
     ws = waists(b)
     est = LAM * 100 / (math.pi * 1.0)
     check(abs(ws[1]['w0'] - est) < 1e-3 * est, f'focus: w0\' = {1000 * ws[1]["w0"]:.2f} um against lambda f / pi w = {1000 * est:.2f} um')
-    info = b.eval("document.querySelector('#el-info').textContent")
+    info = b.eval("document.querySelector('#el-info').textContent").replace('\xa0', ' ')
     check('20.1 µm' in info, f'the lens panel quotes the focus: "{info[:120]}..."')
     b.eval("(() => { const n = document.querySelectorAll('#laser-box input[type=number]')[1]; n.value = 2000; n.dispatchEvent(new Event('change')); })()"); b.sleep(0.2)
     ws = waists(b)
@@ -184,8 +230,8 @@ with Browser('beams/index.html', size=SIZE) as b:
     b.screenshot(f'build/beams{TAG}-cav-unstable.png')
     b.eval('__app.setups.confocal()'); b.sleep(0.2)
     g = b.eval('__app.cavity.mode.gouy')
-    spec = b.eval('[...document.querySelectorAll("#cav-numbers dd")].map(d => d.textContent).join(" | ")')
-    check(abs(g - math.pi / 2) < 1e-12 and '300 MHz' in spec and '600 MHz' in spec, f'confocal: psi1 = pi/2, transverse spacing half the FSR ({spec})')
+    spec = b.eval('[...document.querySelectorAll("#cav-numbers dd")].map(d => d.textContent).join(" | ")').replace('\xa0', ' ')
+    check(abs(g - math.pi / 2) < 1e-12 and '299.8 MHz' in spec and '599.6 MHz' in spec, f'confocal: psi1 = pi/2, transverse spacing half the FSR ({spec})')
     b.eval('__app.cavity.set({ R1: 280, R2: 280 })'); b.sleep(0.1)
     g = b.eval('__app.cavity.mode && __app.cavity.mode.gouy')
     check(g and abs(g / math.pi - 0.4659) < 1e-3, f'R1 = R2 = 280 mm: psi1 = {g / math.pi:.4f} pi, the orders split by {0.5 - g / math.pi:.3f} FSR per order')
@@ -231,6 +277,40 @@ with Browser('beams/index.html', size=SIZE) as b:
         for (let k = 0; k < 40; k++) __app.bench.drawBench();
         return { drag, frame: (performance.now() - t0) / 40 }; })()""")
     check(t['drag'] < 33 and t['frame'] < 16, f'speed: a drag step redraws in {t["drag"]:.1f} ms, an animation frame in {t["frame"]:.1f} ms')
+
+    # ---------------------------------------------------------------- read-outs that keep still
+    b.eval('__app.setups.start()'); b.sleep(0.5)
+    b.eval('__app.bench.select(__app.state.bench.elements[0])'); b.sleep(0.3)
+    BENCH = '#bench-readout > span, #bench-readout .fixnum, #waists th, #waists td, #chips button, #el-info > div, #el-info .fixnum, #crest-note .fixnum, #crest-note, #target-box button, .lens-plot-wrap'
+    BENCH_TEXT = '#bench-readout, #waists, #chips, #el-info, #crest-note'
+    still(b, 'bench: the input waist moved along the bench (signs and sizes)', BENCH, BENCH_TEXT,
+          [set_box(b, '#laser-box', 'at z (mm)', v) for v in (-12.5, 45.25, -40, 0, 88.8, -7.05, 30)])
+    still(b, 'bench: the lens\'s focal length', BENCH, BENCH_TEXT,
+          [set_box(b, '#el-editor', 'f (mm)', v) for v in (120, 95.5, 300, 149.99, 220, 101)])
+    still(b, 'bench: the wavelength', BENCH, BENCH_TEXT,
+          [set_box(b, '#laser-box', 'λ (nm)', v) for v in (700, 532, 1064, 405, 980, 633)], min_compared=2)
+    # The canvas's corner label: its words keep their place as the stretch changes.
+    b.eval("""(() => { const f = CanvasRenderingContext2D.prototype.fillText, seen = window.__seen = {};
+        CanvasRenderingContext2D.prototype.fillText = function (t, x, y, m) { if (this.canvas.id === 'bench') seen[t] = this.getTransform().e + x * this.getTransform().a; return f.call(this, t, x, y, m); }; })()""")
+    xs = []
+    for v in (70.7, 3.25, 1500, 12, 250.5):
+        set_box(b, '#view-box', 'wider ×', v)(); settle(b, '#crest-note'); b.sleep(0.3)
+        xs.append(b.eval("[__seen['drawn ×'], __seen[' wider than it is']]"))
+    check(all(x == xs[0] for x in xs) and None not in xs[0], f'bench: "drawn × … wider than it is" keeps its words in place as the stretch changes ({xs})')
+    b.eval('__app.setups.stability()'); b.sleep(0.5)
+    CAV = '#cavity-readout > span, #cavity-readout .fixnum, #cav-numbers dt, #cav-numbers dd, #cav-numbers .fixnum, #ray-box button'
+    still(b, 'cavity: the mirrors\' spacing (g changes sign)', CAV, '#cavity-readout, #cav-numbers',
+          [set_box(b, '#cav-box', 'L (mm)', v) for v in (250, 620.5, 199, 455, 999.9, 310, 88)])
+    b.eval('__app.setups.hermite()'); b.sleep(0.5)
+    MODES = '#modes-readout > span, #modes-readout .fixnum, #fft-note, #fft-note .fixnum'
+    zsteps = [set_box(b, '#zeta-box', 'z / zR', v) for v in (0.5, -1.25, 2.75, -0.05, 1.0, -2.5)]
+    still(b, 'modes: z along the beam, both signs', MODES, '#modes-readout, #fft-note', zsteps)
+    b.eval('__app.setups.fft()'); b.sleep(0.5)
+    still(b, 'modes: the FFT check as z changes', MODES, '#modes-readout, #fft-note', zsteps[:4], min_compared=2)
+    b.eval('__app.setups.hermite()'); b.sleep(0.3)
+    b.eval('__app.state.modes.travel = true; __app.setView("modes")')
+    still(b, 'modes: the read-out while the mode travels', MODES, '#modes-readout', [lambda: time.sleep(0.3)] * 8, wait=False)
+    b.eval('__app.state.modes.travel = false')
 
     # ---------------------------------------------------------------- dark
     if full:

@@ -61,3 +61,6 @@
   .bar h1 { font-size: 14px; }
 }
 #profile-note b { color: var(--ink-2); font-weight: 600; }
+/* A number in a bold phrase (its slot keeps it still: ui.js setSlots). */
+.fixnum.b { font-weight: bold; }
+#profile-note .fixnum.b { color: var(--ink-2); font-weight: 600; }

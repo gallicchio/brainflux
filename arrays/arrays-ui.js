@@ -6,7 +6,7 @@ import {
   nearField, fieldAt, extent, centroid,
 } from './antenna.js';
 import { colorize, colorOf } from '../lib/complexcolor.js';
-import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, setSlots } from '../lib/ui.js';
 import { fitCanvas, themeColors } from '../lib/plot.js';
 
 const DEG = Math.PI / 180;
@@ -363,13 +363,15 @@ function drawPolar() {
 
 // ------------------------------------------------------------------ read-outs
 
-// Directions to a tenth of a degree (no "-0.0"); widths to three figures.
-const deg = (r) => { const v = Math.round((r / DEG) * 10) / 10; return `${(v === 0 ? 0 : v).toFixed(1).replace('-', '−')}°`; };
-const dB = (v) => `${fmt(v, 3).replace('-', '−')} dB`;
+// Each number in the read-outs has a slot of its own, a fixed number of characters wide with
+// fixed decimals (directions and widths to a tenth of a degree, levels to a tenth of a dB), so that
+// nothing moves as the beam sweeps or the array changes (setSlots).
+const deg = (r) => [{ v: r / DEG, dec: 1, w: 6 }, '°'];
+const dB = (v) => [{ v, dec: 1, w: 5 }, '\u00a0dB'];
 function readouts() {
   const box = $('#readouts'), rows = [];
-  const add = (k, v, cls) => rows.push(`<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ''}>${v}</dd>`);
-  if (!info || !A.els.length) { box.innerHTML = ''; return; }
+  const add = (k, parts, cls = '') => rows.push([k, parts, cls]);
+  if (!info || !A.els.length) { box.replaceChildren(); box._rows = ''; return; }
   if (A.phaseMode === 'focus') {
     // How sharp the focus can be: the spot's first dark points are about
     // lambda / (sin a1 + sin a2) to either side, a1 and a2 the angles out to the array's ends.
@@ -378,23 +380,29 @@ function readouts() {
     let lo = 0, hi = 0;
     for (const e of A.els) { const a = Math.atan2(e.x - fx, e.y - fy) - ax, w = Math.atan2(Math.sin(a), Math.cos(a)); lo = Math.min(lo, w); hi = Math.max(hi, w); }
     const s = Math.sin(Math.min(Math.PI / 2, hi)) + Math.sin(Math.min(Math.PI / 2, -lo));
-    add('Focus', `${fmt(r, 3)} λ from the middle of the array`);
-    if (s > 0.02) add('Spot', `dark about λ/(sin α₁ + sin α₂) = ${fmt(1 / s, 2)} λ to either side`);
-    add('Far field', 'no single beam: the waves meet at the focus and spread out again');
-  } else if (info.omni) add('Beam', 'none: the same power within 3 dB in every direction');
+    add('Focus', [{ v: r, dec: 2, w: 5 }, '\u00a0λ from the middle of the array']);
+    if (s > 0.02) add('Spot', ['dark about λ/(sin α₁ + sin α₂) = ', { v: 1 / s, dec: 2, w: 4 }, '\u00a0λ to either side']);
+    add('Far field', ['no single beam: the waves meet at the focus and spread out again']);
+  } else if (info.omni) add('Beam', ['none: the same power within 3 dB in every direction']);
   else {
-    add('Beam direction', `θ = ${deg(info.beam)}`);
-    add('Beamwidth', `${fmt(info.hpbw / DEG, 3)}° between the half-power (−3 dB) points`);
+    add('Beam direction', ['θ = ', ...deg(info.beam)]);
+    add('Beamwidth', [{ v: info.hpbw / DEG, dec: 1, w: 5 }, '° between the half-power (−3 dB) points']);
     // A grating lobe proper: an equally spaced line with d > lambda / (1 + |sin theta0|).
     const grating = A.layout === 'line' && A.phaseMode === 'steer' && A.d > 1 / (1 + Math.abs(Math.sin(A.theta0 * DEG))) - 1e-9;
-    if (info.sll === null) add('Highest sidelobe', 'none');
-    else if (info.sll > -0.5) add('Highest sidelobe', `${dB(info.sll)} at ${deg(info.sllAngle)}: as strong as the beam${grating ? ' (a grating lobe)' : ''}`, 'warn');
-    else add('Highest sidelobe', `${dB(info.sll)} at ${deg(info.sllAngle)}`);
+    if (info.sll === null) add('Highest sidelobe', ['none']);
+    else if (info.sll > -0.5) add('Highest sidelobe', [...dB(info.sll), ' at ', ...deg(info.sllAngle), `: as strong as the beam${grating ? ' (a grating lobe)' : ''}`], 'warn');
+    else add('Highest sidelobe', [...dB(info.sll), ' at ', ...deg(info.sllAngle)]);
   }
-  if (D > 0 && A.phaseMode !== 'focus') add('Directivity', `${fmt(10 * Math.log10(D), 3)} dBi (D = ${fmt(D, 3)})`);
+  if (D > 0 && A.phaseMode !== 'focus') add('Directivity', [{ v: 10 * Math.log10(D), dec: 1, w: 4 }, '\u00a0dBi (D = ', { v: D, dec: 1, w: 5 }, ')']);
   const Dsz = extent(A.els);
-  add('Elements', `${A.els.length}, across D = ${fmt(Dsz, 3)} λ; far field beyond 2D²/λ = ${fmt(2 * Dsz * Dsz, 3)} λ`);
-  box.innerHTML = rows.join('');
+  add('Elements', [{ v: A.els.length, dec: 0, w: 2 }, ', across D = ', { v: Dsz, dec: 1, w: 4 }, '\u00a0λ; far field beyond 2D²/λ = ', { v: 2 * Dsz * Dsz, dec: 1, w: 6 }, '\u00a0λ']);
+  // The rows are made again only when the quantities shown change; otherwise only their numbers.
+  const key = rows.map(([k, , cls]) => `${k}|${cls}`).join(';');
+  if (box._rows !== key) {
+    box._rows = key;
+    box.replaceChildren(...rows.flatMap(([k, , cls]) => [el('dt', {}, k), el('dd', { class: cls || undefined })]));
+  }
+  rows.forEach(([, parts], i) => setSlots(box.children[2 * i + 1], parts));
 }
 
 // ------------------------------------------------------------------ animation
@@ -525,7 +533,7 @@ function syncSelected() {
   const e = A.els[A.selected];
   $('#selected-panel').hidden = !e;
   if (!e) return;
-  $('#selected-label').textContent = `Element ${A.selected + 1} at (${fmt(e.x, 3)}, ${fmt(e.y, 3)}) λ`;
+  setSlots($('#selected-label'), ['Element ', { v: A.selected + 1, dec: 0, w: 2 }, ' at (', { v: e.x, dec: 2, w: 6 }, ', ', { v: e.y, dec: 2, w: 6 }, ') λ']);
   ampSlider.value = +e.amp.toFixed(3);
   phSlider.value = +(e.phase / DEG).toFixed(1);
 }

@@ -6,8 +6,8 @@ import { solve, rtBoth, field, makeWorkspace, sweepLayer, incidentE2, phaseDiffe
 import { colorimeter, toDisplay, spectralColor, wavelengths } from './color.js';
 import { parseDesign, expandDesign, drainingThickness } from './design.js';
 import { tryParse } from '../lib/expr.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors, niceTicks } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, fixedNum, numSlot, setSlots } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, niceTicks, fillSlots, slotsWidth } from '../lib/plot.js';
 
 const DEG = Math.PI / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -424,12 +424,16 @@ function tintOf(m, nm) {
 }
 const shortName = (m) => (m.mat === 'typed' ? m.label || 'n(λ)' : MATERIALS[m.mat]?.short || m.mat);
 
-function fmtLen(nm) {
-  if (nm >= 10000) return `${fmt(nm / 1000, 3)} µm`;
-  if (nm >= 1000) return `${fmt(nm / 1000, 3)} µm`;
-  return `${nm < 10 ? fmt(nm, 2) : Math.round(nm)} nm`;
-}
-const pct = (v) => (Math.abs(v) < 1e-9 ? '0%' : v > 0.99995 && v < 1 ? '100%' : v >= 0.9995 && v < 1 ? `${(100 * v).toFixed(2)}%` : v < 0.001 && v > 0 ? `${(100 * v).toExponential(1)}%` : `${(100 * v).toFixed(v < 0.1 ? 2 : 1)}%`);
+// Numbers in labels and readouts keep still as they change: a fixed number of decimals for each
+// quantity, each in a slot of fixed width (setSlots on the page, fillSlots on a canvas).
+/** A thickness as parts for fillSlots: nm to the nanometre (0.1 below 10), µm from 1 µm. */
+const fmtLenParts = (nm) => (nm >= 999.5 ? [{ v: nm / 1000, dec: 2, w: 5 }, ' µm'] : [{ v: nm, dec: nm < 9.95 ? 1 : 0, w: 3 }, ' nm']);
+const lambdaParts = () => [{ v: state.lambda, dec: 1, w: 6 }, ' nm'];
+const thetaParts = () => [{ v: state.theta, dec: 1, w: 4 }, '°'];
+/** A fraction as a percentage with two decimals (in powers of ten below 0.1%), in a 7-character slot. */
+const pctText = (v) => { const x = 100 * v; return `${Math.abs(v) < 1e-9 ? '0.00' : x > 0 && x < 0.1 ? x.toExponential(1).replace('e-', 'e−') : fixedNum(x, 2)}%`; };
+const pctPart = (v, bold = false) => ({ text: pctText(v), w: 7, class: bold ? 'b' : '' });
+const boldPart = (v, dec, w, unit) => ({ text: fixedNum(v, dec, w) + unit, w: w + unit.length, class: 'b' });
 
 // --- the stack and the field
 
@@ -521,8 +525,8 @@ function drawStack(now) {
       ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 8 * Math.cos(a - 0.4), y1 - 8 * Math.sin(a - 0.4)); ctx.lineTo(x1 - 8 * Math.cos(a + 0.4), y1 - 8 * Math.sin(a + 0.4)); ctx.closePath(); ctx.fill();
       ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-      const label = `${fmt(state.lambda, 4)} nm, ${fmt(state.theta, 3)}°`;
-      if (x1 + 10 + ctx.measureText(label).width < f.X(0)) ctx.fillText(label, x1 + 6, y1 + 2);
+      const label = [...lambdaParts(), ', ', ...thetaParts()];
+      if (x1 + 10 + slotsWidth(ctx, label) < f.X(0)) fillSlots(ctx, label, x1 + 6, y1 + 2);
     }
   }
   ctx.restore();
@@ -532,12 +536,13 @@ function drawStack(now) {
   ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
   for (const [a, b, m, j] of regions) {
     const xa = Math.max(f.left, f.X(a)), xb = Math.min(f.right, f.X(b)), w = xb - xa;
-    let text = j < 0 || j >= L ? shortName(m) : `${shortName(m)} ${fmtLen(m.d)}`;
-    if (ctx.measureText(text).width > w - 4) text = j < 0 || j >= L ? text : shortName(m);
-    if (ctx.measureText(text).width > w - 4 && j !== state.sel) continue;
-    ctx.fillStyle = j === state.sel ? c.accent : c.ink2;
     ctx.font = j === state.sel ? '600 11px system-ui, sans-serif' : '11px system-ui, sans-serif';
-    ctx.fillText(text, clamp((xa + xb) / 2, f.left + ctx.measureText(text).width / 2, f.right - ctx.measureText(text).width / 2), f.top - 9);
+    let text = j < 0 || j >= L ? [shortName(m)] : [`${shortName(m)} `, ...fmtLenParts(m.d)];
+    if (slotsWidth(ctx, text) > w - 4) text = [shortName(m)];
+    const tw = slotsWidth(ctx, text);
+    if (tw > w - 4 && j !== state.sel) continue;
+    ctx.fillStyle = j === state.sel ? c.accent : c.ink2;
+    fillSlots(ctx, text, clamp((xa + xb) / 2, f.left + tw / 2, f.right - tw / 2), f.top - 9);
   }
   for (let j = 0; j < L; j++) {
     const x = f.X(starts[j + 1]);
@@ -554,7 +559,7 @@ function roundRect(ctx, x, y, w, h, r) {
 // --- the R, T, A plots
 
 const LOG_MIN = -4;
-function drawCurves(cv, data, { x0, x1, xlabel, marker, markerText, kind }) {
+function drawCurves(cv, data, { x0, x1, xlabel, marker, markerParts, kind }) {
   const { ctx, width, height } = fitCanvas(cv);
   ctx.clearRect(0, 0, width, height);
   const c = colors, log = state.show.log;
@@ -605,9 +610,9 @@ function drawCurves(cv, data, { x0, x1, xlabel, marker, markerText, kind }) {
   ctx.save();
   ctx.fillStyle = c.ink; ctx.beginPath(); ctx.moveTo(mx - 6, f.top - 9); ctx.lineTo(mx + 6, f.top - 9); ctx.lineTo(mx, f.top); ctx.closePath(); ctx.fill();
   ctx.font = '600 11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  const tw = ctx.measureText(markerText).width;
+  const tw = slotsWidth(ctx, markerParts);
   const tx = mx + 9 + tw < width - 2 ? mx + 9 : mx - 9 - tw;
-  ctx.fillText(markerText, tx, f.top - 9);
+  fillSlots(ctx, markerParts, tx, f.top - 9);
   ctx.restore();
   legend(ctx, f, qs, pols, labelEnd);
   return f;
@@ -685,16 +690,16 @@ function drawPlots() {
   const sp = comp.spec;
   comp.specWidth = $('#spec').getBoundingClientRect().width;
   comp.angWidth = $('#ang').getBoundingClientRect().width;
-  frames.spec = drawCurves($('#spec'), sp, { x0: state.lrange[0], x1: state.lrange[1], xlabel: 'wavelength (nm)', marker: state.lambda, markerText: `${fmt(state.lambda, 4)} nm`, kind: 'spec' });
+  frames.spec = drawCurves($('#spec'), sp, { x0: state.lrange[0], x1: state.lrange[1], xlabel: 'wavelength (nm)', marker: state.lambda, markerParts: lambdaParts(), kind: 'spec' });
   if (comp.x2kind === 'thickness') {
     const d = state.layers[state.sel].d;
-    frames.ang = drawCurves($('#ang'), comp.x2, { x0: 0, x1: state.dmaxPlot, xlabel: `thickness of layer ${state.sel + 1} (nm)`, marker: d, markerText: fmtLen(d), kind: 'thickness' });
+    frames.ang = drawCurves($('#ang'), comp.x2, { x0: 0, x1: state.dmaxPlot, xlabel: `thickness of layer ${state.sel + 1} (nm)`, marker: d, markerParts: fmtLenParts(d), kind: 'thickness' });
   } else {
-    frames.ang = drawCurves($('#ang'), comp.x2, { x0: 0, x1: 90, xlabel: 'angle of incidence (°)', marker: state.theta, markerText: `${fmt(state.theta, 3)}°`, kind: 'angle' });
+    frames.ang = drawCurves($('#ang'), comp.x2, { x0: 0, x1: 90, xlabel: 'angle of incidence (°)', marker: state.theta, markerParts: thetaParts(), kind: 'angle' });
   }
   $('#x2-title').textContent = comp.x2kind === 'thickness' ? 'Against thickness' : 'Against angle';
   x2Seg.value = comp.x2kind;
-  $('#spec-note').textContent = state.theta ? `at ${fmt(state.theta, 3)}°` : 'at normal incidence';
+  setSlots($('#spec-note'), state.theta ? ['at ', ...thetaParts()] : ['at normal incidence']);
 }
 
 // --- the white-light picture
@@ -787,14 +792,14 @@ function swatchColors() {
   return { R: displayRGB(cm, R, gR), T: displayRGB(cm, T, gT), YR: R[1], YT: T[1], gR, gT };
 }
 const swatchEls = ['reflected', 'transmitted'].map((label) => {
-  const chip = el('div', { class: 'chip' }), value = el('span', { class: 'mono' });
+  const chip = el('div', { class: 'chip' }), value = numSlot(7, { class: 'mono' });
   $('#swatches').append(el('div', { class: 'swatch' }, chip, el('span', {}, label), value));
   return { chip, value };
 });
 function drawSwatches() {
   const s = comp.swatch;
   [[s.R, s.YR, s.gR], [s.T, s.YT, s.gT]].forEach(([rgb, Y, gain], i) => {
-    const { chip, value } = swatchEls[i], bg = rgbCss(rgb), text = pct(Y), title = gain > 1.05 ? `brightened ${fmt(gain, 2)} times` : '';
+    const { chip, value } = swatchEls[i], bg = rgbCss(rgb), text = pctText(Y), title = gain > 1.05 ? `brightened ${fmt(gain, 2)} times` : '';
     if (chip.style.background !== bg) chip.style.background = bg;
     if (chip.title !== title) chip.title = title;
     if (value.textContent !== text) value.textContent = text;
@@ -803,34 +808,39 @@ function drawSwatches() {
 
 // --- readouts
 
-let lastReadouts = '';
+// A group of words and numbers for each quantity, each number in a slot of fixed width, so that
+// nothing in the row moves as the numbers change (only when the words do).
 function readouts() {
-  const v = comp.point, s = v.s, p = v.p, out = [];
-  const pair = (q, a, b) => `<span>${q} <b>${pct(a)}</b>${Math.abs(a - b) > 5e-5 ? ` s, <b>${pct(b)}</b> p` : ''}</span>`;
-  out.push(pair('R', s.R, p.R));
-  out.push(pair('T', s.T, p.T));
-  if (s.A > 1e-5 || p.A > 1e-5) out.push(pair('A', s.A, p.A));
+  const v = comp.point, s = v.s, p = v.p, items = [];
+  const pair = (q, a, b) => [q, ' ', pctPart(a, true), ...(Math.abs(a - b) > 5e-5 ? [' s, ', pctPart(b, true), ' p'] : [])];
+  items.push(pair('R', s.R, p.R));
+  items.push(pair('T', s.T, p.T));
+  if (s.A > 1e-5 || p.A > 1e-5) items.push(pair('A', s.A, p.A));
   const tc = criticalAngle(), tb = brewsterAngle();
-  if (tc !== null) out.push(`<span>θ<sub>c</sub> = ${tc.toFixed(1)}°</span>`);
-  if (tb !== null) out.push(`<span>θ<sub>B</sub> = ${tb.toFixed(2)}°</span>`);
+  if (tc !== null) items.push(['θ', { html: '<sub>c</sub>' }, ' = ', { v: tc, dec: 1, w: 4 }, '°']);
+  if (tb !== null) items.push(['θ', { html: '<sub>B</sub>' }, ' = ', { v: tb, dec: 2, w: 5 }, '°']);
   // The evanescent wave in the substrate.
   const { st, beta } = v;
   if (st.ns[1] < 1e-9 && beta > st.ns[0]) {
     const decay = state.lambda / (2 * Math.PI * Math.sqrt(beta * beta - st.ns[0] ** 2));
-    out.push(`<span>evanescent: |E| falls by 1/e in <b>${decay.toFixed(0)} nm</b></span>`);
-    if (nLayers() === 0) out.push(`<span>phase s − p <b>${phaseDifference(s, p).toFixed(1)}°</b></span>`);
+    items.push(['evanescent: |E| falls by 1/e in ', boldPart(decay, 0, 5, ' nm')]);
+    if (nLayers() === 0) items.push(['phase s − p ', boldPart(phaseDifference(s, p), 1, 6, '°')]);
   }
-  if (comp.rpMin && tb === null && comp.x2kind === 'angle') out.push(`<span>R<sub>p</sub> least at <b>${comp.rpMin.theta.toFixed(2)}°</b> (${pct(comp.rpMin.R)})</span>`);
+  if (comp.rpMin && tb === null && comp.x2kind === 'angle') items.push(['R', { html: '<sub>p</sub>' }, ' least at ', boldPart(comp.rpMin.theta, 2, 5, '°'), ' (', pctPart(comp.rpMin.R), ')']);
   if (comp.finesse) {
-    const F = comp.finesse, w = F.fwhm < 0.1 ? F.fwhm.toFixed(3) : F.fwhm.toFixed(2);
-    out.push(`<span>T peak at ${F.peak.toFixed(1)} nm (${pct(F.Tmax)}), <b>${w} nm</b> wide${F.F ? `; peaks every ${F.spacing.toFixed(1)} nm: finesse <b>${F.F.toFixed(0)}</b>` : ''}</span>`);
+    const F = comp.finesse;
+    items.push(['T peak at ', { v: F.peak, dec: 1, w: 6 }, ' nm (', pctPart(F.Tmax), '), ', boldPart(F.fwhm, 3, 7, ' nm'), ' wide',
+      ...(F.F ? ['; peaks every ', { v: F.spacing, dec: 1, w: 6 }, ' nm: finesse ', boldPart(F.F, 0, 4, '')] : [])]);
   }
-  if (!state.show.film) {
-    const sw = comp.swatch;
-    out.push(`<span>white light: <span class="sw" style="background:${rgbCss(sw.R)}"></span>${pct(sw.YR)} reflected, <span class="sw" style="background:${rgbCss(sw.T)}"></span>${pct(sw.YT)} through</span>`);
+  const sw = state.show.film ? null : comp.swatch;
+  if (sw) items.push(['white light: ', { html: '<span class="sw"></span>' }, pctPart(sw.YR), ' reflected, ', { html: '<span class="sw"></span>' }, pctPart(sw.YT), ' through']);
+  const box = $('#readouts');
+  if (box.children.length !== items.length) box.replaceChildren(...items.map(() => el('span')));
+  items.forEach((parts, i) => setSlots(box.children[i], parts));
+  if (sw) {
+    const chips = box.lastChild.querySelectorAll('.sw');
+    [sw.R, sw.T].forEach((rgb, i) => { const bg = rgbCss(rgb); if (chips[i].style.background !== bg) chips[i].style.background = bg; });
   }
-  const html = out.join('');
-  if (html !== lastReadouts) { $('#readouts').innerHTML = html; lastReadouts = html; }
 }
 
 // ---------------------------------------------------------------------------- the loop
@@ -1007,11 +1017,14 @@ function refreshEditor() {
 }
 function refreshIndexNote() {
   const i = state.sel, m = medium(i), [n, k] = index1(m, state.lambda), mat = matOf(m);
-  let text = `At ${fmt(state.lambda, 4)} nm: n = ${n.toFixed(4)}${Math.abs(k) > 1e-6 ? ` ${k < 0 ? '−' : '+'} ${Math.abs(k).toFixed(3)}i` : ''}.`;
+  // (The numbers in slots of their own, so that the words after them keep their places.)
+  const parts = ['At ', ...lambdaParts(), ': n = ', { v: n, dec: 4, w: 7 }];
+  if (Math.abs(k) > 1e-6) parts.push(' ', { text: k < 0 ? '−' : '+', w: 1 }, ' ', { v: Math.abs(k), dec: 3, w: 6 }, 'i');
+  let text = '.';
   if (i < 0 && Math.abs(k) > 1e-6) text += ' (κ is ignored here: the light must arrive through a transparent medium.)';
   if (mat.ref && mat.ref !== 'typed') text += ` ${mat.ref}.`;
   if (mat.range && (state.lambda < mat.range[0] || state.lambda > mat.range[1])) text += ' Outside the range of the fit.';
-  $('#index-note').textContent = text;
+  setSlots($('#index-note'), [...parts, text]);
 }
 
 // The design panel.

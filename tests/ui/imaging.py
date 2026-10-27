@@ -209,6 +209,31 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     row = b.eval(ROW)
     check(row[mid] < 1e-12 * max(row), 'coherent, opposite phases: dark between them')
 
+    # The readouts keep still: every number in a slot of its own, so that no word, number, panel
+    # or plot below moves (by more than 0.5 px) as the numbers change sign, size and figures.
+    def frame_passed():
+        b.eval('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(0))))')
+    def still(name, sel, steps, want_texts):
+        moves, texts = b.steady(sel, steps)
+        check(not moves and len(texts) >= want_texts,
+              f'{name}: the readouts keep still through {len(texts)} different readings' + (f'; moved: {moves[:4]}' if moves else ''))
+    def hover(canvas, fx, fy):
+        def go():
+            x, y = b.point(canvas, (fx, fy)); b.mouse('mouseMoved', x, y); frame_passed()
+        return go
+    def changed(**values):
+        return lambda: (put(b, **values), frame_passed())
+    setup(b, 'invisible')
+    notes = '#obj-read, #obj-read .fixnum, #fp-read, #fp-read .fixnum, #img-read, #img-read .fixnum, #limit, #limit .fixnum, #profile'
+    still('the notes under the planes', notes, [changed(NA=0.9), changed(z=-2.5), changed(NA=0.13, z=3.75), changed(phi0=2.9), changed(**{'lambda': 0.41}), changed(NA=1.37, z=0, **{'lambda': 0.55})], 7)
+    # Under the pointer: x and y either side of the middle; in the pupil, sin theta either way.
+    for canvas, sel in (('#object', '#obj-read'), ('#fourier', '#fp-read'), ('#image', '#img-read')):
+        hover(canvas, 0.62, 0.41)()
+        still(f'hovering over {canvas}', f'{sel}, {sel} .fixnum, #obj-read, #fp-read, #img-read, #profile',
+              [hover(canvas, fx, fy) for fx, fy in ((0.38, 0.6), (0.555, 0.47), (0.45, 0.57), (0.97, 0.03), (0.07, 0.93))] if canvas != '#fourier'
+              else [hover(canvas, fx, fy) for fx, fy in ((0.38, 0.6), (0.505, 0.49), (0.45, 0.57), (0.6, 0.52))], 5)
+    b.mouse('mouseMoved', 5, 5); frame_passed()
+
     # Painting: ink on the object, a block on the pupil, the light dragged with the Tilt tool.
     setup(b, 'zernike')
     before = b.eval('__app.ink.reduce((a, v) => a + v, 0)')

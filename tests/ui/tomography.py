@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Drive the tomography demo: every experiment, the scanner's physics, pointing and painting."""
-import json, os, sys
+import json, os, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
 
@@ -8,6 +8,39 @@ failures = []
 def check(cond, msg):
     print(('ok    ' if cond else 'FAIL  ') + msg)
     if not cond: failures.append(msg)
+
+# Where the words and number slots of some readouts are, to check that they keep still: each word
+# (not the numbers) by its readout, the readout's words and its place among them; each number slot
+# likewise.  Layouts are compared word by word where the wording is the same.
+LAYOUT = r"""((sel) => { const out = {};
+  for (const e of document.querySelectorAll(sel)) {
+    if (!e.getClientRects().length) continue;       // (not shown)
+    const walk = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), words = []; let n;
+    while ((n = walk.nextNode())) {
+      if (n.parentElement.closest('.fixnum')) continue;
+      for (const m of n.textContent.matchAll(/[^\s\d.,:;()−+-]+/g)) {
+        const g = document.createRange(); g.setStart(n, m.index); g.setEnd(n, m.index + m[0].length);
+        const r = g.getBoundingClientRect(); words.push([m[0], r.left, r.top]);
+      }
+    }
+    const shape = e.id + '|' + words.map((w) => w[0]).join(' ');
+    words.forEach(([w, x, y], k) => { out[`${shape}|${k}`] = [x, y]; });
+    e.querySelectorAll('.fixnum').forEach((s, i) => { const r = s.getBoundingClientRect(); out[`${shape}|slot${i}`] = [r.left, r.top, r.width]; });
+  }
+  return out; })"""
+def track(base, now, tol=0.5):
+    """What in the layout now moved by more than tol px from where it was first seen (in base)."""
+    moved = [(k.split('|')[0], k.split('|')[-1], round(max(abs(x - y) for x, y in zip(base[k], p)), 1)) for k, p in now.items()
+             if k in base and max(abs(x - y) for x, y in zip(base[k], p)) > tol]
+    for k, p in now.items(): base.setdefault(k, p)
+    return moved
+# The x of the words drawn on a canvas around live numbers (fillText calls without digits).
+CANVAS_WORDS = r"""(() => { if (window.__words) return; window.__words = [];
+  const orig = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (t, x, y, m) {
+    const s = String(t);
+    if (/°/.test(s) && !/\d/.test(s)) __words.push([this.canvas.id, s, Math.round((this.getTransform().e + x * this.getTransform().a) * 10) / 10]);
+    return orig.call(this, t, x, y, m); }; })()"""
 
 # Finish the scan, wait for any rescan in the workers, and for two frames to be drawn.
 SETTLE = """(async () => { __app.finishScan();
@@ -158,6 +191,43 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
     b.screenshot('build/tomo-painted.png')
     b.eval("__app.setTool('look')")
 
+    # The readouts keep still: every number in a slot of its own, so that neither its digits nor
+    # the words after it move, while the scanner turns and as the pointer moves over the pictures.
+    READOUTS = f"{LAYOUT}('#scan-readout, #sino-readout, #sino-note, #k-readout, #bp-readout, #fbp-readout, #fbp-note, #extra-readout')"
+    b.eval(CANVAS_WORDS)
+    b.mouse('mouseMoved', 2, 2)                     # (the pointer off the pictures: no hover readouts)
+    b.eval("__app.setView('projection'); __app.state.speed = 25; __app.restartScan()"); b.sleep(0.3)
+    base, moved, seen = {}, [], set()
+    b.eval('__words.length = 0')
+    t0 = time.time()
+    while time.time() - t0 < 40 and len(seen) < 8 and b.eval('__app.state.playing'):   # (a loaded machine draws few frames)
+        b.sleep(0.2)
+        seen.add(b.eval("document.querySelector('#scan-readout').textContent"))
+        moved += track(base, b.eval(READOUTS))
+    words = b.eval('__words')
+    check(len(seen) >= 3 and not moved, f'the readouts keep still while the scanner turns ({len(seen)} readings, e.g. {sorted(seen)[:2]})' + (f'; moved {moved[:3]}' if moved else ''))
+    xs = {(c, t): {x for c2, t2, x in words if (c2, t2) == (c, t)} for c, t, _ in words}
+    check(len(words) >= 6 and all(len(v) == 1 for v in xs.values()), f"the angles drawn on the scanner and the projection keep their places ({ {f'{c} {t!r}': sorted(v) for (c, t), v in xs.items()} })")
+    settle(b)
+    b.eval("__app.setView('direct')"); b.sleep(0.5)
+    base, moved, texts = {}, [], set()
+    for cv in ('#scanner', '#sinogram', '#kspace', '#bp', '#fbp', '#extra'):
+        for fx, fy in ((0.15, 0.2), (0.85, 0.8), (0.5, 0.5), (0.3, 0.72), (0.71, 0.33), (0.52, 0.47), (0.08, 0.6)):
+            x, y = b.point(cv, (fx, fy))
+            b.mouse('mouseMoved', x, y); b.sleep(0.25)
+            texts.add(b.eval("[...document.querySelectorAll('.readout')].map((e) => e.textContent).join(' | ')"))
+            moved += track(base, b.eval(READOUTS))
+        b.mouse('mouseMoved', 2, 2); b.sleep(0.2)
+    check(len(texts) >= 20 and not moved, f'the readouts keep still as the pointer moves over each picture ({len(texts)} readings)' + (f'; moved {moved[:3]}' if moved else ''))
+    for label, v in (('Angles', 7), ('Angles', 360), ('Angles', 180), ('Cutoff', 0.35), ('Cutoff', 0.9), ('Profile at y', -0.62), ('Profile at y', 0.05)):
+        if label == 'Profile at y': b.eval("__app.setView('profile')")
+        b.eval(f"""(() => {{ const s = [...document.querySelectorAll('.slider')].find((s) => s.querySelector('label').textContent === {json.dumps(label)});
+            const box = s.querySelector('input[type=number]'); box.value = {v}; box.dispatchEvent(new Event('change')); }})()""")
+        settle(b)
+        moved += track(base, b.eval(READOUTS))
+    check(not moved, 'the readouts keep still as the number of angles, the cutoff and the profile move' + (f'; moved {moved[:3]}' if moved else ''))
+    b.eval("__app.setView('direct')"); settle(b)
+
     # The formula: its parameters are sliders.
     b.eval("__app.setObject('formula')"); settle(b)
     b.eval("document.querySelector('.formula-presets button').click()"); settle(b)
@@ -175,6 +245,8 @@ with Browser('tomography/index.html#setup=streaks', size=(400, 850)) as b:
     b.wait('window.__app && __app.ready', timeout=30); settle(b)
     check(b.eval('__app.sc.nA') == 24 and b.eval("document.querySelector('#help').classList.contains('open')"), '#setup=streaks sets up the experiment and opens the drawer')
     b.eval("document.querySelector('#help').classList.remove('open')"); b.sleep(0.3)
+    wide = b.eval('document.documentElement.scrollWidth')
+    check(wide <= 400, f'at phone width nothing sticks out sideways (page {wide} px wide)')
     b.screenshot('build/tomo-phone.png')
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no errors at phone width' + ('' if not errors else ': ' + '; '.join(errors[:3])))

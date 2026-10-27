@@ -101,6 +101,29 @@ with Browser('diffraction/index.html', size=(1300, 1000)) as b:
     top = b.eval("(() => { const f = __app.fields[0], N = 512; let m = 0, at = 0; for (let j = 128; j < 384; j++) for (let i = 128; i < 384; i++) { const o = j * N + i, I = f.re[o] ** 2 + f.im[o] ** 2; if (I > m) { m = I; at = [i, j]; } } return at; })()")
     check(top == [256, 256], f'at z = f the brightest point is the focus, in the middle ({top})')
 
+    # The notes and the labels on the pictures keep still as the screen moves (within one phrasing:
+    # near field, or far field in mm): every number in a slot of its own.
+    b.eval("__app.setups.slit()"); b.sleep(0.5)
+    b.eval("""(() => { window.__words = {}; for (const id of ['field', 'side']) { const c = document.getElementById(id).getContext('2d'), fill = c.fillText.bind(c);
+        c.fillText = (t, x, y) => { if (!/^[−\\d.e\\s]+$/.test(t)) { const k = id + '|' + t + '|' + Math.round(y); (__words[k] ||= new Set()).add(Math.round(x * 10) / 10); } fill(t, x, y); }; } })()""")
+    NOTES = '#field-note, #field-note .fixnum, #side-note, #side-note .fixnum, #fresnel, #fresnel .fixnum, #field, #side'
+    def move_to(mm):
+        # The notes follow the screen a frame later (longer on a loaded machine): wait for them.
+        before = b.eval("document.querySelector('#field-note').textContent")
+        set_z(b, mm)
+        for _ in range(300):
+            if b.eval("document.querySelector('#field-note').textContent") != before: break
+            b.sleep(0.1)
+        b.sleep(0.3)
+    for label, zs in (('near field', (1.2, 2.5, 4, 5.9)), ('far field', (70, 99, 150, 450, 999))):
+        move_to(zs[0])
+        b.eval('__words = {}')
+        moves, texts = b.steady(NOTES, [lambda zz=zz: move_to(zz) for zz in zs[1:]])
+        words = b.eval('Object.fromEntries(Object.entries(__words).map(([k, v]) => [k, [...v]]))')
+        drift = {k: v for k, v in words.items() if max(v) - min(v) > 0.5}
+        check(not moves and len(texts) == len(zs) and not drift,
+              f'{label}: the notes and the words on the pictures keep still as z runs {zs[0]} ... {zs[-1]} mm ({moves[:3] or "none moved"}; words drawn in more than one place: {list(drift.items())[:3] or "none"})')
+
     # Fast enough to drag: one wavelength's field, near and far.
     ms = b.eval("""(async () => {
       const o = await import('/diffraction/optics.js'), a = __app.ap, t = [];

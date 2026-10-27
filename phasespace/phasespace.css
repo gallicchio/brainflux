@@ -14,9 +14,8 @@
   display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--ink-2); min-height: 1.5em;
   padding: 2px 4px;
 }
-.readouts b { color: var(--ink); font-weight: 600; }
-.readouts .neg b { color: #2166ac; }
-.readouts .slow { color: var(--ink-3); }
+.readouts .fixnum.v { color: var(--ink); font-weight: 600; }
+.readouts .neg .fixnum.v { color: #2166ac; }
 
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; color: var(--ink-2); padding: 0 4px; min-height: 1.6em; }
 .legend .cbar { display: inline-flex; align-items: center; gap: 6px; }
@@ -39,7 +38,7 @@ details.panel[open] summary { margin-bottom: 6px; }
 .note { font-size: 12px; color: var(--ink-3); }
 
 @media (prefers-color-scheme: dark) {
-  .readouts .neg b { color: #78c8ff; }
+  .readouts .neg .fixnum.v { color: #78c8ff; }
 }
 
 @media (max-width: 900px) {

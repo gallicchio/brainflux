@@ -28,9 +28,10 @@
 .side-foot { display: grid; gap: 4px; max-width: calc(100vh - 210px); width: 100%; margin: 0 auto; }
 .side-foot .slider { grid-template-columns: 5.4em 1fr auto; }
 .readout { color: var(--ink-2); min-height: 1.4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.foot-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.foot-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
 .foot-row select { flex: 0 0 auto; }
-.foot-row .readout { flex: 1; }
+/* Room for the whole readout (its numbers in fixed slots), on a line of its own if need be. */
+.foot-row .readout { flex: 1 1 60ch; min-width: 0; }
 
 #tool-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 #tool-buttons button { padding: 4px 0; display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11px; }

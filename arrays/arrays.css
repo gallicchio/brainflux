@@ -33,7 +33,9 @@
 /* Notes beside the panel titles stay on one line. */
 .synth-stage .side-head { flex-wrap: nowrap; }
 .synth-stage .side-head h2 { flex: none; }
-.synth-stage .side-head span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.synth-stage .side-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Under the CLEAN image, where its counts have room to keep still in slots of their own. */
+.synth-stage .foot-note { width: 100%; max-width: calc(50vh - 75px); margin: 0 auto; min-height: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
@@ -49,5 +51,5 @@
   .arrays-stage { grid-template-columns: minmax(0, 1fr); }
   .arrays-stage .view .sq { max-width: none; }
   .synth-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .synth-stage .sq { max-width: none; }
+  .synth-stage .sq, .synth-stage .foot-note { max-width: none; }
 }

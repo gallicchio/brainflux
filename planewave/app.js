@@ -4,8 +4,8 @@ import { fft, ifft, wavenumbers } from '../lib/fft.js';
 import { colorize, colorOf } from '../lib/complexcolor.js';
 import { texToMathML } from '../lib/mathml.js';
 import { parse } from '../lib/expr.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, setSlots } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, fillSlots } from '../lib/plot.js';
 
 // The four ways of writing a plane wave: phase = s (k.r) + w omega t.
 const CONVENTIONS = [
@@ -296,25 +296,38 @@ function drawDispersion() {
   ctx.restore();
   f.axes({ xlabel: 'k', ylabel: 'ω' });
   ctx.font = '12px system-ui, sans-serif';
-  ctx.fillStyle = c.warn; ctx.fillText(`phase velocity ω/k = ${fmt(vp, 3)}`, f.left + 8, f.top + 14);
-  ctx.fillStyle = c.accent; ctx.fillText(`group velocity dω/dk = ${fmt(vg, 3)}`, f.left + 8, f.top + 30);
+  // Each velocity in a slot of its own (fixed decimals, room for a sign): nothing shifts as they change.
+  ctx.fillStyle = c.warn; fillSlots(ctx, ['phase velocity ω/k = ', { v: vp, dec: 3, w: 6 }], f.left + 8, f.top + 14);
+  ctx.fillStyle = c.accent; fillSlots(ctx, ['group velocity dω/dk = ', { v: vg, dec: 3, w: 6 }], f.left + 8, f.top + 30);
 }
 
 // --------------------------------------------------------------------- formula line
 
+// The formula, centred, and the numbers after it, each in a slot of its own (fixed decimals, room
+// for a sign), so that the line keeps its width, and nothing in it moves, as they change.  The
+// formula is set again only when it changes.
+let formulaTex = null, formulaNote = null;
 function updateFormula() {
   const box = $('#formula');
-  if (state.mode === 'packet') {
+  const packet = state.mode === 'packet', cv = CONVENTIONS[state.conv];
+  const tex = packet ? '\\psi(x,t)=\\int dk\\,\\tilde\\psi(k)\\,e^{i(kx-\\omega(k)t)}' : '\\psi=A\\,' + cv.tex;
+  if (tex !== formulaTex) {
+    formulaTex = tex;
+    const math = el('span');
+    math.innerHTML = texToMathML(tex);
+    formulaNote = el('span', { class: 'small' });
+    box.replaceChildren(math, ' \u00a0 ', formulaNote);
+  }
+  if (packet) {
     const { vp, vg } = velocities();
-    box.innerHTML = `${texToMathML('\\psi(x,t)=\\int dk\\,\\tilde\\psi(k)\\,e^{i(kx-\\omega(k)t)}')} &nbsp; `
-      + `<span class="small">red dot: a crest, at ${fmt(vp, 3)}; blue triangle: the group, at ${fmt(vg, 3)}</span>`;
+    setSlots(formulaNote, ['red dot: a crest, at ', { v: vp, dec: 3, w: 6 }, '; blue triangle: the group, at ', { v: vg, dec: 3, w: 6 }]);
     return;
   }
-  const cv = CONVENTIONS[state.conv], k = state.k1, kk = Math.hypot(k[0], k[1]);
+  const k = state.k1, kk = Math.hypot(k[0], k[1]);
   const lam = kk > 1e-6 ? (2 * Math.PI) / kk : Infinity;
   const omega = omegaOf(k, 1);
-  box.innerHTML = `${texToMathML('\\psi=A\\,' + cv.tex)} &nbsp; <span class="small">|k| = ${fmt(kk, 3)}, λ = 2π/|k| = ${fmt(lam, 3)},
-    ω = ${fmt(omega, 3)}, crests move at ω/|k| = ${fmt(kk > 0 ? omega / kk : 0, 3)}, ${cv.note}</span>`;
+  setSlots(formulaNote, ['|k| = ', { v: kk, dec: 2, w: 4 }, ', λ = 2π/|k| = ', { v: lam, dec: 2, w: 5 },
+    ', ω = ', { v: omega, dec: 2, w: 5 }, ', crests move at ω/|k| = ', { v: kk > 0 ? omega / kk : 0, dec: 2, w: 5 }, `, ${cv.note}`]);
 }
 
 // --------------------------------------------------------------------- loop

@@ -9,8 +9,8 @@ import { colorize, colorOf } from '../lib/complexcolor.js';
 import { fftCentered } from '../lib/fft.js';
 import { paint as stamp } from '../fft2d/tools.js';
 import { loadImage, imageData } from '../fft2d/presets.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
-import { Frame, themeColors } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, setGroups } from '../lib/ui.js';
+import { Frame, themeColors, fillSlots } from '../lib/plot.js';
 
 const N = 256;             // grid points across
 const DX = 0.1;            // micrometres per point: the field of view is 25.6 um
@@ -343,15 +343,20 @@ function blit(cv, layer, zoom = 1) {
 }
 
 const OVERLAY = 'rgba(255,255,255,0.85)';
-/** Text on a translucent dark tag, readable on black and on white. */
+/** Text on a translucent dark tag, readable on black and on white.  Text with live numbers in
+ *  it comes as parts for fillSlots: its tag and words then keep still as the numbers change. */
 function label(ctx, text, x, y, align = 'left', color = OVERLAY) {
-  const d = dpr();
+  const d = dpr(), parts = Array.isArray(text);
   ctx.font = `${11 * d}px system-ui, sans-serif`;
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  const w = ctx.measureText(text).width, x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  let w;
+  if (parts) { ctx.save(); ctx.globalAlpha = 0; w = fillSlots(ctx, text, 0, 0); ctx.restore(); }   // (only its width)
+  else w = ctx.measureText(text).width;
+  const x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(x0 - 3 * d, y - 7.5 * d, w + 6 * d, 15 * d);
-  ctx.fillStyle = color; ctx.fillText(text, x0, y + 0.5 * d);
+  ctx.fillStyle = color;
+  if (parts) fillSlots(ctx, text, x0, y + 0.5 * d); else ctx.fillText(text, x0, y + 0.5 * d);
 }
 
 /** A bar `len` long in canvas pixels, labelled, at the bottom left. */
@@ -419,8 +424,8 @@ function drawObject() {
       ctx.fillRect(x0 + k, y0, 1, bh);
     }
     const [lo, hi] = legend;
-    label(ctx, `${fmt(lo, 2)}`, x0, y0 - 8 * dd, 'center');
-    label(ctx, hi - lo > 1e-9 ? `${fmt(hi, 2)} rad` : 'rad', x0 + bw, y0 - 8 * dd, 'right');
+    label(ctx, [{ v: lo, dec: 2, w: 5 }], x0, y0 - 8 * dd, 'center');
+    label(ctx, hi - lo > 1e-9 ? [{ v: hi, dec: 2, w: 5 }, ' rad'] : 'rad', x0 + bw, y0 - 8 * dd, 'right');
   }
 }
 
@@ -472,7 +477,7 @@ function drawFourier() {
   } else {
     const R = state.NA * k;
     circle(0, 0, R, 'rgba(255,255,255,0.8)');
-    label(ctx, `NA ${fmt(state.NA, 3)}`, X(0) + R * s * 0.72 + 4 * dd, Y(0) - R * s * 0.72 - 6 * dd);
+    label(ctx, ['NA ', { v: state.NA, dec: 2, w: 4 }], X(0) + R * s * 0.72 + 4 * dd, Y(0) - R * s * 0.72 - 6 * dd);
     if (state.filter === 'stop') circle(0, 0, state.stopNA * k, 'rgba(255,255,255,0.9)', [3 * dd, 3 * dd]);
     if (state.filter === 'dot') {
       const c = colorOf(Math.cos(state.dotPhase * deg), Math.sin(state.dotPhase * deg), 0.6);
@@ -632,8 +637,8 @@ function drawProfile() {
   for (let q = 1; q < N / 2; q++) { const p = re[C + q] ** 2 + im[C + q] ** 2; total += p; if (p > best) { best = p; kb = q; } }
   // Only when one period dominates the line (a grating, not a cell).
   profilePeriod = ['grating', 'formula'].includes(state.preset) && kb && best > 0.6 * total && mean > 0 && Math.sqrt(2 * best / N) > 0.01 * mean ? L / kb : null;
-  show('#profile-note', 'along the dashed line; drag on the image to move it' +
-    (profilePeriod ? ` · <b>strongest period along the line: ${fmt(profilePeriod, 3)} µm</b>` : ''));
+  show('#profile-note', ['along the dashed line; drag on the image to move it',
+    ...(profilePeriod ? ['·', [{ html: '<b>strongest period along the line:</b> ' }, { v: profilePeriod, dec: 3, w: 5, class: 'b' }, { html: '<b> µm</b>' }]] : [])]);
 }
 
 // ------------------------------------------------------------------------------ readouts
@@ -667,49 +672,53 @@ function gratingOrders() {
 }
 const orderName = (q) => (q > 0 ? '+' + q : q === 0 ? '0' : '−' + -q);
 
+// The readouts: words and groups of numbers with their words (setGroups), each number in a slot
+// of its own width, so that nothing moves as the numbers change; a line breaks only between groups.
+const n3 = (v, w = 5) => ({ v, dec: 3, w });
+const tiny3 = (v, w = 5) => ({ v, dec: 3, w, tiny: true });   // a quantity that can be far below 0.001
 function readouts() {
   const s = stats(I), [sx, sy] = tiltPx();
   const p = PRESETS[state.preset];
   // The object.
-  let obj = '';
+  let obj;
   if (state.preset === 'grating') {
     const g = snapPeriod(state.d, N, DX);
-    obj = `period d = ${fmt(g.d, 3)} µm (${g.m} across); orders at sin θ = ${fmt(state.lambda / g.d, 3)} × m`;
-  } else if (state.preset === 'diatom') obj = `pore rows ${fmt(state.spacing * Math.sqrt(3) / 2, 3)} µm apart: λ/d = ${fmt(state.lambda / (state.spacing * Math.sqrt(3) / 2), 3)}`;
-  else if (state.preset === 'points') obj = `${fmt(Math.round(state.sep / DX) * DX, 3)} µm apart = ${fmt(Math.round(state.sep / DX) * DX * state.NA / state.lambda, 3)} λ/NA`;
-  else if (state.preset === 'bars') obj = 'bar periods in µm (orange)';
-  else if (state.objView === 'phase') { const [lo, hi] = phaseRange(); obj = `phase φ from ${fmt(lo, 3)} to ${fmt(hi, 3)} rad`; }
+    obj = [['period d = ', n3(g.d), ' µm'], ['(', { v: g.m, dec: 0, w: 3 }, ' across);'], 'orders at', ['sin θ = ', n3(state.lambda / g.d), ' × m']];
+  } else if (state.preset === 'diatom') obj = ['pore rows', [n3(state.spacing * Math.sqrt(3) / 2), ' µm apart:'], ['λ/d = ', n3(state.lambda / (state.spacing * Math.sqrt(3) / 2))]];
+  else if (state.preset === 'points') obj = [[{ v: Math.round(state.sep / DX) * DX, dec: 1, w: 4 }, ' µm apart'], ['= ', n3(Math.round(state.sep / DX) * DX * state.NA / state.lambda, 6), ' λ/NA']];
+  else if (state.preset === 'bars') obj = ['bar periods in µm (orange)'];
+  else if (state.objView === 'phase') { const [lo, hi] = phaseRange(); obj = ['phase φ', ['from ', n3(lo, 6)], ['to ', n3(hi, 6), ' rad']]; }
   else {
     let lo = Infinity, hi = 0;
     for (let o = 0; o < N * N; o++) { const a2 = t.re[o] ** 2 + t.im[o] ** 2; lo = Math.min(lo, a2); hi = Math.max(hi, a2); }
-    obj = `transmitted intensity |t|² from ${fmt(lo, 3)} to ${fmt(hi, 3)}`;
+    obj = ['transmitted intensity', ['|t|² from ', tiny3(lo)], ['to ', tiny3(hi)]];
   }
   objNote = obj;
   if (!hover.obj) show('#obj-read', obj);
   // The Fourier plane.
   const orders = gratingOrders();
   let fp;
-  if (state.illum === 'incoherent') fp = `OTF reaches 2NA/λ = ${fmt((2 * state.NA) / state.lambda, 3)} cycles/µm`;
-  else if (orders) fp = `orders through the pupil: ${orders.length ? orders.map(orderName).join(', ') : 'none'}`;
-  else if (state.preset === 'diatom') fp = `pore orders (rings) through the pupil: ${poreOrderList().filter((o) => o.pass).length} of 6`;
-  else fp = `light through the pupil: ${fmt(100 * throughput(Ts, P, N), 3)}%`;
+  if (state.illum === 'incoherent') fp = ['OTF reaches', ['2NA/λ = ', n3((2 * state.NA) / state.lambda), ' cycles/µm']];
+  else if (orders) fp = [`orders through the pupil: ${orders.length ? orders.map(orderName).join(', ') : 'none'}`];
+  else if (state.preset === 'diatom') fp = [`pore orders (rings) through the pupil: ${poreOrderList().filter((o) => o.pass).length} of 6`];
+  else fp = ['light through the pupil:', [{ v: 100 * throughput(Ts, P, N), dec: 2, w: 6, tiny: true }, '%']];
   fpNote = fp;
   if (!hover.fp) show('#fp-read', fp);
   // The image.
-  let im = `I from ${fmt(s.min, 3)} to ${fmt(s.max, 3)}, contrast ${s.contrast < 1e-9 ? 0 : fmt(s.contrast, 2)}`;
-  if (state.illum === 'condenser' && !partial.done) im += ` · ${partial.count}/${partial.points.length} directions`;
+  const im = [['I from ', tiny3(s.min)], ['to ', tiny3(s.max), ','], ['contrast ', { v: s.contrast < 1e-9 ? 0 : s.contrast, dec: 2, w: 4 }]];
+  if (state.illum === 'condenser' && !partial.done) im.push('·', [{ v: partial.count, dec: 0, w: 4 }, '/', { v: partial.points.length, dec: 0, w: 4 }, ' directions']);
   imgNote = im;
   if (!hover.img) show('#img-read', im);
   // The limit.
   const c = cutoff();
-  let lim = `Smallest period through the pupil: <b>${c.name} = ${fmt(1 / c.f, 3)} µm</b>`;
-  if (state.illum === 'coherent') lim += sx || sy ? ` on axis; tilted light reaches λ/(NA + sin θ) = ${fmt(state.lambda / (state.NA + state.tiltNA), 3)} µm in one direction` : ' (light along the axis)';
-  if (state.illum === 'incoherent') lim += `; Rayleigh 0.61λ/NA = ${fmt((0.61 * state.lambda) / state.NA, 3)} µm`;
+  const rayleigh = state.illum === 'incoherent';
+  const lim = ['Smallest period through the pupil:', [{ html: `<b>${c.name} =</b> ` }, { v: 1 / c.f, dec: 3, w: 6, class: 'b' }, { html: `<b> µm</b>${rayleigh ? ';' : ''}` }]];
+  if (state.illum === 'coherent') lim.push(...(sx || sy ? ['on axis; tilted light reaches', ['λ/(NA + sin θ) = ', n3(state.lambda / (state.NA + state.tiltNA), 6), ' µm'], 'in one direction'] : ['(light along the axis)']));
+  if (rayleigh) lim.push('Rayleigh', ['0.61λ/NA = ', n3((0.61 * state.lambda) / state.NA, 6), ' µm']);
   show('#limit', lim);
 }
-let objNote = '', fpNote = '', imgNote = '';
-const shown = new Map();
-function show(sel, html) { if (shown.get(sel) !== html) { shown.set(sel, html); $(sel).innerHTML = html; } }
+let objNote = [], fpNote = [], imgNote = [];
+function show(sel, groups) { setGroups($(sel), groups); }
 const hover = { obj: false, fp: false, img: false };
 
 // ------------------------------------------------------------------------------ pointers
@@ -752,8 +761,9 @@ function showObjHover({ i, j }) {
   if (!ready) return;
   hover.obj = true;
   const o = j * N + i, a2 = t.re[o] ** 2 + t.im[o] ** 2, ph = Math.atan2(t.im[o], t.re[o]);
-  shown.delete('#obj-read');
-  $('#obj-read').textContent = `x ${fmt((i - C) * DX, 3)}, y ${fmt((C - j) * DX, 3)} µm: |t|² ${fmt(a2, 3)}${a2 > 1e-6 ? `, φ ${fmt(ph, 3)} rad` : ''}`;
+  const phase = a2 > 1e-6;
+  show('#obj-read', [['x ', { v: (i - C) * DX, dec: 1, w: 5 }, ','], ['y ', { v: (C - j) * DX, dec: 1, w: 5 }, ' µm:'], ['|t|² ', tiny3(a2), phase ? ',' : ''],
+    ...(phase ? [['φ ', n3(ph, 6), ' rad']] : [])]);
 }
 
 // The Fourier plane: paint the pupil, or drag the light (tilt).
@@ -813,9 +823,9 @@ function showFpHover({ i, j }) {
   hover.fp = true;
   const k = kappa(), u = (i - C) / k, v = (C - j) / k, o = j * N + i;
   const pr = P.re[o], pi = P.im[o], pm = Math.hypot(pr, pi);
-  const pupilText = pm < 1e-9 ? 'blocked' : `P = ${fmt(pm, 2)}${Math.abs(pi) > 1e-6 * pm || pr < 0 ? ` ∠ ${Math.round(Math.atan2(pi, pr) / deg)}°` : ''}`;
-  shown.delete('#fp-read');
-  $('#fp-read').textContent = `sin θ = (${fmt(u, 3)}, ${fmt(v, 3)}), |sin θ| ${fmt(Math.hypot(u, v), 3)}: ${pupilText}`;
+  const pupil = pm < 1e-9 ? 'blocked' : ['P = ', { v: pm, dec: 2, w: 4, tiny: true },
+    ...(Math.abs(pi) > 1e-6 * pm || pr < 0 ? [' ∠ ', { v: Math.atan2(pi, pr) / deg, dec: 0, w: 4 }, '°'] : [])];
+  show('#fp-read', [['sin θ = (', n3(u, 6), ', ', n3(v, 6), '),'], ['|sin θ| ', n3(Math.hypot(u, v)), ':'], pupil]);
 }
 
 // The image: drag to move the profile's row.
@@ -826,8 +836,7 @@ imgCanvas.addEventListener('pointerdown', (e) => { imgCanvas.setPointerCapture(e
 imgCanvas.addEventListener('pointermove', (e) => {
   const p = pixelOf(imgCanvas, e, state.xzoom);
   hover.img = true;
-  shown.delete('#img-read');
-  $('#img-read').textContent = `x ${fmt((p.i - C) * DX, 3)}, y ${fmt((C - p.j) * DX, 3)} µm: I = ${fmt(I[p.j * N + p.i], 4)}`;
+  show('#img-read', [['x ', { v: (p.i - C) * DX, dec: 1, w: 5 }, ','], ['y ', { v: (C - p.j) * DX, dec: 1, w: 5 }, ' µm:'], ['I = ', { v: I[p.j * N + p.i], dec: 4, w: 6, tiny: true }]]);
   if (imgDrag) setRow(e);
 });
 for (const ev of ['pointerup', 'pointercancel']) imgCanvas.addEventListener(ev, () => { imgDrag = false; });

@@ -3,8 +3,8 @@
 
 import { Sim1D, eigenstates, prepareSharpPotential, hasJumps } from '../schrodinger1d/sim.js';
 import { parse } from '../lib/expr.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors, contour } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash, setSlots } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, contour, fillSlots } from '../lib/plot.js';
 import { fft } from '../lib/fft.js';
 import { PhaseGrid, rng32 } from './wigner.js';
 import { Ensemble, PotentialTable, sampleDensity } from './classical.js';
@@ -569,7 +569,7 @@ function drawQuadrature(ctx, f, c) {
   // A label at the positive end.
   const [lx, ly] = toPx(0.8 * Math.min(win.x1, (win.p1) / u, R), -0.05 * R);
   ctx.fillStyle = c.accent; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(`X at ${Math.round(state.quad)}°`, lx, ly + 14);
+  fillSlots(ctx, ['X at ', { v: Math.round(state.quad), dec: 0, w: 4 }, '°'], lx, ly + 14);
   ctx.restore();
 }
 
@@ -673,47 +673,56 @@ function drawColorbar() {
 function updateLegend() {
   const s = colorScale(), name = state.view === 'Q' ? 'Q' : 'W';
   const fixedLabel = state.view === 'Q' ? '1/2πħ' : '1/πħ';
-  $('#cb-lo').textContent = state.scale === 'fixed' ? `−${fixedLabel}` : `−${fmt(s, 2)}`;
-  $('#cb-hi').textContent = state.scale === 'fixed' ? `+${fixedLabel}` : `+${fmt(s, 2)}`;
+  // Each number in a slot of its own (setSlots), so that the colour bar and the words after it
+  // keep their places as the scale, the count and the values under the pointer change.
+  setSlots($('#cb-lo'), state.scale === 'fixed' ? [`−${fixedLabel}`] : [{ v: -s, dec: 2, w: 5, tiny: true }]);
+  setSlots($('#cb-hi'), state.scale === 'fixed' ? [`+${fixedLabel}`] : [{ v: s, dec: 2, w: 5, plus: '+', tiny: true }]);
   $('#cb-name').textContent = name === 'W' ? 'W(x, p)' : 'Q(x, p)';
-  const dots = $('#dots-note');
-  if (!state.show.dots || !ens.N) dots.textContent = '';
-  else dots.textContent = `• ${ens.N} classical points, drawn at t = 0 from ` + {
+  setSlots($('#dots-note'), !state.show.dots || !ens.N ? [] : ['• ', { v: ens.N, dec: 0, w: 5 }, ' classical points, drawn at t = 0 from ' + {
     W: 'W',
     Q: 'the Husimi Q (W < 0 in places, so it is not a probability density)',
     product: '|ψ(x)|² |φ(p)|² (W < 0 in places, so it is not a probability density)',
-  }[dotsFrom];
-  $('#hover').textContent = hover || '';
+  }[dotsFrom]]);
+  setSlots($('#hover'), hover || []);
 }
 
 // ------------------------------------------------------------------ readouts
 
+// The readouts: a span for each quantity, made again only when the quantities shown change, its
+// number in a slot of its own (setSlots: a fixed number of decimals, right-aligned in a fixed
+// width), so that nothing moves as the numbers change.
+let readoutLayout = '';
 function updateReadouts() {
   const box = $('#readouts');
   if (!sim) return;
   const o = sim.observables();
-  const parts = [
-    `<span>t <b>${fmt(sim.t, 3)}</b></span>`,
-    `<span>⟨x⟩ <b>${fmt(Math.abs(o.x) < 1e-8 ? 0 : o.x, 3)}</b></span>`,
-    `<span>⟨p⟩ <b>${fmt(Math.abs(o.p) < 1e-8 ? 0 : o.p, 3)}</b></span>`,
-    `<span>σ<sub>x</sub>σ<sub>p</sub> <b>${fmt(o.sx * o.sp, 3)}</b> ≥ ħ/2</span>`,
-    `<span>⟨E⟩ <b>${fmt(o.E, 4)}</b></span>`,
+  const num = (v, dec, w) => ({ v, dec, w, class: 'v' });
+  // [label parts, value, what follows, attributes]
+  const items = [
+    [['t '], num(sim.t, 2, 7)],
+    [['⟨x⟩ '], num(o.x, 3, 7)],
+    [['⟨p⟩ '], num(o.p, 3, 7)],
+    [[{ html: 'σ<sub>x</sub>σ<sub>p</sub>' }, ' '], num(o.sx * o.sp, 3, 6), ' ≥ ħ/2'],
+    [['⟨E⟩ '], num(o.E, 3, 8)],
   ];
   if (Wstats) {
     // Values below 1e-4 of the scale are round-off (or the far tails of a Gaussian): 0.
-    const m = Wstats.min * Math.PI, neg = m < -1e-4;
-    const shown = Math.abs(m) < 1e-4 ? '0' : (m < 0 ? '−' : '') + fmt(Math.abs(m), 3);
-    parts.push(`<span${neg ? ' class="neg"' : ''} title="The least value of W in the window, in units of 1/πħ (W ≥ −1/πħ always)">min W <b>${shown}</b>/πħ</span>`);
-    parts.push(`<span title="The volume of the negative part of W: the integral of |W| where W < 0">W&lt;0 volume <b>${fmt(Wstats.negative < 1e-4 ? 0 : Wstats.negative, 3)}</b></span>`);
+    const m = Wstats.min * Math.PI;
+    items.push([['min W '], num(Math.abs(m) < 1e-4 ? 0 : m, 3, 6), '/πħ', { title: 'The least value of W in the window, in units of 1/πħ (W ≥ −1/πħ always)', neg: m < -1e-4 }]);
+    items.push([['W<0 volume '], num(Wstats.negative < 1e-4 ? 0 : Wstats.negative, 3, 5), '', { title: 'The volume of the negative part of W: the integral of |W| where W < 0' }]);
   }
-  if (ens.N && state.show.dots) {
-    const s = ens.stats(table);
-    parts.push(`<span class="cl">classical ⟨E⟩ <b>${fmt(s.E, 4)}</b></span>`);
+  if (ens.N && state.show.dots) items.push([['classical ⟨E⟩ '], num(ens.stats(table).E, 3, 8), '', { class: 'cl' }]);
+  const layout = items.map(([k, , , a]) => k.map((x) => x.html ?? x).join('') + (a?.class || '')).join('|');
+  if (layout !== readoutLayout) {
+    readoutLayout = layout;
+    box.replaceChildren(...items.map(([, , , a]) => el('span', { class: a?.class, title: a?.title })));
   }
-  if (slowNote) parts.push(`<span class="slow">${slowNote}</span>`);
-  box.innerHTML = parts.join('');
+  items.forEach(([label, value, after, a], i) => {
+    const span = box.children[i];
+    span.classList.toggle('neg', !!a?.neg);
+    setSlots(span, [...label, value, ...(after ? [after] : [])]);
+  });
 }
-let slowNote = '';
 
 // ------------------------------------------------------------------- the loop
 
@@ -761,7 +770,9 @@ function setRunning(on) {
 playButton.addEventListener('click', () => setRunning(!state.running));
 $('#restart').addEventListener('click', () => { restart(); kick(); });
 const speedSlider = slider({ label: 'Speed', min: 0.1, max: 20, log: true, value: state.speed, title: 'Simulated time per second', onInput: (v) => { state.speed = v; updateHash(); } });
-$('#speed-box').append(speedSlider);
+// Under the speed, its place kept, shown or not, so that nothing moves when it comes and goes.
+const slowNote = el('div', { class: 'note', style: { visibility: 'hidden' } }, 'Slower than the speed asked for: this computer cannot keep up.');
+$('#speed-box').append(speedSlider, slowNote);
 
 // Potentials.
 const potButtons = {};
@@ -869,9 +880,16 @@ const gridNote = el('div', { class: 'note' });
 $('#numerics-box').append(dotsSlider, el('div', { class: 'note' }, 'Where W < 0 the points come from:'), proxySeg, scaleSeg, zoomSlider, gridNote);
 function updateGridNote() {
   if (!grid || !sim) return;
-  gridNote.textContent = `ψ: ${sim.n} points on [${fmt(sim.xmin, 3)}, ${fmt(sim.xmax, 3)}], ${state.pot.boundary}.  W: ${grid.cols} × ${grid.rows} points, `
-    + `ψ band-limited to |p| < ${fmt(grid.pmax, 3)}.  Time step ${fmt(dtMax, 2)}.  Units ħ = m = 1.`;
+  setSlots(gridNote, ['ψ: ', { v: sim.n, dec: 0, w: 5 }, ' points on [', { v: sim.xmin, dec: 2, w: 6 }, ', ', { v: sim.xmax, dec: 2, w: 6 },
+    `], ${state.pot.boundary}.  W: `, { v: grid.cols, dec: 0, w: 4 }, ' × ', { v: grid.rows, dec: 0, w: 4 }, ' points, ψ band-limited to |p| < ',
+    { v: grid.pmax, dec: 2, w: 6 }, '.  Time step ', { v: dtMax, dec: 4, w: 6, tiny: true }, '.  Units ħ = m = 1.']);
 }
+
+/**
+ * setSlots for text that wraps: each number kept on one line with what follows it up to the next
+ * space, since a line may otherwise break straight after a slot (an inline-block), putting a
+ * comma or a bracket at the start of the next line.
+ */
 
 // ------------------------------------------------------------------ choosing
 
@@ -922,7 +940,8 @@ plot.addEventListener('pointermove', (e) => {
   if (dragging) { moveTo(frame.invX(px), frame.invY(py)); return; }
   if (frame && grid && inMain(px, py)) {
     const x = frame.invX(px), p = frame.invY(py), F = state.view === 'Q' ? grid.Q : grid.W, v = grid.at(F, x, p);
-    hover = `x = ${fmt(x, 3)}, p = ${fmt(p, 3)}:  ${state.view} = ${fmt(v, 3)} = ${fmt(v * Math.PI, 3)}/πħ`;
+    hover = ['x = ', { v: x, dec: 2, w: 6 }, ', p = ', { v: p, dec: 2, w: 6 }, `:  ${state.view} = `, { v, dec: 3, w: 7, tiny: true },
+      ' = ', { v: v * Math.PI, dec: 3, w: 7, tiny: true }, '/πħ'];
     plot.style.cursor = draggable() ? 'grab' : 'crosshair';
   } else hover = null;
   if (!state.running) updateLegend();
@@ -1094,7 +1113,7 @@ if (setups[hash.setup]) {
   if (+hash.t > 0) { runTo(Math.min(+hash.t, 1000)); setRunning(false); kick(); }
 }
 else if (!fromHash(hash)) go('quartic', { init: { kind: 'coherent', x0: 3, p0: 0 }, speed: 2 });
-setInterval(() => { updateGridNote(); slowNote = slowFrames > 20 ? '(slower than the speed asked for: this computer cannot keep up)' : ''; slowFrames = 0; }, 1000);
+setInterval(() => { updateGridNote(); slowNote.style.visibility = slowFrames > 20 ? 'visible' : 'hidden'; slowFrames = 0; }, 1000);
 requestAnimationFrame(loop);
 
 window.__app = {

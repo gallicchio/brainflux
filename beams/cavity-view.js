@@ -2,9 +2,9 @@
 
 import { gParams, isStable, eigenmode, fsr, modeLines } from './cavity.js';
 import { free, mirror, applyRay } from './gauss.js';
-import { el, $, slider, toggle, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors, niceTicks, tickLabel } from '../lib/plot.js';
-import { fmtLen, fmtPi, fmtFreq, wavelengthRGB, signedSlider, arcPath, haloText } from './common.js';
+import { el, $, slider, toggle, fmt, setSlots } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, niceTicks, tickLabel, fillSlots } from '../lib/plot.js';
+import { wavelengthRGB, signedSlider, arcPath, haloText, lenParts, piParts, freqParts, haloSlots } from './common.js';
 
 const DARK = '#07080b';
 const RAY_COLORS = ['#ffd166', '#5ee1ff', '#ff7ab8'];
@@ -103,7 +103,7 @@ export function createCavity(app) {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(F.X(mode.zw), yc - mode.w0 * sy); ctx.lineTo(F.X(mode.zw), yc + mode.w0 * sy); ctx.stroke();
         ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        haloText(ctx, `w₀ ${fmtLen(mode.w0)}`, F.X(mode.zw), yc + Math.min(F.h / 2 - 30, 1.6 * mode.w0 * sy + 4));
+        haloSlots(ctx, ['w₀ ', ...lenParts(mode.w0, 6)], F.X(mode.zw), yc + Math.min(F.h / 2 - 30, 1.6 * mode.w0 * sy + 4));
       }
     } else {
       ctx.font = '13px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -150,7 +150,7 @@ export function createCavity(app) {
       }
     }
     ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    haloText(ctx, `drawn ×${fmt(E, 3)} wider than it is`, F.X(L / 2), F.bottom - 5, 'rgba(255,255,255,0.75)');
+    haloSlots(ctx, ['drawn ×', { v: E, dec: 1, w: 6 }, ' wider than it is'], F.X(L / 2), F.bottom - 5, 'rgba(255,255,255,0.75)');
     ctx.restore();
     // Axes and labels.
     F.axes({ xlabel: 'z (mm)', yTicks: false, colors: c });
@@ -167,8 +167,8 @@ export function createCavity(app) {
     ctx.fillText(um ? 'x (µm)' : 'x (mm)', 0, 0);
     ctx.restore();
     ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'left'; ctx.fillText(`mirror 1: R₁ = ${fmtLen(state.R1)}`, F.left, 15);
-    ctx.textAlign = 'right'; ctx.fillText(`mirror 2: R₂ = ${fmtLen(state.R2)}  (drag it)`, F.right, 15);
+    ctx.textAlign = 'left'; fillSlots(ctx, ['mirror 1: R₁ = ', ...lenParts(state.R1, 7)], F.left, 15);
+    ctx.textAlign = 'right'; fillSlots(ctx, ['mirror 2: R₂ = ', ...lenParts(state.R2, 7), '  (drag it)'], F.right, 15);
   }
 
   // ------------------------------------------------------------------- the stability diagram
@@ -273,7 +273,7 @@ export function createCavity(app) {
     ctx.restore();
     F.axes({ yTicks: false, colors: c });
     ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(`frequency ν, in units of the free spectral range c/2L = ${fmtFreq(FSR)}`, F.left + F.w / 2, F.bottom + 18);
+    fillSlots(ctx, ['frequency ν, in units of the free spectral range c/2L = ', ...freqParts(FSR)], F.left + F.w / 2, F.bottom + 18);
     // A legend of colours.
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '12px system-ui, sans-serif';
     let x = F.right - 7 * 30;
@@ -297,7 +297,7 @@ export function createCavity(app) {
     F.left += (width - (size + 50)) / 2; F.right = F.left + F.w;
     const s = scale(), L = state.L;
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(mode ? `hits on mirror 1: each round trip turns them by 2ψ₁ = ${fmtPi(2 * mode.gouy)}` : 'hits on mirror 1: they run away',
+    fillSlots(ctx, mode ? ['hits on mirror 1: each round trip turns them by 2ψ₁ = ', ...piParts(2 * mode.gouy, 3, 5)] : ['hits on mirror 1: they run away'],
       F.left + F.w / 2, 14);
     // Scaled to the ellipses (stable), or to where the rays started (unstable: they leave).
     let big = 0;
@@ -330,30 +330,33 @@ export function createCavity(app) {
   function numbers() {
     const [g1, g2] = gParams(state.L, state.R1, state.R2), p = g1 * g2;
     const st = !!mode;
+    // Each number in a slot of its own (setSlots), so that nothing moves as they change.
     const rows = [
-      ['g₁, g₂', `${fmt(g1, 3)}, ${fmt(g2, 3)}`],
-      ['g₁g₂', `${fmt(p, 3)}: ${p === 0 && mode ? 'confocal, on the edge' : st ? 'stable' : p === 0 || p === 1 ? 'on the edge' : 'unstable'}`],
+      ['g₁, g₂', [{ v: g1, dec: 3, w: 7 }, ', ', { v: g2, dec: 3, w: 7 }]],
+      ['g₁g₂', [{ v: p, dec: 3, w: 7 }, `: ${p === 0 && mode ? 'confocal, on the edge' : st ? 'stable' : p === 0 || p === 1 ? 'on the edge' : 'unstable'}`]],
     ];
     if (mode) {
       rows.push(
-        ['waist w₀', fmtLen(mode.w0)],
-        ['waist from mirror 1', fmtLen(mode.zw)],
-        ['Rayleigh range z_R', fmtLen(mode.zR)],
-        ['spot on mirror 1, 2', `${fmtLen(mode.w1)}, ${fmtLen(mode.w2)}`],
-        ['Gouy phase ψ₁, one way', fmtPi(mode.gouy)],
-        ['free spectral range', fmtFreq(fsr(state.L))],
-        ['transverse spacing Δν_T', fmtFreq((fsr(state.L) * mode.gouy) / Math.PI)],
+        ['waist w₀', lenParts(mode.w0, 7)],
+        ['waist from mirror 1', lenParts(mode.zw, 7)],
+        ['Rayleigh range z_R', lenParts(mode.zR, 7)],
+        ['spot on mirror 1, 2', [...lenParts(mode.w1, 7), ', ', ...lenParts(mode.w2, 7)]],
+        ['Gouy phase ψ₁, one way', piParts(mode.gouy, 3, 5)],
+        ['free spectral range', freqParts(fsr(state.L))],
+        ['transverse spacing Δν_T', freqParts((fsr(state.L) * mode.gouy) / Math.PI)],
       );
     }
-    const nkey = rows.join('|');
-    if (nkey !== numbersKey) { numbersKey = nkey; $('#cav-numbers').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])); }
+    const dl = $('#cav-numbers'), nkey = rows.map(([k]) => k).join('|');
+    if (nkey !== numbersKey) { numbersKey = nkey; dl.replaceChildren(...rows.flatMap(([k]) => [el('dt', {}, k), el('dd')])); }
+    rows.forEach(([, parts], i) => setSlots(dl.children[2 * i + 1], parts));
     // A short line, the same length whatever the cavity, so the canvases below don't move
     // while the point is dragged.
     const r = mode
-      ? [el('span', { class: 'good' }, `stable: g₁g₂ = ${fmt(p, 3)}`), el('span', {}, 'mode waist ', el('b', {}, fmtLen(mode.w0)), `, Gouy phase ψ₁ = ${fmtPi(mode.gouy)} each way`)]
-      : [el('span', { class: 'warn' }, `${p === 0 || p === 1 ? 'on the edge' : 'unstable'}: g₁g₂ = ${fmt(p, 3)}`), el('span', {}, 'no mode')];
-    const key = r.map((x) => x.textContent).join('|');
-    if (key !== readoutKey) { readoutKey = key; $('#cavity-readout').replaceChildren(...r); }
+      ? [['good', ['stable: g₁g₂ = ', { v: p, dec: 3, w: 7 }]], ['', ['mode waist ', ...lenParts(mode.w0, 7).map((x) => (typeof x === 'string' ? x : { ...x, class: 'b' })), ', Gouy phase ψ₁ = ', ...piParts(mode.gouy, 3, 5), ' each way']]]
+      : [['warn', [`${p === 0 || p === 1 ? 'on the edge' : 'unstable'}: g₁g₂ = `, { v: p, dec: 3, w: 7 }]], ['', ['no mode']]];
+    const box = $('#cavity-readout'), key = r.map(([c]) => c).join('|');
+    if (key !== readoutKey) { readoutKey = key; box.replaceChildren(...r.map(([c]) => el('span', { class: c || undefined }))); }
+    r.forEach(([, parts], i) => setSlots(box.children[i], parts));
   }
   let readoutKey = '', numbersKey = '';
 

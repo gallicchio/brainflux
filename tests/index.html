@@ -12,7 +12,7 @@
   import { run } from './harness.js';
   // Each module registers its tests on import.  ?only=name runs one file, listed here or not.
   const files = ['fft', 'expr', 'mathml', 'bessel', 'schrodinger1d', 'action', 'schrodinger2d', 'diffraction',
-    'thinfilms', 'dispersion', 'interferometer', 'imaging', 'holography', 'tomography', 'arrays', 'beams', 'phasespace', 'radiation', 'maxwell2d', 'drums'];
+    'thinfilms', 'dispersion', 'interferometer', 'imaging', 'holography', 'tomography', 'arrays', 'beams', 'phasespace', 'radiation', 'maxwell2d', 'drums', 'ui-lib'];
   const only = new URLSearchParams(location.search).get('only');
   for (const f of only ? [only] : files) await import(`./${f}.test.js`);
   const failed = await run(document.getElementById('results'));

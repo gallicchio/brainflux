@@ -5,8 +5,8 @@
 import { Scanner } from './scan.js';
 import { sheppLogan, disk, blob, FILTERS, filterResponse, objectSpectrum, TWO_PI } from './radon.js';
 import { colorize } from '../lib/complexcolor.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash, setSlots } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, fillSlots } from '../lib/plot.js';
 import { stroke as paintStroke, paint } from '../fft2d/tools.js';
 import { PRESETS as GALLERY, makePreset, loadImage, imageData } from '../fft2d/presets.js';
 
@@ -471,7 +471,7 @@ function drawScanner() {
     ctx.beginPath(); ctx.arc(X(brushHover.x), Y(brushHover.y), Math.max(2, (state.brush.size / 2) * H * v.s), 0, TWO_PI); ctx.stroke();
   }
   ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = C.text; ctx.textBaseline = 'top';
-  ctx.fillText(`θ = ${(th / DEG).toFixed(1)}°`, 8, 8);
+  fillSlots(ctx, ['θ = ', { v: th / DEG, dec: 1, w: 5 }, '°'], 8, 8);
 }
 
 // The sinogram: s across, theta down.
@@ -794,7 +794,7 @@ function drawProjection(ctx, width, height, col) {
   curve(q, YQ, col.accent, 1.3);
   ctx.restore();
   ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  ctx.fillStyle = col.ink2; ctx.fillText(`projection p(s) at θ = ${(sc.angle(j) / DEG).toFixed(1)}° (left)`, f.left + 4, 10);
+  ctx.fillStyle = col.ink2; fillSlots(ctx, ['projection p(s) at θ = ', { v: sc.angle(j) / DEG, dec: 1, w: 5 }, '° (left)'], f.left + 4, 10);
   ctx.fillStyle = col.accent; ctx.textAlign = 'right'; ctx.fillText('filtered (right)', f.right - 2, 10);
 }
 
@@ -859,54 +859,59 @@ function rmsSmooth(img) {
   for (let i = 0; i < mask.length; i++) if (mask[i]) { const d = img[i] - sc.truth[i]; s += d * d; }
   return Math.sqrt(s / count);
 }
+// The readouts under the pictures: each number in a slot of its own, a fixed number of characters
+// wide with fixed decimals, so that nothing in a readout moves as the numbers change (setSlots).
+const XY = (p) => ['x ', { v: p.x, dec: 3, w: 6 }, ', y ', { v: p.y, dec: 3, w: 6 }, ': '];
+const RMS = (v) => (Number.isFinite(v) ? { v, dec: 4, w: 6, tiny: true } : { text: '–', w: 6 });
 function updateReadouts(data) {
-  const nA = sc.nA, j = hardwareIndex();
+  const nA = sc.nA, j = hardwareIndex(), NA = { v: nA, dec: 0, w: 3 };   // (up to 720 angles)
   // The scanner.
   const hs = hover.scanner;
-  $('#scan-readout').textContent = hs && Math.hypot(hs.x, hs.y) <= 1
-    ? `x ${fmt(hs.x, 3)}, y ${fmt(hs.y, 3)}: attenuation ${fmt(pixel(sc.truth, hs.x, hs.y), 3)}`
-    : state.playing ? `angle ${Math.min(state.next + 1, nA)} of ${nA}, θ = ${(sc.angle(Math.min(state.next, nA - 1)) / DEG).toFixed(1)}°`
-      : `${sc.count} of ${nA} angles measured over ${fmt(sc.opts.range / DEG, 3)}°`;
+  setSlots($('#scan-readout'), hs && Math.hypot(hs.x, hs.y) <= 1
+    ? [...XY(hs), 'attenuation ', { v: pixel(sc.truth, hs.x, hs.y), dec: 3, w: 6 }]
+    : state.playing ? ['angle ', { v: Math.min(state.next + 1, nA), dec: 0, w: 3 }, ' of ', NA, ', θ = ', { v: sc.angle(Math.min(state.next, nA - 1)) / DEG, dec: 1, w: 5 }, '°']
+      : [{ v: sc.count, dec: 0, w: 3 }, ' of ', NA, ' angles measured over ', { v: sc.opts.range / DEG, dec: 0, w: 3 }, '°']);
   // The sinogram.
   const hg = hover.sinogram || state.pick;
   if (hg && hg.j !== undefined && hg.j >= 0 && hg.j < nA) {
     const k = Math.round(hg.s / sc.ds + sc.M / 2);
-    const val = sc.measured[hg.j] && k >= 0 && k < sc.M ? fmt(sc.meas[hg.j * sc.M + k], 4) : 'not measured';
-    $('#sino-readout').textContent = `θ ${(sc.angle(hg.j) / DEG).toFixed(1)}°, s ${fmt(hg.s, 3)}: p = ${val}`;
-  } else $('#sino-readout').textContent = `${nA} angles × ${sc.M} detector bins`;
-  $('#sino-note').textContent = state.point ? `the dashed curve: (${fmt(state.point.x, 2)}, ${fmt(state.point.y, 2)})` : '';
+    const val = sc.measured[hg.j] && k >= 0 && k < sc.M ? { v: sc.meas[hg.j * sc.M + k], dec: 4, w: 7 } : 'not measured';
+    setSlots($('#sino-readout'), ['θ ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, '°, s ', { v: hg.s, dec: 3, w: 6 }, ': p = ', val]);
+  } else setSlots($('#sino-readout'), [NA, ' angles × ', { v: sc.M, dec: 0, w: 3 }, ' detector bins']);
+  setSlots($('#sino-note'), state.point ? ['the dashed curve: (', { v: state.point.x, dec: 2, w: 5 }, ', ', { v: state.point.y, dec: 2, w: 5 }, ')'] : []);
   // Fourier space.
   const hk = hover.kspace;
   if (hk) {
     const k = Math.hypot(hk.x, hk.y);
-    $('#k-readout').textContent = `kx ${fmt(hk.x, 3)}, ky ${fmt(hk.y, 3)}: |k| ${fmt(k, 3)}, wavelength ${k ? fmt(TWO_PI / k, 3) : '∞'}`;
-  } else $('#k-readout').textContent = `${sc.count} slices of ${sc.L} samples; detector Nyquist π/ds = ${fmt(Math.PI / sc.ds, 3)}`;
+    setSlots($('#k-readout'), ['kx ', { v: hk.x, dec: 1, w: 6 }, ', ky ', { v: hk.y, dec: 1, w: 6 }, ': |k| ', { v: k, dec: 1, w: 5 },
+      ', wavelength ', k ? { v: TWO_PI / k, dec: 3, w: 6 } : { text: '∞', w: 6 }]);
+  } else setSlots($('#k-readout'), [{ v: sc.count, dec: 0, w: 3 }, ' slices of ', { v: sc.L, dec: 0, w: 4 }, ' samples; detector Nyquist π/ds = ', { v: Math.PI / sc.ds, dec: 1, w: 5 }]);
   $('#k-note').textContent = state.under ? 'slices over the object’s 2D transform' : 'one slice per projection';
   // The reconstructions.
   const hb = hover.bp;
-  $('#bp-readout').textContent = hb ? `x ${fmt(hb.x, 3)}, y ${fmt(hb.y, 3)}: ${fmt(pixel(sc.bp, hb.x, hb.y), 4)}` : 'its own grey scale';
+  setSlots($('#bp-readout'), hb ? [...XY(hb), { v: pixel(sc.bp, hb.x, hb.y), dec: 3, w: 7 }] : ['its own grey scale']);
   if (rmsCache.key !== `${data}:${objVersion}`) {
     rmsCache = { key: `${data}:${objVersion}`, rms: sc.count ? sc.rmsError(sc.fbp) : NaN, smooth: sc.count ? rmsSmooth(sc.fbp) : NaN };
   }
   const hf = hover.fbp, rms = rmsCache.rms, smooth = rmsCache.smooth;
   state.rmsSmooth = smooth;
-  $('#fbp-readout').textContent = hf ? `x ${fmt(hf.x, 3)}, y ${fmt(hf.y, 3)}: ${fmt(pixel(sc.fbp, hf.x, hf.y), 4)} (object ${fmt(pixel(sc.truth, hf.x, hf.y), 4)})`
-    : `RMS error ${Number.isFinite(rms) ? fmt(rms, 3) : '–'}${Number.isFinite(smooth) ? `, away from edges ${fmt(smooth, 3)}` : ''}`;
+  setSlots($('#fbp-readout'), hf ? [...XY(hf), { v: pixel(sc.fbp, hf.x, hf.y), dec: 4, w: 7 }, ' (object ', { v: pixel(sc.truth, hf.x, hf.y), dec: 4, w: 7 }, ')']
+    : ['RMS error ', RMS(rms), ...(Number.isFinite(smooth) ? [', away from edges ', RMS(smooth)] : [])]);
   state.rms = rms;
-  $('#fbp-note').textContent = FILTERS[sc.opts.filter].label + (sc.opts.cutoff < 1 ? `, cut at ${fmt(sc.opts.cutoff, 2)}` : '');
+  setSlots($('#fbp-note'), [FILTERS[sc.opts.filter].label, ...(sc.opts.cutoff < 1 ? [', cut at ', { v: sc.opts.cutoff, dec: 2, w: 4 }] : [])]);
   // The sixth panel.
   const he = hover.extra;
   if (state.view === 'direct') {
     const img = directCache.img, e = img && sc.count ? sc.rmsError(img) : NaN;
     state.rmsDirect = e;
-    $('#extra-readout').textContent = he ? `x ${fmt(he.x, 3)}, y ${fmt(he.y, 3)}: ${fmt(pixel(img || sc.fbp, he.x, he.y), 4)}` : `RMS error ${Number.isFinite(e) ? fmt(e, 3) : '–'}`;
+    setSlots($('#extra-readout'), he ? [...XY(he), { v: pixel(img || sc.fbp, he.x, he.y), dec: 4, w: 7 }] : ['RMS error ', RMS(e)]);
     $('#extra-note').textContent = 'slices gridded, one inverse FFT';
   } else if (state.view === 'profile') {
-    $('#extra-readout').textContent = `along y = ${fmt(state.py0, 3)} (drag on a reconstruction to move it)`;
+    setSlots($('#extra-readout'), ['along y = ', { v: state.py0, dec: 3, w: 6 }, ' (drag on a reconstruction to move it)']);
     $('#extra-note').textContent = '';
   } else {
     const jr = projRow();
-    $('#extra-readout').textContent = jr >= 0 ? `angle ${jr + 1}: click the sinogram to choose another` : 'nothing measured yet';
+    setSlots($('#extra-readout'), jr >= 0 ? ['angle ', { v: jr + 1, dec: 0, w: 3 }, ': click the sinogram to choose another'] : ['nothing measured yet']);
     $('#extra-note').textContent = '';
   }
 }

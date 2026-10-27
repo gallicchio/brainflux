@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive the antenna-array and aperture-synthesis demo: every experiment, dragging, the address,
 CLEAN, the Earth turning; check the physics read-outs as it goes; screenshots in build/."""
-import json, math, os, sys
+import json, math, os, re, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
 
@@ -9,6 +9,32 @@ failures = []
 def check(cond, msg):
     print(('ok    ' if cond else 'FAIL  ') + msg)
     if not cond: failures.append(msg)
+
+# Where the words and number slots of some readouts are, to check that they keep still: each word
+# (not the numbers) by its readout, the readout's words and its place among them; each number slot
+# likewise.  Layouts are compared word by word where the wording is the same.
+LAYOUT = r"""((sel) => { const out = {};
+  for (const e of document.querySelectorAll(sel)) {
+    if (!e.getClientRects().length) continue;       // (not shown)
+    const walk = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), words = []; let n;
+    while ((n = walk.nextNode())) {
+      if (n.parentElement.closest('.fixnum')) continue;
+      for (const m of n.textContent.matchAll(/[^\s\d.,:;()−+-]+/g)) {
+        const g = document.createRange(); g.setStart(n, m.index); g.setEnd(n, m.index + m[0].length);
+        const r = g.getBoundingClientRect(); words.push([m[0], r.left, r.top]);
+      }
+    }
+    const shape = (e.id || e.tagName) + '|' + words.map((w) => w[0]).join(' ');
+    words.forEach(([w, x, y], k) => { out[`${shape}|${k}`] = [x, y]; });
+    e.querySelectorAll('.fixnum').forEach((s, i) => { const r = s.getBoundingClientRect(); out[`${shape}|slot${i}`] = [r.left, r.top, r.width]; });
+  }
+  return out; })"""
+def track(base, now, tol=0.5):
+    """What in the layout now moved by more than tol px from where it was first seen (in base)."""
+    moved = [(k.split('|')[0], k.split('|')[-1], round(max(abs(x - y) for x, y in zip(base[k], p)), 1)) for k, p in now.items()
+             if k in base and max(abs(x - y) for x, y in zip(base[k], p)) > tol]
+    for k, p in now.items(): base.setdefault(k, p)
+    return moved
 
 INFO = """(() => { const i = __app.arrays.info, d = 180 / Math.PI;
     return { beam: i.beam === null ? null : i.beam * d, hpbw: i.hpbw === null ? null : i.hpbw * d, sll: i.sll,
@@ -71,6 +97,32 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     setup(b, 'sweep', 1.0)
     a1 = b.eval('__app.A.theta0'); b.sleep(0.6); a2 = b.eval('__app.A.theta0')
     check(a1 != a2, f'the sweep swings the beam ({a1} -> {a2})')
+    # The read-outs keep still: every number in a slot of its own, so that neither its digits nor the
+    # words after it move as the beam sweeps, the sliders take numbers of other sizes and signs, and
+    # the focus is moved.
+    READ = f"{LAYOUT}('#readouts, #selected-label')"         # (the read-outs as a whole: rows of other names may be laid out otherwise)
+    setup(b, 'sweep', 0.5)
+    base, moved, seen = {}, [], set()
+    t0 = time.time()
+    while time.time() - t0 < 30 and len(seen) < 8:      # (a loaded machine draws few frames)
+        b.sleep(0.2)
+        seen.add(b.eval("document.querySelector('#readouts').textContent"))
+        moved += track(base, b.eval(READ))
+    check(len(seen) >= 4 and not moved, f'the read-outs keep still as the beam sweeps ({len(seen)} readings)' + (f'; moved {moved[:3]}' if moved else ''))
+    setup(b, 'steer')
+    base, moved = {}, []
+    for name, v in (('θ₀', -55), ('θ₀', -4.5), ('θ₀', 0), ('θ₀', 7), ('θ₀', 63), ('N', 4), ('N', 24), ('spacing', 0.31), ('spacing', 0.97), ('θ₀', 30)):
+        setslider(b, name, v)
+        moved += track(base, b.eval(READ))
+    b.eval('__app.A.selected = 3; __app.arraysChanged()'); b.sleep(0.3)
+    for x, y in ((-3.25, 0.5), (0.125, -2.75), (2, 0), (-0.5, -0.25)):
+        b.eval(f'__app.A.els[3].x = {x}; __app.A.els[3].y = {y}; __app.arraysChanged()'); b.sleep(0.25)
+        moved += track(base, b.eval(READ))
+    setup(b, 'focus')
+    for f in ((0, 0), (-4.5, 3.25), (6, -1), (0.5, 7.5)):
+        b.eval(f'__app.A.focus = [{f[0]}, {f[1]}]; __app.arraysChanged()'); b.sleep(0.25)
+        moved += track(base, b.eval(READ))
+    check(not moved, 'the read-outs keep still as the steering, the number of elements, the spacing, an element and the focus move' + (f'; moved {moved[:3]}' if moved else ''))
     setup(b, 'grating'); i = b.eval(INFO)
     check(i['sll'] < -12, f"0.8 lambda, broadside: no grating lobe (highest sidelobe {i['sll']:.2f} dB)")
     setslider(b, 'θ₀', 30); i = b.eval(INFO)
@@ -187,6 +239,22 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     s = b.eval('[__app.synth.dirty.reduce((a, v) => a + v, 0), Math.min(...__app.synth.dirty) / Math.max(...__app.synth.dirty)]')
     check(abs(s[0]) < 1e-9 and s[1] < -0.1, f'short spacings missing: the dirty image adds up to {s[0]:.1e}, and its negative bowl goes down to {s[1]:.2f} of its peak')
 
+    # The notes keep still as the declination, the hours and the longest baseline change, and while
+    # CLEAN runs.
+    NOTES = f"{LAYOUT}('#map-note, #uv-note, #beam-note, #sky-note, #obs-note div, #clean-note')"
+    setup(b, 'clean', 1.5)
+    base, moved = {}, []
+    for name, v in (('declination', -35.5), ('declination', 4), ('declination', 62.25), ('hours', 0.5), ('hours', 11.5), ('hours', 2), ('declination', 50)):
+        setslider(b, name, v); b.sleep(0.4)
+        moved += track(base, b.eval(NOTES))
+    check(not moved, 'the notes keep still as the declination and the hours change' + (f'; moved {moved[:3]}' if moved else ''))
+    base, moved, seen = {}, [], set()
+    for k in range(12):
+        click(b, 'Step', '#clean-box'); b.sleep(0.1)
+        seen.add(b.eval("document.querySelector('#clean-note').textContent"))
+        moved += track(base, b.eval(NOTES))
+    check(len(seen) >= 10 and not moved, f'the CLEAN note keeps still as it counts steps ({len(seen)} readings, e.g. {sorted(seen)[-1]!r})' + (f'; moved {moved[:3]}' if moved else ''))
+
     # CLEAN finds the double's fluxes at the right pixels.
     setup(b, 'clean', 1.5)
     click(b, 'Step', '#clean-box'); click(b, 'Step', '#clean-box')
@@ -203,7 +271,8 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     # The Event Horizon Telescope: Earth-sized baselines.
     setup(b, 'eht', 2)
     lb = b.eval("document.querySelector('#obs-note').textContent").replace('\u00a0', ' ')
-    check('12700 km' in lb and '21.2 µas' in lb, 'the EHT: longest baseline 12,700 km, lambda/B = 21 microarcseconds')
+    km, uas = re.search(r'Longest baseline ([\d.]+) km', lb), re.search(r'λ/B = ([\d.]+) µas', lb)
+    check(km and uas and abs(float(km[1]) - 12700) < 50 and abs(float(uas[1]) - 21.2) < 0.05, f'the EHT: longest baseline 12,700 km, lambda/B = 21 microarcseconds ({lb[:80]!r})')
     broken = b.eval("(() => { const t = __app.synth.tracks; let n = 0; for (let i = 1; i < t.ok.length; i++) if (t.ok[i] !== t.ok[i - 1] && i % t.nt) n++; return n; })()")
     check(broken > 10, f'its tracks break where the source sets for a station ({broken} breaks)')
     b.screenshot('build/arrays-synth-eht.png')

@@ -27,6 +27,38 @@ INFO = '''(() => { const a = __app, o = a.sim.observables(), s = a.ens.N ? a.ens
 def local_maxima(values, floor):
     return sum(1 for i in range(1, len(values) - 1) if values[i] > values[i - 1] and values[i] >= values[i + 1] and values[i] > floor)
 
+# Read-outs that keep still: the boxes of the read-outs' parts (each quantity, its number's slot,
+# the colour bar, the values under the pointer, the numerics note) are recorded over frames and
+# steps that change the numbers; snapshots that show the same words (numbers taken out) must
+# have every box in the same place, to 0.5 px.
+NUMS = r"/[−+-]?\d[\d.,]*(?:e[−+-]?\d+)?/g"
+def snapshot(b, sel, text_sel):
+    return b.eval(f"""(() => {{
+        const texts = [...document.querySelectorAll({json.dumps(text_sel)})].map((e) => e.textContent).join(' | ');
+        const boxes = [...document.querySelectorAll({json.dumps(sel)})].map((e) => e.getBoundingClientRect())
+          .map((r) => [r.left + scrollX, r.top + scrollY, r.width, r.height].map((v) => Math.round(v * 10) / 10));
+        return [texts.replace({NUMS}, '#'), boxes, texts];
+    }})()""")
+
+def still(b, name, sel, text_sel, steps, min_compared=3):
+    base, moved, texts, compared = {}, [], set(), 0
+    for step in [None] + steps:
+        if step: step()
+        words, boxes, text = snapshot(b, sel, text_sel)
+        texts.add(text)
+        if words not in base: base[words] = boxes; continue
+        compared += 1
+        first = base[words]
+        if len(first) != len(boxes): moved.append(f'{len(first)} -> {len(boxes)} boxes'); continue
+        for k, (a, c) in enumerate(zip(first, boxes)):
+            d = [round(y - x, 1) for x, y in zip(a, c)]
+            if max(abs(v) for v in d) > 0.5: moved.append(f'box {k} by {d} at "{text[:90]}"'); break
+    check(not moved and compared >= min_compared and len(texts) > compared // 2,
+          f'{name}: the read-outs keep still while their numbers change ({len(texts)} different texts, {compared} compared with the same words, '
+          f'{len(base)} wordings)' + (f'; moved: {moved[:2]}' if moved else ''))
+
+READOUTS = '#readouts > span, #readouts .fixnum, .legend .cbar, #cb-lo, #cb-hi, #colorbar, #dots-note, #dots-note .fixnum, #hover, #hover .fixnum'
+
 with Browser('phasespace/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready')
     try: b.wait('__app.sim.t > 0.2', timeout=15)
@@ -156,6 +188,39 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     b.mouse('mouseMoved', hx, hy); b.sleep(0.3)
     hov = b.eval('document.getElementById("hover").textContent')
     check('W =' in hov and '/πħ' in hov, f'hovering shows W: "{hov}"')
+
+    # The read-outs keep still: while the state runs round (<x>, <p> change sign), with the
+    # colour scale on Auto, under the moving pointer, and in the numerics note as the window changes.
+    b.eval('__app.setups.coherent()'); b.sleep(0.5)
+    b.eval("[...document.querySelectorAll('button')].find((x) => x.textContent === 'Auto').click()")
+    b.eval('__app.state.running = true'); b.sleep(0.5)
+    xs = set()
+    def frame():
+        # Wait for the clock to move on by 0.6 (a tenth of a period), however slow the machine.
+        t, t0 = b.eval('__app.sim.t'), time.time()
+        while time.time() - t0 < 10 and b.eval('__app.sim.t') < t + 0.6: time.sleep(0.1)
+        time.sleep(0.15); xs.add(b.eval('Math.sign(__app.sim.observables().x)'))
+    still(b, 'while it runs', READOUTS, '#readouts, .legend', [frame] * 12)
+    check(len(xs) == 2, f'(and <x> took both signs while it ran: {sorted(xs)})')
+    b.eval('__app.state.running = false'); b.sleep(0.3)
+    def hover_at(fx, fy):
+        def go():
+            x, y = b.point('#plot', (fx, fy)); b.mouse('mouseMoved', x, y); time.sleep(0.3)
+        return go
+    still(b, 'under the pointer', READOUTS, '#readouts, .legend', [hover_at(fx, fy) for fx, fy in ((0.3, 0.3), (0.62, 0.71), (0.45, 0.5), (0.8, 0.2), (0.2, 0.85), (0.55, 0.4))])
+    b.mouse('mouseMoved', 2, 2)
+    b.eval("document.getElementById('numerics').open = true")
+    def window(v):
+        def go():
+            b.eval(f'''(() => {{ const box = [...document.querySelectorAll("#numerics-box .slider")].find((d) => d.textContent.includes("window")).querySelector("input[type=number]");
+              box.value = {v}; box.dispatchEvent(new Event("change")); }})()''')
+            t0 = time.time()
+            while time.time() - t0 < 10 and abs(b.eval('__app.state.zoom') - v) > 1e-9: time.sleep(0.2)
+            time.sleep(1.3)    # the note is written once a second
+        return go
+    still(b, 'the numerics note as the window changes', '#numerics-box .note, #numerics-box .note .fixnum', '#numerics-box', [window(v) for v in (1.3, 0.7, 2.2, 1.05, 1.6)], min_compared=2)
+    b.eval("document.getElementById('numerics').open = false")
+    b.eval("[...document.querySelectorAll('button')].find((x) => x.textContent.startsWith('Colours to')).click()")
 
     # Typed wave functions, the help's examples.
     b.eval('__app.setups.typed()'); b.eval('__app.state.running = false')

@@ -2,7 +2,7 @@
 
 import { fft } from '../lib/fft.js';
 import { colorOf } from '../lib/complexcolor.js';
-import { el, $, slider, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
+import { el, $, slider, drawer, readHash, writeHash, setSlots } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
 
 const NMAX = 48;          // harmonics kept
@@ -139,8 +139,9 @@ function drawWave() {
   for (let j = 0; j <= M; j++) { const x = f.X(j / M), y = f.Y(w[j % M]); if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
   ctx.stroke();
   ctx.restore();
-  f.axes({ xlabel: `t / T  (one period, T = 1/f₁ = ${fmt(1000 / state.f1, 3)} ms)` });
-  $('#wave-note').textContent = `drawn with the first ${state.terms} harmonic${state.terms > 1 ? 's' : ''}; draw on it`;
+  // The period in a slot of its own, and the count of harmonics: nothing moves as they change.
+  f.axes({ xlabel: ['t / T  (one period, T = 1/f₁ = ', { v: 1000 / state.f1, dec: 2, w: 5 }, ' ms)'] });
+  setSlots($('#wave-note'), ['drawn with the first ', { v: state.terms, dec: 0, w: 2 }, ` harmonic${state.terms > 1 ? 's' : ''}; draw on it`]);
 }
 
 function drawSpectrum() {

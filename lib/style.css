@@ -109,6 +109,11 @@ input.bad, textarea.bad { border-color: var(--warn); }
 .muted { color: var(--ink-3); }
 .small { font-size: 12px; }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+/* A live number in a readout: a fixed width (set where it is made, in ch), right-aligned, tabular
+   figures, so that it and what follows it keep their places as it changes (ui.js: numSlot). */
+.fixnum { display: inline-block; text-align: right; white-space: pre; font-variant-numeric: tabular-nums; }
+/* A number kept on one line with the words touching it (setSlots). */
+.nobr { white-space: nowrap; }
 
 .panel {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);

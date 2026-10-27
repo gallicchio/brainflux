@@ -39,12 +39,14 @@
 .dsp:not([data-view="pulse"]) #pulse-panel { display: none; }
 
 .readout { color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 3.2em; line-height: 1.5; }
-.readout b { color: var(--ink); font-weight: 600; }
+.readout b, .readout .fixnum.b { color: var(--ink); font-weight: 600; }
 .readout .warn { color: var(--warn); }
 
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+/* Play and Pause take the same room, so that the button beside it stays put. */
+#play { min-width: 5.2em; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
 .osc-chips button { min-width: 34px; padding: 2px 8px; }
 .osc-chips .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: var(--im); vertical-align: 1px; }
