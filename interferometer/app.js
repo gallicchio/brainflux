@@ -92,7 +92,7 @@ const setups = {
   sodium: () => michelson({ source: 'sodium', d: 0, motor: 'fwd', speed: 60, win: [-60, 2440], viewPreset: 'fit' }),
   white: () => michelson({ source: 'white', d: -0.8, tilt: 200, motor: 'sweep', speed: 0.25, win: [-4, 4] }),
   coherence: () => michelson({ source: 'gauss', params: { lam: 550, fwhm: 10 }, d: -8, motor: 'sweep', speed: 2.5, win: [-32, 32] }),
-  led: () => michelson({ source: 'led', d: -5, tilt: 120, motor: 'sweep', speed: 0.4, win: [-12, 12] }),
+  led: () => michelson({ source: 'led', d: -2, tilt: 120, motor: 'sweep', speed: 0.3, win: [-8, 8] }),
   draws: () => {
     michelson({ source: 'draw', d: 0, win: [-12, 12], record: [-12, 12] });
     // Something to start from: two bands, which the student draws over.

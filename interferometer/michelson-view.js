@@ -44,13 +44,14 @@ export const getCounter = () => counter;
 // --------------------------------------------------------------------- the light
 
 export function setSource(id, params) {
+  const same = state.source === id && params;     // a parameter's slider: keep the controls
   state.source = id;
   if (params && state.params[id]) Object.assign(state.params[id], params);
   const s = SOURCES[id] || SOURCES.hene;
   spec = s.make(state.params[id]).normalize();
   fts.drawn = false;
   specChanged();
-  showSourceControls();
+  if (same) showSourceNote(); else showSourceControls();
 }
 
 /** Use a spectrum made elsewhere (a drawing to start from). */
@@ -589,6 +590,7 @@ function drawSpectrum() {
     ctx.fillStyle = c.accent; ctx.fillText('recovered from the scan', f.left + 80, f.top + 14);
   }
   ctx.restore();
+  $('#spec-fn').textContent = state.axis === 'sigma' ? 'S(σ)' : 'S(λ)';
   const neg = rec && rmin < -0.02 * rtop && fts.drawn;
   $('#spec-note').innerHTML = fts.drawn ? (neg ? '<span class="warn-text">negative in places: no light could make this</span>' : 'heights scaled to fit')
     : rec ? 'each curve scaled to fit' : 'draw on it; drag a line\'s dot';
@@ -953,6 +955,11 @@ function showSourceControls() {
     paramSliders.T = slider({ label: 'T (K)', min: 1500, max: 12000, log: true, value: p.T, title: 'The temperature of the filament', onInput: (v) => setSource('lamp', { T: v }) });
     box.append(paramSliders.T);
   }
+  showSourceNote();
+}
+
+function showSourceNote() {
+  const p = state.params[state.source];
   const notes = {
     hene: '632.8 nm (in air), a line far narrower than this demo can show',
     sodium: 'D₂ 588.995 nm and D₁ 589.592 nm, strengths 2 : 1; use "Lines" to zoom in',

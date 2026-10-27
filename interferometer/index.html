@@ -33,7 +33,7 @@
       <div class="box screen-box"><canvas id="screen" aria-label="The fringes, in their true colours, as you see them looking into the interferometer; the cross marks the detector"></canvas></div>
     </div>
     <div class="cell spec-cell">
-      <div class="head"><h2>Spectrum <span class="fn">S(σ)</span></h2><span class="small muted" id="spec-note">draw on it</span><span class="spacer"></span><span id="axis-box"></span><span id="view-box"></span></div>
+      <div class="head"><h2>Spectrum <span class="fn" id="spec-fn">S(σ)</span></h2><span class="small muted" id="spec-note">draw on it</span><span class="spacer"></span><span id="axis-box"></span><span id="view-box"></span></div>
       <div class="box plot-box"><canvas id="spectrum" tabindex="0" aria-label="The spectrum of the light: draw on it, or drag a line's top to change its strength"></canvas></div>
     </div>
     <div class="cell trace-cell">
@@ -112,7 +112,8 @@
   Apart from the constant, the interferogram $I(\Delta)$ is the Fourier (cosine) transform of the
   spectrum: they are a Fourier pair, and you can change either one here.  Moving the mirror M2 by
   $d$ changes the path difference by $\Delta=2d$ (the light goes there and back).  The screen
-  shows what you would see looking into the instrument, in true colour.</p>
+  shows what you would see looking into the instrument, in true colour.  Scroll over the spectrum
+  or the interferogram to zoom; the buttons above them set their ranges.</p>
 
   <article class="exp" data-setup="count">
     <h3>1. Count the fringes: the laser's wavelength</h3>
@@ -177,8 +178,10 @@
     <h3>6. A white LED</h3>
     <p>A white LED is a blue LED chip (here 450 nm, 20 nm wide) under a yellow phosphor (565 nm,
     110 nm wide).  At zero path its fringes are white-light fringes.  The broad phosphor band loses
-    its fringes within a micrometre or two, but the narrower blue band keeps them for several: a
-    few micrometres from zero path the fringes turn blue on a yellowish background.</p>
+    its fringes within a micrometre or two, but the narrower blue band keeps them for several
+    (half visibility at 4.5 μm, against 1.3 μm for the phosphor).  So a few micrometres from zero
+    path only the blue light still interferes, and the fringes alternate between lavender (blue
+    added to the phosphor's yellow) and yellow-green (blue taken away).</p>
   </article>
 
   <article class="exp" data-setup="draws">
