@@ -25,9 +25,16 @@ export class Grid {
     this.h = 1 / (n - 1);
     this.mask = mask;
     for (let i = 0; i < n; i++) { mask[i] = 0; mask[(n - 1) * n + i] = 0; mask[i * n] = 0; mask[i * n + n - 1] = 0; }
-    const inner = [];
-    for (let g = 0; g < n * n; g++) if (mask[g]) inner.push(g);
+    const inner = [], runs = [];
+    for (let g = 0; g < n * n; g++) {
+      if (!mask[g]) continue;
+      inner.push(g);
+      if (!mask[g - 1]) runs.push(g, g + 1); else runs[runs.length - 1] = g + 1;
+    }
     this.inner = Int32Array.from(inner);
+    // The free points as runs [start, end) along the rows: the steppers sweep these, so the
+    // loops read memory in order with no indirection.
+    this.runs = Int32Array.from(runs);
     this.N = inner.length;
     this.area = this.N * this.h * this.h;
   }
@@ -95,11 +102,12 @@ export class Membrane {
     this.t = 0;
   }
   step() {
-    const { n, inner } = this.grid, u = this.u, o = this.uOld;
-    const k = (this.c * this.dt / this.grid.h) ** 2;
-    for (let i = 0; i < inner.length; i++) {
-      const g = inner[i];
-      o[g] = 2 * u[g] - o[g] - k * (4 * u[g] - u[g - 1] - u[g + 1] - u[g - n] - u[g + n]);
+    const { n, runs } = this.grid, u = this.u, o = this.uOld;
+    const k = (this.c * this.dt / this.grid.h) ** 2, k4 = 2 - 4 * k;
+    for (let r = 0; r < runs.length; r += 2) {
+      for (let g = runs[r], end = runs[r + 1]; g < end; g++) {
+        o[g] = k4 * u[g] - o[g] + k * (u[g - 1] + u[g + 1] + u[g - n] + u[g + n]);
+      }
     }
     this.uOld = u; this.u = o;
     this.t += this.dt;
@@ -148,16 +156,17 @@ export class Billiard {
     this.t = 0;
   }
   step() {
-    const { n, inner } = this.grid, R = this.re, I = this.im, O = this.imOld;
-    const k = (0.5 * this.dt) / (this.grid.h * this.grid.h);
-    for (let i = 0; i < inner.length; i++) {
-      const g = inner[i];
-      R[g] += k * (4 * I[g] - I[g - 1] - I[g + 1] - I[g - n] - I[g + n]);
+    const { n, runs } = this.grid, R = this.re, I = this.im, O = this.imOld;
+    const k = (0.5 * this.dt) / (this.grid.h * this.grid.h), k4 = 4 * k;
+    for (let r = 0; r < runs.length; r += 2) {
+      for (let g = runs[r], end = runs[r + 1]; g < end; g++) R[g] += k4 * I[g] - k * (I[g - 1] + I[g + 1] + I[g - n] + I[g + n]);
     }
-    for (let i = 0; i < inner.length; i++) {
-      const g = inner[i];
-      O[g] = I[g];
-      I[g] -= k * (4 * R[g] - R[g - 1] - R[g + 1] - R[g - n] - R[g + n]);
+    for (let r = 0; r < runs.length; r += 2) {
+      for (let g = runs[r], end = runs[r + 1]; g < end; g++) {
+        const v = I[g];
+        O[g] = v;
+        I[g] = v - k4 * R[g] + k * (R[g - 1] + R[g + 1] + R[g - n] + R[g + n]);
+      }
     }
     this.t += this.dt;
   }
@@ -176,22 +185,30 @@ export class Billiard {
 
 /**
  * A Gaussian packet ψ = exp(−|r − r0|²/4σ² + i k·r), zero on the walls, normalised (Σ|ψ|²h² = 1).
- * σ is the spread of |ψ|² in each direction.
+ * σ is the spread of |ψ|² in each direction.  Given the shape's signed distance sdf, the packet
+ * is brought smoothly to zero within 2σ of the wall (a packet cut off sharply by a wall would
+ * have a kink there, and with it a long tail of high energies).
  */
-export function packet(grid, x0, y0, kx, ky, sigma) {
+export function packet(grid, x0, y0, kx, ky, sigma, sdf = null) {
   const { n, h } = grid, N = n * n, re = new Float64Array(N), im = new Float64Array(N);
-  const a = 1 / (4 * sigma * sigma);
+  const a = 1 / (4 * sigma * sigma), w = 2 * sigma;
   for (const g of grid.inner) {
     const x = -0.5 + (g % n) * h, y = -0.5 + Math.floor(g / n) * h;
-    const dx = x - x0, dy = y - y0, env = Math.exp(-(dx * dx + dy * dy) * a), ph = kx * dx + ky * dy;
+    const dx = x - x0, dy = y - y0, ph = kx * dx + ky * dy;
+    let env = Math.exp(-(dx * dx + dy * dy) * a);
+    if (sdf && env > 1e-8) { const d = sdf(x, y) + 0.5 * h; env *= d <= 0 ? 0 : d >= w ? 1 : Math.sin((0.5 * Math.PI * d) / w) ** 2; }
     re[g] = env * Math.cos(ph); im[g] = env * Math.sin(ph);
   }
   normalise(grid, re, im);
   return [re, im];
 }
 
-/** A random state, smoothed to wavelengths longer than about 2π/kmax, normalised. */
-export function randomState(grid, kmax, seed = 1, complex = true) {
+/**
+ * A random state, smoothed to wavelengths longer than about 2π/kmax, normalised.  Given the
+ * shape's signed distance, it is brought smoothly to zero near the walls (over 1.5/kmax), so it
+ * has no kink there and no long tail of high energies.
+ */
+export function randomState(grid, kmax, seed = 1, complex = true, sdf = null) {
   const { n, h } = grid, N = n * n;
   let s = seed >>> 0 || 1;
   const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296 - 0.5; };
@@ -214,6 +231,14 @@ export function randomState(grid, kmax, seed = 1, complex = true) {
       let v = 0;
       for (let d = -reach; d <= reach; d++) { const jj = j + d; if (jj >= 0 && jj < n) v += ker[d + reach] * tmp[jj * n + i]; }
       f[g] = v;
+    }
+  }
+  if (sdf) {
+    const wt = 1.5 / kmax;
+    for (const g of grid.inner) {
+      const d = sdf(-0.5 + (g % n) * h, -0.5 + Math.floor(g / n) * h);
+      const t = d <= 0 ? 0 : d >= wt ? 1 : Math.sin((0.5 * Math.PI * d) / wt) ** 2;
+      out[0][g] *= t; if (out[1]) out[1][g] *= t;
     }
   }
   normalise(grid, out[0], out[1]);

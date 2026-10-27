@@ -175,7 +175,7 @@ export const PRESETS = {
         sdf: (x, y) => R - Math.hypot(x, y), area: PI * R * R, perimeter: 2 * PI * R, K: 1 / 6,
         outline: [arcPoints(0, 0, R, 0, 2 * PI, 160)],
         exact: (lmax) => discSpectrum(R, lmax, false),
-        exactNote: 'λ = (j_{m,k}/R)², j_{m,k} the k-th zero of the Bessel function J_m',
+        exactNote: 'λ = (jₘₖ/R)², jₘₖ the k-th zero of the Bessel function Jₘ; (m, k) with ±m for cos mθ and sin mθ',
       };
     },
   },
@@ -189,7 +189,7 @@ export const PRESETS = {
         area: (PI * R * R) / 2, perimeter: PI * R + 2 * R, K: 1 / 8 + 1 / 12,
         outline: [[...arcPoints(0, y0, R, 0, PI, 100), [R, y0]]],
         exact: (lmax) => discSpectrum(R, lmax, true),
-        exactNote: 'λ = (j_{m,k}/R)² with m ≥ 1 only: the modes sin mθ of the circle',
+        exactNote: 'λ = (jₘₖ/R)² with m ≥ 1 only: the circle\'s modes sin mθ',
       };
     },
   },
@@ -303,7 +303,7 @@ function rect(a, b, h) {
     sdf, area: a * b, perimeter: 2 * (a + b), K: 1 / 4,
     outline: [[[x0, y0], [x0 + a, y0], [x0 + a, y0 + b], [x0, y0 + b], [x0, y0]]],
     exact: (lmax) => rectangleSpectrum(a, b, lmax),
-    exactNote: 'λ = π²(m²/a² + n²/b²)',
+    exactNote: 'λ = π²(m²/a² + n²/b²), a × b the sides',
     // The 5-point Laplacian's own eigenvalues for this rectangle: products of sines.
     discrete: (count) => {
       const Ma = Math.round(a / h) - 1, Mb = Math.round(b / h) - 1, out = [];
@@ -355,29 +355,58 @@ export function paintMask(mask, n, ci, cj, r, v) {
 }
 
 /**
- * A smooth level set for a mask (drawn shapes): the mask blurred over about a grid step, minus
- * 1/2, bilinearly interpolated.  Positive inside; its zero contour runs half way between the
- * free points and the walls.  Returns sdf(x, y) in units of the box (approximate distance).
+ * A signed distance for a mask (drawn and typed shapes): the distance from each free point to
+ * the nearest wall point and from each wall point to the nearest free point (two-pass chamfer
+ * transform with steps 1 and √2), shifted by half a step so that zero lies half way between,
+ * smoothed twice over 3 × 3 points so that its gradient (the ray's normal) does not follow
+ * every stair, and bilinearly interpolated.  Positive inside; in units of the box.
  */
 export function levelSetOfMask(mask, n) {
-  const h = 1 / (n - 1), f = new Float64Array(n * n), tmp = new Float64Array(n * n);
-  const w = [0.25, 0.5, 0.25];
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    let s = 0;
-    for (let d = -1; d <= 1; d++) { const ii = Math.min(n - 1, Math.max(0, i + d)); s += w[d + 1] * mask[j * n + ii]; }
-    tmp[j * n + i] = s;
-  }
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    let s = 0;
-    for (let d = -1; d <= 1; d++) { const jj = Math.min(n - 1, Math.max(0, j + d)); s += w[d + 1] * tmp[jj * n + i]; }
-    f[j * n + i] = s - 0.5;
+  const h = 1 / (n - 1), N = n * n, BIG = 1e9, r2 = Math.SQRT2;
+  const chamfer = (inside) => {
+    const d = new Float64Array(N);
+    for (let g = 0; g < N; g++) d[g] = (mask[g] === 1) === inside ? BIG : 0;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const g = j * n + i;
+      if (!d[g]) continue;
+      let v = d[g];
+      if (i > 0) v = Math.min(v, d[g - 1] + 1);
+      if (j > 0) { v = Math.min(v, d[g - n] + 1); if (i > 0) v = Math.min(v, d[g - n - 1] + r2); if (i < n - 1) v = Math.min(v, d[g - n + 1] + r2); }
+      d[g] = v;
+    }
+    for (let j = n - 1; j >= 0; j--) for (let i = n - 1; i >= 0; i--) {
+      const g = j * n + i;
+      if (!d[g]) continue;
+      let v = d[g];
+      if (i < n - 1) v = Math.min(v, d[g + 1] + 1);
+      if (j < n - 1) { v = Math.min(v, d[g + n] + 1); if (i < n - 1) v = Math.min(v, d[g + n + 1] + r2); if (i > 0) v = Math.min(v, d[g + n - 1] + r2); }
+      d[g] = v;
+    }
+    return d;
+  };
+  const din = chamfer(true), dout = chamfer(false);
+  let f = new Float64Array(N);
+  for (let g = 0; g < N; g++) f[g] = mask[g] ? Math.min(din[g], 1e3) - 0.5 : -(Math.min(dout[g], 1e3) - 0.5);
+  for (let pass = 0; pass < 2; pass++) {
+    const s = new Float64Array(N);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      let acc = 0, wsum = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+        const w = (2 - Math.abs(di)) * (2 - Math.abs(dj));
+        acc += w * f[jj * n + ii]; wsum += w;
+      }
+      s[j * n + i] = acc / wsum;
+    }
+    f = s;
   }
   return (x, y) => {
     const u = (x + 0.5) / h, v = (y + 0.5) / h;
-    if (u < 0 || v < 0 || u > n - 1 || v > n - 1) return -1;
+    if (u < 0 || v < 0 || u > n - 1 || v > n - 1) return -h;
     const i = Math.min(n - 2, Math.floor(u)), j = Math.min(n - 2, Math.floor(v)), a = u - i, b = v - j;
     const val = (1 - a) * (1 - b) * f[j * n + i] + a * (1 - b) * f[j * n + i + 1] + (1 - a) * b * f[(j + 1) * n + i] + a * b * f[(j + 1) * n + i + 1];
-    return val * 2 * h; // the blurred step rises by 1 over about two grid steps
+    return val * h;
   };
 }
 
