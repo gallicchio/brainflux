@@ -1,6 +1,6 @@
 // The 1D Schrödinger demo: choose a potential and an initial state, press Play.
 
-import { Sim1D, eigenstates, prepareSharpPotential } from './sim.js';
+import { Sim1D, eigenstates, prepareSharpPotential, hasJumps } from './sim.js';
 import { POTENTIALS, PACKET } from './presets.js';
 import { parse } from '../lib/expr.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash } from '../lib/ui.js';
@@ -64,17 +64,20 @@ function evalV(t) {
     }
     xs = subX;
   }
-  const v = Vexpr.evaluate({ x: xs, t, m: state.mass, ...Vparams }, n * sub).re;
   const clean = (y) => (Number.isFinite(y) ? Math.max(-1e6, Math.min(1e6, y)) : Number.isNaN(y) ? 0 : Math.sign(y) * 1e6);
+  const v = Vexpr.evaluate({ x: xs, t, m: state.mass, ...Vparams }, n * sub).re.map(clean);
   const out = new Float64Array(n);
   for (let j = 0; j < n; j++) {
     let a = 0;
-    for (let s = 0; s < sub; s++) a += clean(v[j * sub + s]);
+    for (let s = 0; s < sub; s++) a += v[j * sub + s];
     out[j] = a / sub;
   }
   shownV = out;
-  // Sharp edges are made fit for the method: see prepareSharpPotential.
-  return prepareSharpPotential(out, sim.dx, { kc: state.pot.kc || 16 });
+  // Sharp edges are made fit for the method (see prepareSharpPotential), and so is a spike
+  // whose preset asks for it (the delta); a smooth V, however steep its walls, is used exactly
+  // as typed.
+  const sharp = hasJumps(v) || state.pot.kc;
+  return sharp ? prepareSharpPotential(out, sim.dx, { kc: state.pot.kc || 16 }) : out;
 }
 
 function applyPotential({ keepState }) {

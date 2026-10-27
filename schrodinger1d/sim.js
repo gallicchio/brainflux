@@ -385,6 +385,23 @@ export class Sim1D {
  * carries .jumps and .step (the largest time step it allows, divided by the mass).
  */
 const TALL = 30;
+
+/**
+ * Whether a potential, sampled finely (several samples per cell), jumps somewhere: one step
+ * between samples far bigger than its neighbours.  A smooth V, however steep, changes by
+ * nearly equal steps from sample to sample, and is left exactly as typed.
+ */
+export function hasJumps(v) {
+  for (let i = 4; i < v.length - 5; i++) {
+    const d = Math.abs(v[i + 1] - v[i]);
+    if (d < 1e-3) continue;
+    let nb = 0;
+    for (let k = -4; k <= 4; k++) if (k) nb = Math.max(nb, Math.abs(v[i + 1 + k] - v[i + k]));
+    if (d > 20 * nb) return true;
+  }
+  return false;
+}
+
 export function prepareSharpPotential(V, dx, { kc = 16, delta = 0.05 } = {}) {
   const n = V.length, out = Float64Array.from(V);
   out.jumps = false;

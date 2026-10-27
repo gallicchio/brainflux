@@ -1,7 +1,7 @@
 // The quantum phase-space demo: the Wigner function W(x, p) of a wave function evolving under
 // H = p^2/2m + V(x) (hbar = m = 1), with a classical ensemble flowing under the same H.
 
-import { Sim1D, eigenstates, prepareSharpPotential } from '../schrodinger1d/sim.js';
+import { Sim1D, eigenstates, prepareSharpPotential, hasJumps } from '../schrodinger1d/sim.js';
 import { parse } from '../lib/expr.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash, fmt } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, contour } from '../lib/plot.js';
@@ -67,14 +67,7 @@ function evalVOnGrid() {
     for (let s = 0; s < SUB; s++) a += v[j * SUB + s];
     out[j] = a / SUB;
   }
-  out.jumps = false;
-  for (let i = 4; i < N - 5 && !out.jumps; i++) {
-    const d = Math.abs(v[i + 1] - v[i]);
-    if (d < 1e-3) continue;
-    let nb = 0;
-    for (let k = -4; k <= 4; k++) if (k) nb = Math.max(nb, Math.abs(v[i + 1 + k] - v[i + k]));
-    if (d > 20 * nb) out.jumps = true;
-  }
+  out.jumps = hasJumps(v);
   return out;
 }
 const clean = (y) => (Number.isFinite(y) ? Math.max(-1e6, Math.min(1e6, y)) : Number.isNaN(y) ? 0 : Math.sign(y) * 1e6);

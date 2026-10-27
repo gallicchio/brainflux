@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Sim1D, eigenstates, prepareSharpPotential } from '../schrodinger1d/sim.js';
+import { Sim1D, eigenstates, prepareSharpPotential, hasJumps } from '../schrodinger1d/sim.js';
 import { POTENTIALS } from '../schrodinger1d/presets.js';
 import { parse } from '../lib/expr.js';
 
@@ -172,6 +172,15 @@ test('sharp potentials: band-limited jumps and the step limit keep the energy an
   const S = prepareSharpPotential(V, sim.dx);
   assert(!S.jumps && S.every((v, j) => v === V[j]), 'smooth potentials unchanged');
   return notes.join('; ');
+});
+
+test('jumps are found in the fine samples, so steep smooth walls are used exactly as typed', () => {
+  const fine = (a, b, f) => Float64Array.from({ length: 8192 }, (_, i) => f(a + ((i + 0.5) / 8192) * (b - a)));
+  assert(hasJumps(fine(-30, 30, (x) => (Math.abs(x) < 1 ? -7 : 0))), 'a finite well jumps');
+  assert(hasJumps(fine(-60, 60, (x) => 2 * (x > 0))), 'a step jumps');
+  assert(!hasJumps(fine(-6, 6, (x) => 3 * ((x / 1.5) ** 2 - 1) ** 2)), 'the double well does not');
+  assert(!hasJumps(fine(-6, 6, (x) => x ** 4 / 4 - 2 * x * x)), 'nor x^4/4 - 2x^2, whose walls reach 252');
+  assert(!hasJumps(fine(-10, 10, (x) => x * x / 2)), 'nor the harmonic well');
 });
 
 test('a band-limited step reflects like a sharp one: R against ((k - k\')/(k + k\'))^2', () => {
