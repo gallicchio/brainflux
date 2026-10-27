@@ -632,6 +632,8 @@ pathCanvas.addEventListener('pointerdown', (e) => {
   }
   const spacing = state.sys.vertical ? frame.h / (ks.length - 1) : frame.w / (ks.length - 1);
   if (best < 0 || bestD > spacing / 2 + 8) return;
+  // The brachistochrone's bead starts from rest at the top: that end stays put.
+  if (best === 0 && state.sys.lockStart) best = 1;
   dragging = { k: best };
   pathCanvas.setPointerCapture(e.pointerId);
   pathCanvas.classList.add('dragging');

@@ -37,6 +37,16 @@ with Browser('action/index.html', size=(1400, 950)) as b:
         n = b.eval('__app.truths.length')
         b.screenshot(f'build/act-exp-{name}.png')
         check(n >= 1, f'{name}: {n} true path(s) found, S = {b.eval("__app.current && __app.current.S")}')
+    # A typed Lagrangian may use m.
+    b.eval("__app.setups.damped()"); b.sleep(0.3)
+    b.eval("""(() => { const f = document.querySelector('#typed input'); f.value = 'm v^2/2 - m x^2/2'; f.dispatchEvent(new Event('change')); })()""")
+    b.sleep(0.5)
+    tp = b.eval('__app.truths.length'); S = b.eval('__app.current && __app.current.S')
+    check(tp == 1 and S is not None, f'a typed L with m in it works (true paths {tp}, S {S})')
+    # The brachistochrone's start stays put when dragged.
+    b.eval("__app.setups.brach()"); b.sleep(0.3)
+    b.drag(P, (0.01, 0.2), (0.01, 0.5), steps=5); b.sleep(0.3)
+    check(abs(b.eval('__app.state.knots[0]')) < 1e-12, 'the brachistochrone starts at rest at the top, whatever you drag')
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 print(f"SUMMARY: {'all passed' if not failures else str(len(failures)) + ' failed'}")

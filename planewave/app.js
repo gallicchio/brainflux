@@ -117,7 +117,8 @@ function drawWave() {
       const vp = (-cv.w / cv.s) * (state.omega / kk);          // along k-hat
       // The crest nearest the centre at t = 0, then carried along and wrapped across the view.
       const r0 = -state.phi1 / (cv.s * kk);
-      const span = 2 * X * 1.2;
+      // Wrap across the view by a whole number of wavelengths, so the dot stays on a crest.
+      const lam = (2 * Math.PI) / kk, span = lam * Math.max(1, Math.round((2 * X * 1.2) / lam));
       let r = r0 + vp * t;
       r = ((((r + span / 2) % span) + span) % span) - span / 2;
       const px = cx0 + ((r * k[0]) / kk) * (width / (2 * X)), py = cy0 - ((r * k[1]) / kk) * (width / (2 * X));
@@ -187,18 +188,20 @@ function omegaFn() {
 }
 
 function preparePacket() {
-  // psi~(k) = exp(-(k - k0)^2 / (4 dk^2)), centred at x = 0; omega(k) for every k (and -k:
-  // waves going left get omega(|k|) with the same convention, so they go left).
+  // psi~(k) = exp(-(k - k0)^2 / (4 dk^2)), centred at x = 0, each k with omega(|k|):
+  // exp(i(kx - omega t)) with k < 0 goes left, as it should.  Where omega(k) is not finite
+  // (1/k at k = 0, say) that wave is left out: such k carry no weight in the packet anyway.
   const kabs = Float64Array.from(kgrid, Math.abs);
   const w = omegaFn()(kabs);
+  for (let i = 0; i < w.length; i++) if (!Number.isFinite(w[i])) w[i] = NaN;
   packetData = { w, amp: Float64Array.from(kgrid, (k) => Math.exp(-((k - state.k0) ** 2) / (4 * state.dk ** 2))) };
 }
 
 function packetAt(t) {
   const re = new Float64Array(NP), im = new Float64Array(NP), { w, amp } = packetData;
   for (let i = 0; i < NP; i++) {
-    const s = Math.sign(kgrid[i]) || 1;
-    const ph = -s * w[i] * t;
+    if (Number.isNaN(w[i])) continue;
+    const ph = -w[i] * t;
     re[i] = amp[i] * Math.cos(ph); im[i] = amp[i] * Math.sin(ph);
   }
   ifft(re, im);
@@ -212,7 +215,8 @@ function packetAt(t) {
 function velocities() {
   const f = omegaFn(), k0 = state.k0, h = 1e-4 * (1 + Math.abs(k0));
   const [w0, wp, wm] = f(Float64Array.from([k0, k0 + h, k0 - h]));
-  return { w0, vp: w0 / k0, vg: (wp - wm) / (2 * h) };
+  const vg = (wp - wm) / (2 * h);
+  return { w0, vp: w0 / k0, vg: Number.isFinite(vg) ? vg : 0 };
 }
 
 const VIEW = [-10, 70];
@@ -389,7 +393,11 @@ for (const [id, d] of Object.entries(DISPERSIONS)) {
 const omegaField = exprField({
   label: '<math><mi>ω</mi><mo>(</mo><mi>k</mi><mo>)</mo><mo>=</mo></math>', value: DISPERSIONS.schrodinger.omega, variables: ['k'],
   hints: { c: { min: 0, max: 3, value: 1 }, g: { min: 0.5, max: 10, value: 4 }, mu: { min: 0, max: 3, value: 1.5 } },
-  onChange: (expr, params) => { omegaExpr = expr; omegaParams = params; packetData = null; state.t = 0; kick(); },
+  onChange: (expr, params) => {
+    omegaExpr = expr; omegaParams = params; packetData = null; state.t = 0;
+    for (const [k, b] of Object.entries(dispButtons)) b.setAttribute('aria-pressed', String(DISPERSIONS[k].omega === expr.source && k === state.disp));
+    kick();
+  },
 });
 $('#omega-field').append(omegaField);
 const k0Slider = slider({ label: '<math><msub><mi>k</mi><mn>0</mn></msub></math>', labelHTML: true, min: 0.3, max: 4, value: state.k0, onInput: (v) => { state.k0 = v; packetData = null; state.t = 0; kick(); } });
@@ -423,8 +431,13 @@ window.addEventListener('resize', kick);
 
 // --------------------------------------------------------------------- experiments
 
+function resume() {
+  state.running = true; $('#play').textContent = 'Pause';
+  for (const [k, t] of Object.entries(showToggles)) { t.on = true; state.show[k] = true; }
+}
 function reset2D(mode, { conv = 0, display = 'complex', k1 = [1.2, 0.5], omega = 1.5, speed = 1 } = {}) {
   setMode(mode);
+  state.c = 1; cSlider.value = 1;
   setConvention(conv);
   state.display = display; displaySeg.value = display;
   state.k1 = k1; state.omega = omega; omegaSlider.value = omega;
@@ -441,10 +454,10 @@ const setups = {
   standing: () => { reset2D('two', { k1: [1.5, 0] }); twoPresets.Standing(); },
   crossed: () => { reset2D('two', { k1: [1.5, 0.4] }); twoPresets.Crossed(); },
   beats: () => { reset2D('two', { k1: [1.2, 0], speed: 1 }); twoPresets.Beats(); },
-  schrodinger: () => { setMode('packet'); setDispersion('schrodinger'); },
-  water: () => { setMode('packet'); setDispersion('water'); },
-  light: () => { setMode('packet'); setDispersion('light'); },
-  relativistic: () => { setMode('packet'); setDispersion('relativistic'); },
+  schrodinger: () => { setMode('packet'); setDispersion('schrodinger'); resume(); },
+  water: () => { setMode('packet'); setDispersion('water'); resume(); },
+  light: () => { setMode('packet'); setDispersion('light'); resume(); },
+  relativistic: () => { setMode('packet'); setDispersion('relativistic'); resume(); },
 };
 drawer($('#help'), $('#help-button'), setups);
 

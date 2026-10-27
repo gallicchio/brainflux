@@ -24,6 +24,13 @@ with Browser('planewave/index.html', size=(1300, 950)) as b:
             v = b.eval('__app.velocities()')
             x1, x2 = b.eval('__app.centroid(5)'), b.eval('__app.centroid(15)')
             check(abs((x2 - x1) / 10 - v['vg']) < 0.01 * abs(v['vg']) + 1e-3, f"{name}: the packet moves at dω/dk = {v['vg']:.4f} (measured {(x2 - x1) / 10:.4f}); crests at ω/k = {v['vp']:.4f}")
+    # A wide spread of wavenumbers, including negative ones: still moves at d omega/dk.
+    b.eval("__app.setups.schrodinger()"); b.sleep(0.2)
+    b.eval("""(() => { const [k0, dk] = document.querySelectorAll('#packet-box input[type=number]');
+        k0.value = 0.3; k0.dispatchEvent(new Event('change')); dk.value = 0.8; dk.dispatchEvent(new Event('change')); })()""")
+    check(abs(b.eval('__app.state.k0') - 0.3) < 1e-9, 'typed k0 = 0.3')
+    x1, x2 = b.eval('__app.centroid(5)'), b.eval('__app.centroid(15)')
+    check(abs((x2 - x1) / 10) < 0.5, f'a packet with k < 0 components does not run away to the right (centroid speed {(x2 - x1) / 10:.3f})')
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 print(f"SUMMARY: {'all passed' if not failures else str(len(failures)) + ' failed'}")

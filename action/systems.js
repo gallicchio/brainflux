@@ -83,7 +83,7 @@ export const SYSTEMS = [
     make: ({ n0, alpha }) => ({
       L: (q, v) => map3(q, v, q, (y, u) => { const n = n0 + alpha * y; return n > 0 ? n * Math.sqrt(1 + u * u) : NaN; }),
     }),
-    blurb: 'Fermat\'s principle: light takes the path of least optical length ∫n ds.  Where the air is denser above (α > 0) the ray arches upwards, bending towards the higher index.',
+    blurb: 'Fermat\'s principle: light takes the path of least optical length ∫n ds.  Over a hot road the air near the ground is thinner (lower n, α > 0), so the quickest path dips down into it and curves back up, towards the higher index: light from the sky reaches you from below, and the road looks wet.',
   },
   {
     id: 'refraction', label: 'Light: refraction',
@@ -97,7 +97,7 @@ export const SYSTEMS = [
     blurb: 'From air into glass.  The least-time path bends at the surface so that n₁ sin θ₁ = n₂ sin θ₂ (θ from the normal): Snell\'s law is the conserved "energy" in the phase-space picture.',
   },
   {
-    id: 'brachistochrone', label: 'Brachistochrone', flip: true, singularStart: true,
+    id: 'brachistochrone', label: 'Brachistochrone', flip: true, singularStart: true, lockStart: true,
     s: 'x', q: 'depth', s0: 0, s1: Math.PI, q0: 0, q1: 2, qrange: [-0.4, 3], knots: 6, vmax: 50,
     params: { g: { value: 1, min: 0.2, max: 5 } },
     formula: 'L = \\frac{\\sqrt{1+y\'^2}}{\\sqrt{2gy}}',
@@ -127,7 +127,7 @@ export const SYSTEMS = [
 
 /** A Lagrangian from a typed V(x, t) or L(x, v, t), with its parameter values. */
 export function typedSystem(kind, expr, params, m = 1) {
-  const env = (q, v, s) => ({ x: q, v, t: s, ...params });
+  const env = (q, v, s) => ({ x: q, v, t: s, m, ...params });
   if (kind === 'V') {
     return {
       L: (q, v, s) => {

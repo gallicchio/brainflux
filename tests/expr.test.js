@@ -109,3 +109,17 @@ test('speed: a Gaussian packet on 512x512 points', () => {
   e.evaluate({ x, y, x0: -3, y0: 0, s: 1, k: 5 }, n);
   return `${(performance.now() - t0).toFixed(0)} ms`;
 });
+
+test('a chain of comparisons means all of them: -1 < x < 1 is a box', () => {
+  for (const [x, want] of [[-2, 0], [-0.5, 1], [0, 1], [0.99, 1], [1, 0], [3, 0]]) close(at('(-1 < x < 1)', { x }).re, want, 0, `x=${x}`);
+  close(at('0 <= x < 2', { x: 0 }).re, 1, 0);
+  close(at('3 > x > 1 > 0', { x: 2 }).re, 1, 0);
+  close(at('3 > x > 1 > 0', { x: 0.5 }).re, 0, 0);
+  const e = parse('V0 (-a < x < a)');
+  assert(e.parameters.join() === 'V0,a', e.parameters.join());
+  const m = e.mathml();
+  assert((m.match(/&lt;/g) || []).length === 2 && m.includes('<mo>(</mo>'), m);
+  const xs = Float64Array.from([-3, -0.5, 0.5, 3]);
+  const v = e.evaluate({ x: xs, V0: 2, a: 1 }, 4).re;
+  assert(v.join() === '0,2,2,0', v.join());
+});
