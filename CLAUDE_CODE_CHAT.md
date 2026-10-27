@@ -154,4 +154,46 @@ hear, the missing fundamental.  I did not bundle the U. Iowa instrument recordin
 that runs every experiment and checks physics along the way.  Screenshots were looked at for
 every experiment, in light and dark, at desktop and phone widths.
 
-*(continuing: an independent code review is running; its findings will be fixed next)*
+**Links that carry a set-up** (2026-10-27).  The address bar keeps the set-up as you change it:
+in the 1D demo the typed potential, its parameters and the initial state; in the action demo the
+drawn path itself; in the 2D demo the typed target and the packet.  Copy the address into a
+homework and students open exactly that.  `#setup=<name>` opens a guided experiment.  Also a
+probability-current view in 1D (blue flowing right, red flowing left: tunnelling made visible).
+
+### Where it stands
+
+`~/mudd/brainflux` is a git repository (about 25 commits, all as you, with the attribution
+lines), not pushed: create `github.com/gallicchio/brainflux` (or tell me another name), push,
+and turn on Pages for `main` / root; it will be at `gallicchio.github.io/brainflux/`.  To try it
+now: `cd ~/mudd/brainflux && python3 -m http.server` and open <http://localhost:8000/>.
+`tools/test_all.sh` runs every test.
+
+| demo | from | experiments |
+|---|---|---|
+| `fft2d/` 2D Fourier transform | FFT2D applet (2001) | 13 |
+| `schrodinger1d/` Schrödinger in 1D | Schrodinger1D applet (2004) | 18 |
+| `action/` the principle of least action | your idea, new | 14 |
+| `schrodinger2d/` scattering in 2D | your idea, new | 12 |
+| `planewave/` plane waves | PlaneWave applet (2002) | 10 |
+| `diffraction/` diffraction | LightPropagation (2004, unfinished) | 9 |
+| `fourier/` Fourier series you can hear | SoundFourier (2002, unfinished) | 6 |
+
+### What I need from you
+
+1. **The repository's name and the push.**  I used `brainflux`; the pages link to
+   `github.com/gallicchio/brainflux`.
+2. **Your photo** (`fft2d/images/author.jpg`, from the old applet) is in the gallery, last, and
+   is the "magnitude donor" in the phase-swap experiment.  It is listed in `LICENSE-CONTENT.md`
+   as yours under CC BY 4.0: is that what you want?
+3. **`Resources/fft2d/Bricks.jpg`** carries a Sony Cybershot's EXIF: if it is your photo it
+   could replace the drawn brick wall.  I left out the baboon (the USC-SIPI mandrill, unclear
+   licence), the stone-texture catalogue photos and the Lena image.
+4. **The U. Iowa instrument recordings** in `java/Resources/sound/`: the sound demo synthesises
+   instead.  If you want recorded instruments, I'll check their current terms.
+5. **Your courses**: potentials, paths or targets you assign in homework that should be presets.
+
+### What I'd do next
+
+Live filtering of the camera in the FFT demo (paint a mask on the transform and see your own
+face low-passed as you move), a polar plot option for the cross section, and whatever your
+students trip over.
