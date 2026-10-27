@@ -184,7 +184,7 @@ test could catch it again.  The ones worth knowing about:
 
 ### Where it stands
 
-`~/mudd/brainflux` is a git repository (25 commits so far, all as you, with the attribution
+`~/mudd/brainflux` is a git repository (26 commits so far, all as you, with the attribution
 lines), not pushed: create `github.com/gallicchio/brainflux` (or tell me another name), push,
 and turn on Pages for `main` / root; it will be at `gallicchio.github.io/brainflux/`.  To try it
 now: `cd ~/mudd/brainflux && python3 -m http.server` and open <http://localhost:8000/>.
@@ -327,3 +327,145 @@ theremin.music.uiowa.edu.  The new Fourier-series demo synthesises its sounds, s
 need them.  I've dropped the question.
 
 **5. Courses.**  Agreed: the presets stay independent of any textbook.
+
+## Prompt 3
+
+> If you were to come up with 10 to 20 more of these in this spirit for especially for optics,
+> quantum, and electromagnetic waves, what would be good to write?
+
+### Response 3 (2026-10-27)
+
+Twenty ideas, grouped by subject.  Each has something to drag or type, and each turns one
+hard-to-picture idea into something you can watch.  Several reuse code we already have.
+
+**Electromagnetic waves**
+
+1. **Maxwell's equations in 2D.**  Paint glass, metal and absorber with the FFT demo's brushes
+   and place sources.  A finite-difference time-domain solver shows the field and the energy
+   flow in real time.  Experiments: total internal reflection, and its frustrated version
+   (tunnelling for light); a leaky fibre bend; waveguide cutoff; a photonic-crystal band gap; a
+   cavity ringing down; Cherenkov radiation.  Many of the ideas below could become guided tours
+   of this sandbox.
+2. **Radiation from a moving charge.**  Drag a charge with the mouse and see its field lines,
+   computed from the retarded (Liénard–Wiechert) fields.  Stop it suddenly and a kink runs
+   outward at $c$: J. J. Thomson's picture of radiation.  Shake it for the $\sin^2\theta$ dipole
+   pattern, swing it in a fast circle for synchrotron beaming, or push it past $c/n$ for
+   Cherenkov light.
+3. **Antenna arrays and aperture synthesis.**  Place antennas and set their phases: the far-field
+   pattern is the Fourier transform of the layout.  Steer a phased array, and grating lobes
+   appear once the antennas are too far apart for the steering angle.  Then the radio-astronomy
+   version: place dishes, let the Earth's rotation sweep them through the $uv$ plane, and watch
+   the image of a source (a black-hole shadow, say) sharpen.
+4. **Interfaces and thin films.**  Stack layers of any thickness and complex index, and plot the
+   reflectance against wavelength and angle for s and p, with the standing field drawn inside
+   the stack.  Experiments:
+   - Brewster's angle, and the evanescent wave beyond the critical angle.
+   - Soap-bubble colours, rendered as the eye sees them.
+   - Antireflection coatings, Bragg mirrors and a Fabry–Pérot.
+   - A surface-plasmon dip.
+
+   Its 2×2 transfer matrices are the same as those of 1D quantum transmission.
+5. **Dispersion and Kramers–Kronig.**  Drag Lorentz-oscillator resonances to build $\epsilon(\omega)$,
+   then read off the index and the absorption.  Edit the absorption and watch the index follow
+   (a Hilbert transform), in FFT2D's edit-either-side spirit.  Then send a pulse through, for:
+   - group delay;
+   - the "faster than light" peak in anomalous dispersion;
+   - precursors;
+   - a plasma frequency, which is why metals shine and the ionosphere reflects AM radio.
+6. **Waveguides and optical fibres.**  Type an index profile $n(x)$.  Its guided modes are the
+   bound states of a Schrödinger equation, so the 1D eigensolver finds them.  A slab guide is a
+   finite square well, and a graded-index fibre a harmonic oscillator.  Experiments: cutoff, the
+   single-mode condition, modal dispersion, and the TE and TM modes of a metal waveguide.
+
+**Optics**
+
+7. **Polarization and the Poincaré sphere.**  Stack polarizers, wave plates and rotators at any
+   angle.  Watch the tip of $\vec E$ trace its ellipse while the state moves on the Poincaré
+   sphere.  Experiments: Malus's law, the three-polarizer surprise, quarter-wave plates making
+   circular light, and the geometric (Pancharatnam) phase of a loop on the sphere.
+8. **Interferometers and coherence.**  Move a Michelson mirror and watch the fringes.  Draw the
+   source's spectrum: the interferogram is its Fourier transform, and either side can be edited.
+   This is how a Fourier-transform spectrometer works.  Experiments: coherence length;
+   white-light fringes, which appear only near zero path difference; the beats of the sodium
+   doublet; and Michelson's stellar interferometer, where fringe visibility against baseline
+   measures a star's diameter.
+9. **Imaging: Abbe and phase contrast.**  A 4f system (object, lens, Fourier plane, lens, image)
+   in which you can paint the pupil.  It shows Abbe's resolution limit, dark field and
+   schlieren.  A transparent "phase object", like a living cell, is invisible in the image until
+   a quarter-wave dot at the centre of the Fourier plane reveals it.  That is Zernike's phase
+   contrast: a Nobel prize in one brush stroke.
+10. **Holography.**  Interfere an object wave with a reference beam and record the fringes; zoom
+    in to see them.  Light the hologram again to reconstruct the virtual image and the twin
+    image, and see why tilting the reference separates the two.  Cut the hologram in half and
+    the whole picture survives, at lower resolution.  This reuses the diffraction propagator.
+11. **The rainbow: rays to waves.**  First the ray picture: trace rays through a drop.
+    Minimum deviation piles them up at 42°.  The second bow, at 51°, has its colours reversed,
+    and Alexander's dark band lies between the two.  Then the wave theory: Airy's integral near
+    the caustic produces supernumerary bows that no ray can explain, and they change with drop
+    size.
+12. **Tomography** (on your old FFT2D to-do list).  Take projections of a picture, or the camera,
+    at many angles to make a sinogram, then reconstruct.  Plain back-projection is blurred;
+    filtered back-projection is sharp.  The projection-slice theorem shows each projection's 1D
+    transform filling in a line of the 2D transform.  This is how CT scanners work, and why too
+    few angles leave streaks.
+13. **Gaussian beams and laser cavities.**  Put lenses and mirrors on a bench and watch the beam's
+    waist, Rayleigh range and Gouy phase.  Then the cavity stability diagram, the mode a cavity
+    selects, and the Hermite–Gauss and Laguerre–Gauss modes, which have the same shapes as the
+    2D harmonic oscillator's eigenstates.
+
+**Quantum mechanics**
+
+14. **Spin ½: Stern–Gerlach to the Bloch sphere.**  Chain Stern–Gerlach analysers along any axes,
+    with atoms clicking into counters one at a time.  Then add fields, for:
+    - Larmor precession on the Bloch sphere;
+    - Rabi oscillation and detuning;
+    - π/2 pulses, Ramsey fringes and spin echo;
+    - $T_1$ and $T_2$, the language of NMR and qubits.
+
+    Spin is where Townsend starts, and BrainFlux has nothing on it yet.
+15. **Bell's inequality.**  Send entangled photon pairs to two polarizers, choose the angles, and
+    accumulate coincidences into the CHSH sum $S$ as they arrive.  Then switch on a local
+    hidden-variable model, or type your own, and try to beat 2.
+16. **One photon at a time.**  Build a Mach–Zehnder interferometer from beam splitters, mirrors
+    and phase shifters.  Photons arrive one by one, and the fringes build up from clicks.
+    Experiments: block a path; mark the paths with polarization, then erase the mark (the
+    quantum eraser); test bombs without setting them off (Elitzur–Vaidman).
+17. **Bands.**  Type $V(x)$ for one cell of a crystal and see the band structure $E(k)$ computed
+    live; click a point for its Bloch wave.  Gaps open at $k=\pi/a$: the same Bragg condition as
+    the thin-film mirror (4) and the photonic crystal (1).  Add a field for Bloch oscillations
+    and Zener tunnelling, or disorder for Anderson localization.
+18. **Drums and billiards.**  Draw a shape and find its modes the way a spectroscopist would:
+    - let a wave packet bounce around inside it;
+    - Fourier-transform its motion in time, so that each peak is an energy;
+    - filter at a peak to see that energy's eigenstate.
+
+    Experiments: circle against stadium (chaos and scars), Weyl's law, and two different drums
+    with identical spectra ("Can one hear the shape of a drum?"), played as sound.
+19. **Phase space.**  The Wigner function $W(x,p)$ of the 1D demo's $\psi$, live: a coherent
+    state circling in the oscillator, a squeezed state, a cat state whose interference fringes go
+    negative, free spreading as a shear.  This might work better as a new view in the 1D demo
+    than as a page of its own.
+20. **Hydrogen.**  Orbitals as 3D clouds coloured by phase.  A superposition of 1s and 2p sloshes
+    back and forth: an oscillating dipole that radiates at the transition frequency, which
+    connects back to number 2.  Selection rules, and the Stark and Zeeman effects as mixing of
+    states.
+
+**Where I'd start**
+
+- **Maxwell in 2D:** one solver gives you many experiments.
+- **Spin ½:** it fills the biggest gap.
+- **Radiation from a moving charge:** it is the hardest thing in electromagnetism to picture.
+- **Thin films:** they pair with the 1D tunnelling demo.
+- **Tomography:** it was your own idea, and it is mostly made of code we already have.
+
+**Recurring ideas.**  The same idea turns up in several places:
+- the Bragg gap in 1, 4 and 17;
+- tunnelling in 1 and the 1D demo;
+- the Fourier transform as a measuring instrument in 3, 8, 10 and 12;
+- the Poincaré sphere (7), which is the Bloch sphere (14).
+
+The help texts can point these out, so each demo reinforces the others.
+
+All of these run in the browser with no server.  The 2D Maxwell solver and the 3D orbitals
+would be faster in WebGL, which is a web standard and needs no framework; the rest would use
+plain canvas, as the current demos do.
