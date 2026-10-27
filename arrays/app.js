@@ -78,13 +78,19 @@ for (const b of $$('#help .setup-alt')) {
 
 // ------------------------------------------------------------------ start
 
-const hash = readHash();
-if (setups[hash.setup]) setups[hash.setup]();
-else if (hash.mode === 'synth') { synthStarted = true; setMode('synth'); synthFromHash(hash); }
-else {
-  if (Object.keys(hash).length > 1) arraysFromHash(hash);
-  else configureArrays({ n: 8, d: 0.5, theta0: 20, view: 16 });
-  setMode('arrays');
+function fromAddress() {
+  const hash = readHash();
+  if (setups[hash.setup]) setups[hash.setup]();
+  else if (hash.mode === 'synth') { synthStarted = true; setMode('synth'); synthFromHash(hash); }
+  else {
+    if (Object.keys(hash).length > 1) arraysFromHash(hash);
+    else configureArrays({ n: 8, d: 0.5, theta0: 20, view: 16 });
+    setMode('arrays');
+  }
 }
+fromAddress();
+// An address typed or pasted while the page is open (the page itself rewrites the address
+// without this event firing).
+window.addEventListener('hashchange', fromAddress);
 
 window.__app = { state, setups, setMode, A, S, arrays: arraysApi, synth: synthApi, synthChanged, arraysChanged, ready: true };

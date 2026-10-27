@@ -148,14 +148,14 @@
     <h3>1. Two elements</h3>
     <p>Two elements half a wavelength apart, in step.  Straight up and down, their waves arrive
     together and add; along the line they arrive half a period apart and cancel.  The pattern is
-    $|AF|^2=4\cos^2(\tfrac{\pi}{2}\sin\theta)$: broadside, 60° wide.</p>
-    <p>Now make the right-hand element lag by half a period
-    <button type="button" class="setup-alt" data-alt="endfire">End-fire</button>: the beams
-    turn to point along the line.  Then put the elements a quarter wavelength apart, with a lag
-    of a quarter period <button type="button" class="setup-alt" data-alt="cardioid">The cardioid</button>.
+    $|AF|^2=4{\cos}^2(\tfrac{\pi}{2}\sin\theta)$: broadside, 60° wide.</p>
+    <p>Now make the right-hand element lag by half a period, and the beams turn to point along
+    the line <button type="button" class="setup-alt" data-alt="endfire">End-fire</button></p>
+    <p>Then put the elements a quarter wavelength apart, with a lag of a quarter period
+    <button type="button" class="setup-alt" data-alt="cardioid">The cardioid</button>
     To the right, the lag makes up for the shorter path and the waves add; to the left, path and
     lag add up to half a period and the waves cancel.  Two isotropic elements, and the power goes
-    one way: $4\cos^2(\tfrac{\pi}{4}(1-\sin\theta))$.</p>
+    one way: $4{\cos}^2(\tfrac{\pi}{4}(1-\sin\theta))$.</p>
   </article>
 
   <article class="exp" data-setup="line">
@@ -175,9 +175,8 @@
     arrive in step in the direction $\theta_0$.  Slide $\theta_0$ and the beam follows, with
     nothing moving: a phased array, as in radar.  Away from broadside the beam widens, roughly
     as $1/\cos\theta_0$, because the array looks shorter from the side: sixteen elements give
-    6.36° at 0°, 7.35° at 30° and 13.0° at 60°.
-    <button type="button" class="setup-alt" data-alt="sweep">Sweep</button> swings the beam
-    back and forth.</p>
+    6.36° at 0°, 7.35° at 30° and 13.0° at 60°.  To swing the beam back and forth, as a radar
+    does: <button type="button" class="setup-alt" data-alt="sweep">Sweep</button></p>
   </article>
 
   <article class="exp" data-setup="grating">
@@ -188,9 +187,8 @@
     lobes, at $\sin\theta=\sin\theta_0+m\lambda/d$; one comes into view once
     $d>\lambda/(1+|\sin\theta_0|)$, which is 0.667λ at 30°.  The array samples its aperture too
     coarsely, and the pattern aliases, as a signal sampled too slowly does.  Arrays that must
-    steer all the way to ±90° keep $d\le\lambda/2$.  At 2λ
-    <button type="button" class="setup-alt" data-alt="grating2">Spacing 2λ</button> there are
-    grating lobes at every $\sin\theta=m/2$.</p>
+    steer all the way to ±90° keep $d\le\lambda/2$.  At a spacing of 2λ there are grating lobes
+    at every $\sin\theta=m/2$ <button type="button" class="setup-alt" data-alt="grating2">Spacing 2λ</button></p>
   </article>
 
   <article class="exp" data-setup="taper">
@@ -208,7 +206,7 @@
   <article class="exp" data-setup="dipoles">
     <h3>6. Element pattern times array factor</h3>
     <p>Four short dipoles, lying along the line.  A dipole sends nothing along its own axis: one
-    element's pattern (dotted) is $\sin^2$ of the angle to its axis.  The whole pattern (solid)
+    element's pattern (dotted) is ${\sin}^2$ of the angle to its axis.  The whole pattern (solid)
     is that times the array factor (dashed): pattern multiplication.  Turn the dipole axis to
     90°, across the line: the dipoles' nulls now point straight up and down, just where the
     array factor puts its beam, and in this plane the beam is gone.  What is left is two lobes
@@ -252,7 +250,8 @@
   because the sky is real.  As the Earth turns, each baseline traces an ellipse.  The dirty
   image is the inverse transform of what was measured: the sky convolved with the dirty beam,
   which is the transform of the sampling alone.  The uv plane is drawn over the sky's own
-  transform, in phase colours.  North is up and east is to the right in every picture, as on
+  transform, in phase colours.  Pick a sky, or type one (<em>Typed</em>): $I(x,y)$ with $x$
+  east and $y$ north in the unit of the field slider; any other letter becomes a slider.  North is up and east is to the right in every picture, as on
   the map; astronomers usually put east on the left, as the sky looks from below.</p>
 
   <article class="exp" data-setup="fringe">
@@ -262,9 +261,8 @@
     (1.14′ at 21 cm), running perpendicular to the baseline.  Drag a dish: the stripes turn with
     it, and get finer as the dishes move apart.  That is all one baseline measures: how much the
     sky looks like one set of stripes, and where the stripes sit (the amplitude and phase of
-    $V$).  With six dishes
-    <button type="button" class="setup-alt" data-alt="six">Six dishes</button> there are 15
-    baselines, 15 sets of stripes, adding up to a beam with one peak among many smaller ones.</p>
+    $V$).  Six dishes make 15 baselines, and 15 sets of stripes add up to a beam with one peak
+    among many smaller ones <button type="button" class="setup-alt" data-alt="six">Six dishes</button></p>
   </article>
 
   <article class="exp" data-setup="rotation">
@@ -275,13 +273,13 @@
     uv plane fills in, the beam's spokes fade, and the image of Fourier sharpens.
     Earth-rotation synthesis was Martin Ryle's idea (Nobel prize, 1974).</p>
     <p>An east–west baseline has no north–south part, and its ellipse is
-    $u^2+(v/\sin\delta)^2=B^2$.  For a source at the celestial pole
-    <button type="button" class="setup-alt" data-alt="ellipses">East–west line, δ = 90°</button>
-    the tracks are circles.  They flatten as $\sin\delta$, and near the celestial equator
-    <button type="button" class="setup-alt" data-alt="equator">δ = 5°</button> they are almost
-    lines: the beam is a streak, and the array can hardly tell north from south.  This line's
-    eight dishes sit at the marks of a Golomb ruler, so that all 28 of its spacings
-    differ.</p>
+    $u^2+(v/\sin\delta)^2=B^2$.  For a source at the celestial pole the tracks are circles
+    <button type="button" class="setup-alt" data-alt="ellipses">East–west line, δ = 90°</button></p>
+    <p>They flatten as $\sin\delta$, and near the celestial equator they are almost lines: the
+    beam is a streak, and the array can hardly tell north from south
+    <button type="button" class="setup-alt" data-alt="equator">δ = 5°</button></p>
+    <p>This line's eight dishes sit at the marks of a Golomb ruler, so that all 28 of its
+    spacings differ.</p>
   </article>
 
   <article class="exp" data-setup="resolution">
@@ -293,7 +291,7 @@
     The longest baseline sets the resolution, as the diameter of a lens does: an interferometer
     is a huge telescope with most of its mirror missing.</p>
     <p>The shortest baseline sets the other limit
-    <button type="button" class="setup-alt" data-alt="shortspacing">Short spacings</button>.
+    <button type="button" class="setup-alt" data-alt="shortspacing">Short spacings</button>
     A disk 6′ across is larger than $\lambda/B_\text{min}$ = 3.1′.  Its smooth middle is
     large-scale structure, which lives at short spacings, and they are not measured: dishes
     can't be closer than their own diameter, and nothing measures $u=v=0$, the total flux.  The

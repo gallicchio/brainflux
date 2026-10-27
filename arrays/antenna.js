@@ -46,16 +46,17 @@ export function angles(m = 3600) {
 
 /**
  * Power patterns at the angles thetas: total |E AF|^2, and the two factors |AF|^2 and |E|^2.
- * The sum over elements is done by rotating phasors (one cos/sin per element, not per angle),
- * which is exact to rounding for uniformly spaced angles.
+ * Summed directly, element by element (exact; 3600 angles x 64 elements is fast enough).
  */
 export function patterns(els, elem, thetas) {
   const m = thetas.length;
   const total = new Float64Array(m), af = new Float64Array(m), ef = new Float64Array(m);
   const re = new Float64Array(m), im = new Float64Array(m);
+  const sx = thetas.map(Math.sin), sy = thetas.map(Math.cos);
   for (const e of els) {
+    const ax = K * e.x, ay = K * e.y;
     for (let i = 0; i < m; i++) {
-      const ph = e.phase - K * (Math.sin(thetas[i]) * e.x + Math.cos(thetas[i]) * e.y);
+      const ph = e.phase - (sx[i] * ax + sy[i] * ay);
       re[i] += e.amp * Math.cos(ph); im[i] += e.amp * Math.sin(ph);
     }
   }

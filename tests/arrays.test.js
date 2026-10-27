@@ -7,7 +7,8 @@ import {
   stationXYZ, mapPosition, siteXYZ, uvw, sinElevation, tracks, gridSamples, dirtyBeam, skyTransform, dirtyImage,
   cleanStart, cleanSteps, fitBeam, restore, layout, R_EARTH,
 } from '../arrays/synthesis.js';
-import { makeSky } from '../arrays/sky.js';
+import { makeSky, typedSky } from '../arrays/sky.js';
+import { parse } from '../lib/expr.js';
 
 const DEG = Math.PI / 180;
 const ISO = { kind: 'iso', angle: 0 };
@@ -330,6 +331,15 @@ test('CLEAN finds a point source: its flux and its position', () => {
   const fit = fitBeam(B, N), img = restore(cs, fit, N);
   close(img[j0 * N + i0], 1.7, 0.02, 'restored peak');
   return `${cs.iterations} iterations, ${cs.components} components, total ${total.toFixed(4)}; clean beam ${fit.major.toFixed(2)} x ${fit.minor.toFixed(2)} px`;
+});
+
+test('a typed sky: x east, y north in the given unit, negative brightness cut, total flux 1', () => {
+  const n = 64, pix = 2, unit = 1;
+  const sky = typedSky(parse('exp(-((x - a)^2 + y^2) / w^2) - 0.1', { variables: ['x', 'y'] }), { a: 20, w: 8 }, n, pix, unit);
+  let total = 0, mx = 0, my = 0, neg = 0;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const v = sky[j * n + i]; total += v; mx += v * (i - n / 2) * pix; my += v * (n / 2 - j) * pix; if (v < 0) neg++; }
+  close(total, 1, 1e-12, 'total'); close(my, 0, 1e-9, 'centred north-south');
+  assert(mx > 15 && mx < 21 && neg === 0, `the blob is 20 east (${mx.toFixed(2)}), nothing negative`);
 });
 
 test('the clean beam fit recovers an elliptical Gaussian', () => {

@@ -5,10 +5,10 @@ import {
   stationXYZ, mapPosition, siteXYZ, tracks, gridSamples, dirtyBeam, skyTransform, dirtyImage,
   cleanStart, cleanSteps, fitBeam, restore, layout, baselineRange, R_EARTH, EHT_CENTRE,
 } from './synthesis.js';
-import { makeSky, SKIES } from './sky.js';
+import { makeSky, typedSky, SKIES } from './sky.js';
 import { loadImage, imageData } from '../fft2d/presets.js';
 import { colorize, autoBrightness } from '../lib/complexcolor.js';
-import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, exprField, fmt } from '../lib/ui.js';
 import { fitCanvas, themeColors } from '../lib/plot.js';
 
 const DEG = Math.PI / 180;
@@ -16,15 +16,15 @@ const N = 256;                         // the image and uv grids
 const MAXDISHES = 40;
 
 // Angles: units for the sliders and labels.
-const UNITS = { deg: [DEG, '°'], arcmin: [DEG / 60, '′'], arcsec: [DEG / 3600, '″'], mas: [DEG / 3.6e6, ' mas'], uas: [DEG / 3.6e9, ' µas'] };
+const UNITS = { deg: [DEG, '°'], arcmin: [DEG / 60, '′'], arcsec: [DEG / 3600, '″'], mas: [DEG / 3.6e6, ' mas'], uas: [DEG / 3.6e9, ' µas'] };
 export function fmtAngle(r) {
   const a = Math.abs(r);
   const [u, s] = a >= DEG ? UNITS.deg : a >= DEG / 60 ? UNITS.arcmin : a >= DEG / 3600 ? UNITS.arcsec : a >= DEG / 3.6e6 ? UNITS.mas : UNITS.uas;
   return `${fmt(r / u, 3)}${s}`;
 }
-const fmtLen = (m) => (m >= 1000 ? `${fmt(m / 1000, 3)} km` : `${fmt(m, 3)} m`);
-const fmtWaves = (x) => (x >= 1e9 ? `${fmt(x / 1e9, 3)} Gλ` : x >= 1e6 ? `${fmt(x / 1e6, 3)} Mλ` : x >= 1e3 ? `${fmt(x / 1e3, 3)} kλ` : `${fmt(x, 3)} λ`);
-const fmtLambda = (m) => (m >= 1 ? `${fmt(m, 3)} m` : m >= 0.01 ? `${fmt(m * 100, 3)} cm` : `${fmt(m * 1000, 3)} mm`);
+const fmtLen = (m) => (m >= 1000 ? `${fmt(m / 1000, 3)} km` : `${fmt(m, 3)} m`);
+const fmtWaves = (x) => (x >= 1e9 ? `${fmt(x / 1e9, 3)} Gλ` : x >= 1e6 ? `${fmt(x / 1e6, 3)} Mλ` : x >= 1e3 ? `${fmt(x / 1e3, 3)} kλ` : `${fmt(x, 3)} λ`);
+const fmtLambda = (m) => (m >= 1 ? `${fmt(m, 3)} m` : m >= 0.01 ? `${fmt(m * 100, 3)} cm` : `${fmt(m * 1000, 3)} mm`);
 
 export const S = {
   preset: 'y', dishes: [], names: null, refLon: 0,
@@ -64,7 +64,7 @@ function sampling() {
 }
 
 function makeTheSky() {
-  skyImg = makeSky(S.sky, N, pix(), S.size, portrait);
+  skyImg = S.sky === 'typed' && skyField.expr ? typedSky(skyField.expr, skyField.params, N, pix(), UNITS[S.unit][0]) : makeSky(S.sky, N, pix(), S.size, portrait);
   V = skyTransform(skyImg, N);
 }
 
@@ -356,7 +356,7 @@ function notes() {
   $('#uv-note').textContent = S.hours > 0 ? `${fmt(S.hours, 3)} h at declination ${fmt(S.dec, 3)}°` : `a snapshot at declination ${fmt(S.dec, 3)}°`;
   $('#beam-note').textContent = !fit ? '' : fit.stripes ? 'stripes: no single peak to fit'
     : `${fmtAngle(fit.major * pix())} × ${fmtAngle(fit.minor * pix())} at half power`;
-  $('#sky-note').textContent = `${SKIES[S.sky]}${S.sky === 'point' ? '' : `, ${fmtAngle(S.size)}`}; field ${fmtAngle(S.fov)}`;
+  $('#sky-note').textContent = `${SKIES[S.sky]}${S.sky === 'point' || S.sky === 'typed' ? '' : `, ${fmtAngle(S.size)}`}; field ${fmtAngle(S.fov)}`;
   let up = 0;
   for (let k = 0; k < tr.nt; k++) { let n = 0; for (let a = 0; a < pos.length; a++) n += tr.up[a * tr.nt + k]; if (n >= 2) up++; }
   const total = grid.samples + grid.dropped;
@@ -527,13 +527,14 @@ $('#earth-box').append(earthButton);
 
 const skyButtons = {};
 for (const [id, labelText] of Object.entries(SKIES)) {
-  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => setSky(id) }, labelText);
+  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => { if (id === 'typed' && S.sky !== 'typed') resetTyped(); setSky(id); } }, labelText);
   $('#skies').append(b); skyButtons[id] = b;
 }
 async function setSky(id) {
   S.sky = id;
   for (const [k, b] of Object.entries(skyButtons)) b.setAttribute('aria-pressed', String(k === id));
-  if (sizeSlider) sizeSlider.hidden = id === 'point';
+  if (sizeSlider) sizeSlider.hidden = id === 'point' || id === 'typed';
+  skyField.hidden = id !== 'typed';
   if (id === 'portrait' && !portrait) {
     try {
       const img = await loadImage('../fft2d/images/fourier-portrait.png');
@@ -545,7 +546,7 @@ async function setSky(id) {
 }
 
 // Angle sliders in the unit of the moment (minutes of arc for the VLA, microseconds for the EHT).
-let sizeSlider = null, fovSlider = null;
+let sizeSlider = null, fovSlider = null, pendingTyped = null;
 function angleSliders() {
   const [u, sym] = UNITS[S.unit];
   const name = { deg: '°', arcmin: '′', arcsec: '″', mas: 'mas', uas: 'µas' }[S.unit];
@@ -556,10 +557,34 @@ function angleSliders() {
       onInput: (v) => { S.fov = v * u; synthChanged('sampling'); synthChanged('sky'); } }),
   ];
   void sym;
-  $('#sky-box').replaceChildren(...fresh);
+  $('#sky-box').replaceChildren(...fresh, skyField);
   [sizeSlider, fovSlider] = fresh;
-  sizeSlider.hidden = S.sky === 'point';
+  sizeSlider.hidden = S.sky === 'point' || S.sky === 'typed';
+  // The typed sky's parameters get slider ranges that suit the field.
+  const f = S.fov / u;
+  typedHints = {
+    a: { min: 0, max: f / 2, value: +(f / 6).toPrecision(2) }, b: { min: 0, max: f / 2, value: +(f / 8).toPrecision(2) },
+    w: { min: f / 200, max: f / 4, value: +(f / 20).toPrecision(2) }, r: { min: f / 200, max: f / 2, value: +(f / 8).toPrecision(2) },
+    s: { min: f / 200, max: f / 4, value: +(f / 20).toPrecision(2) },
+  };
+  skyField.setHints(typedHints);
 }
+let typedHints = {};
+/** The typed sky's parameters back to values that suit the field (new sliders). */
+function resetTyped() {
+  const p = {};
+  for (const k of Object.keys(skyField.params)) p[k] = typedHints[k] ? typedHints[k].value : skyField.params[k];
+  skyField.set(skyField.source, p, false);
+}
+
+// A sky typed as a formula: x east and y north, in the unit of the sliders.
+const SKY_FORMULA = 'exp(-((x - a)^2 + y^2) / w^2) + exp(-((x + a)^2 + y^2) / w^2) + 4 exp(-(x^2 + y^2) / (w/4)^2)';
+const skyField = exprField({
+  label: '<math><mi>I</mi><mo>(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo>)</mo><mo>=</mo></math>', value: SKY_FORMULA, variables: ['x', 'y'],
+  onChange: () => { if (S.sky === 'typed') synthChanged('sky'); },
+});
+skyField.hidden = true;
+skyField.title = 'The brightness of the sky: x east and y north, in the unit of the field slider; any other letter becomes a slider';
 
 const weightSeg = segmented([
   { value: 'natural', label: 'Natural', title: 'Every sample counts once: the short baselines, sampled most, dominate (smooth, wide beam)' },
@@ -622,6 +647,8 @@ function configure(d) {
   earthButton.textContent = 'Turn the Earth';
   setRunning(false);
   syncPresetButtons(); fitMap(); syncScale(); angleSliders();
+  if (pendingTyped) { skyField.set(pendingTyped.source, pendingTyped.params, false); pendingTyped = null; }
+  else if (d.sky === 'typed') { skyField.set(d.formula || SKY_FORMULA, {}, false); resetTyped(); }
   setSky(d.sky);
   synthChanged('geometry');
 }
@@ -634,11 +661,19 @@ export function synthHash() {
   };
   if (S.preset === 'custom') h.dishes = S.dishes.map(([E, Nn]) => `${+E.toPrecision(6)},${+Nn.toPrecision(6)}`).join(';');
   if (S.cleanShow !== 'restored') h.cshow = S.cleanShow;
+  if (S.sky === 'typed') {
+    h.I = skyField.source;
+    h.Ip = Object.entries(skyField.params).map(([k, v]) => `${k}:${+v.toPrecision(5)}`).join(',');
+  }
   return h;
 }
 
 export function synthFromHash(h) {
   const num = (k, d) => (h[k] !== undefined && Number.isFinite(+h[k]) ? +h[k] : d);
+  if (h.sky === 'typed' && h.I) {
+    const params = Object.fromEntries((h.Ip || '').split(',').map((s) => s.split(':')).filter((a) => a.length === 2 && Number.isFinite(+a[1])).map(([k, v]) => [k, +v]));
+    pendingTyped = { source: h.I, params };
+  }
   const id = DEFAULTS[h.array] ? h.array : 'y';
   const base = DEFAULTS[id];
   const o = {
@@ -674,7 +709,7 @@ export const synthApi = {
   get cs() { return cs; }, get fit() { return fit; }, get tracks() { return tr; }, N,
   clean(steps) { cleanSteps(cs, beam, N, { gain: S.gain, steps, threshold: CLEAN_STOP * maxAbs(dirty) }); restored = null; drawClean(); notes(); return cs; },
   restored() { return restore(cs, fit, N); },
-  setRunning, addDish, removeDish, loadPreset, setSky,
+  setRunning, addDish, removeDish, loadPreset, setSky, skyField,
   turnEarth() { earthButton.click(); },
 };
 

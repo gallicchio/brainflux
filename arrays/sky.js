@@ -8,7 +8,23 @@ export const SKIES = {
   disk: 'Disk',
   ring: 'Ring',
   portrait: 'Fourier',
+  typed: 'Typed',
 };
+
+/**
+ * A sky typed as a formula I(x, y) (an Expression from lib/expr.js), with x east and y north
+ * in units of `unit` radians.  Negative brightness is set to zero; the total is scaled to 1.
+ */
+export function typedSky(expr, params, n, pix, unit) {
+  const x = new Float64Array(n * n), y = new Float64Array(n * n), s = pix / unit;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { x[j * n + i] = (i - n / 2) * s; y[j * n + i] = (n / 2 - j) * s; }
+  const { re } = expr.evaluate({ ...params, x, y }, n * n);
+  const sky = new Float64Array(n * n);
+  let total = 0;
+  for (let i = 0; i < sky.length; i++) { const v = re[i]; if (v > 0 && Number.isFinite(v)) { sky[i] = v; total += v; } }
+  if (total > 0) for (let i = 0; i < sky.length; i++) sky[i] /= total;
+  return sky;
+}
 
 /**
  * Make a sky.

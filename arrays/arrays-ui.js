@@ -61,8 +61,11 @@ function applyWeights() {
 
 const fre = new Float64Array(G * G), fim = new Float64Array(G * G);
 let pat = null, info = null, D = 0, fieldDirty = true;
+// While something is being dragged the waves are computed on half as many points each way
+// (four times faster), and in full when it is let go.
+let res = G;
 
-function grid() { const h = A.view / G; return { g: G, h, x0: -A.view / 2, y0: A.view / 2 }; }
+function grid() { const h = A.view / res; return { g: res, h, x0: -A.view / 2, y0: A.view / 2 }; }
 
 function compute() {
   applyWeights();
@@ -108,19 +111,21 @@ function chooseBrightness() {
   if (!(Rfield > 0)) Rfield = 1;
 }
 
+let fieldRes = 0;
 function drawField() {
-  if (fieldDirty) { nearField(A.els, elem(), grid(), fre, fim); chooseBrightness(); fieldDirty = false; }
-  const { ctx, width, height } = fitCanvas(fieldCanvas);
-  if (!off) { off = document.createElement('canvas'); off.width = off.height = G; offImg = off.getContext('2d').createImageData(G, G); }
+  if (fieldDirty) { nearField(A.els, elem(), grid(), fre, fim); fieldRes = res; chooseBrightness(); fieldDirty = false; }
+  const { ctx, width, height } = fitCanvas(fieldCanvas), g = fieldRes, m = g * g;
+  if (!off || off.width !== g) { off = document.createElement('canvas'); off.width = off.height = g; offImg = off.getContext('2d').createImageData(g, g); }
   const w = 2 * Math.PI * A.t, c = Math.cos(w), s = Math.sin(w);
   const R = Rfield * 10 ** -A.bright;
+  const dr = disp.subarray(0, m), di = dispI.subarray(0, m);
   if (A.display === 'intensity') {
-    for (let i = 0; i < G * G; i++) disp[i] = Math.hypot(fre[i], fim[i]);
-    colorize(disp, null, offImg.data, R, 'intensity');
+    for (let i = 0; i < m; i++) dr[i] = Math.hypot(fre[i], fim[i]);
+    colorize(dr, null, offImg.data, R, 'intensity');
   } else {
     // Re[psi exp(-i w t)] (and Im for the phase colours).
-    for (let i = 0; i < G * G; i++) { disp[i] = fre[i] * c + fim[i] * s; dispI[i] = fim[i] * c - fre[i] * s; }
-    colorize(disp, A.display === 'complex' ? dispI : null, offImg.data, R, A.display === 'complex' ? 'complex' : 'real');
+    for (let i = 0; i < m; i++) { dr[i] = fre[i] * c + fim[i] * s; di[i] = fim[i] * c - fre[i] * s; }
+    colorize(dr, A.display === 'complex' ? di : null, offImg.data, R, A.display === 'complex' ? 'complex' : 'real');
   }
   off.getContext('2d').putImageData(offImg, 0, 0);
   ctx.imageSmoothingEnabled = true;
@@ -212,6 +217,7 @@ fieldCanvas.addEventListener('pointerdown', (e) => {
 });
 fieldCanvas.addEventListener('pointermove', (e) => {
   if (!drag) return;
+  res = G / 2;
   const r = fieldCanvas.getBoundingClientRect();
   if (drag.focus) {
     A.focus = fromPx(e.clientX - r.left, e.clientY - r.top, r.width).map((v) => +Math.max(-A.view / 2, Math.min(A.view / 2, v)).toFixed(3));
@@ -225,7 +231,7 @@ fieldCanvas.addEventListener('pointermove', (e) => {
   }
   arraysChanged();
 });
-const endDrag = () => { drag = null; };
+const endDrag = () => { if (drag) { drag = null; res = G; fieldDirty = true; kick(); } };
 fieldCanvas.addEventListener('pointerup', endDrag);
 fieldCanvas.addEventListener('pointercancel', endDrag);
 fieldCanvas.addEventListener('dblclick', (e) => {
@@ -354,7 +360,7 @@ function drawPolar() {
 
 // Directions to a tenth of a degree (no "-0.0"); widths to three figures.
 const deg = (r) => { const v = Math.round((r / DEG) * 10) / 10; return `${(v === 0 ? 0 : v).toFixed(1).replace('-', '−')}°`; };
-const dB = (v) => `${fmt(v, 3).replace('-', '−')} dB`;
+const dB = (v) => `${fmt(v, 3).replace('-', '−')} dB`;
 function readouts() {
   const box = $('#readouts'), rows = [];
   const add = (k, v, cls) => rows.push(`<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ''}>${v}</dd>`);
@@ -367,8 +373,8 @@ function readouts() {
     let lo = 0, hi = 0;
     for (const e of A.els) { const a = Math.atan2(e.x - fx, e.y - fy) - ax, w = Math.atan2(Math.sin(a), Math.cos(a)); lo = Math.min(lo, w); hi = Math.max(hi, w); }
     const s = Math.sin(Math.min(Math.PI / 2, hi)) + Math.sin(Math.min(Math.PI / 2, -lo));
-    add('Focus', `${fmt(r, 3)} λ from the middle of the array`);
-    if (s > 0.02) add('Spot', `dark about λ/(sin α₁ + sin α₂) = ${fmt(1 / s, 2)} λ to either side`);
+    add('Focus', `${fmt(r, 3)} λ from the middle of the array`);
+    if (s > 0.02) add('Spot', `dark about λ/(sin α₁ + sin α₂) = ${fmt(1 / s, 2)} λ to either side`);
     add('Far field', 'no single beam: the waves meet at the focus and spread out again');
   } else if (info.omni) add('Beam', 'none: the same power within 3 dB in every direction');
   else {
@@ -382,7 +388,7 @@ function readouts() {
   }
   if (D > 0 && A.phaseMode !== 'focus') add('Directivity', `${fmt(10 * Math.log10(D), 3)} dBi (D = ${fmt(D, 3)})`);
   const Dsz = extent(A.els);
-  add('Elements', `${A.els.length}, across D = ${fmt(Dsz, 3)} λ; far field beyond 2D²/λ = ${fmt(2 * Dsz * Dsz, 3)} λ`);
+  add('Elements', `${A.els.length}, across D = ${fmt(Dsz, 3)} λ; far field beyond 2D²/λ = ${fmt(2 * Dsz * Dsz, 3)} λ`);
   box.innerHTML = rows.join('');
 }
 
