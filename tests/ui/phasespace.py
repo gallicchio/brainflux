@@ -189,6 +189,11 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     b.goto('phasespace/index.html#setup=cat')
     b.wait('window.__app && __app.ready'); b.sleep(0.5)
     check(b.eval('__app.state.init.kind') == 'cat', '#setup=cat opens the cat experiment')
+    b.call('Page.navigate', url='about:blank'); time.sleep(0.3)
+    b.goto('phasespace/index.html#setup=tunnel&t=28.09')
+    b.wait('window.__app && __app.ready'); b.sleep(0.3)
+    i = b.eval('({ t: __app.sim.t, left: __app.sim.probabilityLeftOf(0) })')
+    check(i['t'] >= 28.09 and i['left'] < 0.02, f"#setup=tunnel&t=28.09 opens it at t = {i['t']:.2f}, tunnelled (P(x < 0) = {i['left']:.4f})")
 
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))

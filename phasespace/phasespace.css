@@ -16,7 +16,7 @@
 }
 .readouts b { color: var(--ink); font-weight: 600; }
 .readouts .neg b { color: #2166ac; }
-.readouts .warn { color: var(--warn); }
+.readouts .slow { color: var(--ink-3); }
 
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; color: var(--ink-2); padding: 0 4px; min-height: 1.6em; }
 .legend .cbar { display: inline-flex; align-items: center; gap: 6px; }

@@ -717,7 +717,7 @@ function updateReadouts() {
     const s = ens.stats(table);
     parts.push(`<span class="cl">classical ⟨E⟩ <b>${fmt(s.E, 4)}</b></span>`);
   }
-  if (slowNote) parts.push(`<span class="warn">${slowNote}</span>`);
+  if (slowNote) parts.push(`<span class="slow">${slowNote}</span>`);
   box.innerHTML = parts.join('');
 }
 let slowNote = '';
@@ -980,6 +980,15 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', (
 // ------------------------------------------------------------------ experiments
 
 const byId = (id) => POTENTIALS.find((p) => p.id === id);
+
+/** Run the clock to time t straight away, not limited by the frame budget. */
+function runTo(t) {
+  const save = maxSteps;
+  maxSteps = 1e6;
+  while (sim.t < t - 1e-9 && !errorText) advance(Math.min(0.5, t - sim.t));
+  maxSteps = save;
+  frames = slowFrames = 0;
+}
 /**
  * Set up an experiment: potential (with parameters), initial state, what to show, speed.
  * t: run to this time straight away (then pause, unless run is true).
@@ -1010,7 +1019,7 @@ function go(potId, { params, init = {}, view = 'W', show = {}, speed, quad, run 
   const r = fitCanvas(plot);
   layout = computeLayout(r.width, r.height);
   restart();
-  if (t > 0) { for (let i = 0; i < 100000 && sim.t < t - 1e-9; i++) { const save = maxSteps; maxSteps = 100000; advance(Math.min(1, t - sim.t)); maxSteps = save; } }
+  if (t > 0) runTo(t);
   setRunning(run);
   kick();
   updateHash();
@@ -1086,9 +1095,13 @@ function fromHash(h) {
 // ------------------------------------------------------------------------ start
 
 const hash = readHash();
-if (setups[hash.setup]) setups[hash.setup]();
+if (setups[hash.setup]) {
+  // #setup=name&t=8 opens the experiment already run to t = 8 (to link to a moment).
+  setups[hash.setup]();
+  if (+hash.t > 0) { runTo(Math.min(+hash.t, 1000)); kick(); }
+}
 else if (!fromHash(hash)) go('quartic', { init: { kind: 'coherent', x0: 3, p0: 0 }, speed: 2 });
-setInterval(() => { updateGridNote(); slowNote = slowFrames > 5 ? 'running slower than the speed asked for' : ''; slowFrames = 0; }, 1000);
+setInterval(() => { updateGridNote(); slowNote = slowFrames > 20 ? '(slower than the speed asked for: this computer cannot keep up)' : ''; slowFrames = 0; }, 1000);
 requestAnimationFrame(loop);
 
 window.__app = {
