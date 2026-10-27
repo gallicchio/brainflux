@@ -33,13 +33,9 @@ To publish it: push to GitHub and turn on Pages for the `main` branch, root fold
 
     tools/test_all.sh                      # everything below, one line per suite
     tools/run_page.py tests/index.html     # the physics and maths modules, in headless Chromium
-    python3 tests/ui/fft2d.py              # drive a demo like a student, checking the physics
-    python3 tests/ui/schrodinger1d.py
-    python3 tests/ui/action.py
-    python3 tests/ui/schrodinger2d.py
-    python3 tests/ui/planewave.py
-    python3 tests/ui/diffraction.py
-    python3 tests/ui/fourier.py
+    python3 tests/ui/fft2d.py              # drive one demo like a student, checking the physics
+                                           # (there is one of these for every demo)
+    tools/thumbs.py beams                  # remake a demo's thumbnail for the landing page
 
 `tools/run_page.py` serves the repository and reads back the report the test page posts;
 `tools/cdp.py` drives a page through the Chrome DevTools protocol (standard-library Python
