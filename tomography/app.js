@@ -24,7 +24,7 @@ const C = {
 
 const DEFAULTS = {
   obj: 'phantom', contrast: 'modified', px: 0.45, py: 0.25,
-  f: '(r < 0.8)*(1 + cos(k*(x cos(a) + y sin(a))))/2', fp: { k: 40, a: 1.05 },
+  f: '(r < 0.8)*(1 + cos(k*(x cos(a) + y sin(a))))/2', fp: { k: 40, a: 1.0472 },
   na: 180, range: 180, nd: 256, ap: 1,
   noise: false, I0: 1e5, poly: false,
   filter: 'ramlak', cut: 1,
@@ -43,7 +43,6 @@ const state = {
   pmax: 1,                             // the sinogram's grey scale
   objRange: [0, 1],
   camera: null,
-  painted: false,
 };
 
 // ------------------------------------------------------------------------- objects
@@ -66,7 +65,7 @@ const OBJECTS = [
   { id: 'formula', label: 'Formula', title: 'Type the object f(x, y)' },
 ];
 const FORMULAS = [
-  { label: 'Stripes', f: '(r < 0.8)*(1 + cos(k*(x cos(a) + y sin(a))))/2', fp: { k: 40, a: 1.05 } },
+  { label: 'Stripes', f: '(r < 0.8)*(1 + cos(k*(x cos(a) + y sin(a))))/2', fp: { k: 40, a: 1.0472 } },
   { label: 'Rings', f: '(r < 0.85)*(1 + cos(k*r))/2', fp: { k: 40 } },
   { label: 'Gaussian', f: 'exp(-r^2/(2 s^2))', fp: { s: 0.2 } },
   { label: 'Rectangle', f: '(abs(x) < a)*(abs(y) < b)', fp: { a: 0.5, b: 0.2 } },
@@ -129,7 +128,6 @@ async function setObject(id, { restart = true } = {}) {
     sc.setPicture(maskToCircle(Float64Array.from(f)));
   }
   state.obj = id;
-  state.painted = false;
   objectChanged(true);
   if (restart) restartScan();
   updateObjectUI();
@@ -231,7 +229,12 @@ try {
   workers = Array.from({ length: POOL }, () => {
     const w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     w.onmessage = (e) => blockDone(e.data);
-    w.onerror = () => { workers = null; jobs.flight = null; if (jobs.target) rescanAll(jobs.target); };
+    // If workers can't run here, do the job on this thread instead (with the settings it was for).
+    w.onerror = () => {
+      const opts = jobs.target || jobs.flight?.opts;
+      workers = null; jobs.flight = null;
+      if (opts) rescanAll(opts);
+    };
     return w;
   });
 } catch { workers = null; }

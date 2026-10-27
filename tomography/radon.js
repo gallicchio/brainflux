@@ -177,6 +177,8 @@ export function rasterizeShapes(shapes, N, ss = 4, out = new Float64Array(N * N)
       }
     }
   }
+  // Where ellipses cancel (1 - 0.8 - 0.2), rounding leaves about 1e-17: that is zero.
+  for (let i = 0; i < out.length; i++) if (Math.abs(out[i]) < 1e-12) out[i] = 0;
   return out;
 }
 
