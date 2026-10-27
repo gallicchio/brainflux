@@ -28,7 +28,7 @@
       <div class="sq"><canvas id="field" aria-label="The light on a screen at distance z"></canvas></div>
     </div>
     <div class="side wide">
-      <div class="side-head"><h2>From the side</h2><span class="small muted">the middle row of the screen, as z goes from 0 (top) to twice the screen's distance (bottom)</span></div>
+      <div class="side-head"><h2>From the side</h2><span class="small muted" id="side-note">the middle row of the screen, as z goes from 0 (top) to twice the screen's distance (bottom)</span></div>
       <div class="side-wrap"><canvas id="side" aria-label="Side view: x across, distance down"></canvas></div>
     </div>
   </section>
@@ -67,15 +67,27 @@
   Fourier transform), and each travels on with its own phase $e^{ik_zz}$,
   $k_z=\sqrt{k^2-k_x^2-k_y^2}$.  Close to the aperture the screen shows a sharp shadow with
   fringes at its edges (<em>Fresnel</em> diffraction); far away, the Fourier transform of the
-  aperture itself (<em>Fraunhofer</em>).  Which you see depends on the Fresnel number
-  $N_F=a^2/\lambda z$ for an aperture of size $a$: large near, small far.</p>
+  aperture itself (<em>Fraunhofer</em>).</p>
+  <p>Which you see depends on the Fresnel number $N_F=a^2/\lambda z$ for an aperture of radius
+  $a$.  Seen from a point on the screen, paths through the middle and the rim of the aperture
+  differ by about $a^2/2z$, and $N_F$ counts the half wavelengths in that difference: the
+  <em>Fresnel zones</em> the aperture covers.  Many zones ($N_F\gg1$): each edge makes its own
+  fringes, about $\sqrt{\lambda z}$ apart, and the shadow is sharp.  Less than one
+  ($N_F\ll1$): what is left of the path difference is linear across the aperture,
+  $-xx'/z$, so the screen adds up $e^{-ikxx'/z}$ over it: the Fourier transform of the aperture,
+  a pattern of fixed shape in angle $\theta=x/z$ that grows in proportion to $z$.  The
+  handover is around the Fraunhofer distance $a^2/\lambda$.  The slider goes to 10 m, several
+  Fraunhofer distances for every aperture here; <em>Far field</em> moves the screen there.</p>
 
   <article class="exp" data-setup="slit">
     <h3>1. One slit, near and far</h3>
     <p>Slide $z$ from short to long.  At first the slit's shadow is sharp, with ripples inside
     its edges; then the ripples grow and merge; far away ($N_F\ll1$) the pattern settles into the
-    $\mathrm{sinc}^2$ of a slit, wider the narrower the slit.  Press <em>Far field</em> to jump to
-    the limit.</p>
+    $\mathrm{sinc}^2$ of a slit, wider the narrower the slit, with zeros at angles
+    $\theta=\pm\lambda/a,\pm2\lambda/a\ldots$ for a slit of width $a$.  Past 60 mm the screen
+    zooms out with the light, so the pattern keeps its size, and the scale bar gives angles.  The
+    slit's 1.4 mm length takes longer: its far field begins near a metre.  <em>Far field</em>
+    (10 m) gives the Fraunhofer pattern to within 1%.</p>
   </article>
 
   <article class="exp" data-setup="edge">
@@ -111,8 +123,11 @@
   <article class="exp" data-setup="zone">
     <h3>6. A Fresnel zone plate</h3>
     <p>Rings, open and closed alternately, with radii $r_n=\sqrt{n\lambda f}$: every open ring
-    sends light to the point $z=f$ on the axis in step, so the plate focuses like a lens (and
-    also at $f/3$, $f/5$...).  Watch the side view for the bright focus.</p>
+    sends light to the point $z=f$ on the axis in step, so the plate focuses like a lens, to a
+    spot about $0.61\lambda f/R$ in radius for a plate of radius $R$; and also at $f/3$,
+    $f/5$..., from the harmonics of the rings.  Watch the side view for the bright foci.  The
+    rings stop before they get narrower than 2.5 pixels: drawn on a grid, finer rings would
+    alias, sending light where a real plate doesn't.</p>
   </article>
 
   <article class="exp" data-setup="lens">
@@ -136,11 +151,26 @@
     and dark grains, with the size of the far-field pattern of the whole aperture.</p>
   </article>
 
+  <h3>How it is computed</h3>
+  <p>The aperture is 512 by 512 pixels of $\Delta x=8$ µm, each the average of the aperture over
+  its area, so that edges and rings fall between pixels smoothly.  Such a grid carries angles
+  up to $\lambda/2\Delta x$ (34 mrad in green light): light bent further, by detail finer than
+  a pixel, is lost.  Up to $z_c=N\Delta x^2/\lambda$ (60 mm in green) the plane waves travel on
+  that grid, and the screen shows its middle 2 mm.  By $z_c$ the steepest of them have crossed
+  half the grid, and on a fixed grid they would come back in at the other side; so from there on
+  the demo uses the Fresnel transform, whose pixels grow in proportion to $z$, as
+  $\lambda z/N\Delta x$.  The screen then spans a fixed range of angles, ±17 mrad in green, and
+  zooms out as the light spreads.  At $z_c$ the two methods are the same calculation.  Past
+  $z_c$ the phase (<em>Field</em>) is shown relative to a spherical wave from the aperture,
+  whose rings would be finer than the pixels, and the side view brightens its rows in
+  proportion to $z^2$, to make up for the spreading.</p>
+
   <h3>Light and quantum mechanics</h3>
   <p>For waves near the axis, $k_z\approx k-(k_x^2+k_y^2)/2k$, and the field obeys
   $\partial_zU=\frac{i}{2k}\nabla_\perp^2U$: the free Schrödinger equation, with $z$ for time and
-  $1/k$ for $\hbar/m$.  Diffraction is the spreading of a wave packet.  (This demo uses the exact
-  $k_z$, not the approximation.)</p>
+  $1/k$ for $\hbar/m$.  Diffraction is the spreading of a wave packet.  (Up to $z_c$ this demo
+  uses the exact $k_z$; the Fresnel transform beyond it is paraxial, which at the angles shown
+  changes the intensity by a fraction of a percent.)</p>
   <p class="small muted">The idea of the BrainFlux LightPropagation applet, finished in 2026.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
 </aside>
