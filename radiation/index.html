@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radiation from a Moving Charge · BrainFlux</title>
+<meta name="description" content="Drag a charge and see its exact (Liénard–Wiechert) electric field: the kink of radiation running out at the speed of light.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="radiation.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Radiation from a moving charge</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="rad">
+  <section class="stage">
+    <div class="readout" id="readout"></div>
+    <div class="field-wrap">
+      <canvas id="field" tabindex="0" aria-label="The electric field of the charge, in the plane it moves in: drag anywhere and the charge follows (arrow keys move it too)"></canvas>
+      <div class="hint" id="hint">Drag anywhere: the charge follows, never faster than 0.98 c</div>
+    </div>
+    <div class="row2">
+      <div class="plot-wrap"><canvas id="polar" aria-label="Polar plot of the power radiated per unit solid angle, in the plane of motion, for the charge's present motion"></canvas></div>
+      <div class="plot-wrap"><canvas id="power" aria-label="The radiated power over the last ten seconds: Liénard's formula and Larmor's"></canvas></div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="label">Motion</div>
+      <div id="presets" class="button-grid"></div>
+      <div id="typed" class="stack" hidden></div>
+      <div id="params" class="stack"></div>
+      <div id="motion-note" class="small"></div>
+      <div class="row">
+        <button type="button" id="play" title="Pause or run (space)">Pause</button>
+        <button type="button" id="replay" title="Start the motion again">Start again</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="label">Light</div>
+      <div id="c-box"></div>
+      <div class="small muted">The view is 20 units across (its shorter side).</div>
+    </div>
+    <div class="panel">
+      <div class="label">Show</div>
+      <div class="row" id="lines-box"></div>
+      <div id="count-box"></div>
+      <div class="row" id="map-box"></div>
+      <div id="bright-box"></div>
+      <div class="row" id="extras"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A point charge $q$ moves in the plane of the screen, and you see its electric field in that
+  plane, computed exactly.  News of the charge travels at $c$, so the field at $\vec r$ now
+  depends on where the charge was at the <em>retarded time</em> $t_r$, when it sent out the light
+  arriving now: $|\vec r-\vec w(t_r)|=c(t-t_r)$.  Liénard (1898) and Wiechert (1900) found
+  $$\vec E=\frac{q}{4\pi\epsilon_0}\,\frac{(\hat n-\vec\beta)(1-\beta^2)}{\kappa^3R^2}+\frac{q}{4\pi\epsilon_0}\,\frac{\hat n\times((\hat n-\vec\beta)\times\dot{\vec\beta})}{c\,\kappa^3R}$$
+  with everything on the right taken at $t_r$: $R=|\vec r-\vec w(t_r)|$, $\hat n$ the
+  direction from that retarded position, $\vec\beta=\vec v/c$ and
+  $\kappa=1-\hat n\cdot\vec\beta$.  The first term, the
+  <em>velocity field</em>, falls off as $1/R^2$.  The second, the <em>acceleration field</em>,
+  falls off only as $1/R$ and is perpendicular to $\hat n$: it is the radiation.</p>
+  <p>Light is slow here: $c$ is a slider, in units per second (the view is 20 units across its
+  shorter side), and the bar at the bottom left shows how far light goes in a second.  So your
+  hand can move the charge near $c$: drag anywhere and it follows, smoothed and never faster
+  than $0.98c$.  The field lines leave the charge evenly spaced in angle in its own rest frame.
+  They are a slice through a three-dimensional field, so their spacing is only a rough guide to
+  its strength.  Below the picture: how the charge is radiating now, by direction, and its
+  power over the last ten seconds.</p>
+
+  <article class="exp" data-setup="coulomb">
+    <h3>1. At rest: Coulomb</h3>
+    <p>The field lines go straight out, evenly spaced: Coulomb's field.  Drag the charge slowly,
+    much slower than light, and the lines keep up with it, nearly straight.  A slow charge
+    carries its Coulomb field along.</p>
+  </article>
+
+  <article class="exp" data-setup="kink">
+    <h3>2. Stop it: the kink</h3>
+    <p>The charge coasts in from the left at $\beta=0.6$ and stops in 0.15 s.  The news that it
+    stopped spreads out at $c$, as a shell.  Inside the shell, the lines are those of a charge at
+    rest where it stopped.  Outside, nothing has heard yet: the lines still point from where the
+    charge would be had it kept going.  Field lines cannot break, so in the shell they run
+    sideways to join up, and that sideways field is the radiation: J. J. Thomson's picture of
+    1904.  Then make kinks of your own: drag the charge and stop it.</p>
+  </article>
+
+  <article class="exp" data-setup="inside">
+    <h3>3. Inside, the new field; outside, the old</h3>
+    <p>The probe (the yellow dot: drag it) shows where the charge was when it sent the light
+    now arriving at the probe (the ring marked "then") and the path of that light.  The velocity
+    field at the probe points away from the blue cross, which is where the charge would be now
+    had it kept the velocity it had then.  The read-out gives both parts of the field there, the
+    peak of the acceleration part over the last 3 seconds, and how long ago the light left,
+    $t-t_r$.  The arrows are the velocity field (blue), the
+    acceleration field (orange) and their sum (white), all to one scale.  Until the shell
+    reaches the probe the cross runs on, as if the charge had never stopped; when the shell has
+    passed, the cross sits on the stopped charge.</p>
+  </article>
+
+  <article class="exp" data-setup="far">
+    <h3>4. Far away, the kink wins</h3>
+    <p>Thomson's argument: a stop that takes a time $\tau$ makes a shell $c\tau$ thick, across
+    which a line must step sideways by $vt\sin\theta=vR\sin\theta/c$, the distance the charge
+    would have gone on.  So $E_\perp/E_r\approx vR\sin\theta/c^2\tau$, which with $a=v/\tau$ is
+    $$E_\perp\approx\frac{q}{4\pi\epsilon_0}\,\frac{a\sin\theta}{c^2R}:$$
+    the radiation falls off as $1/R$, Coulomb's field as $1/R^2$.  The probe sits 8 units above
+    the stop and keeps the peak of $|E_\mathrm{acc}|$ over the last 3 seconds: 0.118 there,
+    7.5 times the Coulomb field of 0.0156.  Drag it to 4 units above the charge and wait for the
+    next stop: the peak doubles, to 0.236, and the Coulomb field quadruples, to 0.0625.</p>
+  </article>
+
+  <article class="exp" data-setup="heaviside">
+    <h3>5. Uniform motion: lines from where it is now</h3>
+    <p>A charge coasting at $\beta=0.8$ forever.  (The view follows it; the dots are fixed in the
+    lab.)  Its field lines are straight, and they point from where the charge is now, not from
+    where it sent the light now arriving (the probe's ring): that is what the $\hat n-\vec\beta$
+    of the velocity field does.  The field is squashed into a pancake (Heaviside, 1888),
+    $$E=\frac{q}{4\pi\epsilon_0}\,\frac{1-\beta^2}{R^2\left(1-\beta^2\sin^2\psi\right)^{3/2}}$$
+    at distance $R$ and angle $\psi$ from the velocity: across the motion $\gamma$ times
+    Coulomb's field, along it $1/\gamma^2$ times.  The light fronts, sent out at regular
+    intervals and each centred where it was sent, crowd together ahead of the charge.</p>
+  </article>
+
+  <article class="exp" data-setup="dipole">
+    <h3>6. Shake it: dipole radiation</h3>
+    <p>The charge goes up and down once a second, at up to $\beta=0.1$.  The colour is the
+    radiation field (orange one way round the charge, blue the other): waves of length
+    $\lambda=cT=8$ units run outward, strongest sideways.  The field lines wiggle as they pass.
+    The polar plot is Larmor's $\sin^2\theta$, with $\theta$ measured from the acceleration.</p>
+  </article>
+
+  <article class="exp" data-setup="axis">
+    <h3>7. Nothing along the axis</h3>
+    <p>The colour is now the energy flux, $|E_\mathrm{rad}|^2$.  Above and below the charge it is
+    dark, because $\hat n\times(\hat n\times\vec a)=0$ when $\hat n$ is along $\vec a$, and the
+    probe there reads $|E_\mathrm{acc}|=0$ while its velocity field does not.  Drag the probe
+    round the charge, keeping its distance, and watch the peak of $|E_\mathrm{acc}|$ grow as
+    $\sin\theta$.</p>
+  </article>
+
+  <article class="exp" data-setup="fastdipole">
+    <h3>8. A fast dipole leans forward</h3>
+    <p>Now up to $\beta=0.8$, with a period of 2 s.  The lobes of the polar plot lean towards the
+    velocity, up while the charge rises and down as it falls: the $1/\kappa^5$ in $dP/d\Omega$
+    throws the radiation forward.  The waves are no longer sine waves.  Liénard's power (the
+    strip chart) climbs far above Larmor's: for motion along a line the ratio is $\gamma^6$,
+    shown in the read-out as P/P<sub>Larmor</sub>.</p>
+  </article>
+
+  <article class="exp" data-setup="synchrotron">
+    <h3>9. Round and round: cyclotron to synchrotron</h3>
+    <p>Circular motion at $\beta=0.9$.  The energy flux is a spiral: the charge throws its
+    radiation forward, into a cone about $1/\gamma$ wide, and sweeps it round like a
+    lighthouse; a distant observer sees a flash once a turn.  In the plane,
+    $dP/d\Omega\propto(\cos\theta-\beta)^2/(1-\beta\cos\theta)^5$ at an angle $\theta$ from the
+    velocity: half power at 0.147 rad, none at $\cos\theta=\beta$, 0.451 rad (and
+    $1/\gamma=0.436$).  This is
+    synchrotron light.  Slide $\beta$ down to 0.3 and the brightness up to 1: the beam relaxes
+    into the two-armed spiral of a rotating dipole (cyclotron radiation), dark where the line of
+    sight ran along the acceleration.  There are only 8 field lines because each winds
+    round many times: far out, the sideways radiation field outweighs the outward Coulomb
+    field, so the lines creep outward.</p>
+  </article>
+
+  <article class="exp" data-setup="power">
+    <h3>10. How much it radiates: Larmor and Liénard</h3>
+    <p>The strip chart shows the radiated power by Liénard's formula
+    $$P=\frac{q^2\gamma^6}{6\pi\epsilon_0c^3}\left(a^2-|\vec\beta\times\vec a|^2\right)$$
+    (solid) and by Larmor's, $q^2a^2/6\pi\epsilon_0c^3$ (dashed), which is right only when
+    $v\ll c$.  In circular motion $\vec\beta\perp\vec a$ and the ratio is $\gamma^4$: 3.84 at
+    $\beta=0.7$.  Change $\beta$ and watch P/P<sub>Larmor</sub> in the read-out; along a line
+    the ratio is $\gamma^6$ (try the oscillation).</p>
+  </article>
+
+  <article class="exp" data-setup="hyperbolic">
+    <h3>11. Constant proper acceleration</h3>
+    <p>The charge arrives at $0.9c$, slows down with a constant proper acceleration $g$ (the one
+    it would feel), turns round and leaves: $x=x_0-\frac{c^2}{g}\left(\sqrt{1+(gt/c)^2}-1\right)$.
+    Its acceleration in the lab, $g/\gamma^3$, changes all the while, yet Liénard's power stays
+    at $\frac{2}{3}\frac{q^2g^2}{4\pi\epsilon_0c^3}$: the flat top of the strip chart (0.0833
+    here).  Whether such a charge radiates was argued over for half a century; seen from the
+    lab, it does.</p>
+  </article>
+
+  <article class="exp" data-setup="deflect">
+    <h3>12. A flash as it turns</h3>
+    <p>A charge at $\beta=0.9$ is turned through 60° in a quarter of a second, as a magnet
+    would turn it.  Its radiation leaves as a single flash, beamed forward over the directions it
+    pointed while it turned.  A nucleus deflects a fast electron in much the same way (changing
+    its speed too): that is bremsstrahlung, "braking radiation", the X-rays of an X-ray
+    tube.</p>
+  </article>
+
+  <article class="exp" data-setup="parts">
+    <h3>13. The velocity field and the acceleration field</h3>
+    <p>Lines of the velocity field alone (blue), with the acceleration field in colour.  The
+    velocity field points from where the charge would be had it kept its retarded velocity, so
+    its lines barely notice the shells.  Neither part alone obeys Gauss's law,
+    $\oint\vec E\cdot d\vec A=q/\epsilon_0$: the flux of the velocity part through a sphere
+    crossed by a shell is not $q/\epsilon_0$, and the acceleration part makes up the
+    difference.</p>
+  </article>
+
+  <article class="exp" data-setup="hand">
+    <h3>14. Your turn</h3>
+    <p>The charge follows your pointer, smoothed so that its acceleration never jumps, and held
+    below $0.98c$.  Flick it and stop; shake it for waves; swing it round in a circle and watch
+    the polar plot point along the velocity; lower $c$ and everything turns relativistic.  The
+    arrow keys move it too.</p>
+  </article>
+
+  <h3>What is exact, and what is not</h3>
+  <p>The fields are the exact Liénard–Wiechert fields of the path the charge follows.  The path
+  is stored 240 times a second, with quintics between the samples that match their positions,
+  velocities and accelerations.  Your hand's motion is smoothed into such a path.  The colours
+  are computed on a grid coarser than the screen, and when the field is very busy (after wild
+  shaking) the field lines are cut short so that the picture keeps moving.  $dP/d\Omega$ is the
+  power per unit solid angle per unit of the charge's time; a distant observer whom the charge
+  approaches receives it in less time, and so sees it brighter still.  The numbers are in units
+  where $q=1$ and $1/4\pi\epsilon_0=1$ (so the Coulomb field is $1/R^2$), with lengths in units
+  and times in seconds.</p>
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

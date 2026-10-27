@@ -1,0 +1,43 @@
+.rad {
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px;
+  padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
+.readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; padding: 0 4px; min-height: 1.6em; color: var(--ink-2); font-size: 13px; }
+/* Every read-out has a slot of fixed width: the numbers change, nothing moves. */
+.readout .ro { white-space: nowrap; }
+.readout .num {
+  display: inline-block; text-align: right; white-space: pre; margin: 0 0.3em;
+  font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600;
+}
+.readout .sw { display: inline-block; width: 14px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.readout .sw.vel { background: #3d95f0; }
+.readout .sw.acc { background: #f08a20; }
+.field-wrap { position: relative; height: max(320px, calc(100vh - 330px)); background: #05070b; border-radius: var(--radius); overflow: hidden; }
+.field-wrap canvas { width: 100%; height: 100%; cursor: grab; }
+.field-wrap canvas.dragging { cursor: grabbing; }
+.hint {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%); pointer-events: none;
+  background: rgba(0, 0, 0, 0.6); color: #fff; padding: 4px 12px; border-radius: 14px; font-size: 13px;
+  white-space: nowrap; transition: opacity 0.4s;
+}
+.hint.gone { opacity: 0; }
+.row2 { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 8px; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); height: 200px; }
+.plot-wrap canvas { width: 100%; height: 100%; }
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+.button-grid button.wide { grid-column: 1 / -1; }
+#extras button, #lines-box button, #map-box button { font-size: 13px; padding: 3px 8px; }
+#motion-note:empty { display: none; }
+#motion-note.warn { color: var(--warn); }
+.expr input { font-size: 13px; }
+@media (max-width: 900px) {
+  .rad { grid-template-columns: minmax(0, 1fr); }
+  .stage { position: static; }
+  .field-wrap { height: auto; aspect-ratio: 1; }
+  .row2 { grid-template-columns: minmax(0, 160px) minmax(0, 1fr); }
+  .plot-wrap { height: 160px; }
+}
