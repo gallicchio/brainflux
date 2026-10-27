@@ -9,10 +9,13 @@
 
 import { traceBench, beamAt, segmentAt, waists, hermite, lensLaw, coupling } from './gauss.js';
 import { eigenmode } from './cavity.js';
-import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors, niceTicks, tickLabel } from '../lib/plot.js';
+import { el, $, slider, segmented, toggle, fmt, setSlots } from '../lib/ui.js';
+import { fitCanvas, Frame, themeColors, niceTicks, tickLabel, fillSlots, slotsWidth } from '../lib/plot.js';
 import { colorize } from '../lib/complexcolor.js';
-import { fmtLen, fmtAngle, fmtPi, wavelengthRGB, realTable, intensityTable, signedSlider, arrow, arcPath, haloText } from './common.js';
+import { fmtLen, wavelengthRGB, realTable, intensityTable, signedSlider, arrow, arcPath, lenParts, angleParts, piParts, haloSlots } from './common.js';
+
+/** The first number of a line of parts in bold. */
+const bold = (parts) => parts.map((p) => (typeof p === 'string' ? p : { ...p, class: 'b' }));
 
 const MARGIN = { left: 52, right: 14, top: 26, bottom: 30 };
 const DARK = '#07080b';
@@ -251,19 +254,23 @@ export function createBench(app) {
       const px = Zp(hover), b = beamAt(trace, hover);
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(px, F.top); ctx.lineTo(px, F.bottom); ctx.stroke(); ctx.setLineDash([]);
-      const lines = [`z = ${fmtLen(hover)}`, `w = ${fmtLen(b.w)}`, `R = ${fmtLen(b.R)}`, `ψ = ${fmtPi(b.gouy, 3)}`];
-      if (b.n !== 1) lines.push(`in glass, n = ${fmt(b.n, 3)}`);
+      // Each number in a slot of its own, in a column, the box as wide whatever they are.
+      const lines = [['z = ', lenParts(hover, 7)], ['w = ', lenParts(b.w, 7)], ['R = ', lenParts(b.R, 7)], ['ψ = ', piParts(b.gouy, 3, 7)]];
+      const glass = b.n !== 1 ? ['in glass, n = ', { v: b.n, dec: 3, w: 5 }] : null;
       ctx.font = '12px system-ui, sans-serif';
-      const bw = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 14, bh = 16 * lines.length + 8;
+      const lw = Math.max(...lines.map(([k]) => ctx.measureText(k).width));
+      const bw = Math.max(lw + slotsWidth(ctx, [{ text: '', w: 7 }, '\u00a0mm']), glass ? slotsWidth(ctx, glass) : 0) + 14;
+      const bh = 16 * (lines.length + (glass ? 1 : 0)) + 8;
       const bx = px + 8 + bw > F.right ? px - 8 - bw : px + 8, by = F.top + 24;
       ctx.fillStyle = 'rgba(10,12,18,0.82)'; ctx.fillRect(bx, by, bw, bh);
       ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      lines.forEach((t, k) => ctx.fillText(t, bx + 7, by + 5 + 16 * k));
+      lines.forEach(([k, parts], i) => { ctx.fillText(k, bx + 7, by + 5 + 16 * i); fillSlots(ctx, parts, bx + 7 + lw, by + 5 + 16 * i); });
+      if (glass) fillSlots(ctx, glass, bx + 7, by + 5 + 16 * lines.length);
     }
     // The sideways stretch, in a corner.
     ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    haloText(ctx, `drawn ×${fmt(state.E, 3)} wider than it is`, F.right - 6, F.top + 5, 'rgba(255,255,255,0.75)');
+    haloSlots(ctx, ['drawn ×', { v: state.E, dec: 1, w: 6 }, ' wider than it is'], F.right - 6, F.top + 5, 'rgba(255,255,255,0.75)');
     ctx.restore();
     // Axes: z along the bottom, the true transverse x on the left.
     axes(ctx, F, c, sy);
@@ -366,8 +373,8 @@ export function createBench(app) {
       const y = Math.min(F.bottom - 32, Xp(-Math.SQRT2 * w.w0) + 10);
       const lx = Math.max(F.left + 44, Math.min(F.right - 44, px));
       ctx.textBaseline = 'top';
-      haloText(ctx, `w₀ ${fmtLen(w.w0)}`, lx, y);
-      if (zrPx > 6) haloText(ctx, `z_R ${fmtLen(w.zR)}`, lx, y + 13, 'rgba(255,255,255,0.8)');
+      haloSlots(ctx, ['w₀ ', ...lenParts(w.w0, 6)], lx, y);
+      if (zrPx > 6) haloSlots(ctx, ['z_R ', ...lenParts(w.zR, 7)], lx, y + 13, 'rgba(255,255,255,0.8)');
     }
   }
 
@@ -435,21 +442,22 @@ export function createBench(app) {
       const z = e.type === 'slab' ? e.z + e.t / 2 : e.z;
       if (z < state.vz0 || z > state.vz1) continue;
       ctx.fillStyle = e === state.sel ? c.accent : c.ink2;
-      ctx.fillText(elementShort(e), Zp(z), F.top - 8);
+      fillSlots(ctx, shortParts(e), Zp(z), F.top - 8);
     }
     const t = target();
     if (t && t.z + t.L / 2 > state.vz0 && t.z + t.L / 2 < state.vz1) {
       const m = matching();
       ctx.fillStyle = '#c58a00';
-      ctx.fillText(m ? `cavity: η = ${(100 * m.eta).toFixed(1)}%` : 'cavity (unstable)', Zp(t.z + t.L / 2), F.top - 8);
+      fillSlots(ctx, m ? ['cavity: η = ', { v: 100 * m.eta, dec: 1, w: 5 }, '%'] : ['cavity (unstable)'], Zp(t.z + t.L / 2), F.top - 8);
     }
     ctx.restore();
   }
 
-  function elementShort(e) {
-    if (e.type === 'lens') return `f ${fmtLen(e.f, 3)}`;
-    if (e.type === 'mirror') return Number.isFinite(e.R) ? `mirror R ${fmtLen(e.R, 3)}` : 'flat mirror';
-    return `n ${fmt(e.n, 3)}`;
+  /** An element's label, as parts for setSlots or fillSlots. */
+  function shortParts(e) {
+    if (e.type === 'lens') return ['f ', ...lenParts(e.f, 7)];
+    if (e.type === 'mirror') return Number.isFinite(e.R) ? ['mirror R ', ...lenParts(e.R, 7)] : ['flat mirror'];
+    return ['n ', { v: e.n, dec: 3, w: 5 }];
   }
   function elementName(e) {
     const i = state.elements.filter((x) => x.type === e.type).indexOf(e) + 1;
@@ -512,18 +520,18 @@ export function createBench(app) {
 
   // ------------------------------------------------------------------- read-outs
 
-  let readoutKey = '';
+  // Each number in a slot of its own (setSlots only writes what changed), so that nothing in
+  // the line moves as they change.
+  const ro = { lambda: el('span'), input: el('span'), match: el('span', { class: 'good' }) };
+  $('#bench-readout').replaceChildren(ro.lambda, ro.input, ro.match);
   function readout() {
-    const inB = { w0: state.w0, zR: (Math.PI * state.w0 ** 2) / lam() };
-    const parts = [
-      el('span', {}, `λ = ${fmt(state.lambda, 4)} nm`),
-      el('span', {}, 'input waist ', el('b', {}, fmtLen(state.w0)), ` at z = ${fmtLen(state.z0)}, z`, el('sub', {}, 'R'), ` = ${fmtLen(inB.zR)}, divergence λ/πw₀ = ${fmtAngle(lam() / (Math.PI * state.w0))}`),
-    ];
+    const zR = (Math.PI * state.w0 ** 2) / lam();
+    setSlots(ro.lambda, ['λ = ', { v: state.lambda, dec: 0, w: 4 }, '\u00a0nm']);
+    setSlots(ro.input, ['input waist ', ...bold(lenParts(state.w0, 6)), ' at z = ', ...lenParts(state.z0, 7), ', z', { html: '<sub>R</sub>' },
+      ' = ', ...lenParts(zR, 7), ', divergence λ/πw₀ = ', ...angleParts(lam() / (Math.PI * state.w0))]);
     const m = matching();
-    if (m) parts.push(el('span', { class: 'good' }, `mode matching η = ${(100 * m.eta).toFixed(1)}%`));
-    // Only when it changes (writing the page's text makes the browser lay it out again).
-    const key = parts.map((p) => p.textContent).join('|');
-    if (key !== readoutKey) { readoutKey = key; $('#bench-readout').replaceChildren(...parts); }
+    ro.match.hidden = !m;
+    if (m) setSlots(ro.match, ['mode matching η = ', { v: 100 * m.eta, dec: 1, w: 5 }, '%']);
   }
 
   function waistTable() {
@@ -535,9 +543,10 @@ export function createBench(app) {
       // The input beam's waist is really there if no element comes before it (even off the view).
       const real = i === 0 ? segs.length === 1 || w.z <= segs[1].za + 1e-9 : w.real;
       const note = !real ? 'virtual (outside this stretch)' : w.z < state.vz0 || w.z > state.vz1 ? 'off this view' : '';
+      const td = (parts) => { const e = el('td'); setSlots(e, parts); return e; };
       rows.push(el('tr', { class: real ? '' : 'virtual' },
-        el('td', {}, name), el('td', {}, fmtLen(w.w0)), el('td', {}, fmtLen(w.z)), el('td', {}, fmtLen(w.zR)),
-        el('td', {}, fmtAngle(w.theta)), el('td', { class: 'muted' }, note)));
+        td(seg.n !== 1 && i > 0 ? ['in glass (n = ', { v: seg.n, dec: 3, w: 5 }, ')'] : [name]),
+        td(lenParts(w.w0, 7)), td(lenParts(w.z, 7)), td(lenParts(w.zR, 7)), td(angleParts(w.theta, 6)), el('td', { class: 'muted' }, note)));
     });
     $('#waists').replaceChildren(...rows);
   }
@@ -586,7 +595,9 @@ export function createBench(app) {
     box.replaceChildren(...state.elements.map((e) => el('button', {
       type: 'button', 'aria-pressed': String(e === state.sel), title: 'Select it (or click it on the bench)',
       onclick: () => select(e === state.sel ? null : e),
-    }, `${elementName(e)}: ${elementShort(e)}`)));
+    }, `${elementName(e)}: `)));
+    // The number in a slot, so that the chips beside it don't move as it changes.
+    state.elements.forEach((e, i) => setSlots(box.children[i], [`${elementName(e)}: `, ...shortParts(e)]));
   }
 
   let editorSliders = {};
@@ -633,7 +644,7 @@ export function createBench(app) {
     const e = state.sel, info = $('#el-info');
     if (!e || !info) return;
     if (e.type === 'slab') {
-      info.replaceChildren(el('div', {}, `Moves a focus behind it back by t(1 − 1/n) = ${fmtLen(e.t * (1 - 1 / e.n))}, and stretches the Rayleigh range n times inside.`));
+      showInfo(info, [['', ['Moves a focus behind it back by t(1 − 1/n) = ', ...lenParts(e.t * (1 - 1 / e.n), 7), ', and stretches the Rayleigh range n times inside.']]]);
       return;
     }
     const f = e.type === 'lens' ? e.f : e.R / 2;
@@ -641,20 +652,30 @@ export function createBench(app) {
     const seg = segmentAt(trace, e.z + 1e-9);
     const out = waists(trace).find((w) => w.seg === seg);
     const lines = [
-      el('div', {}, `On it: w = ${fmtLen(before.w)}, R = ${fmtLen(before.R)} (coming in).`),
+      ['', ['On it: w = ', ...lenParts(before.w, 7), ', R = ', ...lenParts(before.R, 7), ' (coming in).']],
     ];
     if (Number.isFinite(f)) {
-      lines.push(el('div', {}, `New waist: w₀′ = `, el('b', {}, fmtLen(out.w0)), ` ${out.z >= e.z ? `${fmtLen(out.z - e.z)} after it` : `${fmtLen(e.z - out.z)} before it (virtual)`}.`));
-      if (out.w0 < 3 * lam()) lines.push(el('div', { class: 'warn' }, `That is only ${fmt(out.w0 / lam(), 2)} wavelengths: the beam converges at ${fmtAngle(out.theta)}, too steep for paraxial optics, so these numbers are rough.`));
-      if (f > 0) lines.push(el('div', {}, `λf/πw = ${fmtLen((lam() * f) / (Math.PI * before.w))} (the focus of a collimated beam of this width).`));
+      lines.push(['', ['New waist: w₀′ = ', ...bold(lenParts(out.w0, 7)), ' ',
+        ...(out.z >= e.z ? [...lenParts(out.z - e.z, 7), ' after it.'] : [...lenParts(e.z - out.z, 7), ' before it (virtual).'])]]);
+      if (out.w0 < 3 * lam()) lines.push(['warn', ['That is only ', { v: out.w0 / lam(), dec: 2, w: 5 }, ' wavelengths: the beam converges at ', ...angleParts(out.theta), ', too steep for paraxial optics, so these numbers are rough.']]);
+      if (f > 0) lines.push(['', ['λf/πw = ', ...lenParts((lam() * f) / (Math.PI * before.w), 7), ' (the focus of a collimated beam of this width).']]);
       if (before.n === 1 && after.n === 1) {
         const s = e.z - before.zw, L = lensLaw(s, before.zR, f);
-        const where = `${fmtLen(Math.abs(s))} ${s >= 0 ? 'before' : 'after'} it`;
-        lines.push(el('div', {}, `Ray optics would image the waist (${where}) ${L.geometric >= 0 ? `to ${fmtLen(L.geometric)} after it` : `to a virtual image ${fmtLen(-L.geometric)} before it`}.`));
+        lines.push(['', ['Ray optics would image the waist (', ...lenParts(Math.abs(s), 7), s >= 0 ? ' before it) ' : ' after it) ',
+          ...(L.geometric >= 0 ? ['to ', ...lenParts(L.geometric, 7), ' after it.'] : ['to a virtual image ', ...lenParts(-L.geometric, 7), ' before it.'])]]);
       }
     }
-    info.replaceChildren(...lines);
+    showInfo(info, lines);
     drawLensPlot(e, f, before);
+  }
+  /** Lines [class, parts]: the divs made again only when the lines' kinds change. */
+  function showInfo(info, lines) {
+    const key = lines.map(([c]) => c).join('|');
+    if (info._lines !== key || info.children.length !== lines.length) {
+      info._lines = key;
+      info.replaceChildren(...lines.map(([c]) => el('div', { class: c || undefined })));
+    }
+    lines.forEach(([, parts], i) => setSlots(info.children[i], parts));
   }
 
   function drawLensPlot(e, f, before) {
@@ -690,7 +711,7 @@ export function createBench(app) {
     ctx.restore();
     F.axes({ xlabel: 's/f: the waist was this far before the lens', colors: c });
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`s′/f: the new waist this far after it (z_R/f = ${fmt(Z, 2)})`, 4, 12);
+    fillSlots(ctx, ['s′/f: the new waist this far after it (z_R/f = ', { v: Z, dec: 2, w: 5 }, ')'], 4, 12);
     ctx.textAlign = 'right'; ctx.fillStyle = c.ink3;
     ctx.fillText('rays: dashed', F.right, F.top + 12);
   }
@@ -734,10 +755,11 @@ export function createBench(app) {
 
   function setCrestNote() {
     const crest = lam() * state.E * state.E, px = frame ? (crest * frame.w) / (state.vz1 - state.vz0) : 10;
-    $('#crest-note').textContent = state.field === 'real'
-      ? `The crests are drawn ${fmtLen(crest)} apart (really ${fmtLen(lam())}): a beam drawn ${fmt(state.E, 3)} times wider is a beam with a wavelength ${fmt(state.E * state.E, 3)} times longer, and only so do the crests keep their true curvature and Gouy shift.`
-        + (px < 4 ? ' Here they are too close together to draw: zoom in, or draw the beam wider.' : '')
-      : '';
+    setSlots($('#crest-note'), state.field === 'real'
+      ? ['The crests are drawn ', ...lenParts(crest, 7), ' apart (really ', ...lenParts(lam(), 7, { um: 3 }), '): a beam drawn ', { v: state.E, dec: 1, w: 6 },
+        ' times wider is a beam with a wavelength ', { v: state.E * state.E, dec: 0, w: 7 }, ' times longer, and only so do the crests keep their true curvature and Gouy shift.'
+        + (px < 4 ? ' Here they are too close together to draw: zoom in, or draw the beam wider.' : '')]
+      : []);
   }
 
   // ------------------------------------------------------------------- pointer and keys

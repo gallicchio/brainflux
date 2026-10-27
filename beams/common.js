@@ -2,7 +2,8 @@
 // wavelength, colour tables for drawing fields fast, a slider for signed quantities (focal
 // lengths, mirror radii) and a few canvas shapes.
 
-import { el, slider, segmented, fmt } from '../lib/ui.js';
+import { el, slider, segmented, fmt, setSlots } from '../lib/ui.js';
+import { fillSlots } from '../lib/plot.js';
 import { colorOf } from '../lib/complexcolor.js';
 
 /** A length in mm, written in um, mm or m as suits it. */
@@ -34,6 +35,55 @@ export function fmtFreq(hz, digits = 3) {
 
 /** A phase in units of pi. */
 export const fmtPi = (rad, digits = 3) => `${fmt(rad / Math.PI, digits).replace('-', '−')}π`;
+
+// The same quantities for live read-outs, as parts for setSlots (lib/ui.js) or fillSlots
+// (lib/plot.js): the number in a slot w characters wide with a fixed number of decimals for its
+// unit, then the unit (after a no-break space).  A change of unit is a change of words; within
+// one unit, nothing moves as the number changes.
+
+/** A length in mm, in um (1 decimal), mm (2) or m (2); dec overrides the decimals per unit
+ *  ({ um: 3 } for a wavelength, say). */
+export function lenParts(mm, w = 7, dec = {}) {
+  if (!Number.isFinite(mm)) return [{ text: mm > 0 ? '∞' : mm < 0 ? '−∞' : '—', w }];
+  const a = Math.abs(mm), d = { um: 1, mm: 2, m: 2, ...dec };
+  if (a < 1 && a > 0) return [{ v: mm * 1000, dec: d.um, w }, ' µm'];
+  if (a >= 1000) return [{ v: mm / 1000, dec: d.m, w }, ' m'];
+  return [{ v: mm, dec: d.mm, w }, ' mm'];
+}
+
+/** An angle in radians: degrees (2 decimals), mrad (2) or urad (1). */
+export function angleParts(rad, w = 6) {
+  const a = Math.abs(rad);
+  if (a >= 0.1) return [{ v: (rad * 180) / Math.PI, dec: 2, w }, '°'];
+  if (a < 1e-3) return [{ v: rad * 1e6, dec: 1, w }, ' µrad'];
+  return [{ v: rad * 1e3, dec: 2, w }, ' mrad'];
+}
+
+/** A frequency in Hz, in kHz, MHz (1 decimal) or GHz (2). */
+export function freqParts(hz, w = 6) {
+  const a = Math.abs(hz);
+  if (a >= 1e9) return [{ v: hz / 1e9, dec: 2, w }, ' GHz'];
+  if (a >= 1e6) return [{ v: hz / 1e6, dec: 1, w }, ' MHz'];
+  if (a >= 1e3) return [{ v: hz / 1e3, dec: 1, w }, ' kHz'];
+  return [{ v: hz, dec: 1, w }, ' Hz'];
+}
+
+/** A phase in units of pi, dec decimals, in a slot w wide (room for a sign and one digit). */
+export const piParts = (rad, dec = 3, w = dec + 3) => [{ v: rad / Math.PI, dec, w }, 'π'];
+
+/** fillSlots with a dark halo (as haloText), readable over a field picture. */
+export function haloSlots(ctx, parts, x, y, color = '#fff') {
+  ctx.save();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineJoin = 'round'; ctx.fillStyle = color;
+  const pen = {
+    measureText: (s) => ctx.measureText(s),
+    fillText: (s, px, py) => { ctx.strokeText(s, px, py); ctx.fillText(s, px, py); },
+    get textAlign() { return ctx.textAlign; },
+    set textAlign(v) { ctx.textAlign = v; },
+  };
+  fillSlots(pen, parts, x, y);
+  ctx.restore();
+}
 
 /** An approximate colour [r, g, b] (0..1) for a wavelength in nm (after Dan Bruton); infrared
  *  and ultraviolet get a dim red and a dim violet, so the beam stays visible. */

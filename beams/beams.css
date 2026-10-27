@@ -17,6 +17,8 @@
 .readout .probe { color: var(--ink); font-variant-numeric: tabular-nums; }
 .readout .good { color: var(--good); font-weight: 600; }
 .readout .warn { color: var(--warn); font-weight: 600; }
+/* A number in bold in its fixed slot (lib/style.css .fixnum). */
+.fixnum.b { font-weight: 600; color: var(--ink); }
 
 /* The bench. */
 .bench-wrap { height: max(300px, calc(58vh - 70px)); }
@@ -24,9 +26,15 @@
 .bench-wrap canvas.dragging { cursor: grabbing; }
 .gouy-wrap { height: max(130px, 17vh); }
 .table-wrap { overflow-x: auto; }
-table.waists { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; width: 100%; }
+/* Fixed columns: the numbers (in slots of their own) change without moving the columns. */
+table.waists { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; width: 100%; min-width: 780px; table-layout: fixed; }
+table.waists th:nth-child(1) { width: 19%; }
+table.waists th:nth-child(2) { width: 13%; }
+table.waists th:nth-child(3) { width: 14%; }
+table.waists th:nth-child(4) { width: 16%; }
+table.waists th:nth-child(5) { width: 18%; }
 table.waists th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 3px 10px 3px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-table.waists td { padding: 3px 10px 3px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.waists td { padding: 3px 10px 3px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.waists tr.virtual td { color: var(--ink-3); }
 
 /* The cavity. */

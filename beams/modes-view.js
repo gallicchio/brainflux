@@ -4,9 +4,9 @@
 import { fillMode, modeAt, order, overlap, spectrum, fromSpectrum } from './modes.js';
 import { colorize, drawWheel } from '../lib/complexcolor.js';
 import { texToMathML } from '../lib/mathml.js';
-import { el, $, slider, segmented, toggle, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, setSlots } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, tickLabel } from '../lib/plot.js';
-import { fmtPi, realTable, haloText } from './common.js';
+import { realTable, haloText, piParts, haloSlots } from './common.js';
 
 const DARK = '#07080b';
 const ZMAX = 3;                    // the side view runs from -3 zR to 3 zR
@@ -51,9 +51,9 @@ export function createModes(app) {
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.arc(width / 2, width / 2, r, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
     ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    haloText(ctx, `${name()} at z = ${fmt(z, 3)} z_R`, 8, 8);
+    haloSlots(ctx, [`${name()} at z = `, { v: z, dec: 2, w: 5 }, ' z_R'], 8, 8);
     ctx.textBaseline = 'bottom';
-    haloText(ctx, `dashed: r = w(z) = ${fmt(w, 3)} w₀; the square is ${fmt(2 * half, 3)} w₀ wide`, 8, width - 8, 'rgba(255,255,255,0.8)');
+    haloSlots(ctx, ['dashed: r = w(z) = ', { v: w, dec: 3, w: 5 }, ' w₀; the square is ', { v: 2 * half, dec: 2, w: 5 }, ' w₀ wide'], 8, width - 8, 'rgba(255,255,255,0.8)');
     if (state.fft) { ctx.textAlign = 'right'; ctx.textBaseline = 'top'; haloText(ctx, 'computed by FFT', width - 8, 8, '#ffd166'); }
     if (state.cross === 'phase') {
       if (!wheel) { wheel = document.createElement('canvas'); wheel.width = wheel.height = 56; drawWheel(wheel, 1, 1.6); }
@@ -112,13 +112,15 @@ export function createModes(app) {
 
   function fftNote() {
     const box = $('#fft-note');
-    let text = 'Compute the beam at z from the one at the waist with the angular spectrum method of the diffraction demo (exact, not paraxial: w₀ = 20λ), instead of the formula.';
+    let parts = ['Compute the beam at z from the one at the waist with the angular spectrum method of the diffraction demo (exact, not paraxial: w₀ = 20λ), instead of the formula.'];
     if (state.fft) {
+      // Each number in a slot of its own, so that the words keep their places as z changes.
       const f = computeFFT(), N = order(mode()), psi = Math.atan(state.zeta);
       const measured = (N + 1) * psi - f.ph;
-      text = `Largest difference from the formula: ${(100 * f.err).toPrecision(2)}% of the peak. Overlap with the formula's mode: ${f.mag.toFixed(5)}. Gouy phase of the computed beam: ${fmtPi(measured, 4)} (formula: (N+1) atan(z/z_R) = ${fmtPi((N + 1) * psi, 4)}).`;
+      parts = ['Largest difference from the formula: ', { v: 100 * f.err, dec: 3, w: 6 }, '% of the peak. Overlap with the formula\'s mode: ', { v: f.mag, dec: 5, w: 7 },
+        '. Gouy phase of the computed beam: ', ...piParts(measured, 3), ' (formula: (N+1) atan(z/z_R) = ', ...piParts((N + 1) * psi, 3), ').'];
     }
-    if (box.textContent !== text) box.textContent = text;
+    setSlots(box, parts);
   }
 
   // ------------------------------------------------------------------- the side view
@@ -340,8 +342,10 @@ export function createModes(app) {
 
   function readout() {
     const z = state.zeta, w = Math.sqrt(1 + z * z), N = order(mode());
-    const R = z === 0 ? '∞' : `${fmt(z + 1 / z, 3)} z_R`;
-    whereSpan.textContent = `at z = ${fmt(z, 3)} z_R: w = ${fmt(w, 3)} w₀, R = ${R}, Gouy phase ${N + 1}ψ = ${fmtPi((N + 1) * Math.atan(z), 3)}`;
+    // Each number in a slot of its own, so that nothing moves as z runs.
+    const R = z === 0 ? [{ text: '∞', w: 7 }] : [{ v: z + 1 / z, dec: 2, w: 7 }, '\u00a0z_R'];
+    setSlots(whereSpan, ['at z = ', { v: z, dec: 2, w: 5 }, '\u00a0z_R: w = ', { v: w, dec: 3, w: 5 }, '\u00a0w₀, R = ', ...R,
+      `, Gouy phase ${N + 1}ψ = `, ...piParts((N + 1) * Math.atan(z), 3)]);
   }
 
   function changed(rebuildSide = true) {
