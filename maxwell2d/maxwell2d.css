@@ -7,13 +7,19 @@
 .view-wrap canvas { width: 100%; height: 100%; cursor: crosshair; }
 .view-wrap canvas.grab { cursor: grab; }
 .view-wrap canvas.grabbing { cursor: grabbing; }
-.readouts { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--ink-2); min-height: 1.5em; }
-.readouts b { color: var(--ink); font-weight: 600; }
-.readouts .warn { color: var(--warn); }
-.notes { color: var(--ink-2); min-height: 1.4em; }
+/* Every value in a slot of fixed width, so that nothing moves as the numbers change. */
+.readouts { display: flex; flex-wrap: wrap; gap: 2px 18px; color: var(--ink-2); min-height: 1.5em; font-variant-numeric: tabular-nums; }
+.readouts .ro { white-space: nowrap; }
+.readouts .slot { color: var(--ink); font-weight: 600; }
+.readouts .lab { margin-right: 0.5ch; }
+.readouts .slot + .lab, .readouts .slot + .slot, .readouts .unit { margin-left: 1ch; }
+.slot { display: inline-block; text-align: right; white-space: pre; font-variant-numeric: tabular-nums; vertical-align: bottom; }
+.slot.left { text-align: left; }
+.warnings { color: var(--warn); }
+.warnings:empty { display: none; }
+.notes { color: var(--ink-2); min-height: 1.4em; font-variant-numeric: tabular-nums; }
 .notes b { color: var(--ink); }
-.notes .warn { color: var(--warn); }
-.trace-wrap { height: 120px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.trace-wrap { height: 130px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .trace-wrap canvas { width: 100%; height: 100%; }
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }

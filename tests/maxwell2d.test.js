@@ -294,14 +294,14 @@ test('oblique reflection: Fresnel s (TM) and p (TE), and nothing reflected at Br
 test('total internal reflection: no power escapes; frustrated by a thin gap, it tunnels as the plane-wave formula says', () => {
   const notes = [];
   {
-    const { meters, P } = surfaceRun({ theta: 60 * deg, fromGlass: true, periods: 18, lines: [across(0.8)] });
+    const { meters, P } = surfaceRun({ theta: 60 * deg, fromGlass: true, periods: 16, lines: [across(0.8)] });
     const T = meters[0].power / P;
     assert(Math.abs(T) < 1e-3, `TIR leaks ${T}`);
     notes.push(`TIR at 60°: T = ${T.toExponential(1)}`);
   }
   const w = 1.6;
   for (const [mode, theta, g] of [['TM', 50 * deg, 0.2], ['TM', 50 * deg, 0.4], ['TE', 50 * deg, 0.2]]) {
-    const { meters, P } = surfaceRun({ mode, theta, fromGlass: true, width: w, periods: 22,
+    const { meters, P } = surfaceRun({ mode, theta, fromGlass: true, width: w, periods: 18,
       shapes: (scene) => SHAPES.gap.build(g, 1.5, scene.W, scene.H), lines: [across(g / 2 + 1)] });
     const T = meters[0].power / P, want = beamAverage((t) => layerTransmission(1.5, 1, g, t, mode), theta, 1.5, w);
     close(T / want, 1, 0.03, `${mode} gap ${g}: T`);

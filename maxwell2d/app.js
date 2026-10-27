@@ -1,7 +1,7 @@
 // Maxwell's equations in 2D: paint materials, place sources, watch the fields.
 // Units: c = 1, lengths in vacuum wavelengths of the source, time in its periods.
 
-import { Yee2D, PointSource, BeamSource, MovingSource, Probe, FluxLine, FlowField, PULSE, isOn } from './fdtd.js';
+import { Yee2D, PointSource, BeamSource, MovingSource, Probe, FluxLine, FlowField, PULSE, waveform } from './fdtd.js';
 import { Scene, SHAPES, MATERIALS, GUIDE_START, BEND_Y } from './scene.js';
 import { DIVERGING, SEQUENTIAL, materialImage, outlines, fieldImage, typical, tintOf } from './render.js';
 import * as theory from './theory.js';
@@ -36,7 +36,15 @@ const materialOf = (key) => {
 };
 
 let bgFn = null;
+const MAX_CELLS = 600000;
 function build() {
+  // A grid too big for a browser: fewer cells per wavelength.
+  const want = state.W * state.H * state.ppw ** 2;
+  if (want > MAX_CELLS) {
+    state.ppw = Math.max(6, Math.floor(Math.sqrt(MAX_CELLS / (state.W * state.H))));
+    gridSliders.ppw.value = state.ppw;
+    toast(`That grid would have ${fmt(want, 2)} cells: ${state.ppw} cells per λ instead.`);
+  }
   scene = new Scene({ W: state.W, H: state.H, ppw: state.ppw, pml: PML });
   state.W = scene.W; state.H = scene.H;
   scene.setBackground(bgFn);
@@ -305,7 +313,7 @@ function drawSource(ctx, X, Y, s) {
 const METER_NAMES = ['A', 'B'];
 function drawMeters(ctx, X, Y) {
   ctx.save();
-  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.font = MONO;
   state.meters.forEach((m, q) => {
     const x0 = X(m.x0), y0 = Y(m.y0), x1 = X(m.x1), y1 = Y(m.y1);
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 4; dashed(ctx, x0, y0, x1, y1);
@@ -319,7 +327,9 @@ function drawMeters(ctx, X, Y) {
       handles.push({ kind: 'meter', q, end, x: hx, y: hy });
     }
     const label = `${METER_NAMES[q]} ${meterText(q)}`;
-    const tw = ctx.measureText(label).width, lx = Math.min(viewCanvas.clientWidth - tw - 6, Math.max(4, mx + 12 * nx + (nx > 0 ? 0 : -tw))), ly = Math.max(14, my + 12 * ny + 4);
+    // The box is as wide as the longest reading could be, so the label never moves as it changes.
+    const tw = ctx.measureText('0'.repeat(meterTextWidth())).width + ctx.measureText('A ').width;
+    const lx = Math.min(viewCanvas.clientWidth - tw - 6, Math.max(4, mx + 12 * nx + (nx > 0 ? 0 : -tw))), ly = Math.max(14, my + 12 * ny + 4);
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(lx - 3, ly - 12, tw + 6, 16);
     ctx.fillStyle = '#7ef0c8'; ctx.fillText(label, lx, ly);
   });
@@ -327,19 +337,33 @@ function drawMeters(ctx, X, Y) {
 }
 
 /** A meter's reading: a percentage of the beam's power, or (for other sources) of meter A. */
+// The energy in one pulse, per unit of the beam's CW power: the integral of g(t)^2.
+const PULSE_ENERGY = (() => { let s = 0; for (let t = 0; t < 2 * PULSE.delay * PULSE.width; t += 1e-3) s += waveform('pulse', t) ** 2 * 1e-3; return s; })();
+
+/**
+ * A meter's reading: for a beam, the share of its power (CW: averaged over the last period) or
+ * of its pulse's energy (all that has crossed since the pulse was fired); for other sources,
+ * the power itself, and meter B as a share of meter A's.
+ */
 function meterValue(q) {
   const m = meters[q];
   if (!m || !m.filled) return NaN;
-  if (source && source.type === 'beam' && state.src.wave === 'cw') return m.power / source.power(state.mode);
+  if (source && source.type === 'beam') {
+    return state.src.wave === 'cw' ? m.power / source.power(state.mode) : m.energy / (source.power(state.mode) * PULSE_ENERGY);
+  }
   if (q > 0 && meters[0] && Math.abs(meters[0].power) > 0) return m.power / meters[0].power;
   return m.power;
 }
+const MONO = '600 12px ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
 function meterText(q) {
-  const v = meterValue(q);
-  if (!Number.isFinite(v)) return '';
-  if (source && source.type === 'beam' && state.src.wave === 'cw') return `${fmt(100 * v, 3)}%`;
-  if (q > 0) return `${fmt(100 * v, 3)}% of A`;
-  return fmt(v, 3);
+  const v = meterValue(q), beam = source && source.type === 'beam';
+  const suffix = beam ? (state.src.wave === 'cw' ? '%' : '% of the pulse') : q > 0 ? '% of A' : '';
+  if (!Number.isFinite(v)) return ' '.repeat(meterTextWidth());
+  return (beam || q > 0 ? num(100 * v, 2, 8) : num(v, 4, 10)) + suffix;
+}
+function meterTextWidth() {
+  const beam = source && source.type === 'beam';
+  return beam ? (state.src.wave === 'cw' ? 9 : 22) : 14;
 }
 
 function drawProbe(ctx, X, Y) {
@@ -450,62 +474,98 @@ function paraxialFocus(op, n) {
 const readouts = $('#readouts'), notes = $('#notes');
 let hover = null;
 
+/**
+ * A number in a fixed layout, so that read-outs don't jiggle as it changes: exactly `width`
+ * characters, right-aligned, with a place for the sign whether or not there is one, and
+ * `decimals` decimals; the exponent form only if it would not fit otherwise.
+ */
+function num(v, decimals, width) {
+  if (!Number.isFinite(v)) return '–'.padStart(width);
+  let body = Math.abs(v).toFixed(decimals);
+  const neg = v < 0 && /[1-9]/.test(body);
+  if (body.length + 1 > width) body = Math.abs(v).toExponential(Math.max(0, width - 7)).replace('e+', 'e');
+  return ((neg ? '−' : ' ') + body).padStart(width);
+}
+/** A slot of fixed width (in ch) for a value inside text. */
+const slot = (text, ch) => `<span class="slot" style="width:${ch}ch">${text}</span>`;
+
+// The read-out line is built once, with a slot of fixed width for every value.
+readouts.innerHTML = [
+  '<span class="ro"><span class="lab">t</span><span class="slot" style="width:9ch" data-k="t"></span><span class="unit">periods</span></span>',
+  '<span class="ro"><span class="lab">grid</span><span class="slot" style="width:9ch" data-k="grid"></span><span class="slot" style="width:4ch" data-k="ppw"></span><span class="unit">cells/λ</span></span>',
+  '<span class="ro"><span class="lab">x</span><span class="slot" style="width:7ch" data-k="x"></span><span class="lab">y</span><span class="slot" style="width:7ch" data-k="y"></span>'
+    + '<span class="slot left" style="width:10ch" data-k="mat"></span><span class="lab" data-k="fname"></span><span class="slot" style="width:9ch" data-k="f"></span></span>',
+  '<span class="ro"><span class="slot left muted" style="width:30ch" data-k="lim"></span></span>',
+].join('');
+const slots = Object.fromEntries([...readouts.querySelectorAll('[data-k]')].map((e) => [e.dataset.k, e]));
+const put = (k, text) => { if (slots[k].textContent !== text) slots[k].textContent = text; };
+const warnings = $('#warnings');
+
 function updateReadouts() {
-  const items = [`<span>t <b>${sim.t.toFixed(2)}</b> periods</span>`,
-    `<span>grid <b>${scene.cw}×${scene.ch}</b>, ${state.ppw} cells/λ</span>`];
-  if (limited) items.push('<span class="muted">(as fast as this computer goes)</span>');
+  put('t', num(sim.t, 2, 9));
+  put('grid', `${scene.cw}×${scene.ch}`.padStart(9)); put('ppw', String(state.ppw).padStart(4));
+  put('lim', limited ? '(as fast as this computer goes)' : '');
+  put('fname', fieldName());
   if (hover) {
     const m = scene.materialAt(hover.x, hover.y);
-    const v = sim.sample(hover.x, hover.y);
-    items.push(`<span>x <b>${hover.x.toFixed(2)}</b> y <b>${hover.y.toFixed(2)}</b> λ: ${m.pec ? 'metal' : m.absorb ? 'absorber' : `n <b>${fmt(m.n, 3)}</b>`}, ${fieldName()} <b>${fmt(v, 3)}</b></span>`);
-  }
-  if (warning) items.push(`<span class="warn">${warning}</span>`);
-  if (srcWarning) items.push(`<span class="warn">${srcWarning}</span>`);
-  readouts.innerHTML = items.join('');
-  notes.innerHTML = physicsNotes().join(' · ');
+    put('x', num(hover.x, 2, 7)); put('y', num(hover.y, 2, 7));
+    put('mat', m.pec ? 'metal' : m.absorb ? 'absorber' : `n ${m.n.toFixed(3)}`);
+    put('f', num(sim.sample(hover.x, hover.y), 4, 9));
+  } else for (const k of ['x', 'y', 'mat', 'f']) put(k, '');
+  const w = [warning, srcWarning].filter(Boolean).join(' ');
+  if (warnings.textContent !== w) warnings.textContent = w;
+  const html = physicsNotes().join(' · ');
+  if (notes.innerHTML !== html) notes.innerHTML = html;
 }
 
-const pct = (v) => (Math.abs(v) < 5e-5 ? '0' : fmt(100 * v, 3));
+// Values in the notes, each in a slot of fixed width.
+const pct = (v, ch = 6) => slot(`${(100 * v).toFixed(2)}%`, ch);
+const ang = (a, ch = 5) => slot(`${(a / deg).toFixed(1)}°`, ch);
+const val = (v, d = 3, ch = 5) => slot(v.toFixed(d), ch);
 function physicsNotes() {
   const out = [], src = state.src, pred = predictions(), pol = state.mode === 'TM' ? 'TM (s)' : 'TE (p)';
   if (pred.ray) {
     const { th1, th2, n1, n2 } = pred.ray;
-    out.push(`incidence <b>${(th1 / deg).toFixed(1)}°</b> from n = ${fmt(n1, 3)} into n = ${fmt(n2, 3)}`);
+    out.push(`incidence <b>${ang(th1)}</b> from n = ${val(n1, 2, 4)} into n = ${val(n2, 2, 4)}`);
     if (Number.isFinite(th2)) {
-      out.push(`Snell: refracted at <b>${(th2 / deg).toFixed(1)}°</b> (dashed)`);
+      out.push(`Snell: refracted at <b>${ang(th2)}</b> (dashed)`);
       const Rp = theory.reflectance(n1, n2, th1, state.mode);
-      let fres = `Fresnel, ${pol}: R = <b>${pct(Rp)}%</b> for a plane wave`;
-      if (src.type === 'beam') fres += `, ${pct(theory.beamAverage((t) => theory.reflectance(n1, n2, t, state.mode), th1, n1, src.width))}% for this beam (a spread of angles)`;
+      let fres = `Fresnel, ${pol}: R = <b>${pct(Rp)}</b> for a plane wave`;
+      if (src.type === 'beam') fres += `, ${pct(theory.beamAverage((t) => theory.reflectance(n1, n2, t, state.mode), th1, n1, src.width))} for this beam (a spread of angles)`;
       out.push(fres);
-      if (n2 > n1) out.push(`Brewster's angle ${(theory.brewsterAngle(n1, n2) / deg).toFixed(1)}°`);
+      if (n2 > n1) out.push(`Brewster's angle ${ang(theory.brewsterAngle(n1, n2))}`);
     } else {
-      out.push(`beyond the critical angle ${(theory.criticalAngle(n1, n2) / deg).toFixed(1)}°: total internal reflection; the evanescent field falls by 1/e in <b>${fmt(theory.evanescentDepth(n1, n2, th1), 2)} λ</b>`);
+      out.push(`beyond the critical angle ${ang(theory.criticalAngle(n1, n2))}: total internal reflection; the evanescent field falls by 1/e in <b>${val(theory.evanescentDepth(n1, n2, th1), 2, 4)} λ</b>`);
     }
   }
   if (state.shape === 'gap' && src.type === 'beam') {
     const n = state.n, th = Math.abs(90 - Math.abs(src.angle)) * deg;
     const T = theory.beamAverage((t) => theory.layerTransmission(n, 1, state.p, t, state.mode), th, n, src.width);
-    out.push(`incidence ${(th / deg).toFixed(1)}° (critical ${(theory.criticalAngle(n, 1) / deg).toFixed(1)}°); through a gap of ${fmt(state.p, 3)} λ the plane-wave theory, averaged over this beam's angles, gives T = <b>${fmt(100 * T, 3)}%</b>`);
+    out.push(`incidence ${ang(th)} (critical ${ang(theory.criticalAngle(n, 1))}); through a gap of ${val(state.p, 2, 4)} λ the plane-wave theory, averaged over this beam's angles, gives T = <b>${pct(T)}</b>`);
   }
   if (state.shape === 'metalguide') {
     const w = state.p;
     if (state.mode === 'TE') out.push('TE: the plates guide a wave with E across the gap at any width (no cutoff)');
     else if (w < 0.5) {
       const k = theory.metalGuideDecay(w);
-      out.push(`TM needs a width over λ/2: at ${fmt(w, 3)} λ the field decays as e<sup>−κx</sup>, κ = <b>${fmt(k, 3)}</b>/λ, by ${fmt(Math.exp(-4 * k), 2)} over the 4 λ guide`);
-    } else out.push(`width ${fmt(w, 3)} λ: over the cutoff λ/2, ${Math.floor(2 * w)} TM mode${Math.floor(2 * w) > 1 ? 's' : ''} can travel`);
+      out.push(`TM needs a width over λ/2: at ${val(w, 2, 4)} λ the field decays as e<sup>−κx</sup>, κ = <b>${val(k, 2, 5)}</b>/λ, by ${slot(Math.exp(-4 * k).toExponential(1), 7)} over the 4 λ guide`);
+    } else out.push(`width ${val(w, 2, 4)} λ: over the cutoff λ/2, ${slot(Math.floor(2 * w), 2)} TM mode${Math.floor(2 * w) > 1 ? 's' : ''} can travel`);
   }
-  if ((state.shape === 'crystal' || state.shape === 'pcbend') && src) out.push(`lattice a = ${fmt(state.p, 3)} λ: a/λ = <b>${fmt(state.p, 3)}</b> (rods of n = ${fmt(state.n, 3)}, radius a/5)`);
-  if (pred.cone) out.push(`nβ = ${fmt(pred.cone.n * src.beta, 3)} > 1: Cherenkov cone at <b>θ = ${(theory.cherenkovAngle(pred.cone.n, src.beta) / deg).toFixed(1)}°</b> to the motion, cos θ = 1/nβ (dashed)`);
+  if ((state.shape === 'crystal' || state.shape === 'pcbend') && src) out.push(`lattice a = ${val(state.p)} λ: a/λ = <b>${val(state.p)}</b> (rods of n = ${val(state.n, 2, 4)}, radius a/5)`);
+  if (pred.cone) out.push(`nβ = ${val(pred.cone.n * src.beta)} > 1: Cherenkov cone at <b>θ = ${ang(theory.cherenkovAngle(pred.cone.n, src.beta))}</b> to the motion, cos θ = 1/nβ (dashed)`);
   else if (src.type === 'moving' && source) {
     const [x, y] = source.position(sim.t), n = scene.materialAt(x, y).n;
-    out.push(`nβ = ${fmt(n * src.beta, 3)} < 1: slower than light in this medium, no cone`);
+    out.push(`nβ = ${val(n * src.beta)} < 1: slower than light in this medium, no cone`);
   }
-  if (pred.fringes) out.push(`bright fringes where sin θ = mλ/d: θ = ${pred.fringes.angles.filter((a) => a > 0).map((a) => (a / deg).toFixed(1) + '°').join(', ')} (dashed)`);
-  if (pred.focus) out.push(`paraxial focus (+) ${fmt(pred.focus[0] - scene.shapeOps[0].x, 3)} λ from the lens's centre`);
+  if (pred.fringes) out.push(`bright fringes where sin θ = mλ/d: θ = ${pred.fringes.angles.filter((a) => a > 0).map((a) => ang(a)).join(', ')} (dashed)`);
+  if (pred.focus) out.push(`paraxial focus (+) ${val(pred.focus[0] - scene.shapeOps[0].x, 2, 5)} λ from the lens's centre`);
+  if (bgLines) {
+    const first = Math.ceil(bgLines.lo / bgLines.step + 1e-9) * bgLines.step;
+    out.push(`typed index n(x, y) from ${val(bgLines.lo)} to ${val(bgLines.hi)} in the box (dotted: n = ${val(first)}, ${val(first + bgLines.step)}, …)`);
+  }
   if (state.shape === 'guide' || state.shape === 'bend') {
     const w = state.shape === 'guide' ? state.p : 0.5;
-    out.push(`core ${fmt(w, 3)} λ of n = ${fmt(state.n, 3)}: ${theory.slabModeCount(state.n, 1, w)} guided mode${theory.slabModeCount(state.n, 1, w) > 1 ? 's' : ''} per polarisation`);
+    out.push(`core ${val(w, 2, 4)} λ of n = ${val(state.n, 2, 4)}: ${slot(theory.slabModeCount(state.n, 1, w), 2)} guided mode${theory.slabModeCount(state.n, 1, w) > 1 ? 's' : ''} per polarisation`);
   }
   return out;
 }
@@ -521,7 +581,7 @@ function drawTrace() {
   ctx.clearRect(0, 0, width, height);
   const spp = sim.stepsPerPeriod, span = 30 * spp;
   const { t, v } = probe.last(span);
-  const f = new Frame(ctx, width, height, { left: 44, right: 10, top: 8, bottom: 26 });
+  const f = new Frame(ctx, width, height, { left: 44, right: 14, top: 22, bottom: 34 });
   const t1 = sim.t, t0 = Math.max(0, t1 - 30);
   let top = 1e-12;
   for (let q = 0; q < v.length; q++) top = Math.max(top, Math.abs(v[q]));
@@ -555,11 +615,11 @@ function drawTrace() {
     }
   }
   ctx.restore();
-  ctx.fillStyle = c.ink2; ctx.font = '12px system-ui, sans-serif';
+  ctx.fillStyle = c.ink2; ctx.font = MONO.replace('600 ', '');
   const label = !lastFit ? `${fieldName()} at the probe, the last 30 periods`
-    : lastFit.bound ? `ringing at f = ${fmt(lastFit.f, 4)}, hardly decaying: Q > ${fmt(lastFit.bound, 2)}`
-      : `ringing at f = ${fmt(lastFit.f, 4)}, Q = ${fmt(lastFit.Q, 3)} (the energy falls by 1/e in Q/2π = ${fmt(lastFit.Q / (2 * Math.PI), 3)} periods)`;
-  ctx.fillText(label, f.left + 6, f.top + 13);
+    : lastFit.bound ? `ringing at f =${num(lastFit.f, 4, 7)}, hardly decaying: Q >${num(lastFit.bound, 0, 8)}`
+      : `ringing at f =${num(lastFit.f, 4, 7)}, Q =${num(lastFit.Q, 1, 8)}: the energy falls by 1/e in Q/2π =${num(lastFit.Q / (2 * Math.PI), 1, 7)} periods`;
+  ctx.fillText(label, f.left, f.top - 7);
 }
 
 // --------------------------------------------------------------------------- running
