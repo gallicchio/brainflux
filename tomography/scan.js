@@ -36,11 +36,13 @@ export class Scanner {
     this.inside = circleRows(N, 1);
     this.truth = new Float64Array(N * N);   // the object as pixels
     this.shapes = null;                       // analytic shapes, or null for a picture
+    this.metal = [];                          // the shapes that are metal
     this.raster = null;
     this.bp = new Float64Array(N * N);
     this.fbp = new Float64Array(N * N);
     this.opts = { ...DEFAULTS };
     this.count = 0;                           // angles measured so far
+    this.pass = 0;                            // turns of the scanner: fresh photon noise each turn
     this.allocate();
   }
 
@@ -54,6 +56,7 @@ export class Scanner {
     const { nA, M } = this.opts, L = padLength(M);
     this.L = L;
     this.ideal = new Float64Array(nA * M);    // noiseless line integrals
+    this.idealQ = new Float64Array(nA * M);   // the part of them through metal (for beam hardening)
     this.meas = new Float64Array(nA * M);     // what the scanner reports (the sinogram)
     this.filt = new Float64Array(nA * M);     // filtered projections
     this.spec = { re: new Float32Array(nA * L), im: new Float32Array(nA * L) };
@@ -74,11 +77,12 @@ export class Scanner {
   }
 
   /**
-   * Change settings.  Returns what must happen next: 'rescan' (the geometry or the measurement
-   * changed: the rows are out of date and have been forgotten), 'refilter' (only the filter:
-   * done here, keeping the measurements), or '' (nothing changed).
+   * Change settings.  Returns what changed: 'rescan' (the geometry: the rows are out of date
+   * and have been forgotten), 'remeasure' (the photons or the beam), 'refilter' (the filter),
+   * or ''.  With work = true the stored rows are then measured or filtered again here; with
+   * work = false that is left to the caller (who will measure everything afresh).
    */
-  configure(changes) {
+  configure(changes, work = true) {
     const o = this.opts, old = { ...o };
     Object.assign(o, changes);
     o.nA = Math.max(1, Math.round(o.nA));
@@ -86,45 +90,57 @@ export class Scanner {
     o.range = Math.min(Math.PI, Math.max(1e-3, o.range));
     if (o.nA !== old.nA || o.M !== old.M) { this.allocate(); return 'rescan'; }
     if (o.range !== old.range || o.aperture !== old.aperture) { this.reset(); return 'rescan'; }
+    const filterChanged = o.filter !== old.filter || o.cutoff !== old.cutoff;
+    if (filterChanged) this.H = filterResponse(o.filter, o.M, this.ds, o.cutoff);
     if (o.noise !== old.noise || o.poly !== old.poly || (o.noise && o.I0 !== old.I0) || o.seed !== old.seed) {
-      this.remeasure();
-      return 'remeasured';
+      if (work) this.remeasure();
+      return 'remeasure';
     }
-    if (o.filter !== old.filter || o.cutoff !== old.cutoff) { this.refilter(); return 'refilter'; }
+    if (filterChanged) { if (work) this.refilter(); return 'refilter'; }
     return '';
   }
 
-  /** The object: analytic shapes (exact projections). */
-  setShapes(shapes) {
+  /** The object: analytic shapes (exact projections); raster: also make the picture of it. */
+  setShapes(shapes, raster = true) {
     this.shapes = shapes;
+    this.metal = shapes.filter((sh) => sh.metal);
     this.raster = null;
-    rasterizeShapes(shapes, this.N, 4, this.truth);
+    if (raster) rasterizeShapes(shapes, this.N, 4, this.truth);
   }
 
   /** The object: a picture, N x N, row by row (projected numerically). */
   setPicture(f) {
     this.shapes = null;
+    this.metal = [];
     if (f !== this.truth) this.truth.set(f);
     this.raster = prepareRaster(this.truth, this.N);
   }
 
-  /** Noiseless line integrals at angle theta into out (length M). */
-  project(theta, out) {
+  /** Noiseless line integrals at angle theta into out (length M); their part through metal
+   *  into outQ, if given. */
+  project(theta, out, outQ = null) {
     const { M, aperture } = this.opts;
     out.fill(0);
     if (this.shapes) projectShapes(this.shapes, theta, M, this.ds, aperture, out);
     else projectRaster(this.raster, theta, M, this.ds, aperture, out);
+    if (outQ) { outQ.fill(0); if (this.metal.length) projectShapes(this.metal, theta, M, this.ds, aperture, outQ); }
     return out;
   }
 
-  rowSeed(j) { return (Math.imul(this.opts.seed, 0x9E3779B1) ^ Math.imul(j + 1, 0x85EBCA6B)) >>> 0; }
+  // What the scanner reports for row j's line integrals (into out).
+  measureIdeal(j, out) {
+    const { M } = this.opts, o = this.opts;
+    const pQ = this.metal.length ? this.idealQ.subarray(j * M, (j + 1) * M) : null;
+    return measureRow(this.ideal.subarray(j * M, (j + 1) * M), M, out, { noise: o.noise, I0: o.I0, poly: o.poly, seed: this.rowSeed(j) }, pQ);
+  }
+
+  rowSeed(j) { return (Math.imul(this.opts.seed + 7919 * this.pass, 0x9E3779B1) ^ Math.imul(j + 1, 0x85EBCA6B)) >>> 0; }
 
   /** Measure angle j: its row of the sinogram, its filtered row, its slice of k-space. */
   measure(j) {
-    const { M } = this.opts, o = this.opts, L = this.L, theta = this.angle(j);
-    const ideal = this.ideal.subarray(j * M, (j + 1) * M);
-    this.project(theta, ideal);
-    const m = measureRow(ideal, M, this.rowA, { noise: o.noise, I0: o.I0, poly: o.poly, seed: this.rowSeed(j) });
+    const { M } = this.opts, L = this.L, theta = this.angle(j);
+    this.project(theta, this.ideal.subarray(j * M, (j + 1) * M), this.idealQ.subarray(j * M, (j + 1) * M));
+    const m = this.measureIdeal(j, this.rowA);
     const q = filterRow(m, M, this.H, this.rowB, this.work);
     const oldM = this.meas.subarray(j * M, (j + 1) * M), oldQ = this.filt.subarray(j * M, (j + 1) * M);
     // Back-project the change: the new row, less the old one if this angle was measured before.
@@ -176,16 +192,38 @@ export class Scanner {
 
   /** New measurement settings (noise, beam): measure the stored ideal rows again. */
   remeasure() {
-    const { M } = this.opts, o = this.opts, L = this.L;
+    const { M } = this.opts, L = this.L;
     for (let j = 0; j < this.nA; j++) {
       if (!this.measured[j]) continue;
-      const m = this.meas.subarray(j * M, (j + 1) * M);
-      measureRow(this.ideal.subarray(j * M, (j + 1) * M), M, m, { noise: o.noise, I0: o.I0, poly: o.poly, seed: this.rowSeed(j) });
+      const m = this.measureIdeal(j, this.meas.subarray(j * M, (j + 1) * M));
       filterRow(m, M, this.H, this.filt.subarray(j * M, (j + 1) * M), this.work);
       projectionSpectrum(m, M, this.ds, this.specRe, this.specIm);
       this.spec.re.set(this.specRe, j * L); this.spec.im.set(this.specIm, j * L);
     }
     this.rebuild();
+  }
+
+  /**
+   * The rows and pictures of a block of angles j0 <= j < j1 measured elsewhere (a worker, by
+   * another Scanner with the same settings, object and pass): copied in, and the pictures added.
+   */
+  mergeBlock(b) {
+    const M = this.M, L = this.L;
+    this.ideal.set(b.ideal, b.j0 * M); this.idealQ.set(b.idealQ, b.j0 * M); this.meas.set(b.meas, b.j0 * M); this.filt.set(b.filt, b.j0 * M);
+    this.spec.re.set(b.specRe, b.j0 * L); this.spec.im.set(b.specIm, b.j0 * L);
+    for (let i = 0; i < this.bp.length; i++) { this.bp[i] += b.bp[i]; this.fbp[i] += b.fbp[i]; }
+    for (let j = b.j0; j < b.j1; j++) if (!this.measured[j]) { this.measured[j] = 1; this.count++; }
+  }
+
+  /** Measure angles j0 <= j < j1 from nothing, and package them for mergeBlock. */
+  measureBlock(j0, j1) {
+    this.reset();
+    for (let j = j0; j < j1; j++) this.measure(j);
+    const M = this.M, L = this.L;
+    return {
+      j0, j1, ideal: this.ideal.slice(j0 * M, j1 * M), idealQ: this.idealQ.slice(j0 * M, j1 * M), meas: this.meas.slice(j0 * M, j1 * M), filt: this.filt.slice(j0 * M, j1 * M),
+      specRe: this.spec.re.slice(j0 * L, j1 * L), specIm: this.spec.im.slice(j0 * L, j1 * L), bp: this.bp.slice(), fbp: this.fbp.slice(),
+    };
   }
 
   /** The direct Fourier (gridding) reconstruction from the measured slices. */

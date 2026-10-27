@@ -2,7 +2,7 @@ import { test, assert, close } from './harness.js';
 import {
   sheppLogan, disk, blob, shapesMass, projectShapes, rasterizeShapes, prepareRaster, projectRaster,
   filterResponse, padLength, measureRow, transmission, MU, projectionSpectrum, objectSpectrum, erf, TWO_PI,
-  poisson, random,
+  poisson, random, waterCorrect,
 } from '../tomography/radon.js';
 import { Scanner } from '../tomography/scan.js';
 import { besselJ } from '../lib/bessel.js';
@@ -283,11 +283,31 @@ test('photon counting: Poisson counts, and the noise of -ln(n / I0)', () => {
     close(mean, 1.5, 5 * Math.sqrt(want / M) + 1 / (n * MU), `mean at I0 = ${I0}`);
     close(varr / want, 1, 0.04, `variance at I0 = ${I0}`);
   }
-  // Beam hardening: the measured value falls short only on long paths.
-  close(-Math.log(transmission(0.01, true)) / MU, 0.01, 2e-5, 'short path');
-  const long = -Math.log(transmission(5, true)) / MU;
-  assert(long < 0.8 * 5 && long > (2 / 3) * 5, `long path ${long}`);
-  return `through 30 cm of water: ${(-Math.log(transmission(1.5, true)) / MU).toFixed(3)} instead of 1.5 with the two-energy beam`;
+  return `variance of -ln(n / I0) / mu within 4% of 1 / (n mu^2) at I0 = 1e4 and 1e6`;
+});
+
+test('beam hardening: the water correction is exact for water, and short of the truth through metal', () => {
+  // Water alone: what the two-energy beam gives, corrected for water, is the path itself.
+  let worst = 0;
+  for (const p of [0.001, 0.1, 1, 2.5, 5]) worst = Math.max(worst, Math.abs(waterCorrect(-Math.log(transmission(p, 0, true)) / MU) - p));
+  assert(worst < 1e-12, `water: ${worst}`);
+  // Uncorrected, a long path of water looks shorter (the soft photons are used up first).
+  const raw = -Math.log(transmission(1.5, 0, true)) / MU;
+  assert(raw < 1.5 && raw > 0.85 * 1.5, `raw ${raw}`);
+  // Through metal: the hard photons get through relatively more easily than water would let
+  // them, so the corrected value falls short, the more so the more metal.
+  const out = [];
+  let last = 0;
+  for (const pQ of [0.5, 1, 2]) {
+    const p = 1.5 + pQ, got = waterCorrect(-Math.log(transmission(p, pQ, true)) / MU);
+    assert(got < p && p - got > last, `metal ${pQ}: ${got} of ${p}`);
+    last = p - got;
+    out.push(`${p} -> ${got.toFixed(3)}`);
+  }
+  // measureRow without noise does the same.
+  const row = measureRow(Float64Array.of(1.5, 3.5), 2, new Float64Array(2), { noise: false, I0: 1e5, poly: true }, Float64Array.of(0, 2));
+  close(row[0], 1.5, 1e-12, 'water row'); close(row[1], waterCorrect(-Math.log(transmission(3.5, 2, true)) / MU), 1e-12, 'metal row');
+  return `water exact to ${worst.toExponential(0)}; uncorrected 1.5 of water reads ${raw.toFixed(3)}; with metal (1.5 of water plus metal) ${out.join(', ')}`;
 });
 
 test('noise in the picture falls as 1/sqrt(I0); the Hann window cuts it', () => {

@@ -199,13 +199,14 @@ export function prepareRaster(f, N) {
   return { N, P, rows, cols };
 }
 
-// The whole steps t = t0, t0 + 1, ... for which lo <= u0 + t du < hi, within [0, n - 1].
-function stepRange(u0, du, lo, hi, n) {
-  let a = 0, b = n - 1;
+// The whole steps t in [a, b] for which lo <= u0 + t du < hi: narrows the range [a, b]
+// (returned in RANGE, to save allocating an array for every ray).
+const RANGE = [0, 0];
+function stepRange(u0, du, lo, hi, a, b) {
   if (du > 1e-12) { a = Math.max(a, Math.ceil((lo - u0) / du)); b = Math.min(b, Math.floor((hi - u0) / du - 1e-9)); }
   else if (du < -1e-12) { a = Math.max(a, Math.ceil((hi - u0) / du + 1e-9)); b = Math.min(b, Math.floor((lo - u0) / du)); }
-  else if (!(u0 >= lo && u0 < hi)) return [1, 0];
-  return [a, b];
+  else if (!(u0 >= lo && u0 < hi)) b = a - 1;
+  RANGE[0] = a; RANGE[1] = b;
 }
 
 /**
@@ -232,7 +233,12 @@ export function projectRaster(raster, theta, M, ds, aperture, out) {
       // Along rows: on row j the ray is at column u_j = u0 + j sn/c (from x cos + y sin = s).
       // Along columns: on column i it is at row v_i = v0 + i c/sn.
       const u0 = alongRows ? s / (c * h) - (N / 2) * step + N / 2 : N / 2 - s / (sn * h) - (N / 2) * step;
-      const [a, b] = stepRange(u0, step, -0.5, N - 0.5, N);
+      // Only the part of the ray inside the scan circle (the picture is zero outside it):
+      // its chord, |tau| <= sqrt(1 - s^2), spans these rows (or columns), with a margin.
+      const half = Math.sqrt(1 - s * s), mid = alongRows ? N / 2 - (s * sn) / h : N / 2 + (s * c) / h;
+      const reach = (Math.abs(alongRows ? c : sn) * half) / h + 1;
+      stepRange(u0, step, -0.5, N - 0.5, Math.max(0, Math.floor(mid - reach)), Math.min(N - 1, Math.ceil(mid + reach)));
+      const a = RANGE[0], b = RANGE[1];
       let acc = 0;
       for (let t = a; t <= b; t++) {
         const u = u0 + t * step, i0 = Math.floor(u), f = u - i0, o = (t + 1) * P + i0 + 1, v0 = img[o];
@@ -360,13 +366,17 @@ export const filterWork = (M) => ({ re: new Float64Array(padLength(M)), im: new 
 // unit (10 cm) attenuates by exp(-2): MU = 2.  The detector counts n photons out of I0 sent,
 // Poisson distributed, and the scanner reports p = -ln(n / I0) / MU.
 //
-// The polychromatic beam (beam hardening): half the photons at an energy where every material
-// absorbs 4/3 as strongly, half where it absorbs 2/3 as strongly.  Then -ln(n / I0) / MU
-// falls below p for long paths (the soft photons are used up first); no correction is made.
-// (Real materials differ in how their absorption changes with energy; this keeps one ratio.)
+// The polychromatic beam (beam hardening): half the photons soft, half hard.  Water-like matter
+// (absorbing mostly by Compton scattering, which hardly depends on energy) absorbs the soft ones
+// 1.35 times as strongly as the hard ones; metal (photoelectric absorption, roughly 1/E^3) 4 times.
+// Both are scaled so that their mean is the attenuation the object's values give.  The scanner
+// makes the usual correction for water: it turns -ln(n / I0) into the length of water that would
+// have given it.  That is exact for water-like objects, and wrong for rays through metal, which
+// let relatively more hard photons through than water would: they look less absorbing than
+// they are.  An object's metal is the part of its shapes marked metal: true.
 
 export const MU = 2;
-const HARD = [[0.5, 4 / 3], [0.5, 2 / 3]];
+const SOFT_HARD = [0.5, 0.5], WATER_G = [1.15, 0.85], METAL_G = [1.6, 0.4];
 
 /** A small fast seeded random number generator (mulberry32): uniform in [0, 1). */
 export function random(seed) {
@@ -412,28 +422,45 @@ export function poisson(lambda, rand) {
   }
 }
 
-/** The expected transmitted fraction for a line integral p. */
-export function transmission(p, poly) {
+/** The expected transmitted fraction for a line integral p, of which pQ is through metal. */
+export function transmission(p, pQ, poly) {
   if (!poly) return Math.exp(-MU * p);
   let t = 0;
-  for (const [w, g] of HARD) t += w * Math.exp(-g * MU * p);
+  for (let e = 0; e < 2; e++) t += SOFT_HARD[e] * Math.exp(-MU * (WATER_G[e] * (p - pQ) + METAL_G[e] * pQ));
   return t;
 }
 
+/** The scanner's water correction: the water path p with -ln(T_water(p)) / MU = y. */
+export function waterCorrect(y) {
+  // -ln T / MU is increasing and concave in p, and below p: Newton's method from p = y climbs
+  // monotonically to the root.
+  let p = y;
+  for (let it = 0; it < 40; it++) {
+    const a = SOFT_HARD[0] * Math.exp(-MU * WATER_G[0] * p), b = SOFT_HARD[1] * Math.exp(-MU * WATER_G[1] * p);
+    const f = -Math.log(a + b) / MU - y, df = (WATER_G[0] * a + WATER_G[1] * b) / (a + b);
+    const step = f / df;
+    p -= step;
+    if (Math.abs(step) < 1e-13 * (1 + p)) break;
+  }
+  return p;
+}
+
 /**
- * What the scanner reports for the exact line integrals p (row of M): with noise, Poisson
- * counts of I0 photons per bin (a count of 0 is read as half a photon: a photon-starved ray);
- * with the polychromatic beam, the beam-hardened value.  opts: { noise, I0, poly, seed }.
+ * What the scanner reports for the exact line integrals p (row of M; pQ the part through metal,
+ * or null): with noise, Poisson counts of I0 photons per bin (a count of 0 is read as half a
+ * photon: a photon-starved ray); with the polychromatic beam, the beam-hardened value after the
+ * water correction.  opts: { noise, I0, poly, seed }.
  */
-export function measureRow(p, M, out, opts) {
+export function measureRow(p, M, out, opts, pQ = null) {
   const { noise, I0, poly } = opts;
   if (!noise && !poly) { for (let k = 0; k < M; k++) out[k] = p[k]; return out; }
   const rand = noise ? random(opts.seed) : null;
   for (let k = 0; k < M; k++) {
-    const T = transmission(p[k], poly);
+    const T = transmission(p[k], pQ ? pQ[k] : 0, poly);
     let n = I0 * T;
     if (noise) n = Math.max(0.5, poisson(n, rand));
-    out[k] = -Math.log(n / I0) / MU;
+    const y = -Math.log(n / I0) / MU;
+    out[k] = poly ? waterCorrect(y) : y;
   }
   return out;
 }
