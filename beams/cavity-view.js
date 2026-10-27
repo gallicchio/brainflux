@@ -111,6 +111,13 @@ export function createCavity(app) {
     }
     // Rays: the last passes, fading.
     if (state.rays) {
+      // Where a ray at height x meets a mirror as drawn (an arc of radius R in the stretched
+      // picture); the ray matrices treat the mirrors as thin, at z = 0 and L.
+      const onMirror = (z, x) => {
+        const R = z === 0 ? -state.R1 : state.R2, X = x * E;
+        if (!Number.isFinite(R) || Math.abs(X) >= Math.abs(R)) return z;
+        return z - Math.sign(R) * (Math.abs(R) - Math.sqrt(R * R - X * X));
+      };
       for (const ray of rays) {
         const n = ray.hits.length, first = ray.pass - (n - 1);
         ctx.lineWidth = 1.4;
@@ -118,7 +125,10 @@ export function createCavity(app) {
           const z0 = (first + k - 1) % 2 === 0 ? 0 : L, z1 = L - z0;
           ctx.globalAlpha = 0.15 + 0.85 * (k / (n - 1)) ** 2;
           ctx.strokeStyle = ray.color;
-          ctx.beginPath(); ctx.moveTo(F.X(z0), yc - ray.hits[k - 1] * sy); ctx.lineTo(F.X(z1), yc - ray.hits[k] * sy); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(F.X(onMirror(z0, ray.hits[k - 1])), yc - ray.hits[k - 1] * sy);
+          ctx.lineTo(F.X(onMirror(z1, ray.hits[k])), yc - ray.hits[k] * sy);
+          ctx.stroke();
         }
         ctx.globalAlpha = 1;
       }
@@ -353,7 +363,8 @@ export function createCavity(app) {
     onInput: (v) => { state.R1 = v; changed(true); } });
   const R2s = signedSlider({ label: 'R₂ (mm)', min: 10, max: 10000, value: state.R2, signs, title: 'Radius of curvature of mirror 2',
     onInput: (v) => { state.R2 = v; changed(true); } });
-  box.append(Ls, el('div', { class: 'small muted' }, 'Mirror 1'), R1s, el('div', { class: 'small muted' }, 'Mirror 2'), R2s);
+  const lamNote = el('div', { class: 'small muted' });
+  box.append(Ls, el('div', { class: 'small muted' }, 'Mirror 1'), R1s, el('div', { class: 'small muted' }, 'Mirror 2'), R2s, lamNote);
   const presets = {
     'near planar': [250, 2500, 2500], confocal: [250, 250, 250], 'near concentric': [250, 130, 130],
     hemispherical: [250, Infinity, 270], unstable: [250, 100, 100], 'unequal mirrors': [250, 300, 1000],
@@ -366,7 +377,10 @@ export function createCavity(app) {
   const raysToggle = toggle('Show rays', state.rays, (on) => { state.rays = on; draw(); app.animate(); app.hashSoon(); }, 'Rays bouncing between the mirrors');
   $('#ray-box').append(playButton, el('button', { type: 'button', title: 'Start the rays again', onclick: () => { launch(); draw(); app.animate(); } }, 'New rays'), raysToggle);
 
-  function syncControls() { Ls.value = state.L; R1s.value = state.R1; R2s.value = state.R2; raysToggle.on = state.rays; playButton.textContent = state.play ? 'Pause' : 'Play'; }
+  function syncControls() {
+    Ls.value = state.L; R1s.value = state.R1; R2s.value = state.R2; raysToggle.on = state.rays; playButton.textContent = state.play ? 'Pause' : 'Play';
+    lamNote.textContent = `Light of λ = ${fmt(app.state.bench.lambda, 4)} nm (set on the Bench).  Concave means curved towards the other mirror.`;
+  }
 
   function changed(relaunch) {
     if (relaunch) launch();

@@ -35,9 +35,10 @@ export function createBench(app) {
 
   // ------------------------------------------------------------------- the physics
 
+  let version = 0;            // bumped whenever the beam changes, so the field is recomputed
   function retrace() {
     trace = traceBench({ lambda: lam(), w0: state.w0, z0: state.z0 }, state.elements, state.vz0, state.vz1);
-    field = null;
+    version++;
   }
 
   /** The cavity to match, placed with its first mirror at state.tz: { mode, L, R1, R2 } or null. */
@@ -72,22 +73,28 @@ export function createBench(app) {
   function computeField() {
     const pw = Math.max(2, Math.round(frame.w)), ph = Math.max(2, Math.round(frame.h));
     const mode = state.field;
-    const key = [pw, ph, mode, state.m, state.E, state.vz0, state.vz1, state.bright].join();
+    const key = [pw, ph, mode, state.m, state.E, state.vz0, state.vz1, state.bright, version].join();
     if (field && field.key === key) return field;
     if (!field || field.pw !== pw || field.ph !== ph) {
       const off = document.createElement('canvas'); off.width = pw; off.height = ph;
-      field = { pw, ph, off, img: new ImageData(pw, ph), re: new Float32Array(pw * ph), im: new Float32Array(pw * ph), amp: new Float32Array(pw * ph), cref: new Float64Array(pw) };
+      const col = () => new Float64Array(pw);
+      field = {
+        pw, ph, off, img: new ImageData(pw, ph), re: new Float32Array(pw * ph), im: new Float32Array(pw * ph), amp: new Float32Array(pw * ph), cref: col(),
+        // Per column: the recurrence's state and constants (see below).
+        FR: col(), FI: col(), RR: col(), RI: col(), QR: col(), QI: col(), CR: col(), CI: col(), G: col(), S: col(), SIG: col(), A0: col(), INVW: col(), KMAX: new Int32Array(pw),
+      };
     }
     field.key = key; field.mode = mode;
     if (mode === 'off') return field;
-    const { re, im, amp, cref } = field;
+    const { re, im, amp, cref, FR, FI, RR, RI, QR, QI, CR, CI, G, S, SIG, A0, INVW, KMAX } = field;
     const k0 = (2 * Math.PI) / lam(), E = state.E, kd = k0 / (E * E), m = state.m;
     const sx = pw / (state.vz1 - state.vz0), sy = E * sx;
     let norm = 1;
     for (let k = 1; k <= m; k++) norm *= 2 * k;
     norm = 1 / Math.sqrt(norm);
-    const half = ph / 2;
-    let seg = null, aMin = Infinity, aMax = 0;
+    // Rows come in pairs at x = +-(k + e) dx, dx = 1/sy, e = 1/2 (even ph) or 0 (odd).
+    const half = ph / 2, e = ph % 2 ? 0 : 0.5, dx = 1 / sy, d2 = dx * dx, parity = m % 2 ? -1 : 1;
+    let seg = null, aMin = Infinity, aMax = 0, kTop = 0;
     for (let i = 0; i < pw; i++) {
       const z = state.vz0 + (i + 0.5) / sx;
       if (!seg || z >= seg.zb || z < seg.za) seg = segmentAt(trace, z);
@@ -98,18 +105,50 @@ export function createBench(app) {
       aMin = Math.min(aMin, peak); aMax = Math.max(aMax, peak);
       cref[i] = kd * b.opl;
       const colPhase = (mode === 'real' ? kd * b.opl : 0) - (m + 1) * b.gouy;
-      // Crests closer than a few pixels can't be drawn: fade them to their average, zero.
-      const gz = mode === 'real' ? (kd * b.n) / sx : 0;
-      for (let j = 0; j < ph; j++) {
-        const x = (half - (j + 0.5)) / sy, o = j * pw + i;
-        const g = (x * x) / w2;
-        if (g > 14 + m) { re[o] = 0; im[o] = 0; amp[o] = 0; continue; }
-        const a = a0 * hermite(m, Math.SQRT2 * x / b.w) * Math.exp(-g);
-        amp[o] = a * a;
-        const gx = (2 * Math.abs(c2 * x)) / sy;
-        const att = Math.exp(-(gz * gz + gx * gx) / 5);
-        const p = c2 * x * x + colPhase;
-        re[o] = a * att * Math.cos(p); im[o] = a * att * Math.sin(p);
+      // Crests closer than a few pixels can't be drawn: fade them to their average, zero.  The
+      // fading across x, exp(-(2 c2 x / sy)^2 / 5), is itself a Gaussian in x.
+      const gz = mode === 'real' ? (kd * b.n) / sx : 0, beta = (4 * c2 * c2) / (5 * sy * sy);
+      const A = a0 * Math.exp(-(gz * gz) / 5);
+      CR[i] = A * Math.cos(colPhase); CI[i] = A * Math.sin(colPhase);
+      // Along the column the field is exp(-alpha x^2), alpha = 1/w^2 + beta - i c2: step from
+      // the axis outwards by complex multiplication, f(k+1) = f(k) r(k), r(k+1) = r(k) rho.
+      const ar = 1 / w2 + beta;
+      let s2 = e * e * d2, mag = Math.exp(-ar * s2);
+      FR[i] = mag * Math.cos(c2 * s2); FI[i] = mag * Math.sin(c2 * s2);
+      s2 = (2 * e + 1) * d2; mag = Math.exp(-ar * s2);
+      RR[i] = mag * Math.cos(c2 * s2); RI[i] = mag * Math.sin(c2 * s2);
+      s2 = 2 * d2; mag = Math.exp(-ar * s2);
+      QR[i] = mag * Math.cos(c2 * s2); QI[i] = mag * Math.sin(c2 * s2);
+      // The real Gaussian alone (for the intensity), the same way.
+      G[i] = Math.exp(-(e * e * d2) / w2); S[i] = Math.exp(-((2 * e + 1) * d2) / w2); SIG[i] = Math.exp(-(2 * d2) / w2);
+      A0[i] = a0; INVW[i] = Math.SQRT2 / b.w;
+      KMAX[i] = Math.min(Math.ceil(half) + 1, Math.ceil(Math.sqrt(14 + m) * b.w * sy));
+      kTop = Math.max(kTop, KMAX[i]);
+    }
+    // Then row by row outwards from the axis, every column at once (memory in order).
+    const wantRe = mode !== 'intensity', wantAmp = mode === 'intensity';
+    if (wantRe) { re.fill(0); im.fill(0); } else amp.fill(0);
+    for (let k = 0; k < kTop; k++) {
+      const jU = Math.round(half - 0.5 - (k + e)), jD = Math.round(half - 0.5 + (k + e));
+      const oU = jU * pw, oD = jD * pw, up = jU >= 0, down = jD < ph, x = (k + e) * dx;
+      for (let i = 0; i < pw; i++) {
+        if (k >= KMAX[i]) continue;
+        const h = m ? hermite(m, x * INVW[i]) : 1;
+        let fr = FR[i], fi = FI[i];
+        if (wantRe) {
+          const vr = h * (fr * CR[i] - fi * CI[i]), vi = h * (fr * CI[i] + fi * CR[i]);
+          if (up) { re[oU + i] = vr; im[oU + i] = vi; }
+          if (down) { re[oD + i] = parity * vr; im[oD + i] = parity * vi; }
+        }
+        if (wantAmp) {
+          const a = A0[i] * h * G[i], I = a * a;
+          if (up) amp[oU + i] = I;
+          if (down) amp[oD + i] = I;
+          G[i] *= S[i]; S[i] *= SIG[i];
+        }
+        const rr = RR[i], ri = RI[i];
+        FR[i] = fr * rr - fi * ri; FI[i] = fr * ri + fi * rr;
+        RR[i] = rr * QR[i] - ri * QI[i]; RI[i] = rr * QI[i] + ri * QR[i];
       }
     }
     field.aRef = 0.6 * Math.sqrt(aMin * aMax) * 10 ** (-state.bright / 2);
@@ -234,14 +273,14 @@ export function createBench(app) {
     if (f.re[o] === 0 && f.im[o] === 0) return;
     const p0 = Math.atan2(f.im[o], f.re[o]) - f.cref[0];
     if (pw < 2 || (2 * Math.PI) / Math.abs(f.cref[1] - f.cref[0]) < 5) return;   // too close to draw
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5;
     ctx.beginPath();
     let prev = Math.floor((f.cref[0] + p0 - phase) / (2 * Math.PI));
     for (let i = 1; i < pw; i++) {
       const k = Math.floor((f.cref[i] + p0 - phase) / (2 * Math.PI));
       if (k === prev) continue;
       const x = F.left + (i + 0.5) * sxp;
-      ctx.moveTo(x, F.top); ctx.lineTo(x, F.top + 8); ctx.moveTo(x, F.bottom); ctx.lineTo(x, F.bottom - 8);
+      ctx.moveTo(x, F.top); ctx.lineTo(x, F.top + 6); ctx.moveTo(x, F.bottom); ctx.lineTo(x, F.bottom - 6);
       prev = k;
     }
     ctx.stroke();
@@ -525,6 +564,7 @@ export function createBench(app) {
     state.sel = e;
     buildEditor();
     draw();
+    app.hashSoon();
   }
 
   function buildChips() {
@@ -591,6 +631,7 @@ export function createBench(app) {
     ];
     if (Number.isFinite(f)) {
       lines.push(el('div', {}, `New waist: w₀′ = `, el('b', {}, fmtLen(out.w0)), ` ${out.z >= e.z ? `${fmtLen(out.z - e.z)} after it` : `${fmtLen(e.z - out.z)} before it (virtual)`}.`));
+      if (out.w0 < 3 * lam()) lines.push(el('div', { class: 'warn' }, `That is only ${fmt(out.w0 / lam(), 2)} wavelengths: the beam converges at ${fmtAngle(out.theta)}, too steep for paraxial optics, so these numbers are rough.`));
       if (f > 0) lines.push(el('div', {}, `λf/πw = ${fmtLen((lam() * f) / (Math.PI * before.w))} (the focus of a collimated beam of this width).`));
       if (before.n === 1 && after.n === 1) {
         const s = e.z - before.zw, L = lensLaw(s, before.zR, f);
@@ -644,7 +685,7 @@ export function createBench(app) {
     { value: 'intensity', label: 'Intensity', title: 'The intensity |E|²' },
     { value: 'phase', label: 'Phase', title: 'The phase relative to a plane wave, as colour (brightness: amplitude)' },
     { value: 'off', label: 'Off', title: 'Only the outline ±w(z)' },
-  ], state.field, (v) => { state.field = v; field = null; changed(false); app.animate(); }, { label: 'Field' });
+  ], state.field, (v) => { state.field = v; changed(false); app.animate(); }, { label: 'Field' });
   $('#field-box').append(fieldSeg);
   const playButton = el('button', { type: 'button', class: 'primary', title: 'Start or stop the crests (space)', onclick: () => setPlay(!state.play) }, 'Pause');
   function setPlay(on) { state.play = on; playButton.textContent = on ? 'Pause' : 'Play'; app.animate(); }
@@ -653,11 +694,11 @@ export function createBench(app) {
     el('button', { type: 'button', title: 'Show the whole bench', onclick: () => { fit(); changed(); } }, 'Fit'),
     el('button', { type: 'button', title: 'Zoom in on the narrowest waist', onclick: () => { zoomToFocus(); changed(); } }, 'Focus'));
   const mSlider = slider({ label: 'mode m', min: 0, max: 6, step: 1, value: state.m, title: 'Send the Hermite-Gauss mode HG_m0 instead of the fundamental',
-    onInput: (v) => { state.m = Math.round(v); field = null; changed(false); } });
+    onInput: (v) => { state.m = Math.round(v); changed(false); } });
   const eSlider = slider({ label: 'wider ×', min: 1, max: 100000, log: true, value: state.E, title: 'How many times wider than it is the beam is drawn',
-    onInput: (v) => { state.E = v; field = null; changed(false); } });
+    onInput: (v) => { state.E = v; changed(false); } });
   const bSlider = slider({ label: 'brightness', min: -2, max: 2, step: 0.01, value: state.bright, title: 'The brightness scale is squeezed, so that a focus does not outshine the rest: it is brighter than it looks',
-    onInput: (v) => { state.bright = v; field = null; requestDraw(); app.hashSoon(); } });
+    onInput: (v) => { state.bright = v; requestDraw(); app.hashSoon(); } });
   $('#view-box').append(mSlider, eSlider, bSlider);
 
   // Mode matching.
@@ -943,12 +984,12 @@ export function createBench(app) {
 
   function show() { retrace(); buildEditor(); buildTarget(); syncControls(); draw(); }
 
-  window.addEventListener('resize', () => { if (app.state.view === 'bench') { field = null; draw(); } });
+  window.addEventListener('resize', () => { if (app.state.view === 'bench') draw(); });
 
   return {
     show, draw, tick, toHash, fromHash, load, fit, zoomToFocus,
     get trace() { return trace; }, matching, addElement, removeElement, select,
-    get frame() { return frame; },
+    get frame() { return frame; }, get field() { return field; }, drawBench, computeField: () => { version++; layout(); return computeField(); },
     refreshTarget: () => { buildTarget(); retrace(); },
   };
 }

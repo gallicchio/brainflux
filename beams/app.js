@@ -129,4 +129,4 @@ else if (hash.v) {
   setView(['bench', 'cavity', 'modes'].includes(hash.v) ? hash.v : 'bench');
 } else setups.start();
 
-window.__app = { state, setups, bench, cavity, modes, setView, ready: true };
+window.__app = { state, setups, bench, cavity, modes, setView, hashSoon: app.hashSoon, ready: true };

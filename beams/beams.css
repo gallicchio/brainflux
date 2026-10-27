@@ -68,6 +68,7 @@ dl.numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
 .sign-seg button { font-size: 12px; padding: 2px 8px; min-height: 26px; }
 .el-info { color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
 .el-info b { color: var(--ink); }
+.el-info .warn { color: var(--warn); }
 .lens-plot-wrap { height: 190px; border: 1px solid var(--line); border-radius: 6px; }
 .lens-plot { width: 100%; height: 100%; }
 .formula { min-height: 1.8em; overflow-x: auto; }
