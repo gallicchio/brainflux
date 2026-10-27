@@ -131,7 +131,7 @@ export class Propagator {
     const { ar, ai, Xr, Xi, pr, pi, dw } = this;
     ar.fill(0); ai.fill(0);
     for (let k = 0; k <= this.kmax; k++) {
-      const amp = vacuum ? 1 : Math.exp(-pi[k] * z);
+      const amp = vacuum ? 1 : Math.exp(Math.min(300, -pi[k] * z)); // (a drawn gain medium could overflow)
       if (amp < 1e-300 && k > 0) continue;
       const ph = (vacuum ? 0 : pr[k] * z) - k * dw * tc;
       const c = amp * Math.cos(ph), s = amp * Math.sin(ph), f = k === 0 ? 1 : 2;

@@ -747,12 +747,14 @@ function drawPulse() {
   // Below a millionth, nothing is drawn: the medium has absorbed the pulse.
   let scale = 1;
   const absorbed = !log && !(mmax > 1e-6 * vmax);
-  if (!log && !absorbed && mmax < 0.4 * vmax) {
+  if (!log && !absorbed && (mmax < 0.4 * vmax || mmax > 1.5 * vmax)) { // (a gain medium amplifies)
     const want = (0.8 * vmax) / mmax, p = 10 ** Math.floor(Math.log10(want)), m = want / p;
     scale = (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p;
   }
   if (absorbed) { scale = 0; em.fill(0); fmin.fill(0); fmax.fill(0); }
+  // Y: the pulse in the medium, scaled up (or down) to be seen; Yv: the vacuum pulse, never scaled.
   const Y = log ? (v) => Math.log10(Math.max(v, 1e-14) / vmax) : (v) => v * scale / vmax;
+  const Yv = log ? Y : (v) => v / vmax;
   if (log) { f.y0 = -12; f.y1 = 0.5; } else { f.y0 = -1.15; f.y1 = 1.15; }
   const X = (c) => f.left + ((c + 0.5) * f.w) / cols;
 
@@ -784,7 +786,7 @@ function drawPulse() {
     ctx.beginPath(); let pen = false;
     for (let c = 0; c < cols; c++) {
       if (!(ev[c] > 0)) { pen = false; continue; }
-      const y = f.Y(s * Y(ev[c]));
+      const y = f.Y(s * Yv(ev[c]));
       if (pen) ctx.lineTo(X(c), y); else { ctx.moveTo(X(c), y); pen = true; }
     }
     ctx.stroke();
