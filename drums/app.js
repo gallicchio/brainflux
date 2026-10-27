@@ -54,11 +54,9 @@ const isQ = () => state.mode === 'quantum';
 /** The spectrum's variable from λ: E = λ/2 (ħ = m = 1, box side 1) or f in Hz. */
 const xOf = (lambda) => (isQ() ? lambda / 2 : (state.c * Math.sqrt(Math.max(0, lambda))) / (2 * Math.PI * L_PHYS));
 const lambdaOfX = (x) => (isQ() ? 2 * x : ((2 * Math.PI * L_PHYS * x) / state.c) ** 2);
-const xUnit = () => (isQ() ? 'E' : 'f (Hz)');
 /** λ from the numerical frequency Ω of the time stepper, and back. */
 const lambdaOfOmega = (Om) => (isQ() ? 2 * sim.trueOmega(Om) : sim.trueOmega(Om) ** 2);
 const omegaOfLambda = (l) => (isQ() ? sim.numericalOmega(l / 2) : sim.numericalOmega(Math.sqrt(l)));
-const fmtX = (x) => (isQ() ? fmt(x, 4) : `${fmt(x, 4)}`);
 
 // ------------------------------------------------------------------ the shape
 
@@ -239,21 +237,30 @@ function advance(real) {
   if (ray) { ray.advance(sim.t - ray.t); ray.t = sim.t; }
 }
 
+// The signal keeps at most this many samples: after that the spectrum stops sharpening (its
+// transform would cost too much to redraw), while the run and the mode filter go on.
+const SIGNAL_MAX = 1 << 17;
+
 function record() {
-  const h2 = grid.h * grid.h;
+  const h2 = grid.h * grid.h, keep = signal.length < SIGNAL_MAX;
   if (isQ()) {
-    const [r0, i0] = psi0, R = sim.re, I = sim.im;
-    let cr = 0, ci = 0;
-    for (const g of grid.inner) { cr += r0[g] * R[g] + i0[g] * I[g]; ci += r0[g] * I[g] - i0[g] * R[g]; }
-    signal.push(cr * h2, ci * h2);
+    const R = sim.re, I = sim.im;
+    if (keep) {
+      const [r0, i0] = psi0;
+      let cr = 0, ci = 0;
+      for (const g of grid.inner) { cr += r0[g] * R[g] + i0[g] * I[g]; ci += r0[g] * I[g] - i0[g] * R[g]; }
+      signal.push(cr * h2, ci * h2);
+    }
     if (filter) filter.add(sim.t, stride * sim.dt, R, I);
   } else {
-    let s = 0;
-    for (const g of grid.inner) s += probe[g] * sim.u[g];
-    signal.push(s * h2);
+    if (keep) {
+      let s = 0;
+      for (const g of grid.inner) s += probe[g] * sim.u[g];
+      signal.push(s * h2);
+    }
     if (filter) filter.add(sim.t, stride * sim.dt, sim.u, null);
   }
-  specDirty = true;
+  if (keep) specDirty = true;
   if (filter) modeDirty = true;
 }
 
@@ -330,12 +337,13 @@ function requestCount() {
 
 function updateSolveNote() {
   const note = $('#solve-note');
+  const pct = (f) => slot(`${fixed(100 * f, 0, 4)}%`, 5);
   if (solving && solving.key === shapeKey()) {
-    note.textContent = `${solving.purpose === 'count' ? `counting ${COUNT} modes` : `computing ${MODES} exact modes`}… ${Math.round(100 * solving.progress)}%`;
+    note.innerHTML = `${solving.purpose === 'count' ? `counting ${COUNT} modes` : `computing ${MODES} exact modes`}… ${pct(solving.progress)}`;
   } else if (modes) note.textContent = `${modes.values.length} modes by shift-invert Lanczos (${(modes.ms / 1000).toFixed(1)} s)`;
   else note.textContent = '';
   $('#count-more').disabled = !!(solving && solving.purpose === 'count') || !!counted;
-  $('#count-more').textContent = counted ? `${counted.values.length} modes counted` : solving && solving.purpose === 'count' ? `Counting… ${Math.round(100 * solving.progress)}%` : `Count ${COUNT} modes`;
+  $('#count-more').innerHTML = counted ? `${counted.values.length} modes counted` : solving && solving.purpose === 'count' ? `Counting… ${pct(solving.progress)}` : `Count ${COUNT} modes`;
 }
 
 /** Exact mode k as a grid array. */
@@ -557,7 +565,7 @@ function drawSpectrum() {
   const { ctx, width, height } = fitCanvas(specCanvas);
   const c = themeColors();
   ctx.clearRect(0, 0, width, height);
-  const f = new Frame(ctx, width, height, { left: 44, right: 10, top: 16, bottom: 34 });
+  const f = new Frame(ctx, width, height, { left: 44, right: 18, top: 16, bottom: 34 });
   specFrame = f;
   f.x0 = 0; f.x1 = xOf(state.specMax);
   let top = 0;
@@ -600,15 +608,25 @@ function drawSpectrum() {
   if (sim && signal && signal.T > 0) {
     const Om = omegaOfLambda(state.specMax * 0.5), dOm = WINDOW_FWHM / signal.T;
     const dx = Math.abs(xOf(lambdaOfOmega(Om + dOm / 2)) - xOf(lambdaOfOmega(Math.max(0, Om - dOm / 2))));
-    const w = Math.max(1, f.X(dx) - f.X(0)), x1 = f.right - 6, x0 = x1 - Math.min(w, f.w * 0.6);
+    // The label and its number hold still (a fixed-width number in a monospaced font); the bar
+    // after them is as long as a peak is wide, on the axis below.
+    const label = `a peak's width ${isQ() ? 'ΔE' : 'Δf'} ≈`, num = fixed(dx, 1, 6) + (isQ() ? '' : ' Hz');
+    ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(label, f.left, 8);
+    const nx = f.left + ctx.measureText(label).width;
+    ctx.font = '11px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    ctx.fillText(num, nx, 8);
+    const x0 = nx + ctx.measureText(num).width + 8, w = Math.max(1, f.X(dx) - f.X(0)), x1 = Math.min(f.right - 4, x0 + w);
     ctx.strokeStyle = c.ink2; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(x0, 8); ctx.lineTo(x1, 8); ctx.moveTo(x0, 4); ctx.lineTo(x0, 12); ctx.moveTo(x1, 4); ctx.lineTo(x1, 12); ctx.stroke();
-    ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillText(`a peak's width, ${isQ() ? 'ΔE' : 'Δf'} ≈ ${fmt(dx, 2)}${isQ() ? '' : ' Hz'}`, x0 - 6, 8);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.beginPath(); ctx.moveTo(x0, 8); ctx.lineTo(x1, 8); ctx.moveTo(x0, 4); ctx.lineTo(x0, 12);
+    if (x0 + w <= f.right - 4) { ctx.moveTo(x1, 4); ctx.lineTo(x1, 12); }
+    ctx.stroke();
+    ctx.textBaseline = 'alphabetic';
   }
   f.axes({ xlabel: isQ() ? 'energy E  (ħ = m = 1, box side 1)' : 'frequency f (Hz)', ylabel: state.log ? 'log₁₀' : '', yTicks: state.log });
-  $('#spec-note').textContent = signal ? `run ${isQ() ? `t = ${fmt(signal.T, 3)}` : `${fmt(signal.T * L_PHYS / state.c * 1000, 3)} ms`}` : '';
+  $('#spec-note').innerHTML = signal ? (signal.length >= SIGNAL_MAX ? 'the longest run kept, ' : 'run ')
+    + (isQ() ? `t =${slot(fixed(signal.T, 3, 8), 8)}` : `${slot(fixed((signal.T * L_PHYS) / state.c * 1000, 1, 8), 8)} ms`) : '';
 }
 
 function drawSignal() {
@@ -634,10 +652,12 @@ function drawSignal() {
   ctx.stroke();
   ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif';
   ctx.fillText(isQ() ? '|⟨ψ(0)|ψ(t)⟩|' : 'u under the mallet', left + 4, top + 11);
-  ctx.textAlign = 'right';
-  ctx.fillText(isQ() ? `t = ${fmt(signal.T, 3)}` : `${fmt((signal.T * L_PHYS) / state.c * 1000, 3)} ms`, width - right - 2, height - 3);
-  ctx.textAlign = 'left';
   ctx.fillText('0', left, height - 3);
+  // The run's length, in a fixed-width monospaced slot at the right end.
+  ctx.font = '11px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(isQ() ? `t =${fixed(signal.T, 3, 8)}` : `${fixed((signal.T * L_PHYS) / state.c * 1000, 1, 8)} ms`, width - right - 2, height - 3);
+  ctx.textAlign = 'left';
 }
 
 // ------------------------------------------------------------------ drawing: the mode
@@ -716,7 +736,8 @@ function drawMode() {
     if (lab && lab[k]) lines.push(`exactly: ${lab[k].label}, λ = ${fmt(lab[k].lambda, 6)} (grid ${fmt(100 * (l / lab[k].lambda - 1), 2)}%)`);
   } else {
     const T = filter.T;
-    lines.push(`<b>Built from the motion</b> at ${isQ() ? `E = ${fmt(selected.lambda / 2, 5)}` : `f = ${fmt(xOfDrum(selected.lambda), 5)} Hz`}: ∫ψ(t)e<sup>iEt</sup>w(t)dt over ${isQ() ? `t = ${fmt(T, 3)}` : `${fmt(T * L_PHYS / state.c * 1000, 3)} ms`}`);
+    // The run's length and the overlap change as the mode builds up: fixed-width slots.
+    lines.push(`<b>Built from the motion</b> at ${isQ() ? `E = ${fmt(selected.lambda / 2, 5)}` : `f = ${fmt(xOfDrum(selected.lambda), 5)} Hz`}: ∫ψ(t)e<sup>iEt</sup>w(t)dt over ${isQ() ? `t =${slot(fixed(T, 3, 7), 7)}` : `${slot(fixed(T * L_PHYS / state.c * 1000, 1, 7), 7)} ms`}`);
     if (modes && modes.nvec) {
       // The overlap with the exact modes near this λ (a degenerate set counts together).
       const near = [];
@@ -730,12 +751,12 @@ function drawMode() {
           for (let p = 0; p < N; p++) { const v = modes.vectors[k * N + p], g = modes.pts[p]; a += v * m.re[g]; b += v * m.im[g]; }
           ov += (a * a + b * b) * h2;
         }
-        lines.push(`${fmt(100 * ov / nn, 4)}% of it is exact mode${near.length > 1 ? 's' : ''} ${near.map((k) => k + 1).join(', ')} (λ = ${fmt(modes.values[near[0]], 6)})`);
+        lines.push(`${slot(fixed(100 * ov / nn, 2, 7), 7)}% of it is exact mode${near.length > 1 ? 's' : ''} ${near.map((k) => k + 1).join(', ')} (λ = ${fmt(modes.values[near[0]], 6)})`);
       } else lines.push('no exact mode this close among the ones computed');
-    } else lines.push(`${fmt(100 * m.fraction, 3)}% real after turning its phase`);
+    } else lines.push(`${slot(fixed(100 * m.fraction, 2, 7), 7)}% real after turning its phase`);
   }
   info.innerHTML = lines.join('<br>');
-  $('#excite').disabled = false; $('#hear-mode').disabled = isQ() && false;
+  $('#excite').disabled = false; $('#hear-mode').disabled = false;
 }
 
 // ------------------------------------------------------------------ the exact modes list
@@ -858,28 +879,48 @@ function drawCount() {
 
 // ------------------------------------------------------------------ readouts
 
-/** The relative change of the scheme's conserved quantity since the start. */
-function drift(v) {
-  const d = v / conserved0 - 1;
-  return Math.abs(d) < 1e-16 ? '< 1e-16' : d.toExponential(0);
+// ------------------------------------------------------------------ numbers that hold still
+//
+// Live numbers sit in slots of fixed width (in characters of a monospaced font), right-aligned,
+// with a fixed number of decimals and room for a sign, so that nothing beside them moves as they
+// change, grow a digit or cross zero.  Exponent form only when a number would not fit.
+
+/** v with `dec` decimals in `w` characters (a leading space where the minus sign would go). */
+function fixed(v, dec, w) {
+  if (!Number.isFinite(v)) return '–'.padStart(w);
+  let s = (v < 0 ? '−' : ' ') + Math.abs(v).toFixed(dec);
+  if (s.length > w) s = (v < 0 ? '−' : ' ') + Math.abs(v).toExponential(Math.max(0, w - 7));
+  return s.padStart(w);
 }
+/** A small relative change in a fixed exponent layout: −2.1e−15, +3.0e−16 (8 characters). */
+function expo(d) {
+  if (d === 0 || !Number.isFinite(d)) return '       0';
+  const e = Math.floor(Math.log10(Math.abs(d))), m = Math.abs(d) / 10 ** e;
+  const [mm, ee] = m >= 9.95 ? ['1.0', e + 1] : [m.toFixed(1), e];
+  return `${d < 0 ? '−' : '+'}${mm}e${ee < 0 ? '−' : '+'}${String(Math.abs(ee)).padStart(2, '0')}`;
+}
+/** A slot of w characters holding text (right-aligned). */
+const slot = (text, w) => `<span class="slot" style="width:${w}ch">${text}</span>`;
+
+/** The relative change of the scheme's conserved quantity since the start. */
+const drift = (v) => expo(v / conserved0 - 1);
 
 function updateReadouts() {
   if (!sim) { $('#readouts').innerHTML = ''; return; }
   const items = [];
   if (isQ()) {
-    items.push(['t', fmt(sim.t, 4)], ['norm drift', drift(sim.norm())]);
+    items.push(['t', slot(fixed(sim.t, 3, 8), 8)], ['norm drift', slot(drift(sim.norm()), 8)]);
     const st = energyStats(grid, sim.re, sim.im, 0.5);
-    items.push(['⟨E⟩', `${fmt(st.mean, 4)} ± ${fmt(st.spread, 3)}`]);
-    if (ray) items.push(['bounces', ray.bounces]);
+    items.push(['⟨E⟩', `${slot(fixed(st.mean, 1, 7), 7)} ± ${slot(fixed(st.spread, 1, 7), 7)}`]);
+    if (ray) items.push(['bounces', slot(fixed(ray.bounces, 0, 6), 6)]);
   } else {
     const ms = (sim.t * L_PHYS) / state.c * 1000;
-    items.push(['t', `${fmt(ms, 4)} ms`]);
-    if (!state.fast) items.push(['slowed down', `${fmt(1 / ((L_PHYS / state.c) * state.speed.drum), 2)} times`]);
-    items.push(['energy drift', drift(sim.energy())]);
+    items.push(['t', `${slot(fixed(ms, 2, 10), 10)} ms`]);
+    if (!state.fast) items.push(['slowed down', `${slot(fixed(1 / ((L_PHYS / state.c) * state.speed.drum), 0, 7), 7)} times`]);
+    items.push(['energy drift', slot(drift(sim.energy()), 8)]);
   }
   items.push(['grid', `${state.n}² (${grid.N} free points)`]);
-  $('#readouts').innerHTML = items.map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+  $('#readouts').innerHTML = items.map(([k, v]) => `<span class="ro"><span class="k">${k}</span> <b>${v}</b></span>`).join('');
 }
 
 // ------------------------------------------------------------------ pointer on the stage
@@ -999,14 +1040,14 @@ specCanvas.addEventListener('pointermove', (e) => {
   const r = specCanvas.getBoundingClientRect(), px = e.clientX - r.left, f = specFrame;
   if (px < f.left || px > f.right) { $('#spec-hover').textContent = ''; return; }
   const x = f.invX(px);
-  let s = `${xUnit()} = ${fmtX(x)}`;
+  let s = `${isQ() ? 'E' : 'f'} = ${slot(fixed(x, 1, 8), 8)}${isQ() ? '' : ' Hz'}`;
   if (modes) {
     const l = lambdaOfX(x);
     let best = 0;
     modes.values.forEach((v, k) => { if (Math.abs(v - l) < Math.abs(modes.values[best] - l)) best = k; });
-    s += ` · nearest exact mode ${best + 1} at ${fmtX(xOf(modes.values[best]))}`;
+    s += ` · nearest exact mode ${slot(fixed(best + 1, 0, 4), 4)} at ${slot(fixed(xOf(modes.values[best]), 1, 8), 8)}`;
   }
-  $('#spec-hover').textContent = s;
+  $('#spec-hover').innerHTML = s;
 });
 
 // ------------------------------------------------------------------ controls
@@ -1015,7 +1056,7 @@ const playButton = $('#play');
 function setRunning(on) { state.running = on; playButton.textContent = on ? 'Pause' : 'Play'; }
 playButton.addEventListener('click', () => setRunning(!state.running));
 $('#restart').addEventListener('click', () => { restart(); if (!isQ() && state.start === 'strike') strikeSound(); });
-const fastButton = toggle('Fast', state.fast, (on) => { state.fast = on; }, 'Run as fast as the computer can (for the spectrum), drawing a few times a second');
+const fastButton = toggle('Fast', state.fast, (on) => { state.fast = on; }, 'Run as fast as the computer can (for the spectrum), drawing a few times a second (F)');
 $('#run-row').append(fastButton);
 const speedSlider = slider({ label: 'speed', min: 0.001, max: 2, log: true, value: state.speed[state.mode], title: 'Simulated time per second',
   onInput: (v) => { state.speed[state.mode] = v; } });

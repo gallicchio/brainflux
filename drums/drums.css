@@ -9,6 +9,8 @@
 .stage-wrap canvas.painting { cursor: cell; }
 .readouts { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--ink-2); max-width: calc(100vh - 150px); margin: 0 auto; width: 100%; }
 .readouts b { color: var(--ink); font-weight: 600; }
+/* A live number: a fixed width, right-aligned, monospaced, so nothing around it moves. */
+.slot { display: inline-block; text-align: right; white-space: pre; font-family: var(--mono); font-variant-numeric: tabular-nums; vertical-align: bottom; }
 
 .analysis { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .analysis .panel { display: flex; flex-direction: column; gap: 4px; padding: 8px; }

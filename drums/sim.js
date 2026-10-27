@@ -299,7 +299,8 @@ export class Signal {
     const K = this.length;
     if (K < 8) return { omega: new Float64Array(0), amp: new Float64Array(0) };
     let P = 1;
-    while (P < 4 * K || (2 * Math.PI) / (P * this.dts) > dOmega) P *= 2;
+    // Zero-padded to at least 4K points (2K for long signals: the peaks are smooth enough).
+    while (P < (K > 16384 ? 2 : 4) * K || (2 * Math.PI) / (P * this.dts) > dOmega) P *= 2;
     const re = new Float64Array(P), im = new Float64Array(P);
     for (let k = 0; k < K; k++) {
       const w = window((k + 0.5) / K);
