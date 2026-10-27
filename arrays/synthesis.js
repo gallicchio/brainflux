@@ -174,25 +174,32 @@ export function cleanStart(dirty) {
  */
 export function cleanSteps(cs, beam, n, { gain = 0.1, steps = 1, threshold = 0 } = {}) {
   const R = cs.residual, M = cs.model, h = n / 2;
+  // The brightest pixel (kept from the last pass, which finds it while subtracting).
+  let best = cs.peak ?? -1, bv = best >= 0 ? Math.abs(R[best]) : 0;
+  if (best < 0) for (let i = 0; i < R.length; i++) { const a = Math.abs(R[i]); if (a > bv) { bv = a; best = i; } }
   for (let s = 0; s < steps; s++) {
-    let best = 0, bv = 0;
-    for (let i = 0; i < R.length; i++) { const a = Math.abs(R[i]); if (a > bv) { bv = a; best = i; } }
     if (bv <= threshold || bv === 0) { cs.done = true; break; }
     const g = gain * R[best], i0 = best % n, j0 = (best - i0) / n;
     if (M[best] === 0) cs.components++;
     M[best] += g;
-    // R(i, j) -= g B(i - i0 + n/2, j - j0 + n/2), indices mod n.
-    const off = (h - i0 + n) % n;
+    // R(i, j) -= g B(i - i0 + n/2, j - j0 + n/2), indices mod n, finding the next peak too.
+    const off = (h - i0 + n) % n, cut = n - off;
+    bv = 0;
     for (let j = 0; j < n; j++) {
       const rrow = j * n, brow = (((j - j0 + h) % n + n) % n) * n;
-      for (let i = 0; i < n; i++) {
-        let bi = i + off;
-        if (bi >= n) bi -= n;
-        R[rrow + i] -= g * beam[brow + bi];
+      for (let i = 0; i < cut; i++) {
+        const v = (R[rrow + i] -= g * beam[brow + i + off]), a = v < 0 ? -v : v;
+        if (a > bv) { bv = a; best = rrow + i; }
+      }
+      for (let i = cut; i < n; i++) {
+        const v = (R[rrow + i] -= g * beam[brow + i - cut]), a = v < 0 ? -v : v;
+        if (a > bv) { bv = a; best = rrow + i; }
       }
     }
     cs.iterations++;
   }
+  cs.peak = best;
+  cs.peakValue = bv;
   return cs;
 }
 
@@ -239,7 +246,8 @@ export function fitBeam(beam, n) {
   const ca = Math.cos(ang), sa = Math.sin(ang);
   a = l1 * ca * ca + l2 * sa * sa; c = l1 * sa * sa + l2 * ca * ca; b = (l1 - l2) * ca * sa;
   const fw = (l) => 2 * Math.sqrt(Math.log(2) / l);
-  return { a, b, c, major: fw(l2), minor: fw(l1), angle: ang + Math.PI / 2 };
+  // stripes: the main lobe has no end along one direction (one baseline, or one line of them).
+  return { a, b, c, major: fw(l2), minor: fw(l1), angle: ang + Math.PI / 2, stripes: l2 <= lmin * 1.0001 };
 }
 
 function solve3(A, r) {
@@ -259,20 +267,25 @@ function solve3(A, r) {
 }
 
 /** The restored image: the CLEAN components convolved with the clean beam, plus the residual. */
+let kernel = null;
 export function restore(cs, fit, n) {
   const h = n / 2;
-  const gr = new Float64Array(n * n), gi = new Float64Array(n * n);
-  // The Gaussian with its peak at index (0, 0), wrapped.
-  for (let j = 0; j < n; j++) {
-    const y = j < h ? j : j - n;
-    for (let i = 0; i < n; i++) {
-      const x = i < h ? i : i - n;
-      const e = fit.a * x * x + 2 * fit.b * x * y + fit.c * y * y;
-      gr[j * n + i] = e < 50 ? Math.exp(-e) : 0;
+  if (!kernel || kernel.fit !== fit || kernel.n !== n) {
+    // The Gaussian with its peak at index (0, 0), wrapped, and its transform (kept).
+    const gr = new Float64Array(n * n), gi = new Float64Array(n * n);
+    for (let j = 0; j < n; j++) {
+      const y = j < h ? j : j - n;
+      for (let i = 0; i < n; i++) {
+        const x = i < h ? i : i - n;
+        const e = fit.a * x * x + 2 * fit.b * x * y + fit.c * y * y;
+        gr[j * n + i] = e < 50 ? Math.exp(-e) : 0;
+      }
     }
+    fft2(gr, gi, n, n, -1);
+    kernel = { fit, n, gr, gi };
   }
+  const { gr, gi } = kernel;
   const mr = Float64Array.from(cs.model), mi = new Float64Array(n * n);
-  fft2(gr, gi, n, n, -1);
   fft2(mr, mi, n, n, -1);
   for (let i = 0; i < mr.length; i++) {
     const a = mr[i] * gr[i] - mi[i] * gi[i], b = mr[i] * gi[i] + mi[i] * gr[i];
@@ -310,7 +323,8 @@ export const EHT_CENTRE = { lat: 10, lon: -70 };
  *   line   eight dishes on an east-west line at the marks of a Golomb ruler (0 1 4 9 15 22 32
  *          34): every one of the 28 spacings is different
  *   y      a Y like the Very Large Array: 9 dishes on each of three arms at azimuths 355, 115
- *          and 235 degrees, at distances growing as k^1.716 out to `arm` metres
+ *          and 235 degrees, at distances growing as (k + 1/2)^1.716 out to `arm` metres (arm
+ *          600 m is about the VLA's D configuration, 1950 m its C, 6400 m B, 21 km A)
  *   eht    the Event Horizon Telescope's sites, on the map centred at EHT_CENTRE
  */
 export function layout(kind, { arm = 1950, unit = 72 } = {}) {
@@ -320,7 +334,7 @@ export function layout(kind, { arm = 1950, unit = 72 } = {}) {
     const dishes = [];
     for (const az of [355, 115, 235]) {
       for (let k = 1; k <= 9; k++) {
-        const r = arm * (k / 9) ** 1.716;
+        const r = arm * ((k + 0.5) / 9.5) ** 1.716;
         dishes.push([r * Math.sin(az * DEG), r * Math.cos(az * DEG)]);
       }
     }

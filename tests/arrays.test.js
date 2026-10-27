@@ -268,6 +268,25 @@ test('the map: flat ground for a small array, the globe for a large one', () => 
 
 const N = 128;
 
+test('two dishes make one fringe: the dirty beam is cos 2 pi (u l + v m), l east and m north', () => {
+  // A baseline 300 m east and 100 m north, seen at transit from the equator with the source
+  // overhead: (u, v) = (300, 100) m / lambda, put exactly on grid points.
+  const pos = [stationXYZ(0, 0, 0), stationXYZ(300, 100, 0)];
+  const tr = tracks(pos, { dec: 0, hours: 0 });
+  const lambda = 1, pix = 1e-3, du = 1 / (N * pix);
+  const u = tr.u[0], v = tr.v[0];
+  // The ground is curved: 300 m is a little shorter as a chord.
+  close(u, 300, 1e-2, 'u'); close(v, 100, 1e-2, 'v');
+  const { S } = gridSamples(tr, lambda, N, du);
+  const B = dirtyBeam(S, N), ug = Math.round(u / du) * du, vg = Math.round(v / du) * du;
+  let worst = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const l = (i - N / 2) * pix, m = (N / 2 - j) * pix;
+    worst = Math.max(worst, Math.abs(B[j * N + i] - Math.cos(2 * Math.PI * (ug * l + vg * m))));
+  }
+  assert(worst < 1e-12, `beam - cos: ${worst}`);
+});
+
 test('the dirty image of a point source is the dirty beam there; with every spacing, the beam is a point', () => {
   const pos = layout('y', { arm: 2000 }).dishes.map(([E, N_]) => stationXYZ(E, N_, 34 * DEG));
   const tr = tracks(pos, { dec: 50 * DEG, hours: 6, steps: 61 });

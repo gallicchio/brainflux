@@ -130,13 +130,21 @@ export function analysePattern(P, { prefer = 0, mirror = null } = {}) {
     // The mirror image of the main lobe across the line: theta -> 2 axis - theta.
     mc = Math.round((wrapAngle(2 * mirror - th(best)) + Math.PI) / dth) % m;
   }
-  let sll = null, sllAngle = null;
+  const lobes = [];
   for (let i = 0; i < m; i++) {
     // (Maxima 100 dB down are rounding noise in a null.)
     if (!(P[i] >= at(i - 1) && P[i] > at(i + 1)) || P[i] < 1e-10 * pmax) continue;
     if (inLobe(i, best, sl, sr)) continue;
     if (mc !== null && inLobe(i, mc, sr + 1, sl + 1)) continue;
-    if (sll === null || P[i] > sll) { sll = P[i]; sllAngle = th(i); }
+    lobes.push(i);
+  }
+  // The highest sidelobe; of several equal ones (to 0.01 dB), the one nearest the beam.
+  let sll = null, sllAngle = null;
+  if (lobes.length) {
+    const top = Math.max(...lobes.map((i) => P[i]));
+    const near = (i) => Math.abs(wrapAngle(th(i) - th(best)));
+    const pick = lobes.filter((i) => P[i] >= top / 1.0023).sort((a, b) => near(a) - near(b))[0];
+    sll = top; sllAngle = th(pick);
   }
   return {
     beam, hpbw, omni: false, lobe: [th(best - sl), th(best + sr)],
