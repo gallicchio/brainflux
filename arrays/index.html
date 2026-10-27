@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antenna Arrays and Aperture Synthesis · BrainFlux</title>
+<meta name="description" content="Place antennas and set their phases: the far-field pattern is the Fourier transform of the layout.  Then place radio dishes on the turning Earth and make an image of the sky.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="arrays.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Antenna arrays and aperture synthesis</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="ar">
+  <section class="stage">
+    <div class="row mode-row" id="mode-row"></div>
+
+    <div class="arrays-stage" id="arrays-stage">
+      <div class="view">
+        <div class="side-head"><h2>The waves</h2><span class="small muted" id="field-note">drag the elements; double-click to add one</span></div>
+        <div class="sq dark"><canvas id="field" tabindex="0" aria-label="The waves from the array, in the plane of the elements: drag an element to move it, double-click to add one"></canvas></div>
+      </div>
+      <div class="view">
+        <div class="side-head"><h2>Far-field pattern</h2><span class="small muted" id="polar-note">power in each direction</span></div>
+        <div class="sq plot"><canvas id="polar" aria-label="The far-field power pattern on a polar plot, straight up being 0 degrees"></canvas></div>
+        <dl class="readouts" id="readouts" aria-live="polite"></dl>
+      </div>
+    </div>
+
+    <div class="synth-stage" id="synth-stage" hidden>
+      <div class="cell">
+        <div class="side-head"><h2>Dishes</h2><span class="small muted" id="map-note"></span></div>
+        <div class="sq plot"><canvas id="map" tabindex="0" aria-label="The dishes on the ground, north up: drag a dish to move it, double-click to add one"></canvas></div>
+      </div>
+      <div class="cell">
+        <div class="side-head"><h2>uv coverage</h2><span class="small muted" id="uv-note"></span></div>
+        <div class="sq dark"><canvas id="uv" aria-label="The uv plane: the baselines as seen from the source, tracing ellipses as the Earth turns, over the Fourier transform of the sky"></canvas></div>
+      </div>
+      <div class="cell">
+        <div class="side-head"><h2>Dirty beam</h2><span class="small muted" id="beam-note"></span></div>
+        <div class="sq dark"><canvas id="beam" aria-label="The dirty beam: the image a point source would give"></canvas></div>
+      </div>
+      <div class="cell">
+        <div class="side-head"><h2>Sky</h2><span class="small muted" id="sky-note"></span></div>
+        <div class="sq dark"><canvas id="sky" aria-label="The true sky"></canvas></div>
+      </div>
+      <div class="cell">
+        <div class="side-head"><h2>Dirty image</h2><span class="small muted" id="dirty-note">sky ∗ dirty beam</span></div>
+        <div class="sq dark"><canvas id="dirty" aria-label="The dirty image: the sky convolved with the dirty beam"></canvas></div>
+      </div>
+      <div class="cell">
+        <div class="side-head"><h2 id="clean-title">CLEAN</h2><span class="small muted" id="clean-note"></span></div>
+        <div class="sq dark"><canvas id="clean" aria-label="The CLEAN image"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="controls" id="arrays-controls">
+    <div class="panel">
+      <div class="label">Elements</div>
+      <div class="button-grid three" id="layouts"></div>
+      <div id="layout-box" class="stack"></div>
+      <div class="row" id="kind-box"></div>
+      <div id="dipole-box"></div>
+      <div class="row" id="edit-box"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Phases</div>
+      <div class="row" id="phase-mode"></div>
+      <div id="phase-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Amplitudes (taper)</div>
+      <div class="button-grid three" id="tapers"></div>
+      <div id="sll-box"></div>
+    </div>
+    <div class="panel" id="selected-panel" hidden>
+      <div class="label" id="selected-label">Selected element</div>
+      <div id="selected-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Show</div>
+      <div class="row">
+        <button type="button" id="play" class="primary" title="Play or pause the waves (space)">Pause</button>
+        <span id="db-box"></span><span id="factors-box"></span>
+      </div>
+      <div class="row" id="display-box"></div>
+      <div id="show-box" class="stack"></div>
+    </div>
+  </aside>
+
+  <aside class="controls" id="synth-controls" hidden>
+    <div class="panel">
+      <div class="label">Dishes</div>
+      <div class="button-grid" id="arrays-presets"></div>
+      <div id="scale-box"></div>
+      <div class="row" id="dish-edit"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Observation</div>
+      <div id="obs-box" class="stack"></div>
+      <div class="row" id="earth-box"></div>
+      <div class="small" id="obs-note"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Sky</div>
+      <div class="button-grid three" id="skies"></div>
+      <div id="sky-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Imaging</div>
+      <div class="row" id="weight-box"></div>
+      <div class="row" id="clean-box"></div>
+      <div id="gain-box"></div>
+      <div class="row" id="clean-show"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>Waves from several sources add up.  Far away, in the direction $\hat r$, the waves from
+  elements at $\vec r_n$ with complex amplitudes $a_n$ add up to the array factor
+  $$AF(\hat r)=\sum_n a_n\,e^{-ik\hat r\cdot\vec r_n},\qquad k=\frac{2\pi}{\lambda}:$$
+  the Fourier transform of the layout, on the wavevectors of length $k$.  The first half of
+  this page sends waves out from antennas you place.  The second turns the idea round: radio
+  dishes spread over the ground each measure one Fourier component of the sky, and the turning
+  Earth gathers enough of them to make a picture.</p>
+
+  <h3>Antenna arrays</h3>
+  <p>The elements lie in the plane of the picture; lengths are in wavelengths.  The picture is
+  the field at one instant, $\mathrm{Re}\,\psi e^{-i\omega t}$: crests red, troughs cyan.  Each
+  element's colour is its phase, and a larger phase means a later signal.  Angles $\theta$ are
+  measured from straight up, positive to the right.  The polar plot is the far-field power
+  pattern, in decibels down to −40 dB (or in plain power).  Below it are the beam's direction,
+  its width between the half-power points, the highest sidelobe, and the directivity
+  $D=4\pi U/P$: the power per solid angle towards the beam, compared with the average over the
+  whole sphere (radiation out of the plane counts too).  Drag the elements; double-click to add
+  one.</p>
+
+  <article class="exp" data-setup="two">
+    <h3>1. Two elements</h3>
+    <p>Two elements half a wavelength apart, in step.  Straight up and down, their waves arrive
+    together and add; along the line they arrive half a period apart and cancel.  The pattern is
+    $|AF|^2=4{\cos}^2(\tfrac{\pi}{2}\sin\theta)$: broadside, 60° wide.</p>
+    <p>Now make the right-hand element lag by half a period, and the beams turn to point along
+    the line <button type="button" class="setup-alt" data-alt="endfire">End-fire</button></p>
+    <p>Then put the elements a quarter wavelength apart, with a lag of a quarter period
+    <button type="button" class="setup-alt" data-alt="cardioid">The cardioid</button>
+    To the right, the lag makes up for the shorter path and the waves add; to the left, path and
+    lag add up to half a period and the waves cancel.  Two isotropic elements, and the power goes
+    one way: $4{\cos}^2(\tfrac{\pi}{4}(1-\sin\theta))$.</p>
+  </article>
+
+  <article class="exp" data-setup="line">
+    <h3>2. N in a line</h3>
+    <p>Eight elements $\lambda/2$ apart.  The beam is 12.8° wide and the first sidelobes are
+    12.8 dB down.  Change $N$: the beam narrows as $1/N$, close to $0.886\,\lambda/Nd$ radians
+    (6.36° for sixteen), and the first sidelobe stays near −13 dB (−13.26 dB for many
+    elements).  The directivity is $D=N$: in the beam the waves add to $N^2$ times one element's
+    power, while at this spacing the total power is just $N$ times one element's.  The polar
+    plot also has a beam pointing down: a line of elements can't tell one side from the other.
+    That mirror image is not counted as a sidelobe.</p>
+  </article>
+
+  <article class="exp" data-setup="steer">
+    <h3>3. Steering by phase</h3>
+    <p>Each element lags its left-hand neighbour by $\alpha=kd\sin\theta_0$, so that their waves
+    arrive in step in the direction $\theta_0$.  Slide $\theta_0$ and the beam follows, with
+    nothing moving: a phased array, as in radar.  Away from broadside the beam widens, roughly
+    as $1/\cos\theta_0$, because the array looks shorter from the side: sixteen elements give
+    6.36° at 0°, 7.35° at 30° and 13.0° at 60°.  To swing the beam back and forth, as a radar
+    does: <button type="button" class="setup-alt" data-alt="sweep">Sweep</button></p>
+  </article>
+
+  <article class="exp" data-setup="grating">
+    <h3>4. Grating lobes</h3>
+    <p>Twelve elements 0.8λ apart.  At $\theta_0=0$ there is one beam (and its mirror image).
+    Steer to 30°: a second beam, as strong as the first, appears at
+    $\sin\theta=\sin\theta_0-\lambda/d$, here −48.6°.  The red triangles mark these grating
+    lobes, at $\sin\theta=\sin\theta_0+m\lambda/d$; one comes into view once
+    $d>\lambda/(1+|\sin\theta_0|)$, which is 0.667λ at 30°.  The array samples its aperture too
+    coarsely, and the pattern aliases, as a signal sampled too slowly does.  Arrays that must
+    steer all the way to ±90° keep $d\le\lambda/2$.  At a spacing of 2λ there are grating lobes
+    at every $\sin\theta=m/2$ <button type="button" class="setup-alt" data-alt="grating2">Spacing 2λ</button></p>
+  </article>
+
+  <article class="exp" data-setup="taper">
+    <h3>5. Tapering</h3>
+    <p>Sixteen elements in step, all at full strength: the first sidelobes are 13.1 dB down.
+    Now weaken the elements towards the ends (the buttons under <em>Amplitudes</em>).
+    Hann: sidelobes at −31.5 dB, and a beam 9.72° wide instead of 6.36°.  Dolph–Chebyshev:
+    every sidelobe exactly at the level you choose (−30 dB), with a 7.98° beam, the narrowest any
+    taper allows for that level; Taylor's taper comes close (−30.0 dB, 8.05°).  Binomial: no
+    sidelobes at all, and a 15.7° beam.  An aperture with sharp edges has a Fourier transform
+    that rings; tapering smooths the edges, and pays for quieter sidelobes with a wider beam and
+    less directivity (16 uniform, 13.8 Chebyshev).</p>
+  </article>
+
+  <article class="exp" data-setup="dipoles">
+    <h3>6. Element pattern times array factor</h3>
+    <p>Four short dipoles, lying along the line.  A dipole sends nothing along its own axis: one
+    element's pattern (dotted) is ${\sin}^2$ of the angle to its axis.  The whole pattern (solid)
+    is that times the array factor (dashed): pattern multiplication.  Turn the dipole axis to
+    90°, across the line: the dipoles' nulls now point straight up and down, just where the
+    array factor puts its beam, and in this plane the beam is gone.  What is left is two lobes
+    at ±50°, and the directivity towards them is only 0.31.  The beam hasn't vanished: it points
+    out of the screen, which the plane doesn't show.  For dipoles the picture shows the magnetic
+    field, which is perpendicular to the plane; it is exact at every distance, near field
+    included.</p>
+  </article>
+
+  <article class="exp" data-setup="random">
+    <h3>7. A random sparse array</h3>
+    <p>Twenty-four elements scattered over 14λ, no two closer than 0.6λ, phased to send their
+    waves straight up.  The beam is as narrow as the array is wide: 3.71°.  A regular array this
+    sparse would have grating lobes.  Here the waves that would have made them arrive with random
+    phases, and spread into a floor of sidelobes averaging about $1/N$ of the beam's power
+    (−13.8 dB for 24; −12.9 dB for this layout), with peaks above it.  Press <em>Scatter them
+    again</em> for another layout.  Low-frequency radio telescopes such as LOFAR are built like
+    this.</p>
+  </article>
+
+  <article class="exp" data-setup="focus">
+    <h3>8. Focusing in the near field</h3>
+    <p>The phases $\varphi_n=-k|\vec r_f-\vec r_n|$ delay each element by its distance from the
+    cross, so that every wave arrives there in step: the waves converge on it and spread out
+    again past it.  This is time reversal: record what a source at the cross would send to each
+    element, and play it backwards.  Drag the cross.  The spot is about
+    $\lambda/(\sin\alpha_1+\sin\alpha_2)$ from its middle to its first dark points, where
+    $\alpha_1$ and $\alpha_2$ are the angles out to the array's two ends: never much less than
+    $\lambda/2$.  Its brightest point is half a wavelength nearer the array than the cross,
+    because the nearer waves are stronger (the focal shift).  Move the focus beyond about
+    $D^2/\lambda$ and it fades into an ordinary beam.  Ultrasound scanners focus like this.</p>
+  </article>
+
+  <h3>Aperture synthesis</h3>
+  <p>Two dishes a baseline $\vec B$ apart, pointed at the same source, multiply their signals
+  and average.  The result is the visibility
+  $$V(u,v)=\iint I(l,m)\,e^{-2\pi i(ul+vm)}\,dl\,dm,$$
+  one Fourier component of the sky's brightness $I(l,m)$ ($l$ and $m$ are small angles east
+  and north of the centre), at $(u,v)$: the baseline as seen from the source, in wavelengths.
+  $N$ dishes make $N(N-1)/2$ baselines, and each gives two points, $(u,v)$ and $(-u,-v)$,
+  because the sky is real.  As the Earth turns, each baseline traces an ellipse.  The dirty
+  image is the inverse transform of what was measured: the sky convolved with the dirty beam,
+  which is the transform of the sampling alone.  The uv plane is drawn over the sky's own
+  transform, in phase colours.  Pick a sky, or type one (<em>Typed</em>): $I(x,y)$ with $x$
+  east and $y$ north in the unit of the field slider; any other letter becomes a slider.  North is up and east is to the right in every picture, as on
+  the map; astronomers usually put east on the left, as the sky looks from below.</p>
+
+  <article class="exp" data-setup="fringe">
+    <h3>9. Two dishes make one fringe</h3>
+    <p>Two dishes 632 m apart, a snapshot of a point source.  One baseline is two points in the
+    uv plane, so the dirty beam is a single cosine: stripes across the sky, $\lambda/B$ apart
+    (1.14′ at 21 cm), running perpendicular to the baseline.  Drag a dish: the stripes turn with
+    it, and get finer as the dishes move apart.  That is all one baseline measures: how much the
+    sky looks like one set of stripes, and where the stripes sit (the amplitude and phase of
+    $V$).  Six dishes make 15 baselines, and 15 sets of stripes add up to a beam with one peak
+    among many smaller ones <button type="button" class="setup-alt" data-alt="six">Six dishes</button></p>
+  </article>
+
+  <article class="exp" data-setup="rotation">
+    <h3>10. The Earth turns</h3>
+    <p>The 27 dishes of a Y like the Very Large Array in New Mexico: 351 baselines.  A snapshot
+    samples a six-pointed star in the uv plane, and the dirty beam has six spokes.  Press
+    <em>Turn the Earth</em>: over twelve hours every baseline sweeps out part of an ellipse, the
+    uv plane fills in, the beam's spokes fade, and the image of Fourier sharpens.
+    Earth-rotation synthesis was Martin Ryle's idea (Nobel prize, 1974).</p>
+    <p>An east–west baseline has no north–south part, and its ellipse is
+    $u^2+(v/\sin\delta)^2=B^2$.  For a source at the celestial pole the tracks are circles
+    <button type="button" class="setup-alt" data-alt="ellipses">East–west line, δ = 90°</button></p>
+    <p>They flatten as $\sin\delta$, and near the celestial equator they are almost lines: the
+    beam is a streak, and the array can hardly tell north from south
+    <button type="button" class="setup-alt" data-alt="equator">δ = 5°</button></p>
+    <p>This line's eight dishes sit at the marks of a Golomb ruler, so that all 28 of its
+    spacings differ.</p>
+  </article>
+
+  <article class="exp" data-setup="resolution">
+    <h3>11. Long baselines and short ones</h3>
+    <p>Two point sources 30″ apart, and a Y as compact as the VLA's smallest configuration
+    (longest baseline 1.04 km, $\lambda/B$ = 42″ at 21 cm): one blob.  Lengthen the longest
+    baseline: as $\lambda/B$ shrinks towards their separation they come apart, and at 1.4 km
+    ($\lambda/B$ = 31″) the dip between them is down to a third of the fainter one.
+    The longest baseline sets the resolution, as the diameter of a lens does: an interferometer
+    is a huge telescope with most of its mirror missing.</p>
+    <p>The shortest baseline sets the other limit
+    <button type="button" class="setup-alt" data-alt="shortspacing">Short spacings</button>
+    A disk 6′ across is larger than $\lambda/B_\text{min}$ = 3.1′.  Its smooth middle is
+    large-scale structure, which lives at short spacings, and they are not measured: dishes
+    can't be closer than their own diameter, and nothing measures $u=v=0$, the total flux.  The
+    dirty image keeps the disk's edges and sits in a negative bowl: it adds up to zero.  CLEAN
+    can't put back what was never measured; single dishes and compact arrays fill in the short
+    spacings.</p>
+  </article>
+
+  <article class="exp" data-setup="eht">
+    <h3>12. An Earth-sized telescope</h3>
+    <p>Nine sites of the Event Horizon Telescope, as in 2018, observing the galaxy M87
+    (declination +12.4°) at 1.3 mm.  Baselines nearly as long as the Earth is wide (12,700 km,
+    $\lambda/B$ = 21 µas) can resolve a ring of light 42 µas across around a black hole's shadow.
+    (The ring is a model, brighter to the south like the one imaged in M87.)  With so few
+    stations the uv plane is sparse, a track breaks off when the source sets for one of its
+    stations, and the dirty beam has strong sidelobes; still, the ring shows.  Run CLEAN.  (The
+    published images used more data and more careful methods.)  Try the declination of
+    Sgr A*, −29°: the South Pole station then sees it all day.</p>
+  </article>
+
+  <article class="exp" data-setup="clean">
+    <h3>13. CLEAN</h3>
+    <p>Högbom's CLEAN (1974) supposes the sky is a set of points.  It finds the brightest pixel
+    of the residual (at first, the dirty image), adds a tenth of it (the loop gain) to the model
+    there, and subtracts a tenth of the dirty beam centred there; then again.  Two point sources,
+    two hours: press <em>Step</em> a few times and watch the residual, then <em>Run</em>.  After
+    97 steps it has found 0.622 and 0.372 Jy at the two sources' pixels; the true fluxes are
+    0.625 and 0.375.  The CLEAN image is the model smoothed by a clean beam (a Gaussian fitted to
+    the dirty beam's main lobe), plus the residual.  Smooth emission (try <em>Fourier</em>)
+    takes thousands of components, and the scales no baseline measured stay missing.</p>
+  </article>
+
+  <h3>What is simplified</h3>
+  <p>Arrays: the elements are ideal point sources or short dipoles, each radiating as if the
+  others weren't there (no mutual coupling), with no ground.  The pattern is drawn in the plane
+  of the elements only.</p>
+  <p>Synthesis: the sky is a grid of 256 × 256 pixels whose transform is computed with the FFT,
+  so the field repeats beyond its edges (sidelobes wrap round).  Each $(u,v)$ sample is moved
+  to the nearest point of the transform's grid, and the third coordinate $w$ is left out (a
+  small field).  The dishes' own fields of view, noise, the atmosphere and the source's
+  spectrum are left out too.  The Earth is a sphere, and a dish sees the source while it is
+  more than 10° above that dish's horizon.</p>
+  <p class="small muted">New in 2026 for BrainFlux.
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
