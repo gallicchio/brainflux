@@ -1,0 +1,63 @@
+/* Dispersion: plots stacked on the left (which ones depends on the view), controls on the right. */
+
+:root {
+  --re: #2f62d8;        /* real parts: n, ε', Re χ */
+  --im: #c8501a;        /* imaginary parts: κ, ε'', Im χ */
+  --refl: #7b3fb5;      /* reflectance */
+  --ng: #1f7a3a;        /* group index */
+  --spec: rgba(90, 100, 120, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --re: #7aa2ff;
+    --im: #ff9a5c;
+    --refl: #c79bff;
+    --ng: #7ad694;
+    --spec: rgba(170, 180, 200, 0.16);
+  }
+}
+
+.dsp {
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px;
+  padding: 12px; max-width: 1500px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.view-row { justify-content: center; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.plot-wrap canvas { width: 100%; height: 100%; }
+#resp { cursor: crosshair; }
+#kkim, #kkre { cursor: crosshair; }
+
+/* Which plots each view shows, and how tall. */
+.dsp .plot-wrap { display: none; }
+.dsp[data-view="medium"] #resp-wrap { display: block; height: max(260px, calc(56vh - 40px)); }
+.dsp[data-view="medium"] #refl-wrap { display: block; height: max(170px, calc(30vh - 30px)); }
+.dsp[data-view="pulse"] #resp-wrap { display: block; height: max(220px, calc(40vh - 40px)); }
+.dsp[data-view="pulse"] #pulse-wrap { display: block; height: max(230px, calc(46vh - 30px)); }
+.dsp[data-view="kk"] .kk { display: block; height: max(170px, calc(28.5vh - 30px)); }
+.dsp:not([data-view="kk"]) #kk-panel { display: none; }
+.dsp:not([data-view="pulse"]) #pulse-panel { display: none; }
+
+.readout { color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 3.2em; line-height: 1.5; }
+.readout b { color: var(--ink); font-weight: 600; }
+.readout .warn { color: var(--warn); }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+.osc-chips button { min-width: 34px; padding: 2px 8px; }
+.osc-chips .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: var(--im); vertical-align: 1px; }
+details summary { cursor: pointer; color: var(--ink-2); }
+details[open] summary { margin-bottom: 6px; }
+#typed-presets button { font-size: 12px; padding: 2px 6px; }
+
+@media (max-width: 900px) {
+  .dsp { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  .dsp[data-view="medium"] #resp-wrap { height: max(240px, 42vh); }
+  .dsp[data-view="medium"] #refl-wrap { height: max(160px, 24vh); }
+  .dsp[data-view="pulse"] #resp-wrap { height: max(210px, 32vh); }
+  .dsp[data-view="pulse"] #pulse-wrap { height: max(220px, 34vh); }
+  .dsp[data-view="kk"] .kk { height: max(160px, 24vh); }
+}
+.dsp[data-view="kk"] #show-panel { display: none; }
