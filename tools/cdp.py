@@ -117,12 +117,16 @@ class Browser:
              f'--remote-debugging-port={port}', f'--user-data-dir={self.profile}',
              f'--window-size={self.size[0]},{self.size[1]}', 'about:blank'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(100):
+        # Up to a minute for Chromium to start: a busy machine can take far longer than usual.
+        deadline = time.time() + 60
+        while True:
             try:
                 tabs = json.load(urllib.request.urlopen(f'http://127.0.0.1:{port}/json'))
                 tab = next(t for t in tabs if t['type'] == 'page')
                 break
             except Exception:
+                if time.time() > deadline:
+                    raise RuntimeError(f'Chromium did not start within 60 s ({self.chromium})')
                 time.sleep(0.1)
         self.ws = _WebSocket(tab['webSocketDebuggerUrl'])
         self.call('Runtime.enable')
