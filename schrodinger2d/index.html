@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scattering in 2D · BrainFlux</title>
+<meta name="description" content="Wave packets scattering off potentials in two dimensions: cross sections, the Born approximation, partial waves and the optical theorem.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="schrodinger2d.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Scattering in two dimensions</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="s2d">
+  <section class="view-col">
+    <div class="view-wrap"><canvas id="view" aria-label="The wave function in the plane"></canvas></div>
+    <div class="readouts mono small" id="readouts"></div>
+  </section>
+
+  <section class="analysis">
+    <div class="panel">
+      <div class="panel-head"><span class="label">Momentum space</span><span class="small muted" id="mom-note"></span></div>
+      <div class="mom-wrap"><canvas id="momentum" aria-label="The wave function in momentum space, with the energy circle"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="label">Differential cross section</span>
+        <span class="row small" id="xs-legend"></span></div>
+      <div class="xs-wrap"><canvas id="xsec" aria-label="dσ/dθ against the scattering angle"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="label">Partial waves and total cross section</span>
+        <span class="small muted">bars sin²δ<sub>m</sub>, dots |S<sub>m</sub>|</span></div>
+      <div class="pw-wrap"><canvas id="waves" aria-label="sin²δ_m for each partial wave m"></canvas></div>
+      <table class="sigmas small" id="sigmas"></table>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="row">
+        <button type="button" id="play" class="primary" title="Play or pause (space)">Play</button>
+        <button type="button" id="restart" title="Start the collision again (R)">Restart</button>
+      </div>
+      <div id="speed-box"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Target</div>
+      <div id="targets" class="button-grid"></div>
+      <div id="v-field"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Incoming packet</div>
+      <div id="packet-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Show</div>
+      <div class="row" id="view-mode"></div>
+      <div class="row" id="shows"></div>
+      <div id="bright-box"></div>
+    </div>
+    <details class="panel">
+      <summary class="label">Grid</summary>
+      <div class="stack" id="grid-box"></div>
+    </details>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A wave packet, nearly a plane wave across the target, runs into a potential $V(x,y)$ and
+  scatters, with $\hbar=m=1$.  The picture is $\psi$ coloured by phase (the colour wheel of the
+  other demos) and lit by $|\psi|$; the potential is drawn faintly, and the dashed circle is
+  the detector.  Far away the scattered part is an outgoing circular wave,
+  $$\psi\to e^{ikx}+f(\theta)\,\frac{e^{ikr}}{\sqrt r},\qquad \frac{d\sigma}{d\theta}=|f(\theta)|^2,$$
+  and in two dimensions a cross section is a length.  Everything on the right is measured on
+  the detector circle while the packet goes by.</p>
+
+  <article class="exp" data-setup="disk">
+    <h3>1. A packet meets a disk</h3>
+    <p>Watch the reflected crescent and the circular wave spreading from the disk.  Switch the
+    view to <em>Scattered only</em>: that is $\psi-\psi_\text{inc}$, the difference the disk makes,
+    computed exactly because the free packet's motion is known in closed form.</p>
+  </article>
+
+  <article class="exp" data-setup="shadow">
+    <h3>2. The shadow is the optical theorem</h3>
+    <p>Behind the disk, a shadow.  In the <em>Scattered only</em> view the shadow is a forward
+    scattered wave in step against the incident one.  The interference between them carries
+    probability away from the forward direction: the table's <em>shadow</em> line is that loss,
+    and it equals the total scattered, line for line.  That is the optical theorem,
+    $\sigma=-\sqrt{8\pi/k}\,\mathrm{Re}\,[e^{i\pi/4}f(0)]$: the forward amplitude knows how much is
+    scattered in all directions.</p>
+  </article>
+
+  <article class="exp" data-setup="born">
+    <h3>3. The Born approximation</h3>
+    <p>A weak, smooth bump.  To first order, $f(\theta)$ is the Fourier transform of the
+    potential at the momentum transfer $q=2k\sin(\theta/2)$:
+    $\frac{d\sigma}{d\theta}=\frac{m^2}{2\pi\hbar^4k}|\tilde V(q)|^2$ (dashed grey).  The measured curve
+    follows it.  Raise $V_0$: the measured cross section grows less than $V_0^2$ and the Born
+    curve overshoots.  Make the bump attractive ($V_0<0$): Born cannot tell the sign; the exact
+    answer can.</p>
+  </article>
+
+  <article class="exp" data-setup="ring">
+    <h3>4. Scattering puts the wave on a circle</h3>
+    <p>Look at momentum space.  The incident packet is a spot at $(k_0,0)$; elastic scattering
+    can only turn $\vec k$, not shorten it, so the scattered wave fills in the circle
+    $|\vec k|=k_0$, brightest where $|f(\theta)|^2$ is largest.  The Born approximation says the
+    brightness at $\vec k$ is $|\tilde V(\vec k-\vec k_0)|^2$: the potential's Fourier transform,
+    centred on the incident spot.</p>
+  </article>
+
+  <article class="exp" data-setup="swave">
+    <h3>5. Partial waves: slow particles scatter in all directions</h3>
+    <p>A small hard disk and a slow packet, $ka\approx1$: only the $m=0$ wave scatters, and the
+    cross section is nearly the same in every direction.  The bars show $\sin^2\delta_m$ for each
+    partial wave; $\sigma=\frac4k\sum_m\sin^2\delta_m$.  Speed the packet up ($k_0$): more partial
+    waves join in, roughly up to $m\approx ka$, and the scattering turns forward.  The dots show
+    $|S_m|=|e^{2i\delta_m}|$, which must be 1 (probability conserved), as a check.</p>
+  </article>
+
+  <article class="exp" data-setup="resonance">
+    <h3>6. A resonance: the packet lingers</h3>
+    <p>An attractive well, with a quasi-bound state near the packet's energy.  Part of the
+    wave is caught, circles inside the well, and leaks out long after the rest has gone,
+    in all directions.  One partial wave's phase shift passes through $\pi/2$
+    ($\sin^2\delta_m=1$, the unitarity limit).</p>
+  </article>
+
+  <article class="exp" data-setup="coulomb">
+    <h3>7. A screened Coulomb potential</h3>
+    <p>Charge scattering: strongly peaked forward, falling off with angle, as Rutherford
+    found.  The screening (length $\ell$) keeps the total cross section finite.</p>
+  </article>
+
+  <article class="exp" data-setup="two">
+    <h3>8. Two scatterers interfere</h3>
+    <p>Two disks, a distance $d$ apart across the beam.  The waves scattered by each
+    interfere, and $d\sigma/d\theta$ has fringes spaced by about $\lambda/d$: the double slit,
+    done with obstacles instead of holes.</p>
+  </article>
+
+  <article class="exp" data-setup="slits">
+    <h3>9. The double slit</h3>
+    <p>A wall with two openings.  Behind it, two circular waves overlap and make fringes; in
+    momentum space, the transverse momenta $k_y$ are quantised into the diffraction orders.
+    Close one slit ($a$) and watch the fringes go.</p>
+  </article>
+
+  <article class="exp" data-setup="crystal">
+    <h3>10. Bragg scattering from a crystal</h3>
+    <p>A small square lattice of scatterers.  The waves from all of them add up only in the
+    directions where $\vec k-\vec k_0$ is a reciprocal lattice vector and $|\vec k|=k_0$: sharp
+    Bragg peaks, where the circle of momentum space crosses the reciprocal lattice (Ewald's
+    construction).</p>
+  </article>
+
+  <article class="exp" data-setup="impact">
+    <h3>11. The impact parameter</h3>
+    <p>A narrow packet aimed off centre, with impact parameter $b$.  Large $b$: it passes by,
+    barely deflected.  Small $b$: it bounces off.  A classical particle's deflection depends on
+    $b$ alone; a wave's spreads, the more so the narrower the packet.</p>
+  </article>
+
+  <article class="exp" data-setup="typed">
+    <h3>12. Your own target</h3>
+    <p>Type any $V(x,y)$, using $x$, $y$, $r$ and $\theta$.  Sharp edges are softened slightly
+    (an edge sharper than the grid can't be followed in time).</p>
+  </article>
+
+  <h3>How it is computed</h3>
+  <p>The split-operator method on a $256\times256$ grid, with an absorbing border.  On the
+  detector circle (radius $R$) the outward flux of the scattered wave is added up over the
+  collision and divided by the incident fluence: that is the measured $d\sigma/d\theta$,
+  averaged over the packet's spread of energies.  At the packet's central energy, the time
+  Fourier transform of $\psi_\text{sc}$ on the circle, expanded in $e^{im\theta}$ and divided by the
+  Hankel functions $H_m(kR)$ and by the incident beam's own partial waves, gives
+  $S_m=e^{2i\delta_m}$ exactly, without assuming $kR\gg1$.</p>
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

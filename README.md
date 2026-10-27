@@ -8,6 +8,7 @@ BrainFlux Java applets of 2001-2007 as plain web pages.
 | [2D Fourier transform](fft2d/) | Paint on a picture or on its Fourier transform; the other side follows as you paint.  Filter, shift, swap phases, find the reciprocal lattice. |
 | [Schrödinger equation in 1D](schrodinger1d/) | Choose or type a potential V(x, t) and an initial wave function; watch it evolve, measure it, run it backwards. |
 | [Least action](action/) | Drag the knots of a path between two events; its action is recorded as you go.  The true path, saddles, phase space, relativity, light, the brachistochrone. |
+| [Scattering in 2D](schrodinger2d/) | Wave packets meet disks, wells, slits, crystals or a typed V(x, y); dσ/dθ measured on a detector circle against Born, partial waves and the optical theorem. |
 
 Each demo opens already doing something worth watching, has preset buttons beside every text
 box, a slider (with a typed value) for every number, and a drawer of guided experiments that set
@@ -44,6 +45,7 @@ browsers refuse to load JavaScript modules from `file://` URLs.)
     python3 tests/ui/fft2d.py              # drive a demo like a student, checking the physics
     python3 tests/ui/schrodinger1d.py
     python3 tests/ui/action.py
+    python3 tests/ui/schrodinger2d.py
 
 `tools/run_page.py` serves the repository and reads back the report the test page posts;
 `tools/cdp.py` drives a page through the Chrome DevTools protocol (standard-library Python

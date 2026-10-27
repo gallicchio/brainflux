@@ -95,14 +95,14 @@ test('wavenumbers are in FFT order', () => {
   assert(maxAbsDiff(k, want) < 1e-15);
 });
 
-test('speed: 256x256 and 512x512 2D FFTs', () => {
+test('speed: 256x256 and 512x512 2D FFTs, in double and single precision', () => {
   const out = [];
-  for (const n of [256, 512]) {
-    const [re, im] = randomComplex(n * n, 5);
+  for (const [n, T] of [[256, Float64Array], [512, Float64Array], [256, Float32Array], [512, Float32Array]]) {
+    const [r0, i0] = randomComplex(n * n, 5), re = T.from(r0), im = T.from(i0);
     fft2(re, im, n, n);
     const reps = n === 256 ? 20 : 5, t0 = performance.now();
     for (let r = 0; r < reps; r++) fft2(re, im, n, n);
-    out.push(`${n}^2: ${((performance.now() - t0) / reps).toFixed(2)} ms`);
+    out.push(`${n}^2 ${T === Float32Array ? 'f32' : 'f64'}: ${((performance.now() - t0) / reps).toFixed(2)} ms`);
   }
   return out.join(', ');
 });
