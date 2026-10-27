@@ -682,16 +682,17 @@ function pulseAt(z) {
     }
     Object.assign(vacCache, { tc, vr, vi, env: null });
   }
-  return { P, tc, t: P.t, mr, mi, vr: vacCache.vr, vi: vacCache.vi, N };
+  // (br, bi: the incident pulse itself, unshifted: the reference for heights, energies and lengths.)
+  return { P, tc, t: P.t, mr, mi, vr: vacCache.vr, vi: vacCache.vi, br: vacCache.br, bi: vacCache.bi, N };
 }
 
 function measure(d, z) {
-  const { t, mr, mi, vr, vi, tc } = d, sh = state.pulse.shape;
-  const m = moments(t, mr, mi), m0 = moments(t, vr, vi);
+  const { t, mr, mi, br, bi, tc } = d, sh = state.pulse.shape;
+  const m = moments(t, mr, mi), m0 = moments(t, br, bi);
   // Times in the frame shown (peak, predicted) and after z/c (peakVac, predictedVac).
   const out = { energy: m.energy / m0.energy, ng: cache.ng0, predicted: z * (cache.ng0 - 1) - tc, predictedVac: z * (cache.ng0 - 1) };
   if (sh !== 'step') {
-    const pk = peakTime(t, mr, mi), pv = peakTime(t, vr, vi);
+    const pk = peakTime(t, mr, mi), pv = peakTime(t, br, bi);
     out.peak = pk.t; out.peakVac = pk.t + tc; out.height = pk.peak / pv.peak; out.stretch = m.rms / m0.rms;
   }
   if (sh !== 'gauss') {
@@ -750,7 +751,8 @@ function drawPulse() {
     if (vamp > ev[c]) ev[c] = vamp;
     mmax = Math.max(mmax, amp);
   }
-  for (let n = 0; n < t.length; n++) vmax = Math.max(vmax, envV ? envV[n] : Math.sqrt(vr[n] * vr[n] + vi[n] * vi[n]));
+  // The scale is the incident pulse's peak, wherever the vacuum pulse is (it may be out of view).
+  for (let n = 0; n < t.length; n++) vmax = Math.max(vmax, Math.sqrt(d.br[n] * d.br[n] + d.bi[n] * d.bi[n]));
   // A column no sample fell in borrows from the one before (only on very wide plots).
   for (let c = 1; c < cols; c++) if (!(fmax[c] >= fmin[c])) { fmin[c] = fmin[c - 1]; fmax[c] = fmax[c - 1]; em[c] = em[c - 1]; ev[c] = ev[c - 1]; wloc[c] = wloc[c - 1]; }
   // Scale the pulse in the medium up if it is small, and say so.
@@ -865,7 +867,9 @@ function checkView() {
     const pk = peakTime(d.t, d.mr, d.mi), pv = peakTime(d.t, d.vr, d.vi);
     let inside = 0, all = 0;
     for (let n = 0; n < d.t.length; n++) { const e = d.mr[n] ** 2 + d.mi[n] ** 2; all += e; if (d.t[n] >= lo && d.t[n] <= hi) inside += e; }
-    if (pk.t < lo || pk.t > hi || pv.t < lo || pv.t > hi || inside < 0.97 * all) fitView();
+    // (In the frame moving with the pulse, the vacuum pulse is meant to be out of view.)
+    const vacOut = state.pulse.frame !== 'group' && (pv.t < lo || pv.t > hi);
+    if (pk.t < lo || pk.t > hi || vacOut || inside < 0.97 * all) fitView();
   }, 300);
 }
 

@@ -24,9 +24,13 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     check(abs(m['peakVac'] - m['predictedVac']) < 0.03 * m['predictedVac'],
           f"delay at z = zmax: predicted z(n_g - 1) = {m['predictedVac']:.2f}, peak at {m['peakVac']:.2f}")
 
+    bad = []
     for name in b.eval('Object.keys(__app.setups)'):
         run(b, name, 1.2)
         b.screenshot(f'build/dsp-exp-{name}.png')
+        text = b.eval("document.querySelector('#readout').textContent")
+        if 'NaN' in text or 'Infinity' in text or 'undefined' in text: bad.append(f'{name}: {text[:120]}')
+    check(not bad, 'every experiment\'s read-out is made of numbers' + ('' if not bad else ': ' + ' | '.join(bad)))
 
     # ---- the handles: drag a line sideways (strength kept), up (stronger), its width (area kept)
     run(b, 'sumrule')
@@ -103,6 +107,9 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     run(b, 'spread')
     ms = b.eval('__app.bench()')
     check(ms < 33, f"spreading in glass: {ms:.1f} ms an animation frame")
+    st = b.eval('[1, 1.732, 5].map((mm) => __app.pulseAt(mm / 1.97327e-4).stretch)')
+    check(abs(st[0] - 2 ** 0.5) < 0.02 and abs(st[1] - 2) < 0.02 and abs(st[2] - 26 ** 0.5) < 0.05,
+          f"a 10 fs pulse in fused silica grows {st[0]:.3f}, {st[1]:.3f}, {st[2]:.3f} times in 1, 1.73, 5 mm (√(1 + (z/L)²) with L = 1.0 mm: 1.414, 2.000, 5.099)")
     vac = b.eval('[0, 0.5, 1, 1.7, 2.3, 3.1, 3.9, 4.6, 5].map((mm) => __app.vacuumInView(mm / 1.97327e-4))')
     check(vac[0] > 0.99 and max(vac[2:]) < 1e-12, f"moving with the pulse, the vacuum pulse is in view at z = 0 ({vac[0]:.3f}) and gone, not wrapped round, beyond 1 mm (largest {max(vac[2:]):.1e})")
     run(b, 'glass')
