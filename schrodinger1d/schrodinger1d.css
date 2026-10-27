@@ -12,15 +12,49 @@
   display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2); min-height: 1.5em;
   padding: 2px 4px;
 }
-.readouts b { color: var(--ink); font-weight: 600; }
+/* Each quantity in a slot of its own, its value right-aligned in a fixed width (set from app.js):
+   nothing moves as the numbers change. */
+.readouts .ro { white-space: nowrap; }
+.readouts b { display: inline-block; text-align: right; color: var(--ink); font-weight: 600; }
 .readouts .warn { color: var(--warn); }
+
+/* The name of each plot, with a key to its marks, in the corner of its frame. */
+.plot-key {
+  position: absolute; left: 56px; top: 15px; max-width: calc(100% - 140px); pointer-events: none;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; padding: 1px 6px;
+  font-size: 12px; color: var(--ink-2); border-radius: 4px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+}
+.mom-wrap .plot-key { top: 10px; }
+.carpet-wrap .plot-key { top: 6px; }
+.plot-key b { color: var(--ink); font-weight: 600; }
+.plot-key span { white-space: nowrap; }
+.plot-key i, .plot-key .mark { display: inline-block; vertical-align: middle; margin: -2px 4px 0 0; }
+.plot-key sub { line-height: 0; }
+.plot-key .mark { width: 22px; height: 11px; }
+.plot-key .mark path { fill: var(--ink); }
+.plot-key .mark path:first-child { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.plot-key .dash { width: 16px; border-top: 2px dashed var(--accent); }
+.plot-key .level { width: 14px; border-top: 1px solid var(--ink-3); }
+.plot-key .cn { width: 10px; height: 4px; background: var(--accent); }
+.plot-key .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
+.plot-key.dark { background: rgba(0, 0, 0, 0.55); color: rgba(255, 255, 255, 0.7); }
+.plot-key.dark b { color: #fff; }
 
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .controls .spacer { flex: 1; }
 .button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
-#suggestions button { font-size: 13px; padding: 3px 8px; }
+/* The initial states: a row per kind, the kind's own button first, then its named states. */
+.starts { display: grid; gap: 4px; }
+.start-row { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 4px; align-items: start; }
+.start-row .names { display: flex; flex-wrap: wrap; gap: 4px; }
+.starts button { font-size: 13px; padding: 3px 8px; }
+.starts button.kind { background: var(--panel-2); color: var(--ink-2); text-align: left; }
+.starts button.kind[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.state-box { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+.s1d .expr input[readonly] { background: var(--panel-2); color: var(--ink-2); }
 #shows button { font-size: 13px; padding: 3px 8px; }
 details.panel summary { cursor: pointer; }
 details.panel[open] summary { margin-bottom: 6px; }
