@@ -193,6 +193,33 @@ class Browser:
     def box(self, selector):
         return self.eval(f'(() => {{ const r = document.querySelector({json.dumps(selector)}).getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }})()')
 
+    def rects(self, selector):
+        """The boxes [left, top, width, height] (page coordinates, to 0.1 px) of every visible element
+        matching selector, in document order: for checking that readouts keep still."""
+        return self.eval(f'''[...document.querySelectorAll({json.dumps(selector)})].map((e) => e.getBoundingClientRect())
+            .filter((r) => r.width || r.height)
+            .map((r) => [r.left + scrollX, r.top + scrollY, r.width, r.height].map((v) => Math.round(v * 10) / 10))''')
+
+    def steady(self, selector, steps, tol=0.5):
+        """Run each of steps (callables that change the numbers shown) and compare the boxes of the
+        elements matching selector with those before.  Returns (moves, texts): moves lists
+        (step index, element index, [dl, dt, dw, dh]) for every element that moved or changed size by
+        more than tol px (or appeared or vanished), texts the distinct texts seen."""
+        first = self.rects(selector)
+        moves, texts = [], {self.eval(f'[...document.querySelectorAll({json.dumps(selector)})].map((e) => e.textContent).join(" | ")')}
+        for i, step in enumerate(steps):
+            step()
+            now = self.rects(selector)
+            texts.add(self.eval(f'[...document.querySelectorAll({json.dumps(selector)})].map((e) => e.textContent).join(" | ")'))
+            if len(now) != len(first):
+                moves.append((i, -1, [len(first), len(now)]))
+                continue
+            for k, (a, b) in enumerate(zip(first, now)):
+                d = [round(y - x, 1) for x, y in zip(a, b)]
+                if max(abs(v) for v in d) > tol:
+                    moves.append((i, k, d))
+        return moves, texts
+
     def point(self, selector, frac):
         x, y, w, h = self.box(selector)
         return x + frac[0] * w, y + frac[1] * h
