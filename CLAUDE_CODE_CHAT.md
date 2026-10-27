@@ -70,4 +70,43 @@ Added while I worked, after I mentioned the photo in the old FFT2D screenshot:
 
 ### Response 1 (2026-10-26, 21:40 onward; this entry is kept up to date as the work goes on)
 
-*(in progress)*
+**Reading the old site (21:40-21:55).**  The two applets are `java/src/brainflux/fft2d` and
+`schrodinger1d`; a subagent swept the rest of the 16,600 files for abandoned ideas.  There is no
+code or note anywhere for the Lagrangian demo, 2D Schrödinger or scattering (all new).  Found:
+the PlaneWave applet (four sign conventions of exp(i(±k.x∓wt))), a LightPropagation applet
+(painted aperture, propagated), SoundFourier/InstrumentFourier (Fourier series you hear, U. Iowa
+instrument samples), RLC and spherical-harmonics stubs, a delta-function potential that only
+survives in `java_old.tar.bz2`, a Mathematica notebook for the V = a|x| well, planned E(x),
+B(x), A(x) panels for the 1D applet, and `About/Philosophy.xml`, whose rules ("Easy Startup",
+"Interesting Presets", "Sliders, not Text Boxes") are now the design rules in `PLAN.md`.
+Bugs in the old code, not carried over: the |.|^2 display never worked (`type != MAG2 ||
+type != MAG2_PHASE` is always true), the probability current used a backwards, half-size
+derivative and filled every other point, and the kinetic energy was p^2/m.  The old solver was
+Crank-Nicolson (unitary), not forward Euler.
+
+**Decisions (`PLAN.md`).**  One repository, `brainflux` (github.com/gallicchio/brainflux, so
+gallicchio.github.io/brainflux/), one folder per demo and a shared `lib/`.  Plain HTML, CSS and
+ES modules: no frameworks, no build, no CDN.  Equations as MathML (native in every browser
+since 2023) from a small TeX translator of our own.  Code MIT, text and pictures CC BY 4.0.
+
+**2D Fourier transform (`fft2d/`, committed 22:25).**  Paint on either side, the other follows
+every frame (256^2 FFT in 2 ms, 512^2 in 12 ms).  Hand, brush, eraser, and a mask that is
+scrubbed live (a low-pass or high-pass filter as you drag), mirror painting (keeps the other
+side real), lattice repeats, zoom, undo, operations (keep magnitude/phase/Re/Im, graft the phase
+of a remembered transform), a gallery led by the Boilly engraving of Fourier and his jacket at
+1:1 (your photo is in it, last), your own picture by file, drop or paste, and the camera.
+Photos are drawn in grey until an edit makes them complex.  Thirteen guided experiments.
+
+**1D Schrödinger equation (`schrodinger1d/`, committed 23:55).**  Split-operator evolution.
+Twelve potentials including the old delta and V = F|x| and new ones (bouncer, tilted lattice
+for Bloch oscillations, driven oscillator), typed V(x, t) and psi0 with automatic sliders,
+stationary states with the state's weights |c_n|^2, measurement of x and E, a classical
+particle, momentum space, a space-time carpet, play backwards (stops at t = 0), eighteen
+experiments.  The hard part was sharp potentials: a step makes the split-operator method heat a
+bound state tenfold.  Fixed by measuring, not guessing: steps are band-limited (reflection
+stays that of the sharp step: R = 0.0941 against 0.0943), walls taller than 30 are rounded,
+static potentials are cell-averaged so an edge sits where it was typed, and the time step
+follows the potential where the wave function is.  33 unit tests and a scripted run of every
+experiment pass.
+
+*(continuing: the least-action demo next)*
