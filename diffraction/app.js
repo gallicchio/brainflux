@@ -3,7 +3,8 @@
 import { diffract, sideView, spectrumOf, sampleAperture, zoneCount, criticalDistance, pitchAt } from './optics.js';
 import { colorize } from '../lib/complexcolor.js';
 import { stroke as paintStroke, paint } from '../fft2d/tools.js';
-import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, setSlots } from '../lib/ui.js';
+import { fillSlots } from '../lib/plot.js';
 
 const N = 512;            // the grid
 const DX = 8;             // micrometres per pixel: the window is 4.096 mm across
@@ -172,19 +173,24 @@ function drawAperture() {
 }
 
 const round125 = (v) => { const e = 10 ** Math.floor(Math.log10(v)), m = v / e; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * e; };
-const fmtLen = (um) => (um < 100 ? `${fmt(um, 3)} µm` : `${fmt(um / 1000, 3)} mm`);
+// Lengths and distances as parts for setSlots or fillSlots: each number in a slot of fixed width
+// with fixed decimals for its unit, so that the words after it keep their places as it changes
+// (they move only when the unit does).
+const lenParts = (um) => (um < 100 ? [{ v: um, dec: 1, w: 4 }, '\u00a0µm'] : [{ v: um / 1000, dec: 2, w: 6 }, '\u00a0mm']);
+const zParts = (z) => (z >= 1e6 ? [{ v: z / 1e6, dec: 2, w: 5 }, '\u00a0m'] : z >= 1000 ? [{ v: z / 1000, dec: 2, w: 6 }, '\u00a0mm'] : [{ v: z, dec: 0, w: 4 }, '\u00a0µm']);
 
 // A scale bar about a quarter of the width: a round length; or, given the screen's distance z
 // once the screen spans a fixed range of angles (past z_c), a round angle and its length there.
 function scaleBar(ctx, w, h, span, z = 0) {
   const dpr = window.devicePixelRatio || 1;
-  let len, text;
-  if (z) { const mrad = round125((span / z) * 250); len = (mrad / 1000) * z; text = `${mrad} mrad (${fmtLen(len)})`; }
-  else { len = round125(span / 4); text = fmtLen(len); }
+  let len, parts;
+  if (z) { const mrad = round125((span / z) * 250); len = (mrad / 1000) * z; parts = [{ v: mrad, dec: 0, w: 3, tiny: true }, '\u00a0mrad (', ...lenParts(len), ')']; }
+  else { len = round125(span / 4); parts = lenParts(len); }
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fillRect(10 * dpr, h - 14 * dpr, (len / span) * w, 3 * dpr);
   ctx.font = `${11 * dpr}px system-ui, sans-serif`;
-  ctx.fillText(text, 10 * dpr, h - 20 * dpr);
+  ctx.textAlign = 'left';
+  fillSlots(ctx, parts, 10 * dpr, h - 20 * dpr);
 }
 
 /** Intensities of the fields over the drawn region, to a coloured image. */
@@ -291,37 +297,39 @@ function drawSide() {
   ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = `${11 * dpr}px system-ui, sans-serif`;
   ctx.fillText('z = 0', 6 * dpr, 13 * dpr);
-  ctx.fillText(`z = ${fmtZ(z)} (the screen)`, 6 * dpr, h / 2 - 4 * dpr);
-  ctx.fillText(`${fmtZ(2 * z)}`, 6 * dpr, h - 5 * dpr);
+  ctx.textAlign = 'left';
+  fillSlots(ctx, ['z = ', ...zParts(z), ' (the screen)'], 6 * dpr, h / 2 - 4 * dpr);
+  fillSlots(ctx, zParts(2 * z), 6 * dpr, h - 5 * dpr);
   const zc = criticalDistance(N, DX, state.white ? 0.45 : state.lambda);
-  $('#side-note').textContent = 'the middle row of the screen, as z goes from 0 (top) to twice the screen\'s distance (bottom)' +
-    (2 * z > zc ? `; past ${fmtZ(zc)} brightened ∝ z², against the spreading` : '');
+  setSlots($('#side-note'), ['the middle row of the screen, as z goes from 0 (top) to twice the screen\'s distance (bottom)',
+    ...(2 * z > zc ? ['; past ', ...zParts(zc), ' brightened ∝ z², against the spreading'] : [])]);
 }
-
-function fmtZ(z) { return z >= 1e6 ? `${fmt(z / 1e6, 3)} m` : z >= 1000 ? `${fmt(z / 1000, 3)} mm` : `${fmt(z, 3)} µm`; }
 
 function updateNotes() {
   const P = screenPitch(), span = SHOW * P, far = P > DX;
-  $('#field-note').textContent = `z = ${fmtZ(state.z)}` +
-    (far ? `: ${fmtLen(span)} across, ±${fmt((span / 2 / state.z) * 1000, 3)} mrad` : '') +
-    (state.z >= ZMAX ? ', the far field' : '');
+  setSlots($('#field-note'), ['z = ', ...zParts(state.z),
+    ...(far ? [': ', ...lenParts(span), ' across, ±', { v: (span / 2 / state.z) * 1000, dec: 2, w: 5 }, '\u00a0mrad'] : []),
+    state.z >= ZMAX ? ', the far field' : '']);
   const p = PRESETS[state.preset];   // undefined when painted by hand
   const lam = state.white ? 0.55 : state.lambda, z = state.z;
-  let text = '';
+  // Words and numbers, each number in a slot of its own (setSlots).
+  let text = [];
   if (p?.fz) {
     const f = state.size * 1000;
     if (state.preset === 'zone') {
       const M = zones(f, lam), R = Math.sqrt(M * lam * f);
-      text = `Focus at f = ${fmt(state.size, 3)} mm (and f/3, f/5...): ${Math.ceil(M / 2)} open rings out to r = ${fmt(R / 1000, 2)} mm, the outermost ${fmt(R - Math.sqrt((M - 1) * lam * f), 2)} µm wide`;
-    } else text = `Focus at f = ${fmt(state.size, 3)} mm; the lens is ${fmt((2 * lensRadius(f, lam)) / 1000, 2)} mm across`;
-  } else if (state.preset === 'grating') text = `Talbot length 2d²/λ = ${fmtZ((2 * state.size * state.size) / lam)}`;
-  else if (state.preset === 'edge') text = `Fringes about √(λz) = ${fmtLen(Math.sqrt(lam * z))} apart`;
+      text = ['Focus at f = ', { v: state.size, dec: 1, w: 5 }, '\u00a0mm (and f/3, f/5...): ', { v: Math.ceil(M / 2), dec: 0, w: 3 }, '\u00a0open rings out to r = ',
+        { v: R / 1000, dec: 2, w: 4 }, '\u00a0mm, the outermost ', { v: R - Math.sqrt((M - 1) * lam * f), dec: 1, w: 4 }, '\u00a0µm wide'];
+    } else text = ['Focus at f = ', { v: state.size, dec: 1, w: 5 }, '\u00a0mm; the lens is ', { v: (2 * lensRadius(f, lam)) / 1000, dec: 2, w: 4 }, '\u00a0mm across'];
+  } else if (state.preset === 'grating') text = ['Talbot length 2d²/λ = ', ...zParts((2 * state.size * state.size) / lam)];
+  else if (state.preset === 'edge') text = ['Fringes about √(λz) = ', ...lenParts(Math.sqrt(lam * z)), ' apart'];
   else if (p?.size[1] && !p.phase) {
     const a = state.size / 2, NF = (a * a) / (lam * z);
-    text = `Fresnel number a²/λz = ${fmt(NF, 3)} (a = ${fmt(a, 3)} µm): ${NF > 3 ? 'near field, a sharp shadow' : NF > 0.3 ? 'in between' : 'far field: the pattern is the Fourier transform'}`;
+    text = ['Fresnel number a²/λz = ', { v: NF, dec: 3, w: 7, tiny: true }, ' (a = ', { v: a, dec: 1, w: 5 }, '\u00a0µm): ',
+      NF > 3 ? 'near field, a sharp shadow' : NF > 0.3 ? 'in between' : 'far field: the pattern is the Fourier transform'];
   }
-  if (far && state.display === 'complex' && !state.white) text += `${text ? '. ' : ''}The phase is shown relative to a spherical wave from the aperture`;
-  $('#fresnel').textContent = text;
+  if (far && state.display === 'complex' && !state.white) text.push(`${text.length ? '. ' : ''}The phase is shown relative to a spherical wave from the aperture`);
+  setSlots($('#fresnel'), text);
 }
 
 // --------------------------------------------------------------------- painting
