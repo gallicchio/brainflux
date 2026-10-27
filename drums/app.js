@@ -31,6 +31,7 @@ const state = {
   c: 100, ring: 1.2, volume: 0.5, sound: true, soundKind: 'strike',
   ray: true, sand: false, log: false, bright: 0,
   countTab: 'list',
+  weylResidual: false,
   seed: 0,                   // the random state's seed (0: a new one each time)
   specMax: null,             // the spectrum's range, in λ
 };
@@ -391,28 +392,36 @@ function playSpectrum(values) {
 // ------------------------------------------------------------------ the main loop
 
 let last = 0, frames = 0, lastSpec = 0, lastMode = 0;
+// Milliseconds spent in each part of the frames so far (for the tests).
+const timing = { frames: 0, advance: 0, stage: 0, spectrum: 0, mode: 0, other: 0 };
 function loop(now) {
   const real = last ? Math.min(0.1, (now - last) / 1000) : 0;
   last = now;
+  let t = performance.now(), t1;
   advance(real);
-  frames++;
+  t1 = performance.now(); timing.advance += t1 - t; t = t1;
+  frames++; timing.frames++;
   if (frames % 10 === 0 && sim) {
     // The brightness follows the field, slowly (a drum's displacement passes through zero).
     const R = isQ() ? autoBrightness(sim.re, sim.im, 0.5) * 0.8 : autoBrightness(sim.u, null, 0.6) * 0.9;
     if (Number.isFinite(R) && R > 0 && (isQ() || sim.t > 0)) autoR = 0.8 * autoR + 0.2 * R;
   }
   drawStage();
+  t1 = performance.now(); timing.stage += t1 - t; t = t1;
   if (specDirty && now - lastSpec > (state.fast ? 250 : 120)) { lastSpec = now; drawSpectrum(); }
+  t1 = performance.now(); timing.spectrum += t1 - t; t = t1;
   if (modeDirty && now - lastMode > 200) { lastMode = now; drawMode(); }
+  t1 = performance.now(); timing.mode += t1 - t; t = t1;
   if (countDirty) drawCount();
   if (frames % 10 === 0) updateReadouts();
+  timing.other += performance.now() - t;
   requestAnimationFrame(loop);
 }
 
 // ------------------------------------------------------------------ drawing: the stage
 
 const stage = $('#stage');
-let fieldImage = null, wallImage = null, flipMap = null;
+let fieldImage = null, wallImage = null, wallLayer = null, flipMap = null;
 
 function ensureImages() {
   const n = state.n;
@@ -456,26 +465,36 @@ function drawStage() {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(fieldImage, 0, 0, W, H);
   }
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(wallImage, 0, 0, W, H);
-  ctx.imageSmoothingEnabled = true;
-  // The true edge of a preset, over its staircase.
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
-  for (const line of geo.outline || []) {
-    ctx.beginPath();
-    line.forEach(([x, y], i) => { const [X, Y] = toCanvas(x, y, W); if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
-    ctx.stroke();
+  // The walls, and the true edge of a preset over its staircase: drawn once at the canvas's own
+  // resolution, then copied each frame.
+  if (!wallLayer || wallLayer.width !== stage.width || wallLayer.height !== stage.height || wallLayer.src !== wallImage) {
+    wallLayer = document.createElement('canvas');
+    wallLayer.width = stage.width; wallLayer.height = stage.height; wallLayer.src = wallImage;
+    const w = wallLayer.getContext('2d'), s = stage.width / W;
+    w.setTransform(s, 0, 0, s, 0, 0);
+    w.imageSmoothingEnabled = false;
+    w.drawImage(wallImage, 0, 0, W, H);
+    w.strokeStyle = 'rgba(255,255,255,0.35)'; w.lineWidth = 1;
+    for (const line of geo.outline || []) {
+      w.beginPath();
+      line.forEach(([x, y], i) => { const [X, Y] = toCanvas(x, y, W); if (i) w.lineTo(X, Y); else w.moveTo(X, Y); });
+      w.stroke();
+    }
   }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(wallLayer, 0, 0); ctx.restore();
   // The classical particle and its path.
   if (isQ() && ray && state.ray) {
+    // The last 60 legs of the path, fading with age, in five strokes.
     const pts = ray.path.concat([[ray.x, ray.y]]);
     ctx.lineWidth = 1.4;
-    const first = Math.max(0, pts.length - 60);
-    for (let i = first + 1; i < pts.length; i++) {
-      const a = 0.15 + (0.75 * (i - first)) / (pts.length - first);
-      ctx.strokeStyle = `rgba(255, 214, 90, ${a})`;
-      const [X0, Y0] = toCanvas(...pts[i - 1], W), [X1, Y1] = toCanvas(...pts[i], W);
-      ctx.beginPath(); ctx.moveTo(X0, Y0); ctx.lineTo(X1, Y1); ctx.stroke();
+    const first = Math.max(0, pts.length - 61), span = pts.length - 1 - first;
+    for (let gI = 0; gI < 5; gI++) {
+      const a = Math.floor(first + (span * gI) / 5), b = Math.floor(first + (span * (gI + 1)) / 5);
+      if (b <= a) continue;
+      ctx.strokeStyle = `rgba(255, 214, 90, ${0.2 + 0.16 * (gI + 1)})`;
+      ctx.beginPath();
+      for (let i = a; i <= b; i++) { const [X, Y] = toCanvas(...pts[i], W); if (i === a) ctx.moveTo(X, Y); else ctx.lineTo(X, Y); }
+      ctx.stroke();
     }
     const [X, Y] = toCanvas(ray.x, ray.y, W);
     ctx.fillStyle = '#ffd65a'; ctx.beginPath(); ctx.arc(X, Y, 4, 0, 2 * Math.PI); ctx.fill();
@@ -773,29 +792,44 @@ function drawCount() {
   if (!values || values.length < 8) { note.textContent = solving ? 'waiting for the eigenvalues…' : ''; return; }
   const h = grid.h;
   if (state.countTab === 'weyl') {
+    // Either N(λ) itself, or what is left after the area term, N − Aλ/4π, against √λ: there the
+    // perimeter term is a straight line falling with slope −P/4π.
+    const resid = state.weylResidual;
+    const A = geo.area, P = geo.perimeter, K = geo.K ?? 0;
+    const area = (l) => (A * gridCorrected(l, h)) / (4 * Math.PI);
     const f = new Frame(ctx, width, height, { left: 40, right: 10, top: 10, bottom: 32 });
     const lmax = values[values.length - 1] * 1.02;
-    f.x0 = 0; f.x1 = lmax; f.y0 = 0; f.y1 = values.length * 1.08;
+    const X = (l) => f.X(resid ? Math.sqrt(l) : l);
+    f.x0 = 0; f.x1 = resid ? Math.sqrt(lmax) : lmax;
+    if (resid) {
+      let lo = 0, hi = 0;
+      values.forEach((l, k) => { lo = Math.min(lo, k - area(l)); hi = Math.max(hi, k + 1 - area(l)); });
+      f.y0 = Math.floor(lo - 1); f.y1 = Math.ceil(hi + 1);
+    } else { f.y0 = 0; f.y1 = values.length * 1.08; }
+    const Y = (l, v) => f.Y(resid ? v - area(l) : v);
     f.clip();
-    const A = geo.area, P = geo.perimeter, K = geo.K ?? 0;
-    const curve = (fn, color, dash) => {
-      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash);
+    const curve = (fn, color, dash, w = 1.5) => {
+      ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash);
       ctx.beginPath();
-      for (let px = 0; px <= f.w; px += 2) { const l = f.invX(f.left + px), v = fn(l); if (px) ctx.lineTo(f.left + px, f.Y(v)); else ctx.moveTo(f.left + px, f.Y(v)); }
+      for (let px = 0; px <= f.w; px += 2) {
+        const u = f.invX(f.left + px), l = resid ? u * u : u, y = Y(l, fn(l));
+        if (px) ctx.lineTo(f.left + px, y); else ctx.moveTo(f.left + px, y);
+      }
       ctx.stroke(); ctx.setLineDash([]);
     };
-    curve((l) => (A * l) / (4 * Math.PI), c.ink3, [2, 3]);
-    curve((l) => weyl(A, P, K, gridCorrected(l, h)), c.warn, [6, 3]);
-    // The staircase.
+    if (resid) { ctx.strokeStyle = c.line; ctx.beginPath(); ctx.moveTo(f.left, f.Y(0)); ctx.lineTo(f.right, f.Y(0)); ctx.stroke(); }
+    else curve((l) => (A * l) / (4 * Math.PI), c.ink3, [2, 3]);
+    // The staircase, then Weyl's three terms over it.
     ctx.strokeStyle = c.accent; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(f.X(0), f.Y(0));
-    values.forEach((l, k) => { ctx.lineTo(f.X(l), f.Y(k)); ctx.lineTo(f.X(l), f.Y(k + 1)); });
-    ctx.lineTo(f.X(lmax), f.Y(values.length));
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0, 0));
+    values.forEach((l, k) => { ctx.lineTo(X(l), Y(l, k)); ctx.lineTo(X(l), Y(l, k + 1)); });
     ctx.stroke();
+    curve((l) => weyl(A, P, K, gridCorrected(l, h)), c.warn, [6, 3], 1.8);
     ctx.restore();
-    f.axes({ xlabel: 'λ', ylabel: 'N(λ)' });
+    f.axes({ xlabel: resid ? '√λ' : 'λ', ylabel: resid ? 'N − Aλ/4π' : 'N(λ)' });
     const fit = hearShape(values, { h, K: geo.K ?? null });
-    note.innerHTML = `<span class="key" style="--c:${c.accent}"></span>modes counted &nbsp; <span class="key dashed" style="--c:${c.warn}"></span>Weyl: Aλ/4π − P√λ/4π + K &nbsp; <span class="key dotted" style="--c:${c.ink3}"></span>area term only<br>`
+    note.innerHTML = `<span class="key" style="--c:${c.accent}"></span>counted &nbsp;<span class="key dashed" style="--c:${c.warn}"></span>Weyl, Aλ/4π − P√λ/4π + K`
+      + (resid ? '' : ` &nbsp;<span class="key dotted" style="--c:${c.ink3}"></span>area alone`) + '<br>'
       + (fit ? `Heard from ${values.length} modes: area ${fmt(fit.area, 4)} (true ${fmt(A, 4)}), perimeter ${fmt(fit.perimeter, 3)} (true ${fmt(P, 3)})` : '')
       + (state.shape === 'drawn' || state.shape === 'typed' ? ' (true values estimated from the drawing)' : '');
   } else {
@@ -824,11 +858,17 @@ function drawCount() {
 
 // ------------------------------------------------------------------ readouts
 
+/** The relative change of the scheme's conserved quantity since the start. */
+function drift(v) {
+  const d = v / conserved0 - 1;
+  return Math.abs(d) < 1e-16 ? '< 1e-16' : d.toExponential(0);
+}
+
 function updateReadouts() {
   if (!sim) { $('#readouts').innerHTML = ''; return; }
   const items = [];
   if (isQ()) {
-    items.push(['t', fmt(sim.t, 4)], ['norm drift', (sim.norm() / conserved0 - 1).toExponential(0)]);
+    items.push(['t', fmt(sim.t, 4)], ['norm drift', drift(sim.norm())]);
     const st = energyStats(grid, sim.re, sim.im, 0.5);
     items.push(['⟨E⟩', `${fmt(st.mean, 4)} ± ${fmt(st.spread, 3)}`]);
     if (ray) items.push(['bounces', ray.bounces]);
@@ -836,7 +876,7 @@ function updateReadouts() {
     const ms = (sim.t * L_PHYS) / state.c * 1000;
     items.push(['t', `${fmt(ms, 4)} ms`]);
     if (!state.fast) items.push(['slowed down', `${fmt(1 / ((L_PHYS / state.c) * state.speed.drum), 2)} times`]);
-    items.push(['energy drift', (sim.energy() / conserved0 - 1).toExponential(0)]);
+    items.push(['energy drift', drift(sim.energy())]);
   }
   items.push(['grid', `${state.n}² (${grid.N} free points)`]);
   $('#readouts').innerHTML = items.map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
@@ -1149,11 +1189,15 @@ function showTab(v) {
   state.countTab = v; countSeg.value = v;
   $('#list-tab').hidden = v !== 'list';
   $('#count-tab').hidden = v === 'list';
+  $('#weyl-tools').hidden = v !== 'weyl';
   $('#list-note').textContent = v === 'list' ? (geo?.exactNote ? `exactly: ${geo.exactNote}` : '') : '';
   countDirty = true;
   if (v !== 'list') drawCount();
 }
 $('#count-more').addEventListener('click', () => requestCount());
+const residToggle = toggle('Take away the area term', state.weylResidual, (on) => { state.weylResidual = on; drawCount(); },
+  'Plot N(λ) − Aλ/4π against √λ: what is left is the perimeter term, a straight line of slope −P/4π, and the fluctuations');
+$('#weyl-tools').append(residToggle);
 
 // The display.
 $('#bright-box').append(slider({ label: 'brightness', min: -1.5, max: 1.5, value: 0, step: 0.01, onInput: (v) => { state.bright = v; } }));
@@ -1309,7 +1353,7 @@ window.__app = {
   state, setups, get grid() { return grid; }, get sim() { return sim; }, get signal() { return signal; }, get spec() { return spec; },
   get modes() { return modes; }, get counted() { return counted; }, get geo() { return geo; }, get filter() { return filter; },
   get selected() { return selected; }, get ray() { return ray; }, get pinned() { return pinned; }, get mask() { return mask; },
-  get norm0() { return conserved0; }, get psi0() { return psi0; }, get probe() { return probe; },
+  get norm0() { return conserved0; }, get psi0() { return psi0; }, get probe() { return probe; }, timing,
   selectPeak, selectExact, restart, setShape, setMode, computeSpectrum: () => { computeSpectrum(); return spec; }, lambdaOfOmega, xOf,
   ready: true,
 };

@@ -184,8 +184,36 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
     h = b.eval('location.hash')
     check('shape=circle' in h and 'mode=quantum' in h, f'the address keeps the set-up ({h[:60]}...)')
 
+    # A typed shape: the default ellipse x²/a² + y²/b² < 1, a = 0.45, b = 0.3.
+    b.eval("document.querySelector('#presets button:last-child').click()")
+    ok = wait_for(b, '__app.state.shape === "typed" && __app.modes', 60)
+    area = b.eval('__app.grid.N * __app.grid.h ** 2')
+    check(ok and abs(area / (3.14159265 * 0.45 * 0.3) - 1) < 0.03, f'typed: the ellipse x²/a² + y²/b² < 1 has area {area:.4f} (πab = {3.14159265 * 0.45 * 0.3:.4f}) and gets its modes')
+    b.screenshot('build/drums-typed.png')
+
+    # A coarser grid, and a tiny drawn drum (fewer free points than modes asked for).
+    b.eval("document.querySelector('#grid-box button').click()")
+    ok = wait_for(b, '__app.grid.n === 96 && __app.modes', 60)
+    check(ok, f"the 96² grid works ({b.eval('__app.grid.N')} free points, {b.eval('__app.modes && __app.modes.values.length')} modes)")
+    b.eval("document.getElementById('clear').click()")
+    b.sleep(0.3)
+    b.drag('#stage', (0.48, 0.48), (0.53, 0.52), steps=4)
+    ok = wait_for(b, '__app.state.shape === "drawn" && __app.modes', 60)
+    r = b.eval('({ N: __app.grid.N, m: __app.modes && __app.modes.values.length, t: __app.sim && __app.sim.t })')
+    check(ok and r['m'] and r['m'] <= r['N'], f"a tiny drawing ({r['N']} free points) gets {r['m']} modes and runs")
+
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
+
+# Opening a set-up from the address.
+with Browser('drums/index.html#mode=drum&shape=stadium&p=%7B%22r%22%3A0.3%2C%22a%22%3A0.1%7D&x=0.05&y=0.1&w=0.02', size=(1200, 900)) as b:
+    b.wait('window.__app && __app.ready')
+    b.sleep(1)
+    r = b.eval('({ mode: __app.state.mode, shape: __app.state.shape, r: __app.state.params.r, a: __app.state.params.a, x: __app.state.strike.x, w: __app.state.mallet })')
+    check(r['mode'] == 'drum' and r['shape'] == 'stadium' and abs(r['r'] - 0.3) < 1e-9 and abs(r['a'] - 0.1) < 1e-9 and abs(r['x'] - 0.05) < 1e-9 and abs(r['w'] - 0.02) < 1e-9,
+          f'the address restores a set-up ({r})')
+    errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
+    check(not errors, 'restored set-up: no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 
 # Phone width.
 with Browser('drums/index.html#setup=circle', size=(400, 850)) as b:
