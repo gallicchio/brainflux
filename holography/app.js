@@ -642,6 +642,8 @@ function drawFront() {
       if (k === state.sel) { ctx.strokeStyle = c.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 3.5, 0, 2 * Math.PI); ctx.stroke(); }
       ctx.fillStyle = c.ink2; ctx.fillText(`${fmt(pt.z / MM, 3)}`, x + r + 4, y);
     });
+    ctx.fillStyle = c.ink3; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText('depths in mm', width - 5, height - 3);
   }
 }
 
@@ -911,7 +913,7 @@ function syncLambda2() { sameToggle.on = state.sameColour; lambda2Slider.value =
 const lambdaSlider = slider({ label: 'laser λ (nm)', min: 400, max: 700, step: 1, value: 633, title: 'The wavelength the hologram is recorded with',
   onInput: (v) => { state.lambda = v / 1000; syncRef(); syncLambda2(); fitScene(); changed(); } });
 const pitchSlider = slider({ label: 'pixel (µm)', min: 2, max: 20, step: 0.1, value: 5, title: 'The pixel pitch of the camera',
-  onInput: (v) => { state.pitch = v; syncRef(); fitScene(); changed(); } });
+  onInput: (v) => { state.pitch = v; syncRef(); syncWindow(); fitScene(); stale.holo = true; changed(); } });
 const ratioSlider = slider({ label: 'object/ref.', min: 0.03, max: 3, log: true, value: 0.3, title: 'The amplitude of the object light at the plate (r.m.s.) relative to the reference beam',
   onInput: (v) => { state.ratio = v; changed(); } });
 const bitsToggle = toggle('Round the grey levels', state.bits > 0, (on) => { state.bits = on ? bitsSlider.value : 0; bitsSlider.hidden = !on; changed(); }, 'Record only a few grey levels, as a cheap camera (or a printer) would');
@@ -984,7 +986,9 @@ const jumpTwin = el('button', { type: 'button', title: 'Focus on the twin image 
 $('#jump-box').append(jumpImage, jumpTwin);
 function jump(which) {
   const pts = objectPoints(), pt = state.object === 'points' ? selPt() : pts[0];
-  const im = images(pointDescription(pt), refDesc(), refDesc(state.relight === 'conj'), lam2() / state.lambda)[which];
+  // Lit by the conjugate beam, the image to look at is the real one, made by the twin term.
+  const term = state.relight === 'conj' ? (which === 'image' ? 'twin' : 'image') : which;
+  const im = images(pointDescription(pt), refDesc(), refDesc(state.relight === 'conj'), lam2() / state.lambda)[term];
   state.sweepFocus = false; sweepFocusToggle.on = false;
   if (!Number.isFinite(im.R) || Math.abs(im.R) > 1e6) { setFocus(1e6); return; }
   setFocus(im.R); fitScene();
@@ -1085,7 +1089,8 @@ drawer($('#help'), $('#help-button'), setups);
 function fromHash() {
   const hash = readHash();
   if (setups[hash.setup]) setups[hash.setup]();
-  else apply(readState(hash));
+  else if (Object.keys(hash).length) apply(readState(hash));
+  else apply({ sweepFocus: true });   // the opening view: the focus sweeps through the points
 }
 fromHash();
 // A link to another set-up on this page (#setup=...) is followed without a reload.  (The page's

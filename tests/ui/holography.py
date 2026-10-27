@@ -54,6 +54,8 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1)
     b.eval(HELPERS)
     b.screenshot('build/holo-start.png')
+    check(b.eval('__app.state.sweepFocus'), 'the opening view sweeps the focus')
+    b.eval('__app.apply({})'); b.sleep(0.3)
     check('Three separate islands' in b.eval('__app.verdict()'), f"the opening view is off axis and clean: {b.eval('__app.verdict()')!r}")
 
     # Every experiment in the drawer has a set-up, and the other way round.
@@ -198,6 +200,10 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     only01 = b.eval('__app.W.H.every((v) => v === 0 || v === 1)')
     cb = b.eval('T.corr(__app.W.picB, [93, 93, 163, 163])')
     check(only01 and cb > 0.8, f'the binary hologram is black and white, and its F correlates {cb:.3f} with the picture')
+    b.eval("document.querySelector('#camera-panel').open = true"); b.sleep(0.2)
+    b.eval("T.slider('bits', 4)"); b.eval('__app.redraw()')
+    c4 = b.eval('T.corr(__app.W.picB, [93, 93, 163, 163])')
+    check(c4 > 0.97, f'with 4 bits the F correlates {c4:.3f} (the help: all but perfect)')
 
     # 13. The steepest reference: fringes of two pixels, and the warning.
     b.eval('__app.setups.steep()'); b.sleep(0.4); b.eval('__app.redraw()')

@@ -22,6 +22,11 @@
 // (non-paraxial) phase of a lens focused on the axis.  Directions are sampled every
 // lambda/(n p) radians out to +-lambda/2p, which is as fine and as wide as the plate allows: the
 // pixels cannot record fringes finer than two pixels, nor send light to larger angles.
+// (Why not propagate the plate's light by the angular spectrum, on the plate's own grid, as
+// diffraction/optics.js does?  At the image the zero order and the twin have moved sideways by
+// one to three plate widths; on a periodic grid one plate wide they wrap round onto the image,
+// and off-axis holography would look no better than in-line.  The tests check this Fresnel
+// transform against optics.js where both apply.)
 
 import { fft2Centered } from '../lib/fft.js';
 
