@@ -1,5 +1,7 @@
 import { test, assert, close } from './harness.js';
 import { Sim1D, eigenstates, prepareSharpPotential } from '../schrodinger1d/sim.js';
+import { POTENTIALS } from '../schrodinger1d/presets.js';
+import { parse } from '../lib/expr.js';
 
 function gaussianPacket(sim, x0, sigma, k0) {
   const re = new Float64Array(sim.n), im = new Float64Array(sim.n);
@@ -221,4 +223,84 @@ test('the delta well: one bound state at -alpha^2/2, and T = k^2/(k^2 + alpha^2)
   // square well 0.05 wide and 20 deep transmits 0.509 at k = 1 where a delta transmits 0.5.
   close(T, num / den, 0.03, 'T');
   return `E = ${bound[0].E.toFixed(4)}, T = ${T.toFixed(4)} (analytic ${(num / den).toFixed(4)})`;
+});
+
+// ------------------------------------------------------------------ the presets
+
+const preset = (id) => POTENTIALS.find((p) => p.id === id);
+const start = (id, label) => preset(id).states.find((s) => s.label === label);
+
+/** The demo's way with a typed potential: averaged over each cell (8 samples), then made fit for the method. */
+function presetPotential(sim, p) {
+  const e = parse(p.V, { variables: ['x', 't'] }), sub = 8, xs = new Float64Array(sim.n * sub);
+  for (let j = 0; j < sim.n; j++) for (let s = 0; s < sub; s++) xs[j * sub + s] = sim.x[j] + ((s + 0.5) / sub - 0.5) * sim.dx;
+  const v = e.evaluate({ x: xs, t: 0, m: 1, ...p.params }, xs.length).re;
+  const V = new Float64Array(sim.n);
+  for (let j = 0; j < sim.n; j++) { let a = 0; for (let s = 0; s < sub; s++) a += v[j * sub + s]; V[j] = a / sub; }
+  return prepareSharpPotential(V, sim.dx, { kc: p.kc || 16 });
+}
+
+test('the squeezed preset breathes in place: <x> = <p> = 0, sigma_x^2 = s^2 cos^2 t + sin^2 t / 4 s^2', () => {
+  const { x0, sigma: s, k0 } = start('harmonic', 'Squeezed').params;
+  assert(x0 === 0 && k0 === 0, 'centred and at rest');
+  const sim = new Sim1D({ n: 1024, xmin: -10, xmax: 10, boundary: 'walls' });
+  sim.setPotential(sim.x.map((x) => 0.5 * x * x));
+  gaussianPacket(sim, x0, s, k0);
+  const notes = [];
+  for (const t of [Math.PI / 4, Math.PI / 2]) {
+    sim.step(Math.PI / 800, Math.round((t - sim.t) / (Math.PI / 800)));
+    const o = sim.observables();
+    close(o.x, 0, 1e-10, `<x> at t = ${t.toFixed(3)}`);
+    close(o.p, 0, 1e-10, `<p> at t = ${t.toFixed(3)}`);
+    close(o.sx, Math.sqrt(s * s * Math.cos(t) ** 2 + Math.sin(t) ** 2 / (4 * s * s)), 1e-4, 'sigma_x');
+    notes.push(`sigma_x(${t.toFixed(2)}) = ${o.sx.toFixed(4)}`);
+  }
+  return notes.join(', ');
+});
+
+test('the finite well: the packet on a transmission resonance passes, the one off it mostly reflects', () => {
+  // As the demo runs it: its domain, grid and absorbing ends, the well cell-averaged and band-limited.
+  const p = preset('well'), { V0, a } = p.params;
+  const Tk = (k) => { const E = k * k / 2, q = Math.sqrt(2 * (E + V0)); return 1 / (1 + (V0 * V0 * Math.sin(2 * a * q) ** 2) / (4 * E * (E + V0))); };
+  const notes = [];
+  for (const [label, tEnd, inRange] of [['On resonance', 30, (T) => T > 0.97], ['Off resonance', 50, (T) => T < 0.4]]) {
+    const { x0, sigma, k0 } = start('well', label).params;
+    const sim = new Sim1D({ n: p.n, xmin: p.domain[0], xmax: p.domain[1], boundary: p.boundary });
+    sim.setPotential(presetPotential(sim, p));
+    gaussianPacket(sim, x0, sigma, k0);
+    sim.absorbSpeed = Math.max(1.5, k0 + 3 / (2 * sigma));
+    const dt = sim.suggestedStep(sim.observables().E);
+    sim.step(dt, Math.round(tEnd / dt));
+    const T = 1 - sim.probabilityLeftOf(0) - sim.absorbedLeft;
+    // The plane-wave T(k), averaged over the packet's spread in k.
+    const sk = 1 / (2 * sigma);
+    let num = 0, den = 0;
+    for (let k = k0 - 6 * sk; k <= k0 + 6 * sk; k += sk / 50) { const w = Math.exp(-((k - k0) ** 2) / (2 * sk * sk)); num += w * Tk(Math.abs(k)); den += w; }
+    close(T, num / den, 0.01, `${label}: T`);
+    assert(inRange(T), `${label}: T = ${T}`);
+    notes.push(`${label}: 2ak'/pi = ${(2 * a * Math.sqrt(k0 * k0 + 2 * V0) / Math.PI).toFixed(3)}, T = ${T.toFixed(4)} (analytic ${(num / den).toFixed(4)})`);
+  }
+  return notes.join('; ');
+});
+
+test('every potential has named starts, and a typed start that is smooth (its <T> does not depend on the grid)', () => {
+  const notes = [];
+  for (const p of POTENTIALS) {
+    const labels = p.states.map((s) => s.label);
+    assert(labels.length && new Set(labels).size === labels.length, `${p.id}: named starts, each once`);
+    assert(p.typed?.psi, `${p.id}: a typed start`);
+    const e = parse(p.typed.psi, { variables: ['x'] }), T = [];
+    for (const n of [p.n, 2 * p.n]) {
+      const sim = new Sim1D({ n, xmin: p.domain[0], xmax: p.domain[1], boundary: p.boundary });
+      const v = e.evaluate({ x: sim.x, m: 1, ...p.typed.params }, n);
+      sim.setPsi(v.re, v.im);
+      assert(sim.normalize(), `${p.id}: the typed start is not zero`);
+      T.push(sim.observables().T);
+    }
+    // A jump in psi (or a psi that is not zero at a wall) makes <T> grow with the grid's k_max.
+    close(T[1], T[0], 1e-3 * Math.max(1, T[0]), `${p.id}: <T> on two grids`);
+    if (p.erange) assert(T[0] < p.erange[1] - p.erange[0], `${p.id}: <T> = ${T[0]} fits the plot`);
+    notes.push(`${p.id} ${T[0].toFixed(3)}`);
+  }
+  return `<T>: ${notes.join(', ')}`;
 });

@@ -20,9 +20,20 @@
 <main class="s1d">
   <section class="plots">
     <div class="readouts mono small" id="readouts" aria-live="off"></div>
-    <div class="plot-wrap main-wrap"><canvas id="plot" aria-label="The wave function over the potential"></canvas></div>
-    <div class="plot-wrap mom-wrap" id="mom-wrap"><canvas id="momentum" aria-label="The wave function in momentum space"></canvas></div>
-    <div class="plot-wrap carpet-wrap" id="carpet-wrap"><canvas id="carpet" aria-label="Space-time picture: position across, time downwards"></canvas></div>
+    <div class="plot-wrap main-wrap"><canvas id="plot" aria-label="The wave function over the potential, with the mean position and its spread"></canvas>
+      <div class="plot-key"><b>Position</b>
+        <span><svg class="mark" viewBox="0 0 24 12" aria-hidden="true"><path d="M2 3v7M22 3v7M2 7.5h20"/><path d="M12 1.5l-5.5 10h11z"/></svg>⟨x⟩ ± σ<sub>x</sub></span>
+        <span><i class="dash"></i>⟨E⟩</span>
+        <span id="key-levels"><i class="level"></i>levels, <i class="cn"></i>|c<sub>n</sub>|²</span>
+        <span id="key-classical" hidden><i class="dot"></i>classical particle</span>
+      </div></div>
+    <div class="plot-wrap mom-wrap" id="mom-wrap"><canvas id="momentum" aria-label="φ(p), the wave function in momentum space, with the mean momentum and its spread"></canvas>
+      <div class="plot-key"><b>Momentum</b>
+        <span><svg class="mark" viewBox="0 0 24 12" aria-hidden="true"><path d="M2 3v7M22 3v7M2 7.5h20"/><path d="M12 1.5l-5.5 10h11z"/></svg>⟨p⟩ ± σ<sub>p</sub></span>
+        <span id="key-classical-p" hidden><i class="dot"></i>classical</span>
+      </div></div>
+    <div class="plot-wrap carpet-wrap" id="carpet-wrap"><canvas id="carpet" aria-label="Space-time picture: position across, time downwards"></canvas>
+      <div class="plot-key dark"><b>Space-time</b> <span>x across, t downwards</span></div></div>
   </section>
 
   <aside class="controls">
@@ -43,13 +54,12 @@
 
     <div class="panel">
       <div class="label">Initial wave function</div>
-      <div id="suggestions" class="row"></div>
-      <div id="kind"></div>
-      <div id="state-box"></div>
+      <div id="starts" class="starts"></div>
+      <div id="state-box" class="state-box"></div>
     </div>
 
     <div class="panel">
-      <div class="label">Measure</div>
+      <div class="label">Make a measurement</div>
       <div class="row">
         <button type="button" id="measure-x" title="Find the particle: the wave function collapses around a position chosen with probability |ψ|²">Position</button>
         <button type="button" id="measure-e" title="Measure the energy: the wave function collapses onto one stationary state, chosen with probability |c_n|²">Energy</button>
@@ -76,11 +86,19 @@
   <p>The time-dependent Schrödinger equation
   $$i\hbar\frac{\partial\psi}{\partial t}=-\frac{\hbar^2}{2m}\frac{\partial^2\psi}{\partial x^2}+V(x,t)\,\psi$$
   with $\hbar=m=1$.  The filled curve is $|\psi|^2$, the probability density, coloured by the
-  phase of $\psi$ (the colour wheel below); the grey region is $V(x)$, read on the right-hand
-  energy axis, with the stationary states' energies as thin lines and $\langle E\rangle$ dashed.
-  Pick a potential and an initial state, then press <em>Play</em>.  Typed expressions may use
-  any symbols: each new one gets a slider.  Change the potential while the clock runs, and the
-  wave function feels it suddenly.</p>
+  phase of $\psi$ (the colour wheel below); the grey region is $V(x)$ (an infinite wall is a grey
+  band), read on the right-hand energy axis, with the stationary states' energies as thin lines
+  and $\langle E\rangle$ dashed.  The triangle at the foot is $\langle x\rangle$, and the bar
+  through it spans $\langle x\rangle\pm\sigma_x$.  Under it is the wave function in momentum
+  space, $\phi(p)=\frac{1}{\sqrt{2\pi\hbar}}\int\psi(x)\,e^{-ipx/\hbar}\,dx$, drawn the same
+  way, with $\langle p\rangle\pm\sigma_p$.</p>
+  <p>Pick a potential and an initial state, then press <em>Play</em>.  The initial states come in
+  four kinds, a row each: a Gaussian packet, a stationary state, an equal mix of two, and a
+  formula you type.  Each row starts with its kind, then named starting points of that kind;
+  the highlighted button is the state loaded.  Move one of its sliders and the highlight moves
+  to the kind: the state is now your own.  Typed expressions may use any symbols: each new one
+  gets a slider.  Change the potential while the clock runs, and the wave function feels it
+  suddenly.</p>
   <figure class="wheel-figure"><canvas id="legend" width="100" height="100"></canvas>
   <figcaption class="small muted">Phase colours: red is positive real, cyan negative real,
   yellow-green $+i$, violet $-i$.  A wave $e^{ikx}$ has colours cycling along $x$: the faster they
@@ -99,7 +117,7 @@
     <h3>2. The phase is the momentum</h3>
     <p>A packet moving to the right has colours cycling along it, at a rate set by $k_0$.  Drag the
     $k_0$ slider through zero: the colour stripes stop, then cycle the other way, and the packet
-    goes left.  The momentum panel shows the same thing: $|\tilde\psi(p)|^2$ is centred on
+    goes left.  The momentum panel shows the same thing: $|\phi(p)|^2$ is centred on
     $\hbar k_0$.</p>
   </article>
 
@@ -131,8 +149,9 @@
   <article class="exp" data-setup="coherent">
     <h3>6. A coherent state: almost classical</h3>
     <p>A Gaussian with the ground state's width, displaced, in a harmonic well.  It swings back
-    and forth without changing shape, with $\langle x\rangle$ (the triangle) following the classical
-    particle (the dot) exactly: for a quadratic potential Ehrenfest's theorem
+    and forth without changing shape (the bar $\langle x\rangle\pm\sigma_x$ keeps its length), with
+    $\langle x\rangle$ (the triangle) following the classical particle (the red dot, under
+    <em>Show</em>: <em>Classical</em>) exactly: for a quadratic potential Ehrenfest's theorem
     $\frac{d}{dt}\langle p\rangle=-\langle V'(x)\rangle$ is Newton's law.  Try the <em>V-shaped</em>
     potential with the same packet: there $\langle V'\rangle\ne V'(\langle x\rangle)$ and the two part
     ways.</p>
@@ -140,8 +159,11 @@
 
   <article class="exp" data-setup="squeezed">
     <h3>7. A squeezed state breathes</h3>
-    <p>Narrower than the ground state, this packet's width oscillates at twice the oscillator's
-    frequency, trading position uncertainty for momentum uncertainty and back.</p>
+    <p>Narrower than the ground state and at rest in the middle, this packet stays put,
+    $\langle x\rangle=\langle p\rangle=0$, but its width oscillates at twice the oscillator's
+    frequency, trading position uncertainty for momentum uncertainty and back: the bars
+    $\pm\sigma_x$ and $\pm\sigma_p$ take turns to be long.  $\sigma_x\sigma_p$ is back at its
+    minimum, $\hbar/2$, whenever $\sigma_x$ is at its largest or smallest.</p>
   </article>
 
   <article class="exp" data-setup="tunnel">
@@ -171,8 +193,22 @@
     state, the farther.  Click a level (a thin line) to load that state.</p>
   </article>
 
+  <article class="exp" data-setup="resonance">
+    <h3>11. Passing over a well: resonance</h3>
+    <p>A particle passing over the well is partly reflected, by the jump in $V$ at each edge.
+    Over the well its wavenumber is larger, $k'=\sqrt{k^2+2mV_0/\hbar^2}$, and the waves reflected
+    at the two edges cancel when the well is a whole number of half wavelengths wide,
+    $2ak'=n\pi$: then it all goes through.  In general
+    $$T=\left[1+\frac{V_0^2\sin^2(2ak')}{4E(E+V_0)}\right]^{-1}.$$
+    This packet has $k_0=2.865$, so $2ak'=3\pi$, and passes almost entirely: $P(x>0)$ ends at
+    0.985.  Now choose <em>Off resonance</em>: $k_0=1.19$, halfway to the resonance below
+    ($2ak'=2.5\pi$), and more than two thirds comes back ($T=0.31$).  The packets are wide ($\sigma=2.5$)
+    so that their spread in $k$, $1/2\sigma$, is narrow.  Slow electrons crossing noble-gas atoms
+    almost unscattered (the Ramsauer–Townsend effect) are the same cancellation.</p>
+  </article>
+
   <article class="exp" data-setup="double">
-    <h3>11. Tunnelling back and forth</h3>
+    <h3>12. Tunnelling back and forth</h3>
     <p>A particle in the left well of a double well is the superposition
     $(\psi_0+\psi_1)/\sqrt2$ of the two lowest states, which differ in energy by a tiny splitting
     $\Delta E$.  It tunnels to the right well and back with period $2\pi\hbar/\Delta E$.  Raise the
@@ -181,7 +217,7 @@
   </article>
 
   <article class="exp" data-setup="delta">
-    <h3>12. The delta function</h3>
+    <h3>13. The delta function</h3>
     <p>An attractive $V=-\alpha\,\delta(x)$ has exactly one bound state, $\psi=\sqrt\alpha\,e^{-\alpha|x|}$
     with $E=-\alpha^2/2$.  Here the delta is a narrow Gaussian well of width $w$ and area
     $\alpha$, and its level sits a little higher, at $-0.465$: the true bound state has a cusp at the
@@ -191,14 +227,17 @@
   </article>
 
   <article class="exp" data-setup="bouncer">
-    <h3>13. The quantum bouncer</h3>
-    <p>A ball dropped onto a floor in uniform gravity, $V=gx$.  The dot is the classical ball.  The
-    quantum one keeps time for a few bounces, then dissolves, and later partly revives.  The
-    stationary states are Airy functions.</p>
+    <h3>14. The quantum bouncer</h3>
+    <p>A ball dropped onto a floor in uniform gravity, $V=gx$.  The red dot is the classical ball.
+    The quantum one keeps time for a few bounces, then dissolves, and later partly revives.  The
+    stationary states are Airy functions.  Choose <em>Typed</em>: $xe^{-bx}$ is the textbook
+    variational guess for the lowest one.  Drag $b$ and watch $\langle E\rangle=\hbar^2b^2/2m+3g/2b$:
+    it is least, 1.966, at $b=1.145$, just above the true ground state, 1.856 (the lowest level), as
+    the variational principle promises.</p>
   </article>
 
   <article class="exp" data-setup="bloch">
-    <h3>14. Bloch oscillations</h3>
+    <h3>15. Bloch oscillations</h3>
     <p>An electron in a crystal ($V_0\cos 2\pi x/a$) pushed by a constant force $F$ does not
     accelerate forever: it oscillates, with period $2\pi\hbar/Fa$, because its momentum runs to
     the edge of the Brillouin zone and is Bragg-reflected.  Set $F=0$ to see it simply spread.
@@ -207,14 +246,14 @@
   </article>
 
   <article class="exp" data-setup="driven">
-    <h3>15. Driving at resonance</h3>
+    <h3>16. Driving at resonance</h3>
     <p>The ground state of a harmonic oscillator pushed by $F\cos\omega t$.  At resonance
     ($\omega=1$) the packet swings ever wider without changing shape: it is a coherent state
     whose amplitude grows linearly.  Off resonance it beats.</p>
   </article>
 
   <article class="exp" data-setup="quench">
-    <h3>16. A sudden change</h3>
+    <h3>17. A sudden change</h3>
     <p>The ground state of a narrow box.  While it runs, drag the box's width $L$: the walls move
     and the wave function, unchanged at that instant, is now a superposition of the new box's
     states (watch the bars at the right).  Move the slider slowly instead and it stays in the
@@ -222,15 +261,15 @@
   </article>
 
   <article class="exp" data-setup="measure">
-    <h3>17. Measurement</h3>
-    <p>Press <em>Position</em> under <em>Measure</em>: a position is chosen at random with
+    <h3>18. Measurement</h3>
+    <p>Press <em>Position</em> under <em>Make a measurement</em>: a position is chosen at random with
     probability $|\psi|^2$, and the wave function collapses to a narrow packet there, which then
     spreads.  Press <em>Energy</em>: one stationary state is chosen with probability $|c_n|^2$
     and the wave function becomes it, motionless.  Measure the energy twice: the same answer.</p>
   </article>
 
   <article class="exp" data-setup="backwards">
-    <h3>18. Running time backwards</h3>
+    <h3>19. Running time backwards</h3>
     <p>A spread-out mess: a packet hit a barrier a while ago, and part went through, part came back.
     <em>Backwards</em> is on: press <em>Play</em>, and the reflected and transmitted parts come back
     together into the original packet, which stops at $t=0$.  The

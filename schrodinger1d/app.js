@@ -3,17 +3,20 @@
 import { Sim1D, eigenstates, prepareSharpPotential } from './sim.js';
 import { POTENTIALS, PACKET } from './presets.js';
 import { parse } from '../lib/expr.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
 import { colorOf, colorize, drawWheel } from '../lib/complexcolor.js';
 
 // ----------------------------------------------------------------------------- state
 
+// What is shown when a potential or an experiment is set up (the classical particle is extra).
+const SHOW = { levels: true, classical: false, momentum: true, carpet: true };
+
 const state = {
   pot: POTENTIALS[2],
   init: null,                 // the initial state, as in presets.js
   view: 'density',
-  show: { levels: true, classical: true, momentum: true, carpet: true },
+  show: { ...SHOW },
   running: false,
   direction: 1,
   speed: 1,                   // simulated time per second
@@ -161,6 +164,8 @@ function restart() {
     sim.setPsi(new Float64Array(sim.n), null);
   }
   started = false;
+  memory[state.init.kind] = state.init;
+  showChoice();
   const o = sim.observables();
   // The absorber must stop the fastest part of the packet.
   sim.absorbSpeed = Math.max(1.5, (Math.abs(o.p) + 3 * o.sp) / state.mass);
@@ -274,23 +279,51 @@ function coefficients() {
 
 function draw() {
   if (!sim) return;
-  drawMain();
-  if (state.show.momentum) drawMomentum();
-  updateReadouts();
+  const o = sim.observables();
+  drawMain(o);
+  if (state.show.momentum) drawMomentum(o);
+  updateReadouts(o);
+  showKey();
 }
 
-/** The part of the domain to draw: without the absorbing layers, which are not part of the physics. */
+/**
+ * The part of the domain to draw: without the absorbing layers, which are not part of the
+ * physics; and a little beyond a wall that is in sight (V at that end below the top of the plot),
+ * so that the wall shows, as a grey band.
+ */
 function viewRange() {
   if (state.boundary === 'absorbing') return [sim.xmin + sim.L / 8, sim.xmax - sim.L / 8];
-  return [sim.xmin, sim.xmax];
+  if (state.boundary !== 'walls') return [sim.xmin, sim.xmax];
+  const V = shownV || sim.V, top = energyRange()[1], pad = Math.min(2, sim.L / 10);
+  return [sim.xmin - (V[0] < top ? pad : 0), sim.xmax + (V[sim.n - 1] < top ? pad : 0)];
 }
 
-function drawMain() {
+/** A mean, as a triangle at the foot of a plot, with a bar across mean ± sd. */
+function meanMark(ctx, f, mean, sd, c) {
+  const px = f.X(mean), a = f.X(mean - sd), b = f.X(mean + sd), y = f.bottom - 4.5;
+  const bar = new Path2D();
+  bar.moveTo(a, y); bar.lineTo(b, y);
+  bar.moveTo(a, y - 4); bar.lineTo(a, y + 4);
+  bar.moveTo(b, y - 4); bar.lineTo(b, y + 4);
+  const tri = new Path2D();
+  tri.moveTo(px, f.bottom - 11); tri.lineTo(px - 6, f.bottom); tri.lineTo(px + 6, f.bottom); tri.closePath();
+  // A halo in the background colour keeps it legible over the coloured density.
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = c.panel; ctx.lineWidth = 4.5; ctx.stroke(bar); ctx.lineWidth = 3; ctx.stroke(tri);
+  ctx.strokeStyle = c.ink; ctx.lineWidth = 1.5; ctx.stroke(bar);
+  ctx.fillStyle = c.ink; ctx.fill(tri);
+  ctx.lineJoin = 'miter';
+  marks.push({ mean, sd });
+}
+let marks = [];               // the means and spreads drawn last (for the tests)
+
+function drawMain(o) {
   const { ctx, width, height } = fitCanvas(plotCanvas);
   const c = themeColors();
   ctx.clearRect(0, 0, width, height);
   const f = new Frame(ctx, width, height, { left: 50, right: 52, top: 12, bottom: 34 });
   mainFrame = f;
+  marks = [];
   [f.x0, f.x1] = viewRange();
   const view = state.view;
   let dmax = 0;
@@ -311,33 +344,42 @@ function drawMain() {
   energyY = EY;
 
   f.clip();
-  // The potential (as typed), filled from the bottom.
-  const { x, n } = sim, V = shownV || sim.V;
+  // The potential (as typed), filled from the bottom; walls in sight as grey bands.
+  const { x, n } = sim, V = shownV || sim.V, walls = state.boundary === 'walls';
+  const xa = Math.max(f.left, f.X(sim.xmin)), xb = Math.min(f.right, f.X(sim.xmax));
   ctx.beginPath();
   ctx.moveTo(f.X(x[0]), f.bottom + 2);
   const stride = Math.max(1, Math.floor(n / (f.w * 2)));
   for (let j = 0; j < n; j += stride) ctx.lineTo(f.X(x[j]), Math.max(f.top - 4, Math.min(f.bottom + 2, EY(V[j]))));
   ctx.lineTo(f.X(x[n - 1]), Math.max(f.top - 4, Math.min(f.bottom + 2, EY(V[n - 1]))));
-  ctx.lineTo(f.right, f.bottom + 2);
+  ctx.lineTo(f.X(x[n - 1]), f.bottom + 2);
   ctx.closePath();
+  if (walls) { ctx.rect(f.left, f.top, xa - f.left, f.h); ctx.rect(xb, f.top, f.right - xb, f.h); }
   ctx.fillStyle = c.line;
   ctx.globalAlpha = 0.6;
   ctx.fill();
   ctx.globalAlpha = 1;
   // The outline: the max and min of V within each pixel column, so that a barrier narrower
-  // than a pixel still shows.
+  // than a pixel still shows; up the walls at the ends.
   const vPath = new Path2D();
   const clampY = (E) => Math.max(f.top - 4, Math.min(f.bottom + 2, EY(E)));
+  // The pixel columns over the domain (the view may reach past its walls), and the grid point
+  // nearest a column.
+  const xs = f.w, colFrom = Math.max(0, Math.ceil(xa - f.left)), colTo = Math.min(xs, Math.floor(xb - f.left));
+  const at = (px) => Math.max(0, Math.min(n - 1, Math.round((f.invX(f.left + px) - sim.xmin) / sim.dx)));
   let first = true;
-  for (let px = 0; px <= f.w; px++) {
+  const to = (px, py) => { if (first) { vPath.moveTo(px, py); first = false; } else vPath.lineTo(px, py); };
+  if (walls && xa > f.left) to(xa, f.top - 4);
+  for (let px = colFrom; px <= colTo; px++) {
     const a = Math.max(0, Math.floor((f.invX(f.left + px - 0.5) - sim.xmin) / sim.dx));
     const b = Math.min(n - 1, Math.ceil((f.invX(f.left + px + 0.5) - sim.xmin) / sim.dx));
     if (b < 0 || a > n - 1) continue;
     let lo = Infinity, hi = -Infinity;
     for (let j = a; j <= b; j++) { lo = Math.min(lo, V[j]); hi = Math.max(hi, V[j]); }
-    if (first) { vPath.moveTo(f.left + px, clampY(hi)); first = false; } else vPath.lineTo(f.left + px, clampY(hi));
+    to(f.left + px, clampY(hi));
     if (lo !== hi) { vPath.lineTo(f.left + px, clampY(lo)); vPath.lineTo(f.left + px, clampY(hi)); }
   }
+  if (walls && xb < f.right) to(xb, f.top - 4);
 
   // Stationary-state energies, and the state's weight in each (bars from the right edge).
   if (state.show.levels && shownLevels.length) {
@@ -348,18 +390,18 @@ function drawMain() {
       if (y < f.top || y > f.bottom) continue;
       ctx.strokeStyle = c.ink3;
       ctx.globalAlpha = 0.55;
-      ctx.beginPath(); ctx.moveTo(f.left, y); ctx.lineTo(f.right, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xb, y); ctx.stroke();
       ctx.globalAlpha = 1;
       if (cn[k] > 1e-4) {
         ctx.fillStyle = c.accent;
         const w = Math.min(f.w * 0.25, cn[k] * f.w * 0.25);
-        ctx.fillRect(f.right - w, y - 2, w, 4);
+        ctx.fillRect(xb - w, y - 2, w, 4);
       }
     }
   }
 
   // The wave function.
-  const xs = f.w, base = f.Y(0);
+  const base = f.Y(0);
   if (view === 'density' || view === 'amplitude') {
     for (let px = 0; px < xs; px++) {
       const xv = f.invX(f.left + px + 0.5), j = Math.round((xv - sim.xmin) / sim.dx);
@@ -372,11 +414,10 @@ function drawMain() {
       ctx.fillRect(f.left + px, y, 1, base - y);
     }
     ctx.beginPath();
-    for (let px = 0; px <= xs; px++) {
-      const xv = f.invX(f.left + px), j = Math.max(0, Math.min(n - 1, Math.round((xv - sim.xmin) / sim.dx)));
-      const d = sim.re[j] ** 2 + sim.im[j] ** 2;
+    for (let px = colFrom; px <= colTo; px++) {
+      const j = at(px), d = sim.re[j] ** 2 + sim.im[j] ** 2;
       const y = f.Y(view === 'density' ? d : Math.sqrt(d));
-      if (px === 0) ctx.moveTo(f.left, y); else ctx.lineTo(f.left + px, y);
+      if (px === colFrom) ctx.moveTo(f.left + px, y); else ctx.lineTo(f.left + px, y);
     }
     ctx.strokeStyle = c.ink;
     ctx.lineWidth = 1.2;
@@ -385,10 +426,9 @@ function drawMain() {
     // The probability current j = (hbar/m) Im(psi* dpsi/dx): probability flowing right (up) or
     // left (down).  |psi|^2 in grey for reference, scaled to fit.
     ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.beginPath();
-    for (let px = 0; px <= xs; px++) {
-      const xv = f.invX(f.left + px), j = Math.max(0, Math.min(n - 1, Math.round((xv - sim.xmin) / sim.dx)));
-      const y = f.Y((scale.current * (sim.re[j] ** 2 + sim.im[j] ** 2)) / scale.density);
-      if (px === 0) ctx.moveTo(f.left, y); else ctx.lineTo(f.left + px, y);
+    for (let px = colFrom; px <= colTo; px++) {
+      const j = at(px), y = f.Y((scale.current * (sim.re[j] ** 2 + sim.im[j] ** 2)) / scale.density);
+      if (px === colFrom) ctx.moveTo(f.left + px, y); else ctx.lineTo(f.left + px, y);
     }
     ctx.stroke();
     for (let px = 0; px < xs; px++) {
@@ -398,14 +438,13 @@ function drawMain() {
       ctx.fillStyle = v >= 0 ? c.accent : c.warn;
       ctx.fillRect(f.left + px, Math.min(y, base), 1, Math.abs(base - y));
     }
-    ctx.strokeStyle = c.ink2; ctx.beginPath(); ctx.moveTo(f.left, base); ctx.lineTo(f.right, base); ctx.stroke();
+    ctx.strokeStyle = c.ink2; ctx.beginPath(); ctx.moveTo(xa, base); ctx.lineTo(xb, base); ctx.stroke();
   } else {
     const line = (get, color, width = 1.4) => {
       ctx.beginPath();
-      for (let px = 0; px <= xs; px++) {
-        const xv = f.invX(f.left + px), j = Math.max(0, Math.min(n - 1, Math.round((xv - sim.xmin) / sim.dx)));
-        const y = f.Y(get(j));
-        if (px === 0) ctx.moveTo(f.left, y); else ctx.lineTo(f.left + px, y);
+      for (let px = colFrom; px <= colTo; px++) {
+        const y = f.Y(get(at(px)));
+        if (px === colFrom) ctx.moveTo(f.left + px, y); else ctx.lineTo(f.left + px, y);
       }
       ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
     };
@@ -413,7 +452,7 @@ function drawMain() {
     line((j) => -Math.hypot(sim.re[j], sim.im[j]), c.ink3, 1);
     line((j) => sim.re[j], '#e8453c');
     line((j) => sim.im[j], '#3c7be8');
-    ctx.strokeStyle = c.line; ctx.beginPath(); ctx.moveTo(f.left, base); ctx.lineTo(f.right, base); ctx.stroke();
+    ctx.strokeStyle = c.line; ctx.beginPath(); ctx.moveTo(xa, base); ctx.lineTo(xb, base); ctx.stroke();
   }
 
   // The potential's outline, over the wave function so that thin barriers stay visible.
@@ -422,38 +461,41 @@ function drawMain() {
   ctx.stroke(vPath);
 
   // <E>, dashed.
-  const o = sim.observables();
   lastE = o.E;
   const yE = EY(o.E);
   if (yE > f.top && yE < f.bottom) {
     ctx.setLineDash([6, 4]);
     ctx.strokeStyle = c.accent; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(f.left, yE); ctx.lineTo(f.right, yE); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xa, yE); ctx.lineTo(xb, yE); ctx.stroke();
     ctx.setLineDash([]);
   }
-  // <x> (triangle) and the classical particle (dot) at the bottom.
-  const tri = (xv, color) => {
-    const px = f.X(xv);
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.moveTo(px, f.bottom - 9); ctx.lineTo(px - 6, f.bottom); ctx.lineTo(px + 6, f.bottom); ctx.closePath(); ctx.fill();
-  };
-  if (o.norm > 1e-3) tri(o.x, c.ink);
+  // <x> ± sigma_x (triangle and bar) and the classical particle (dot) at the bottom.
+  if (o.norm > 1e-3) meanMark(ctx, f, o.x, o.sx, c);
   if (state.show.classical && classical?.alive) {
     const px = f.X(classical.x);
     ctx.strokeStyle = c.warn; ctx.globalAlpha = 0.5; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(px, f.top); ctx.lineTo(px, f.bottom); ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha = 1;
     ctx.fillStyle = c.warn;
-    ctx.beginPath(); ctx.arc(px, f.bottom - 14, 5, 0, 2 * Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(px, f.bottom - 17, 5, 0, 2 * Math.PI); ctx.fill();
   }
   ctx.restore(); // the clip
 
   f.axes({ xlabel: 'x', ylabel: { density: '|ψ|²', amplitude: '|ψ|', reim: 'Re ψ, Im ψ', current: 'current j(x)' }[view] });
   f.rightAxis(Elo, Ehi, 'energy');
   if (hover) {
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillText(hover, f.right - 6, f.top + 4);
+    // The values under the pointer, each right-aligned in a slot of its own width, so that
+    // nothing moves as they change.
+    ctx.font = '12px ui-monospace, Menlo, Consolas, "Liberation Mono", monospace';
+    ctx.fillStyle = c.ink2; ctx.textBaseline = 'top';
+    const cw = ctx.measureText('0').width, gap = 2 * cw;
+    let px = f.right - 6 - hover.reduce((s, [k, , , w]) => s + ctx.measureText(k).width + cw * (w + 1) + gap, -gap);
+    for (const [k, v, dec, w] of hover) {
+      ctx.textAlign = 'left'; ctx.fillText(k, px, f.top + 4);
+      px += ctx.measureText(k).width + cw * (w + 1);
+      ctx.textAlign = 'right'; ctx.fillText(fixedNum(v, dec, w), px, f.top + 4);
+      px += gap;
+    }
   }
   if (errorText) {
     ctx.font = '13px system-ui, sans-serif';
@@ -462,7 +504,8 @@ function drawMain() {
   }
 }
 
-function drawMomentum() {
+// phi(p), the wave function in momentum space: |phi|^2 coloured by its phase.
+function drawMomentum(o) {
   const { ctx, width, height } = fitCanvas(momCanvas);
   const c = themeColors();
   ctx.clearRect(0, 0, width, height);
@@ -477,20 +520,24 @@ function drawMomentum() {
   f.clip();
   const base = f.Y(0);
   for (let px = 0; px < f.w; px++) {
-    const pv = f.invX(f.left + px + 0.5), i = Math.round(pv / ph.dp + ph.p.length / 2);
-    if (i < 0 || i >= ph.p.length) continue;
-    const a = ph.re[i], b = ph.im[i], y = f.Y(a * a + b * b);
+    // |phi|^2 interpolated between the samples, which can be wider apart than a pixel; the
+    // colour from the nearer one.
+    const pv = f.invX(f.left + px + 0.5), u = pv / ph.dp + ph.p.length / 2, i = Math.floor(u), s = u - i;
+    if (i < 0 || i + 1 >= ph.p.length) continue;
+    const d0 = ph.re[i] ** 2 + ph.im[i] ** 2, d1 = ph.re[i + 1] ** 2 + ph.im[i + 1] ** 2, y = f.Y(d0 + s * (d1 - d0));
     if (base - y < 0.3) continue;
-    ctx.fillStyle = phaseColor(a, b);
+    const k = s < 0.5 ? i : i + 1;
+    ctx.fillStyle = phaseColor(ph.re[k], ph.im[k]);
     ctx.fillRect(f.left + px, y, 1, base - y);
   }
+  if (o.norm > 1e-3) meanMark(ctx, f, o.p, o.sp, c);
   if (state.show.classical && classical?.alive) {
     const px = f.X(classical.p);
     ctx.fillStyle = c.warn;
-    ctx.beginPath(); ctx.arc(px, f.bottom - 6, 4, 0, 2 * Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(px, f.bottom - 15, 4, 0, 2 * Math.PI); ctx.fill();
   }
   ctx.restore();
-  f.axes({ xlabel: 'p', ylabel: '|ψ̃(p)|²', yTicks: false });
+  f.axes({ xlabel: 'p', ylabel: '|φ(p)|²', yTicks: false });
 }
 
 // The space-time "carpet": one row per frame, time running downwards.
@@ -514,8 +561,8 @@ function carpetRow() {
   const re = new Float64Array(w), im = new Float64Array(w);
   const [v0, v1] = viewRange();
   for (let i = 0; i < w; i++) {
-    const xv = v0 + ((i + 0.5) / w) * (v1 - v0), j = Math.min(sim.n - 1, Math.max(0, Math.round((xv - sim.xmin) / sim.dx)));
-    re[i] = sim.re[j]; im[i] = sim.im[j];
+    const xv = v0 + ((i + 0.5) / w) * (v1 - v0), j = Math.round((xv - sim.xmin) / sim.dx);
+    if (j >= 0 && j < sim.n) { re[i] = sim.re[j]; im[i] = sim.im[j]; }   // (beyond a wall, nothing)
   }
   colorize(re, im, carpetImage.data, Math.sqrt(scale.density / 1.25) * 0.6, 'complex');
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -523,20 +570,55 @@ function carpetRow() {
   ctx.putImageData(carpetImage, left, H - 1);
 }
 
-function updateReadouts() {
-  const o = sim.observables();
-  const parts = [
-    ['t', sim.t.toFixed(2)],
-    ['⟨x⟩', fmt(o.x, 3)], ['σx', fmt(o.sx, 3)], ['⟨p⟩', fmt(o.p, 3)], ['σp', fmt(o.sp, 3)],
-    ['σxσp', `${fmt(o.sx * o.sp, 3)} ≥ ½`], ['⟨E⟩', fmt(o.E, 4)],
+/**
+ * v with a fixed number of decimals, in at most w characters (else in powers of ten), with a
+ * true minus sign and no "−0.000".  Right-aligned in a slot w characters wide, its digits stay
+ * where they are as it changes, whatever its sign.
+ */
+function fixedNum(v, dec, w) {
+  if (!Number.isFinite(v)) return '–';
+  if (Math.abs(v) < 0.5 * 10 ** -dec) v = 0;
+  let s = v.toFixed(dec);
+  for (let p = Math.max(0, w - 5); s.length > w && p >= 0; p--) s = v.toExponential(p).replace('e+', 'e');
+  return s.replaceAll('-', '−');
+}
+
+// The readouts: a slot for each quantity, each a fixed number of characters wide, so that
+// nothing moves as the numbers change.  Built again only when the quantities shown change.
+const readoutBox = $('#readouts');
+let readoutLayout = '', readoutValues = [];
+function updateReadouts(o) {
+  // [label, value, decimals, width in characters, what follows]
+  const items = [
+    ['t', sim.t, 2, 7], ['⟨x⟩', o.x, 3, 8], ['σx', o.sx, 3, 7], ['⟨p⟩', o.p, 3, 7], ['σp', o.sp, 3, 7],
+    ['σxσp', o.sx * o.sp, 3, 7, '≥ ½'], ['⟨E⟩', o.E, 3, 8],
   ];
   if (state.pot.barrier !== undefined) {
     const xb = state.pot.barrier;
-    const left = sim.probabilityLeftOf(xb) + sim.absorbedLeft, right = 1 - left;
-    parts.push([`P(x < ${xb})`, fmt(left, 3)], [`P(x > ${xb})`, fmt(right, 3)]);
-  } else if (state.boundary === 'absorbing') parts.push(['left in view', fmt(o.norm, 3)]);
-  $('#readouts').innerHTML = parts.map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')
-    + (slowed ? '<span class="warn">running as fast as this computer can</span>' : '');
+    const left = sim.probabilityLeftOf(xb) + sim.absorbedLeft;
+    items.push([`P(x < ${xb})`, left, 3, 5], [`P(x > ${xb})`, 1 - left, 3, 5]);
+  } else if (state.boundary === 'absorbing') items.push(['left in view', o.norm, 3, 5]);
+  const layout = items.map(([k, , , w]) => k + w).join('|');
+  if (layout !== readoutLayout) {
+    readoutLayout = layout;
+    readoutValues = items.map(([, , , w]) => el('b', { style: { width: `${w + 0.5}ch` } }));
+    readoutBox.replaceChildren(...items.map(([k, , , , after], i) => el('span', { class: 'ro' }, k, ' ', readoutValues[i], after ? ` ${after}` : '')));
+  }
+  items.forEach(([, v, dec, w], i) => {
+    const s = fixedNum(v, dec, w);
+    if (readoutValues[i].textContent !== s) readoutValues[i].textContent = s;
+  });
+  // Under the speed, its place kept, shown or not, so that nothing below it moves.
+  slowNote.style.visibility = slowed ? 'visible' : 'hidden';
+}
+
+// The keys in the plots' corners name only what is drawn.
+function showKey() {
+  const set = (sel, on) => { const e = $(sel); if (e.hidden === on) e.hidden = !on; };
+  const dot = state.show.classical && !!classical?.alive;
+  set('#key-levels', state.show.levels && shownLevels.length > 0);
+  set('#key-classical', dot);
+  set('#key-classical-p', dot);
 }
 
 function updateClock() {}
@@ -577,7 +659,8 @@ reverseButton.addEventListener('click', () => {
 
 const speedSlider = slider({ label: 'Speed', min: 0.02, max: 100, log: true, value: state.speed,
   title: 'Simulated time per second', onInput: (v) => { state.speed = v; } });
-$('#speed-box').append(speedSlider);
+const slowNote = el('div', { class: 'note warn', style: { visibility: 'hidden' } }, 'Running as fast as this computer can.');
+$('#speed-box').append(speedSlider, slowNote);
 
 // The potential buttons and the typed V.
 const potButtons = {};
@@ -607,15 +690,24 @@ const vField = exprField({
 let quenchNoted = false;
 $('#v-field').append(vField);
 
-// The initial state.
-const suggestionBox = $('#suggestions');
-const kindSeg = segmented([
-  { value: 'packet', label: 'Packet', title: 'A Gaussian packet: position x0, width σ, momentum k0' },
-  { value: 'eigen', label: 'Stationary', title: 'One stationary state (an eigenstate of the energy)' },
-  { value: 'two', label: 'Two states', title: 'An equal superposition of two stationary states' },
-  { value: 'typed', label: 'Typed', title: 'Any expression in x' },
-], 'packet', (k) => { setKind(k); restart(); kick(); }, { label: 'Kind of initial state' });
-$('#kind').append(kindSeg);
+// The initial state.  The named starting points of the potential (presets.js) sit in rows by
+// kind, each row led by a button for the kind itself.  Exactly one button is lit, the one that
+// says what is loaded: a named state, as long as it is unchanged, or else its kind (a packet, a
+// formula... of your own, after a slider has moved).
+const KINDS = [
+  { kind: 'packet', label: 'Packet', title: 'A Gaussian packet: drag its position x₀, width σ and momentum k₀ below' },
+  { kind: 'eigen', label: 'Stationary', title: 'One stationary state, an eigenstate of the energy: choose n below, or click a level on the plot' },
+  { kind: 'two', label: 'Two states', title: 'An equal superposition (ψₙ + ψₘ)/√2 of two stationary states' },
+  { kind: 'typed', label: 'Typed', title: 'Any ψ₀(x) you type: it is normalised for you, and each new symbol gets a slider' },
+];
+const kindButtons = {}, kindRows = {};
+let startButtons = [];        // [{button, start}]: the named states of this potential
+let memory = {};              // the latest state of each kind, for the kind's button to go back to
+for (const { kind, label, title } of KINDS) {
+  kindButtons[kind] = el('button', { type: 'button', class: 'kind', title, 'aria-pressed': 'false', onclick: () => chooseKind(kind) }, label);
+  kindRows[kind] = el('div', { class: 'start-row', role: 'group', 'aria-label': label }, kindButtons[kind], el('div', { class: 'names' }));
+  $('#starts').append(kindRows[kind]);
+}
 const stateBox = $('#state-box');
 
 const packetField = exprField({
@@ -625,7 +717,7 @@ const packetField = exprField({
 packetField.input.readOnly = true;
 packetField.input.title = 'The packet formula; choose Typed to write your own';
 const typedField = exprField({
-  label: '<math><msub><mi>ψ</mi><mn>0</mn></msub><mo>=</mo></math>', value: '(x>-1)(x<1)', variables: ['x'],
+  label: '<math><msub><mi>ψ</mi><mn>0</mn></msub><mo>=</mo></math>', value: 'exp(-x^2)', variables: ['x'],
   reserved: ['m'], onChange: (expr, params) => { state.init = { kind: 'typed', psi: expr.source, params }; restartIfIdle(); },
 });
 const nSlider = slider({ label: 'n', min: 0, max: 20, step: 1, value: 0, onInput: (v) => { state.init = { ...state.init, n: Math.round(v) - nOffset() }; restartIfIdle(); } });
@@ -645,19 +737,19 @@ function packetHints() {
   };
 }
 
+/** Load an initial state of the given kind, and show its controls. */
 function setKind(kind, init) {
-  kindSeg.value = kind;
   stateBox.replaceChildren();
   const off = nOffset();
   if (kind === 'packet') {
-    const params = init?.params || state.init?.params || { x0: 0, sigma: 1, k0: 0 };
     stateBox.append(packetField);
     packetField.setHints(packetHints());
-    packetField.set(PACKET, params, false);
+    packetField.set(PACKET, init.params || {}, false);
     state.init = { kind: 'packet', params: packetField.params };
   } else if (kind === 'typed') {
     stateBox.append(typedField);
-    if (init?.psi) typedField.set(init.psi, init.params || {}, false);
+    typedField.setHints({ ...packetHints(), ...state.pot.typed?.hints });
+    typedField.set(init.psi || typedField.source, init.params || {}, false);
     state.init = { kind: 'typed', psi: typedField.source, params: typedField.params };
   } else {
     const count = Math.max(1, shownLevels.length);
@@ -681,33 +773,80 @@ function restartIfIdle() {
   kick();
 }
 
-function showSuggestions() {
-  suggestionBox.replaceChildren();
-  for (const s of state.pot.states) {
-    suggestionBox.append(el('button', { type: 'button', title: 'Start from this state', onclick: () => { useState(s); restart(); kick(); } }, s.label));
-  }
+/** A named starting point as an initial state. */
+function startInit(s) {
+  if (s.kind === 'packet') return { kind: 'packet', params: { ...s.params } };
+  if (s.kind === 'typed') return { kind: 'typed', psi: s.psi, params: { ...s.params } };
+  return { kind: s.kind, n: s.n, m: s.m ?? 1 };
 }
 
-function useState(s) {
-  setKind(s.kind, s);
-  if (s.kind === 'packet') { packetField.set(PACKET, s.params, false); state.init = { kind: 'packet', params: { ...s.params } }; }
-  if (s.kind === 'typed') { typedField.set(s.psi, s.params || {}, false); state.init = { kind: 'typed', psi: s.psi, params: typedField.params }; }
-  if (s.kind === 'eigen' || s.kind === 'two') state.init = { kind: s.kind, n: s.n, m: s.m ?? 1 };
+function sameState(a, b) {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'eigen') return a.n === b.n;
+  if (a.kind === 'two') return (a.n === b.n && a.m === b.m) || (a.n === b.m && a.m === b.n);
+  if (a.kind === 'typed' && a.psi.replace(/\s+/g, '') !== b.psi.replace(/\s+/g, '')) return false;
+  const p = a.params || {}, q = b.params || {};
+  const near = (u, v) => Math.abs(u - v) <= 1e-6 * Math.max(1, Math.abs(u), Math.abs(v));
+  return [...new Set([...Object.keys(p), ...Object.keys(q)])].every((k) => k in p && k in q && near(p[k], q[k]));
 }
 
-function choosePotential(p, { stateIndex = 0, keepRunning = true } = {}) {
+/** The potential's named states, in their rows; and what each kind's button goes back to. */
+function showStarts() {
+  for (const { kind } of KINDS) kindRows[kind].lastChild.replaceChildren();
+  startButtons = state.pot.states.map((s) => {
+    const title = s.kind === 'packet' ? `A packet with x₀ = ${s.params.x0}, σ = ${s.params.sigma}, k₀ = ${s.params.k0}`
+      : s.kind === 'typed' ? `ψ₀ = ${s.psi}` : s.kind === 'eigen' ? `The stationary state n = ${s.n + nOffset()}`
+      : `(ψ${s.n + nOffset()} + ψ${s.m + nOffset()})/√2`;
+    const button = el('button', { type: 'button', title, 'aria-pressed': 'false', onclick: () => { loadStart(s); restart(); kick(); } }, s.label);
+    kindRows[s.kind].lastChild.append(button);
+    return { button, start: s };
+  });
+  const first = (kind) => state.pot.states.find((s) => s.kind === kind);
+  const [a, b] = state.domain;
+  memory = {
+    packet: first('packet') ? startInit(first('packet')) : { kind: 'packet', params: { x0: (a + b) / 2, sigma: (b - a) / 20, k0: 0 } },
+    eigen: first('eigen') ? startInit(first('eigen')) : { kind: 'eigen', n: 0 },
+    two: first('two') ? startInit(first('two')) : { kind: 'two', n: 0, m: 1 },
+    typed: { kind: 'typed', psi: 'exp(-x^2)', params: {}, ...state.pot.typed },
+  };
+}
+
+/** Light the one button that says what is loaded. */
+function showChoice() {
+  const init = state.init;
+  const lit = startButtons.find(({ start }) => sameState(startInit(start), init))?.button || kindButtons[init.kind];
+  for (const { button } of startButtons) button.setAttribute('aria-pressed', String(button === lit));
+  for (const b of Object.values(kindButtons)) b.setAttribute('aria-pressed', String(b === lit));
+  // Stationary states only where there are some (and the kind loaded, whatever it is).
+  kindRows.eigen.hidden = !shownLevels.length && init.kind !== 'eigen';
+  kindRows.two.hidden = shownLevels.length < 2 && init.kind !== 'two';
+}
+
+/** A named state, at its own speed (or the potential's). */
+function loadStart(s) {
+  setKind(s.kind, startInit(s));
+  state.speed = s.speed ?? state.pot.speed; speedSlider.value = state.speed;
+}
+
+/** A kind's own button: the latest state of that kind (at first, its first named one). */
+function chooseKind(kind) {
+  if (state.init.kind !== kind) setKind(kind, memory[kind]);
+  restart();
+  kick();
+}
+
+function choosePotential(p, { start, keepRunning = true } = {}) {
   state.pot = p;
   for (const [id, b] of Object.entries(potButtons)) b.setAttribute('aria-pressed', String(id === p.id));
   state.domain = [...p.domain]; state.n = p.n; state.boundary = p.boundary; state.mass = 1;
-  state.speed = p.speed; speedSlider.value = p.speed;
   syncNumerics();
   vField.set(p.V, p.params || {}, false);
   Vexpr = vField.expr; Vparams = vField.params;
   const [xmin, xmax] = state.domain;
   sim = new Sim1D({ n: state.n, xmin, xmax, mass: state.mass, boundary: state.boundary });
   applyPotential({ keepState: false });
-  showSuggestions();
-  useState(p.states[stateIndex] || p.states[0]);
+  showStarts();
+  loadStart(p.states.find((s) => s.label === start) || p.states[0]);
   restart();
   if (!keepRunning) setRunning(false);
   updateHash();
@@ -720,8 +859,8 @@ for (const [k, v] of [['density', 'probability |ψ|²'], ['amplitude', 'amplitud
 viewSelect.addEventListener('change', () => { state.view = viewSelect.value; kick(); });
 const showToggles = {
   levels: toggle('Levels', state.show.levels, (on) => { state.show.levels = on; kick(); }, 'The energies of the stationary states, with bars for the state\'s weight in each'),
-  classical: toggle('Classical', state.show.classical, (on) => { state.show.classical = on; kick(); }, 'A classical particle started at ⟨x⟩ and ⟨p⟩ (the red dot)'),
-  momentum: toggle('Momentum', state.show.momentum, (on) => { state.show.momentum = on; $('#mom-wrap').hidden = !on; kick(); }, 'The wave function in momentum space'),
+  classical: toggle('Classical', state.show.classical, (on) => { state.show.classical = on; kick(); }, 'A classical particle started at ⟨x⟩ with momentum ⟨p⟩, moving by Newton\'s laws: the red dot (and its p, below)'),
+  momentum: toggle('Momentum', state.show.momentum, (on) => { state.show.momentum = on; $('#mom-wrap').hidden = !on; kick(); }, 'φ(p), the wave function in momentum space'),
   carpet: toggle('Space-time', state.show.carpet, (on) => { state.show.carpet = on; $('#carpet-wrap').hidden = !on; clearCarpet(); kick(); }, 'A picture of ψ(x, t): x across, time downwards'),
 };
 $('#shows').append(...Object.values(showToggles));
@@ -741,7 +880,7 @@ $('#measure-x').addEventListener('click', () => {
   sim.normalize(); sim.t = t;
   scale.density = Math.max(scale.density, (1.25 / (Math.sqrt(2 * Math.PI) * s)));
   classical = { x: x[j], p: sim.observables().p, alive: true };
-  toast(`Found at x = ${fmt(x[j], 3)}`);
+  toast(`Found at x = ${fixedNum(x[j], 3, 9)}`);
   kick();
 });
 $('#measure-e').addEventListener('click', () => {
@@ -753,7 +892,7 @@ $('#measure-e').addEventListener('click', () => {
   const t = sim.t;
   sim.setPsi(shownLevels[k].psi, null);
   sim.normalize(); sim.t = t;
-  toast(`E = ${fmt(shownLevels[k].E, 4)}  (n = ${k + nOffset()})`);
+  toast(`E = ${fixedNum(shownLevels[k].E, 4, 10)}  (n = ${k + nOffset()})`);
   classical = { ...sim.observables(), alive: false };
   kick();
 });
@@ -765,7 +904,7 @@ plotCanvas.addEventListener('pointermove', (e) => {
   const xv = mainFrame.invX(px), j = Math.round((xv - sim.xmin) / sim.dx);
   if (j >= 0 && j < sim.n) {
     const d = sim.re[j] ** 2 + sim.im[j] ** 2;
-    hover = `x = ${fmt(xv, 3)}   V = ${fmt((shownV || sim.V)[j], 3)}   |ψ|² = ${fmt(d, 3)}`;
+    hover = [['x =', xv, 3, 8], ['V =', (shownV || sim.V)[j], 3, 8], ['|ψ|² =', d, 4, 7]];
   }
   plotCanvas.style.cursor = levelAt(py) >= 0 ? 'pointer' : 'default';
   if (!state.running) kick();
@@ -832,38 +971,39 @@ window.addEventListener('resize', () => { clearCarpet(); kick(); });
 // ------------------------------------------------------------------ experiments
 
 const byId = (id) => POTENTIALS.find((p) => p.id === id);
-function go(potId, { stateIndex = 0, params, init, speed, show = {}, view = 'density', run = true } = {}) {
+function go(potId, { start, params, init, speed, show = {}, view = 'density', run = true } = {}) {
   state.direction = 1; reverseButton.setAttribute('aria-pressed', 'false');
   for (const [k, t] of Object.entries(showToggles)) {
-    const on = show[k] ?? true;
+    const on = show[k] ?? SHOW[k];
     t.on = on; state.show[k] = on;
   }
   $('#mom-wrap').hidden = !state.show.momentum; $('#carpet-wrap').hidden = !state.show.carpet;
   state.view = view; viewSelect.value = view;
-  choosePotential(byId(potId), { stateIndex, keepRunning: false });
+  choosePotential(byId(potId), { start, keepRunning: false });
   if (params) { vField.set(vField.source, params, false); Vexpr = vField.expr; Vparams = vField.params; applyPotential({ keepState: false }); }
-  if (init) useState(init);
+  if (init) setKind(init.kind, init);
   if (speed) { state.speed = speed; speedSlider.value = speed; }
   restart();
   setRunning(run);
 }
 
 const setups = {
-  spread: () => go('free', { stateIndex: 1, speed: 1 }),
-  phase: () => go('free', { stateIndex: 0, speed: 3 }),
-  collide: () => go('free', { stateIndex: 2, speed: 3 }),
-  stationary: () => go('box', { stateIndex: 2, speed: 1 }),
-  revival: () => go('box', { stateIndex: 0, speed: 16, show: { carpet: true } }),
-  coherent: () => go('harmonic', { stateIndex: 0, speed: 1.5 }),
-  squeezed: () => go('harmonic', { stateIndex: 4, speed: 1 }),
-  tunnel: () => go('barrier', { stateIndex: 0, speed: 6 }),
-  step: () => go('step', { stateIndex: 1, speed: 6 }),
-  well: () => go('well', { stateIndex: 1, speed: 1 }),
-  double: () => go('double', { stateIndex: 0, speed: 4, show: { carpet: true } }),
-  delta: () => go('delta', { stateIndex: 1, speed: 4 }),
-  bouncer: () => go('bouncer', { stateIndex: 0, speed: 3, show: { carpet: true } }),
-  bloch: () => go('lattice', { stateIndex: 0, speed: 8, show: { carpet: true } }),
-  driven: () => go('driven', { stateIndex: 0, speed: 3 }),
+  spread: () => go('free', { start: 'Narrow, at rest', speed: 1 }),
+  phase: () => go('free', { start: 'Moving', speed: 3 }),
+  collide: () => go('free', { start: 'Two packets meet', speed: 3 }),
+  stationary: () => go('box', { start: 'n = 2', speed: 1 }),
+  revival: () => go('box', { start: 'Bouncing', speed: 16 }),
+  coherent: () => go('harmonic', { start: 'Coherent', speed: 1.5, show: { classical: true } }),
+  squeezed: () => go('harmonic', { start: 'Squeezed', speed: 1 }),
+  tunnel: () => go('barrier', { start: 'Tunnelling', speed: 6 }),
+  step: () => go('step', { start: 'Above the step', speed: 6 }),
+  well: () => go('well', { start: 'n = 1', speed: 1 }),
+  resonance: () => go('well', { start: 'On resonance' }),
+  double: () => go('double', { start: 'Left well', speed: 4 }),
+  delta: () => go('delta', { start: 'Moving', speed: 4 }),
+  bouncer: () => go('bouncer', { start: 'Dropped', speed: 3, show: { classical: true } }),
+  bloch: () => go('lattice', { start: 'Wide', speed: 8 }),
+  driven: () => go('driven', { start: 'n = 0', speed: 3 }),
   quench: () => {
     go('custom', { run: false });
     state.domain = [-8, 8]; state.n = 1024; state.boundary = 'walls'; syncNumerics();
@@ -871,13 +1011,13 @@ const setups = {
     Vexpr = vField.expr; Vparams = vField.params;
     sim = new Sim1D({ n: state.n, xmin: -8, xmax: 8, mass: 1, boundary: 'walls' });
     applyPotential({ keepState: false });
-    useState({ kind: 'eigen', n: 0 });
+    setKind('eigen', { n: 0 });
     state.speed = 1; speedSlider.value = 1;
     restart(); setRunning(true);
   },
-  measure: () => go('box', { stateIndex: 0, speed: 1, run: false }),
+  measure: () => go('box', { start: 'Bouncing', speed: 1, run: false }),
   backwards: () => {
-    go('barrier', { stateIndex: 0, speed: 6, run: false });
+    go('barrier', { start: 'Tunnelling', speed: 6, run: false });
     state.boundary = 'walls'; syncNumerics();
     rebuildKeepingInit();
     // Run forward to t = 16 straight away (not limited by the per-frame budget), then wait,
@@ -931,7 +1071,7 @@ function fromHash(h) {
     }
     const keep = state.init;
     rebuildKeepingInit();
-    useState(keep);
+    setKind(keep.kind, keep);
     restart();
   } catch { /* an address that doesn't parse: the preset stands */ }
   return true;
@@ -944,4 +1084,4 @@ if (setups[hash.setup]) setups[hash.setup]();
 else if (!fromHash(hash)) choosePotential(POTENTIALS[2], { keepRunning: false });
 setRunning(true);
 
-window.__app = { state, get sim() { return sim; }, get slow() { const r = [slowFrames, frames]; slowFrames = frames = 0; return r; }, setups, choosePotential, restart, advance, get levels() { return shownLevels; }, ready: true };
+window.__app = { state, get sim() { return sim; }, get slow() { const r = [slowFrames, frames]; slowFrames = frames = 0; return r; }, setups, choosePotential, restart, advance, get levels() { return shownLevels; }, get marks() { return marks; }, get classical() { return classical; }, viewRange, potentials: POTENTIALS, byId, ready: true };
