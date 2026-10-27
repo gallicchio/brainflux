@@ -26,6 +26,7 @@ DEMOS = {
     'tomography': ('', 3),
     'arrays': ('#setup=steer', 3),
     'beams': ('#setup=waist', 3),
+    'phasespace': ('#setup=anharmonic&t=8', 3),
 }
 
 
