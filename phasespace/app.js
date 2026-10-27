@@ -52,16 +52,28 @@ let Vversion = 0;
 // ------------------------------------------------------------------- the potential
 
 const SUB = 8;
-/** V on the simulation grid, each cell the average of 8 samples (an edge falls where typed). */
+/**
+ * V on the simulation grid, each cell the average of 8 samples (an edge falls where typed).
+ * out.jumps: whether V jumps somewhere: one step between samples far bigger than its
+ * neighbours (a smooth V, however steep, changes by nearly equal steps from sample to sample).
+ */
 function evalVOnGrid() {
-  const n = sim.n, xs = new Float64Array(n * SUB);
+  const n = sim.n, N = n * SUB, xs = new Float64Array(N);
   for (let j = 0; j < n; j++) for (let s = 0; s < SUB; s++) xs[j * SUB + s] = sim.x[j] + ((s + 0.5) / SUB - 0.5) * sim.dx;
-  const v = Vexpr.evaluate({ x: xs, ...Vparams }, n * SUB).re;
+  const v = Vexpr.evaluate({ x: xs, ...Vparams }, N).re.map(clean);
   const out = new Float64Array(n);
   for (let j = 0; j < n; j++) {
     let a = 0;
-    for (let s = 0; s < SUB; s++) a += clean(v[j * SUB + s]);
+    for (let s = 0; s < SUB; s++) a += v[j * SUB + s];
     out[j] = a / SUB;
+  }
+  out.jumps = false;
+  for (let i = 4; i < N - 5 && !out.jumps; i++) {
+    const d = Math.abs(v[i + 1] - v[i]);
+    if (d < 1e-3) continue;
+    let nb = 0;
+    for (let k = -4; k <= 4; k++) if (k) nb = Math.max(nb, Math.abs(v[i + 1 + k] - v[i + k]));
+    if (d > 20 * nb) out.jumps = true;
   }
   return out;
 }
@@ -70,7 +82,10 @@ const clean = (y) => (Number.isFinite(y) ? Math.max(-1e6, Math.min(1e6, y)) : Nu
 function applyPotential() {
   if (!sim || !Vexpr) return;
   shownV = evalVOnGrid();
-  const V = prepareSharpPotential(shownV, sim.dx);
+  // Only a V with jumps is softened for the split-operator method (see schrodinger1d/sim.js).
+  // A smooth V, however steep its walls, is used exactly as typed: softening it would ripple
+  // it inside the well.
+  const V = shownV.jumps ? prepareSharpPotential(shownV, sim.dx) : shownV;
   sim.setPotential(V);
   if (V.jumps) {
     // A potential with jumps: the classical points feel the same softened V as the wave.
@@ -475,8 +490,11 @@ function drawDots(ctx, f, c) {
   if (!N) return;
   ctx.save();
   ctx.fillStyle = c.ink;
-  ctx.globalAlpha = N > 4000 ? 0.45 : 0.6;
-  const s = N > 4000 ? 1.4 : 1.8;
+  // Fainter and smaller when the points are crowded (many of them, or a small plot), so that
+  // W shows through.
+  const crowd = N / (f.w * f.h) * 1e5;          // points per 100 000 square pixels
+  ctx.globalAlpha = Math.max(0.3, Math.min(0.65, 0.65 * Math.sqrt(1000 / Math.max(crowd, 1))));
+  const s = crowd > 1500 ? 1.3 : 1.8;
   const ax = f.w / (win.x1 - win.x0), ap = f.h / (win.p1 - win.p0);
   for (let i = 0; i < N; i++) {
     const px = f.left + (x[i] - win.x0) * ax, py = f.bottom - (p[i] - win.p0) * ap;
@@ -509,7 +527,7 @@ function drawQuadrature(ctx, f, c) {
   const th = (state.quad * Math.PI) / 180, u = omegaRef, F = state.view === 'Q' ? grid.Q : grid.W;
   // In the oscillator's own units (x, p/u) the line is a diameter at angle theta.
   const R = Math.hypot(Math.max(Math.abs(win.x0), Math.abs(win.x1)), Math.max(Math.abs(win.p0), Math.abs(win.p1)) / u);
-  const nb = 240, P = grid.quadrature(F, th, u, -R, R, nb);
+  const nb = 160, P = grid.quadrature(F, th, u, -R, R, nb);
   let pk = 0;
   for (const v of P) pk = Math.max(pk, v);
   const ex = Math.cos(th), ep = Math.sin(th);           // along the line, natural units
@@ -1034,6 +1052,6 @@ window.__app = {
   state, setups, go, restart, advance,
   get sim() { return sim; }, get grid() { return grid; }, get ens() { return ens; }, get levels() { return levels; },
   get Wstats() { return Wstats; }, get dotsFrom() { return dotsFrom; }, get table() { return table; }, get omegaRef() { return omegaRef; },
-  computePhase, draw, frames: () => frameCount,
+  computePhase, draw, frames: () => frameCount, frame: () => frame,
   ready: true,
 };

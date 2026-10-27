@@ -78,9 +78,10 @@ export function normalize(re, im, dx) {
 // ---------------------------------------------------------------------------- potentials
 //
 // Each: the formula and its parameters, the computing domain (bigger than the window, so the
-// walls are never felt), the window of phase space shown, the frequency of small oscillations
-// at the bottom (its coherent states are the round ones there), and states worth starting from.
-// A state is { kind: 'coherent' | 'squeezed' | 'cat' | 'eigen' | 'typed', ... }.
+// walls are never felt, but not so big that V is enormous at them, which would only shorten
+// the time step), the window of phase space shown (meant to fill a square), the frequency of
+// small oscillations at the bottom (the coherent states are the round ones there), and the
+// simulated time per second.
 
 export const POTENTIALS = [
   {
@@ -96,17 +97,17 @@ export const POTENTIALS = [
   {
     id: 'quartic', label: 'Quartic',
     V: 'x^2/2 + lambda x^4', params: { lambda: 0.05 }, omegaOf: () => 1,
-    domain: [-10, 10], n: 1024, boundary: 'walls', window: { x: [-5, 5], p: [-6, 6] }, speed: 2,
+    domain: [-7.5, 7.5], n: 1024, boundary: 'walls', window: { x: [-5, 5], p: [-6, 6] }, speed: 2,
   },
   {
     id: 'morse', label: 'Morse',
     V: 'D (1 - exp(-a x))^2', params: { D: 8, a: 0.5 }, omegaOf: (p) => p.a * Math.sqrt(2 * p.D),
-    domain: [-5, 27], n: 1024, boundary: 'walls', window: { x: [-2.5, 7.5], p: [-4.5, 4.5] }, speed: 2,
+    domain: [-4.5, 27.5], n: 1024, boundary: 'walls', window: { x: [-2.5, 7.5], p: [-4.5, 4.5] }, speed: 2,
   },
   {
     id: 'double', label: 'Double well',
     V: 'V0 ((x/a)^2 - 1)^2', params: { V0: 3, a: 1.5 }, omegaOf: (p) => Math.sqrt(8 * p.V0) / p.a,
-    domain: [-8, 8], n: 1024, boundary: 'walls', window: { x: [-3.5, 3.5], p: [-4, 4] }, speed: 4,
+    domain: [-5.5, 5.5], n: 1024, boundary: 'walls', window: { x: [-3.5, 3.5], p: [-4, 4] }, speed: 4,
   },
   {
     id: 'typed', label: 'Typed',

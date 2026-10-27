@@ -19,7 +19,7 @@
 .readouts .warn { color: var(--warn); }
 
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; color: var(--ink-2); padding: 0 4px; min-height: 1.6em; }
-.legend .bar { display: inline-flex; align-items: center; gap: 6px; }
+.legend .cbar { display: inline-flex; align-items: center; gap: 6px; }
 .legend canvas { width: 120px; height: 12px; border-radius: 2px; }
 #hover { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-3); }
 

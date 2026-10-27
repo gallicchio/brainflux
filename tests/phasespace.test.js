@@ -265,11 +265,31 @@ test('quadratures: X_theta of a squeezed state has the variance of its rotated c
     let s0 = 0, s1 = 0, s2 = 0;
     for (let i = 0; i < nb; i++) { const X = -8 + (i + 0.5) * w; s0 += P[i] * w; s1 += P[i] * X * w; s2 += P[i] * X * X * w; }
     const mean = s1 / s0, v = s2 / s0 - mean * mean, c = Math.cos(th), s = Math.sin(th);
-    close(s0, 1, 1e-6, `norm at ${th}`);
-    close(mean, opts.x0 * c + opts.p0 * s, 1e-6, `mean at ${th}`);
-    // Cloud-in-cell binning adds w^2/6 to the variance of the samples.
-    close(v, sxx * c * c + 2 * sxp * s * c + spp * s * s + (w * w) / 6 + (g.cellX ** 2 * c * c + g.dp ** 2 * s * s) / 12, 2e-3, `variance at ${th}`);
+    close(s0, 1, 1e-4, `norm at ${th}`);
+    close(mean, opts.x0 * c + opts.p0 * s, 1e-4, `mean at ${th}`);
+    // Bilinear interpolation between grid points adds (cell size)^2 / 6 to the variance.
+    close(v, sxx * c * c + 2 * sxp * s * c + spp * s * s + (g.cellX ** 2 * c * c + g.dp ** 2 * s * s) / 6, 2e-4, `variance at ${th}`);
   }
+});
+
+test('quadratures: in the oscillator, |psi(x, t)|^2 is the shadow of W(0) at theta = omega t', () => {
+  const n = 1024, sim = new Sim1D({ n, xmin: -12, xmax: 12, boundary: 'walls' });
+  sim.setPotential(sim.x.map((x) => x * x / 2));
+  const cat = catState(sim.x, { x0: 3, p0: 0.5, phi: 0.4 });
+  sim.setPsi(cat.re, cat.im); sim.normalize();
+  const g = new PhaseGrid(sim, { x0: -6, x1: 6, p0: -6, p1: 6 }, { cols: 300, rows: 300 });
+  const b = g.prepare(sim.re.subarray(0, n), sim.im.subarray(0, n));
+  g.wigner(b.re, b.im);
+  const t = 0.9, nb = 200, P = g.quadrature(g.W, t, 1, -5, 5, nb);
+  sim.step(0.005, t / 0.005);
+  let err = 0, peak = 0;
+  for (let i = 0; i < nb; i++) {
+    const X = -5 + (i + 0.5) * 10 / nb, f = (X - sim.xmin) / sim.dx, j = Math.floor(f), u = f - j;
+    const d = (1 - u) * (sim.re[j] ** 2 + sim.im[j] ** 2) + u * (sim.re[j + 1] ** 2 + sim.im[j + 1] ** 2);
+    err = Math.max(err, Math.abs(P[i] - d)); peak = Math.max(peak, d);
+  }
+  assert(err < 2e-3 * peak, `largest difference ${err / peak} of the peak`);
+  return `largest difference ${(err / peak).toExponential(1)} of the peak`;
 });
 
 // ---------------------------------------------------------------------------- classical

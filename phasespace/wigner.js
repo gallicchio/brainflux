@@ -240,26 +240,26 @@ export class PhaseGrid {
 
   /**
    * The distribution of the quadrature X = x cos(theta) + (p / u) sin(theta) (u: the unit of
-   * momentum that counts as one unit of x), from F, in nb bins on [X0, X1]: the shadow of F
-   * on a line at angle theta.  At theta = 0 it is the x marginal.  Cloud-in-cell binning.
+   * momentum that counts as one unit of x), from F, at nb points X_i = X0 + (i + 1/2)(X1 - X0)/nb:
+   * the shadow of F on a line at angle theta, its integral along the perpendicular lines,
+   *     P(X) = u * integral F(X cos - Y sin, u (X sin + Y cos)) dY
+   * (u from dx dp = u dX dY), with F interpolated bilinearly within the window.  At theta = 0
+   * it is the x marginal, at 90 degrees the p marginal (in units of p / u).
    */
   quadrature(F, theta, u, X0, X1, nb, out = new Float64Array(nb)) {
-    const { rows, cols, x, p } = this;
-    const c = Math.cos(theta), s = Math.sin(theta) / u, w = (X1 - X0) / nb;
-    out.fill(0);
-    for (let k = 0; k < cols; k++) {
-      const xc = x[k] * c;
-      for (let r = 0; r < rows; r++) {
-        const v = F[k * rows + r];
-        if (v === 0) continue;
-        const f = (xc + p[r] * s - X0) / w - 0.5, i = Math.floor(f), t = f - i;
-        if (i >= 0 && i < nb) out[i] += v * (1 - t);
-        if (i + 1 >= 0 && i + 1 < nb) out[i + 1] += v * t;
+    const c = Math.cos(theta), s = Math.sin(theta), w = (X1 - X0) / nb;
+    // Lines long enough to cross the window, in steps finer than its cells.
+    const L = Math.hypot(Math.max(Math.abs(this.x0), Math.abs(this.x1)), Math.max(Math.abs(this.p0), Math.abs(this.p1)) / u);
+    const dY = 0.5 * Math.min(this.cellX, this.dp / u), m = Math.ceil(L / dY);
+    for (let i = 0; i < nb; i++) {
+      const X = X0 + (i + 0.5) * w;
+      let sum = 0;
+      for (let k = -m; k <= m; k++) {
+        const Y = k * dY;
+        sum += this.at(F, X * c - Y * s, u * (X * s + Y * c));
       }
+      out[i] = sum * dY * u;
     }
-    // Each sample carries F dx dp; the density in X is that over the bin width.
-    const k = this.cell / w;
-    for (let i = 0; i < nb; i++) out[i] *= k;
     return out;
   }
 
