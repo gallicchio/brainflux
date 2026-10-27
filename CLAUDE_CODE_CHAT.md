@@ -184,7 +184,7 @@ test could catch it again.  The ones worth knowing about:
 
 ### Where it stands
 
-`~/mudd/brainflux` is a git repository (17 commits so far, all as you, with the attribution
+`~/mudd/brainflux` is a git repository (23 commits so far, all as you, with the attribution
 lines), not pushed: create `github.com/gallicchio/brainflux` (or tell me another name), push,
 and turn on Pages for `main` / root; it will be at `gallicchio.github.io/brainflux/`.  To try it
 now: `cd ~/mudd/brainflux && python3 -m http.server` and open <http://localhost:8000/>.
