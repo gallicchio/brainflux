@@ -1,5 +1,5 @@
-// The Wigner function of a wave function sampled on a grid, and the Husimi Q function, with
-// FFTs, one per column of phase space.  Units: hbar = 1.
+// The Wigner function of a wave function sampled on a grid, and the Husimi Q function, by
+// FFTs along p, column by column of phase space.  Units: hbar = 1.
 //
 //     W(x, p) = (1/pi hbar) integral psi*(x + y) psi(x - y) exp(2 i p y / hbar) dy
 //

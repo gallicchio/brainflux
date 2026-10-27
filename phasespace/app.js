@@ -701,8 +701,8 @@ function updateReadouts() {
   const o = sim.observables();
   const parts = [
     `<span>t <b>${fmt(sim.t, 3)}</b></span>`,
-    `<span>⟨x⟩ <b>${fmt(o.x, 3)}</b></span>`,
-    `<span>⟨p⟩ <b>${fmt(o.p, 3)}</b></span>`,
+    `<span>⟨x⟩ <b>${fmt(Math.abs(o.x) < 1e-8 ? 0 : o.x, 3)}</b></span>`,
+    `<span>⟨p⟩ <b>${fmt(Math.abs(o.p) < 1e-8 ? 0 : o.p, 3)}</b></span>`,
     `<span>σ<sub>x</sub>σ<sub>p</sub> <b>${fmt(o.sx * o.sp, 3)}</b> ≥ ħ/2</span>`,
     `<span>⟨E⟩ <b>${fmt(o.E, 4)}</b></span>`,
   ];
