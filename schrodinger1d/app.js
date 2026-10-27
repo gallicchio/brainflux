@@ -118,23 +118,33 @@ function energyRange() {
 function initialPsi() {
   const n = sim.n, init = state.init;
   const re = new Float64Array(n), im = new Float64Array(n);
-  const nOff = 0;
   if (init.kind === 'eigen' || init.kind === 'two') {
-    const pick = (k) => levels[Math.min(levels.length - 1, Math.max(0, k + nOff))];
-    if (!levels.length) throw new Error('No stationary states were found.');
-    const a = pick(init.n);
+    // Only the states drawn as levels (bound ones, or all of them between walls): not a state
+    // of the computing box that happens to fit below some cut-off.
+    const count = shownLevels.length, need = Math.max(init.n, init.kind === 'two' ? init.m : 0) + 1;
+    if (!count) throw new Error('This potential has no bound states: try a packet.');
+    if (need > count) throw new Error(`This potential has only ${count} bound state${count > 1 ? 's' : ''} (n = ${nOffset()}${count > 1 ? '…' + (count - 1 + nOffset()) : ''}).`);
+    const a = shownLevels[init.n];
     if (init.kind === 'eigen') { re.set(a.psi); return { re, im }; }
-    const b = pick(init.m);
+    const b = shownLevels[init.m];
     for (let j = 0; j < n; j++) re[j] = (a.psi[j] + b.psi[j]) / Math.SQRT2;
     return { re, im };
   }
   const src = init.kind === 'packet' ? PACKET : init.psi;
   const e = parse(src, { variables: ['x'] });
   const v = e.evaluate({ x: sim.x, m: state.mass, ...init.params }, n);
+  // NaN (0/0 at a point) is taken as 0; but an infinity means the formula overflows
+  // somewhere in the domain (exp(40 x), say), and no normalisation can rescue that.
+  let peak = 0;
   for (let j = 0; j < n; j++) {
-    re[j] = Number.isFinite(v.re[j]) ? v.re[j] : 0;
-    im[j] = v.im && Number.isFinite(v.im[j]) ? v.im[j] : 0;
+    const a = v.re[j], b = v.im ? v.im[j] : 0;
+    if (a === Infinity || a === -Infinity || b === Infinity || b === -Infinity) throw new Error('ψ₀ is infinite somewhere in the domain: it grows too fast.');
+    re[j] = Number.isFinite(a) ? a : 0;
+    im[j] = Number.isFinite(b) ? b : 0;
+    peak = Math.max(peak, Math.abs(re[j]), Math.abs(im[j]));
   }
+  // Scale before normalising, so that huge (but finite) values don't overflow the sum.
+  if (peak > 0) for (let j = 0; j < n; j++) { re[j] /= peak; im[j] /= peak; }
   return { re, im };
 }
 
@@ -604,7 +614,7 @@ const kindSeg = segmented([
   { value: 'eigen', label: 'Stationary', title: 'One stationary state (an eigenstate of the energy)' },
   { value: 'two', label: 'Two states', title: 'An equal superposition of two stationary states' },
   { value: 'typed', label: 'Typed', title: 'Any expression in x' },
-], 'packet', (k) => setKind(k), { label: 'Kind of initial state' });
+], 'packet', (k) => { setKind(k); restart(); kick(); }, { label: 'Kind of initial state' });
 $('#kind').append(kindSeg);
 const stateBox = $('#state-box');
 
@@ -718,7 +728,7 @@ $('#shows').append(...Object.values(showToggles));
 
 // Measurements.
 $('#measure-x').addEventListener('click', () => {
-  const { re, im, x, n, dx } = sim;
+  const { re, im, x, n, dx } = sim, t = sim.t;
   let r = Math.random() * sim.norm(), j = 0;
   for (; j < n - 1; j++) { r -= (re[j] ** 2 + im[j] ** 2) * dx; if (r <= 0) break; }
   // A measurement with resolution s: psi -> psi * exp(-(x - x_m)^2 / 4 s^2), renormalised.
@@ -727,8 +737,8 @@ $('#measure-x').addEventListener('click', () => {
     const g = Math.exp(-((x[i] - x[j]) ** 2) / (4 * s * s));
     re[i] *= g; im[i] *= g;
   }
-  if (state.boundary === 'walls') sim.setPsi(re.slice(0, n), im.slice(0, n));
-  const t = sim.t; sim.normalize(); sim.t = t;
+  if (state.boundary === 'walls') sim.setPsi(re.slice(0, n), im.slice(0, n));   // (resets t)
+  sim.normalize(); sim.t = t;
   scale.density = Math.max(scale.density, (1.25 / (Math.sqrt(2 * Math.PI) * s)));
   classical = { x: x[j], p: sim.observables().p, alive: true };
   toast(`Found at x = ${fmt(x[j], 3)}`);
@@ -870,7 +880,9 @@ const setups = {
     go('barrier', { stateIndex: 0, speed: 6, run: false });
     state.boundary = 'walls'; syncNumerics();
     rebuildKeepingInit();
-    advance(16);
+    // Run forward to t = 16 straight away (not limited by the per-frame budget), then wait,
+    // with Backwards already on, for Play.
+    for (let i = 0; i < 100000 && sim.t < 16 - 1e-9; i++) advance(Math.min(1, 16 - sim.t));
     state.direction = -1; reverseButton.setAttribute('aria-pressed', 'true');
     updateClock(); kick();
   },

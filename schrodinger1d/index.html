@@ -183,11 +183,11 @@
   <article class="exp" data-setup="delta">
     <h3>12. The delta function</h3>
     <p>An attractive $V=-\alpha\,\delta(x)$ has exactly one bound state, $\psi=\sqrt\alpha\,e^{-\alpha|x|}$
-    with $E=-\alpha^2/2$.  Here the delta is a narrow well of width $w$, so its level sits a
-    little higher, near $-0.46$: the true bound state has a cusp at the delta, made of very short
-    wavelengths, which a well of any width blunts.  A packet sent at it is transmitted with
-    probability close to $T=k^2/(k^2+\alpha^2)$: one half for $k=\alpha$ (0.52 here, for the
-    same reason).  The slower the packet, the less it can tell the well from a true delta.</p>
+    with $E=-\alpha^2/2$.  Here the delta is a narrow Gaussian well of width $w$ and area
+    $\alpha$, and its level sits a little higher, at $-0.465$: the true bound state has a cusp at the
+    delta, made of very short wavelengths, which a well of any width blunts.  A packet sent at it is transmitted with
+    probability close to $T=k^2/(k^2+\alpha^2)$: one half for $k=\alpha$ (0.51 here, for the
+    same reason: watch $P(x>0)$ once the packet has gone).  The slower the packet, the less it can tell the well from a true delta.</p>
   </article>
 
   <article class="exp" data-setup="bouncer">
@@ -231,8 +231,9 @@
 
   <article class="exp" data-setup="backwards">
     <h3>18. Running time backwards</h3>
-    <p>A spread-out mess, a few seconds after a packet hit a barrier.  Press <em>Backwards</em>:
-    the reflected and transmitted parts come back together into the original packet.  The
+    <p>A spread-out mess: a packet hit a barrier a while ago, and part went through, part came back.
+    <em>Backwards</em> is on: press <em>Play</em>, and the reflected and transmitted parts come back
+    together into the original packet, which stops at $t=0$.  The
     Schrödinger equation is time-reversal symmetric (the absorbing walls are not, so they are
     off here).</p>
   </article>

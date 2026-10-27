@@ -83,7 +83,7 @@ export const POTENTIALS = [
   },
   {
     id: 'delta', label: 'Delta', kc: 40,
-    V: '-alpha rect(x/w)/w', params: { alpha: 1, w: 0.05 }, domain: [-30, 30], n: 2048, boundary: 'absorbing', erange: [-1, 2], prange: 3, speed: 3,
+    V: '-alpha exp(-x^2/(2 w^2))/(sqrt(2 pi) w)', params: { alpha: 1, w: 0.03 }, domain: [-30, 30], n: 2048, boundary: 'absorbing', erange: [-1, 2], prange: 3, speed: 3,
     barrier: 0,
     states: [
       { label: 'Bound state', kind: 'eigen', n: 0 },
