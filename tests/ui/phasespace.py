@@ -35,7 +35,8 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     t0, f0 = time.time(), b.eval('__app.frames()')
     b.sleep(2)
     fps = (b.eval('__app.frames()') - f0) / (time.time() - t0)
-    print(f'note  {fps:.0f} frames per second in headless Chromium (software rendering; the page work per frame is a few ms)')
+    work, quality = b.eval('[__app.work, __app.quality]')
+    print(f'note  {fps:.0f} frames per second in headless Chromium (software rendering); the page works {work:.1f} ms a frame (W grid at {quality:.2f} of full resolution)')
     b.screenshot('build/ps-start.png')
 
     names = b.eval('Object.keys(__app.setups)')

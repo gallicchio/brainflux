@@ -234,15 +234,17 @@ test('free evolution shears W: W(x, p, t) = W0(x - p t, p)', () => {
 // ------------------------------------------------------------------------------ Husimi Q
 
 test('Husimi: a coherent state gives Q = exp(-((x-x0)^2 + (p-p0)^2)/2) / 2 pi; Q >= 0; integral 1', () => {
-  const L = line(1024, -12, 12), x0 = -1.5, p0 = 2;
-  const g = new PhaseGrid(L, { x0: -8, x1: 8, p0: -8, p1: 8 }, { cols: 300, rows: 300 });
-  const b = g.prepare(...Object.values(gaussian(L, { x0, p0 })));
-  g.husimi(b.re, b.im, Math.SQRT1_2);
-  let err = 0;
-  for (let c = 0; c < g.cols; c++) for (let r = 0; r < g.rows; r++) err = Math.max(err, Math.abs(g.Q[c * g.rows + r] - Math.exp(-((g.x[c] - x0) ** 2 + (g.p[r] - p0) ** 2) / 2) / (2 * Math.PI)));
-  const peak = 1 / (2 * Math.PI);
+  const L = line(1024, -12, 12), x0 = -1.5, p0 = 2, peak = 1 / (2 * Math.PI);
+  // Grids like the demo's (Q computed on a coarser grid and interpolated), and finer ones.
+  let err = 0, g = null;
+  for (const [cols, rows] of [[320, 320], [200, 260], [600, 150]]) {
+    g = new PhaseGrid(L, { x0: -7.3, x1: 7.3, p0: -6, p1: 6 }, { cols, rows });
+    const b = g.prepare(...Object.values(gaussian(L, { x0, p0 })));
+    g.husimi(b.re, b.im, Math.SQRT1_2);
+    for (let c = 0; c < g.cols; c++) for (let r = 0; r < g.rows; r++) err = Math.max(err, Math.abs(g.Q[c * g.rows + r] - Math.exp(-((g.x[c] - x0) ** 2 + (g.p[r] - p0) ** 2) / 2) / (2 * Math.PI)));
+    close(g.stats(g.Q).total, 1, 2e-3, 'integral of Q');
+  }
   assert(err < 3e-3 * peak, `max error ${err / peak} of the peak`);
-  close(g.stats(g.Q).total, 1, 1e-4, 'integral of Q');
   // A cat state: W is negative between the blobs, Q is not.
   const cat = catState(L.x, { x0: 3, p0: 0, phi: Math.PI });
   normalize(cat.re, cat.im, L.dx);

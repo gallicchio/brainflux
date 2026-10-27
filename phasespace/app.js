@@ -93,9 +93,9 @@ function applyPotential() {
       const f = Math.max(0, Math.min(sim.n - 1.000001, (x - sim.xmin) / sim.dx)), j = Math.floor(f);
       return V[j] + (f - j) * (V[Math.min(sim.n - 1, j + 1)] - V[j]);
     });
-    table = new PotentialTable(lin, sim.xmin, sim.xmax, 8192);
+    table = new PotentialTable(lin, sim.xmin, sim.xmax, 4096);
   } else {
-    table = new PotentialTable((xs) => Vexpr.evaluate({ x: xs, ...Vparams }, xs.length).re, sim.xmin, sim.xmax, 8192);
+    table = new PotentialTable((xs) => Vexpr.evaluate({ x: xs, ...Vparams }, xs.length).re, sim.xmin, sim.xmax, 4096);
   }
   omegaRef = referenceOmega();
   computeLevels(V);
@@ -198,6 +198,32 @@ function restart({ quick = false } = {}) {
   if (!quick) updateHash();
 }
 
+/**
+ * For sliders: at most one restart per animation frame, a quick one (no trial run for the
+ * time step), with the trial once the input has paused for 300 ms.  before(): work to do first
+ * (a new potential), also once per frame.
+ */
+let livePending = 0, liveBefore = null, calTimer = 0;
+function restartLive(before) {
+  if (before) liveBefore = before;
+  if (livePending) return;
+  livePending = requestAnimationFrame(() => {
+    livePending = 0;
+    if (liveBefore) { const f = liveBefore; liveBefore = null; f(); }
+    restart({ quick: true });
+    kick();
+    clearTimeout(calTimer);
+    calTimer = setTimeout(calibrate, 300);
+  });
+}
+function calibrate() {
+  if (!sim || errorText) return;
+  dtCal = sim.calibrateStep(sim.suggestedStep(E0));
+  dtMax = Math.min(dtCal, sim.suggestedStep(E0));
+  measureSpeed();
+  updateHash();
+}
+
 /** How long a step takes, to keep a frame's work to about 10 ms. */
 function measureSpeed() {
   const keep = { re: sim.re.slice(), im: sim.im.slice(), t: sim.t };
@@ -246,7 +272,7 @@ function ensureGrid() {
   const m = layout.main, w = m.right - m.left, h = m.bottom - m.top;
   if (!(w > 20 && h > 20)) return false;
   win = fittedWindow(w, h);
-  const cols = Math.min(320, Math.round(w / 2.2)), rows = Math.min(320, Math.round(h / 1.8));
+  const cols = Math.round(quality * Math.min(320, w / 2.2)), rows = Math.round(quality * Math.min(320, h / 1.8));
   const key = [win.x0, win.x1, win.p0, win.p1, cols, rows, sim.n, sim.dx, sim.xmin].map((v) => +v.toPrecision(6)).join(',');
   if (key !== gridKey) {
     // psi is band-limited at twice the window's largest momentum: a state that reaches a
@@ -681,9 +707,11 @@ function updateReadouts() {
     `<span>⟨E⟩ <b>${fmt(o.E, 4)}</b></span>`,
   ];
   if (Wstats) {
-    const neg = Wstats.min < -1e-4 / Math.PI;
-    parts.push(`<span${neg ? ' class="neg"' : ''}>min W <b>${neg ? '−' : ''}${fmt(Math.abs(Wstats.min) * Math.PI, 3)}</b>/πħ</span>`);
-    parts.push(`<span>W&lt;0 volume <b>${fmt(Wstats.negative < 1e-5 ? 0 : Wstats.negative, 3)}</b></span>`);
+    // Values below 1e-4 of the scale are round-off (or the far tails of a Gaussian): 0.
+    const m = Wstats.min * Math.PI, neg = m < -1e-4;
+    const shown = Math.abs(m) < 1e-4 ? '0' : (m < 0 ? '−' : '') + fmt(Math.abs(m), 3);
+    parts.push(`<span${neg ? ' class="neg"' : ''} title="The least value of W in the window, in units of 1/πħ (W ≥ −1/πħ always)">min W <b>${shown}</b>/πħ</span>`);
+    parts.push(`<span title="The volume of the negative part of W: the integral of |W| where W < 0">W&lt;0 volume <b>${fmt(Wstats.negative < 1e-4 ? 0 : Wstats.negative, 3)}</b></span>`);
   }
   if (ens.N && state.show.dots) {
     const s = ens.stats(table);
@@ -700,6 +728,7 @@ let last = 0, dragging = null;
 function loop(now) {
   const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
   last = now;
+  const t0 = performance.now();
   if (state.running && !dragging && sim && !errorText) advance(state.speed * dt);
   if (dirty) {
     if (grid) computePhase();
@@ -707,10 +736,24 @@ function loop(now) {
     updateLegend();
     if (frameCount++ % 4 === 0 || !state.running) updateReadouts();
     dirty = false;
+    adapt(now, performance.now() - t0);
   }
   requestAnimationFrame(loop);
 }
 let frameCount = 0;
+
+// On a slow device, a coarser grid for W: the work of a frame is kept under about 25 ms (so
+// the page still answers the pointer at 30 frames a second or more).  Checked once a second,
+// after the first two (while the JavaScript engine is still compiling, everything is slow).
+let quality = 1, workAvg = 0, lastAdapt = 0;
+const started = performance.now();
+function adapt(now, work) {
+  workAvg = workAvg ? 0.9 * workAvg + 0.1 * work : work;
+  if (now - lastAdapt < 1000 || now - started < 2000) return;
+  lastAdapt = now;
+  const q = workAvg > 25 ? Math.max(0.4, quality * 0.8) : workAvg < 12 ? Math.min(1, quality * 1.25) : quality;
+  if (q !== quality) { quality = q; layout = null; }
+}
 const kick = () => { dirty = true; };
 
 // ------------------------------------------------------------------- controls
@@ -737,13 +780,11 @@ const vField = exprField({
   label: '<math><mi>V</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo></math>', value: state.pot.V, variables: ['x'],
   params: state.pot.params,
   hints: { omega: { min: 0.2, max: 3, value: 1 }, lambda: { min: 0, max: 0.5, value: 0.05 }, D: { min: 1, max: 20, value: 8 }, a: { min: 0.2, max: 3, value: 1 }, V0: { min: 0, max: 10, value: 3 } },
-  onChange: (expr, params) => {
+  onChange: (expr, params) => restartLive(() => {
     Vexpr = expr; Vparams = params;
     applyPotential();
     syncKindControls();
-    restart();
-    kick();
-  },
+  }),
 });
 $('#v-field').append(vField);
 
@@ -758,7 +799,7 @@ const kindButtons = segmented([
 ], state.init.kind, (k) => { state.init.kind = k; syncKindControls(); restart(); kick(); }, { label: 'Kind of initial state' });
 kindButtons.classList.add('kinds');
 $('#kind').append(kindButtons);
-const setInit = (key) => (v) => { state.init[key] = v; restart(); kick(); };
+const setInit = (key) => (v) => { state.init[key] = v; restartLive(); };
 const x0Slider = slider({ label: '<math><msub><mi>x</mi><mn>0</mn></msub></math>', labelHTML: true, min: -6, max: 6, value: state.init.x0, onInput: setInit('x0') });
 const p0Slider = slider({ label: '<math><msub><mi>p</mi><mn>0</mn></msub></math>', labelHTML: true, min: -6, max: 6, value: state.init.p0, onInput: setInit('p0') });
 const rSlider = slider({ label: 'squeeze <math><mi>r</mi></math>', labelHTML: true, min: -2, max: 2, value: state.init.r, title: 'The ellipse is e^r times longer and e^−r times narrower than a coherent state', onInput: setInit('r') });
@@ -769,7 +810,7 @@ const mSlider = slider({ label: '<math><mi>m</mi></math>', labelHTML: true, min:
 const typedField = exprField({
   label: '<math><msub><mi>ψ</mi><mn>0</mn></msub><mo>=</mo></math>', value: state.init.psi, variables: ['x'], params: state.init.params,
   hints: { a: { min: 0.1, max: 4, value: 1 }, x0: { min: -5, max: 5, value: 0 }, k: { min: -6, max: 6, value: 2 } },
-  onChange: (expr, params) => { state.init.psi = expr.source; state.init.params = params; if (state.init.kind === 'typed') { restart(); kick(); } },
+  onChange: (expr, params) => { state.init.psi = expr.source; state.init.params = params; if (state.init.kind === 'typed') restartLive(); },
 });
 const stateNote = el('div', { class: 'note' });
 $('#state-box').append(x0Slider, p0Slider, rSlider, thetaSlider, phiSlider, nSlider, mSlider, typedField, stateNote);
@@ -788,7 +829,11 @@ function syncKindControls() {
   x0Slider.setRange(Math.min(b.x0, it.x0), Math.max(b.x1, it.x0));
   p0Slider.setRange(Math.min(b.p0, it.p0), Math.max(b.p1, it.p0));
   x0Slider.value = it.x0; p0Slider.value = it.p0; rSlider.value = it.r; thetaSlider.value = it.theta; phiSlider.value = it.phi;
-  const top = Math.max(1, levels.length - 1);
+  // n and m must name levels this potential has (m another one than n, if it can).
+  const last = Math.max(0, levels.length - 1), top = Math.max(1, last);
+  it.n = Math.max(0, Math.min(last, it.n));
+  it.m = Math.max(0, Math.min(last, it.m));
+  if (it.m === it.n && last > 0) it.m = it.n === 0 ? 1 : it.n - 1;
   nSlider.setRange(0, top); mSlider.setRange(0, top);
   nSlider.value = it.n; mSlider.value = it.m;
   const harmonic = state.pot.id === 'harmonic';
@@ -851,8 +896,6 @@ function choosePotential(p, { keepInit = true } = {}) {
   const b = baseWindow(), it = state.init;
   if (it.x0 < b.x0 || it.x0 > b.x1 || it.p0 < b.p0 || it.p0 > b.p1) { it.x0 = b.x0 + 0.7 * (b.x1 - b.x0); it.p0 = 0; }
   if ((it.kind === 'eigen' || it.kind === 'two') && !levels.length) it.kind = 'coherent';
-  if (it.n >= levels.length) it.n = 0;
-  if (it.m >= levels.length) it.m = Math.min(1, levels.length - 1);
   syncKindControls();
   restart();
 }
@@ -1051,7 +1094,7 @@ requestAnimationFrame(loop);
 window.__app = {
   state, setups, go, restart, advance,
   get sim() { return sim; }, get grid() { return grid; }, get ens() { return ens; }, get levels() { return levels; },
-  get Wstats() { return Wstats; }, get dotsFrom() { return dotsFrom; }, get table() { return table; }, get omegaRef() { return omegaRef; },
-  computePhase, draw, frames: () => frameCount, frame: () => frame,
+  get Wstats() { return Wstats; }, get dotsFrom() { return dotsFrom; }, get error() { return errorText; }, get table() { return table; }, get omegaRef() { return omegaRef; },
+  computePhase, draw, frames: () => frameCount, frame: () => frame, get quality() { return quality; }, get work() { return workAvg; },
   ready: true,
 };
