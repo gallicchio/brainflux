@@ -82,7 +82,7 @@ export function synthChanged(what = 'geometry', hash = true) {
   pending = requestAnimationFrame(() => {
     pending = 0;
     const w = pendingWhat; pendingWhat = new Set();
-    if (w.has('geometry')) geometry();
+    if (w.has('geometry') || !tr) geometry();
     if (w.has('sky') || !V) makeTheSky();
     if (w.has('geometry') || w.has('sampling') || !grid) sampling();
     imaging();
@@ -377,13 +377,15 @@ function notes() {
 // ------------------------------------------------------------------ pointer on the map
 
 let dragDish = null;
+let reach = 12;
 function hitDish(px, py, w) {
-  let best = -1, bd = 12;
+  let best = -1, bd = reach;
   S.dishes.forEach(([E, Nn], i) => { const [x, y] = mapPx(E, Nn, w), d = Math.hypot(x - px, y - py); if (d < bd) { bd = d; best = i; } });
   return best;
 }
 mapCanvas.addEventListener('pointerdown', (e) => {
   const r = mapCanvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  reach = e.pointerType === 'touch' ? 24 : 12;
   const i = hitDish(px, py, r.width);
   S.selected = i;
   if (i >= 0) {
@@ -479,7 +481,7 @@ for (const [id, labelText] of Object.entries(PRESETS)) {
   const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => loadPreset(id) }, labelText);
   $('#arrays-presets').append(b); presetButtons[id] = b;
 }
-function syncPresetButtons() { for (const [id, b] of Object.entries(presetButtons)) b.setAttribute('aria-pressed', String(id === S.preset)); latSlider.input.disabled = S.preset === 'eht'; }
+function syncPresetButtons() { for (const [id, b] of Object.entries(presetButtons)) b.setAttribute('aria-pressed', String(id === S.preset)); for (const i of latSlider.querySelectorAll('input')) i.disabled = S.preset === 'eht'; latSlider.title = S.preset === 'eht' ? 'Each station of the Earth-sized array is at its own latitude' : ''; }
 
 /** The longest baseline (the straight distance between two dishes, through the Earth). */
 function longest() { return baselineRange(S.dishes.map(([E, Nn]) => stationXYZ(E, Nn, S.lat * DEG)))[1]; }

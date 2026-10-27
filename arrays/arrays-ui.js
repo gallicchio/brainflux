@@ -33,6 +33,7 @@ export function onArraysChange(f) { onChange = f; }
 function rng(seed) { let s = (seed * 2654435761) % 2147483647 || 1; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
 
 function makeLayout() {
+  if (A.layout === 'custom') A.layout = 'line';
   const { n, d, cy } = A, els = [];
   if (A.layout === 'line') for (let i = 0; i < n; i++) els.push({ x: (i - (n - 1) / 2) * d, y: cy });
   else if (A.layout === 'circle') for (let i = 0; i < n; i++) { const a = (2 * Math.PI * i) / n; els.push({ x: A.radius * Math.sin(a), y: cy + A.radius * Math.cos(a) }); }
@@ -117,7 +118,8 @@ function drawField() {
   const { ctx, width, height } = fitCanvas(fieldCanvas), g = fieldRes, m = g * g;
   if (!off || off.width !== g) { off = document.createElement('canvas'); off.width = off.height = g; offImg = off.getContext('2d').createImageData(g, g); }
   const w = 2 * Math.PI * A.t, c = Math.cos(w), s = Math.sin(w);
-  const R = Rfield * 10 ** -A.bright;
+  // Intensity falls off as 1/r^2: away from a focus, show it four times brighter.
+  const R = Rfield * 10 ** -A.bright * (A.display === 'intensity' && A.phaseMode !== 'focus' ? 0.5 : 1);
   const dr = disp.subarray(0, m), di = dispI.subarray(0, m);
   if (A.display === 'intensity') {
     for (let i = 0; i < m; i++) dr[i] = Math.hypot(fre[i], fim[i]);
@@ -190,16 +192,19 @@ function drawOverlay(ctx, w, h) {
 // ------------------------------------------------------------------ pointer
 
 let drag = null;
+// Fingers need bigger targets than a mouse pointer.
+let reach = 14;
 function hit(px, py, w) {
-  let best = -1, bd = 14;
+  let best = -1, bd = reach;
   A.els.forEach((e, i) => { const [x, y] = toPx(e.x, e.y, w), d = Math.hypot(x - px, y - py); if (d < bd) { bd = d; best = i; } });
   return best;
 }
 fieldCanvas.addEventListener('pointerdown', (e) => {
   const r = fieldCanvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  reach = e.pointerType === 'touch' ? 26 : 14;
   if (A.phaseMode === 'focus') {
     const [fx, fy] = toPx(...A.focus, r.width);
-    if (Math.hypot(fx - px, fy - py) < 16) { drag = { focus: true }; fieldCanvas.setPointerCapture(e.pointerId); return; }
+    if (Math.hypot(fx - px, fy - py) < reach + 2) { drag = { focus: true }; fieldCanvas.setPointerCapture(e.pointerId); return; }
   }
   const i = hit(px, py, r.width);
   A.selected = i;
@@ -558,7 +563,7 @@ export function configureArrays(o = {}) {
   kindSeg.value = A.kind; dipSlider.hidden = A.kind !== 'dipole'; dipSlider.value = A.dipAngle;
   theta0Slider.value = A.theta0; sweepToggle.on = A.sweep; syncFocus();
   dbToggle.on = A.db; factorsToggle.on = A.factors; displaySeg.value = A.display;
-  brightSlider.value = A.bright; viewSlider.value = A.view;
+  brightSlider.value = A.bright; viewSlider.value = A.view; sllSlider.value = A.sll;
   fieldDirty = true;
   syncLayoutButtons();
   setTaper(A.taper === 'manual' ? 'uniform' : A.taper);
