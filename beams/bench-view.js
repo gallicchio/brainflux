@@ -528,12 +528,16 @@ export function createBench(app) {
 
   function waistTable() {
     const rows = [el('tr', {}, ...['', 'waist w₀', 'at z', 'Rayleigh range z_R', 'divergence θ = λ/πnw₀', ''].map((h) => el('th', {}, h)))];
+    const segs = trace.segments;
     waists(trace).forEach((w, i) => {
       const seg = w.seg;
       const name = i === 0 ? 'input beam' : seg.n !== 1 ? `in glass (n = ${fmt(seg.n, 3)})` : `after ${seg.after ? elementName(seg.after).toLowerCase() : '?'}`;
-      rows.push(el('tr', { class: w.real ? '' : 'virtual' },
+      // The input beam's waist is really there if no element comes before it (even off the view).
+      const real = i === 0 ? segs.length === 1 || w.z <= segs[1].za + 1e-9 : w.real;
+      const note = !real ? 'virtual (outside this stretch)' : w.z < state.vz0 || w.z > state.vz1 ? 'off this view' : '';
+      rows.push(el('tr', { class: real ? '' : 'virtual' },
         el('td', {}, name), el('td', {}, fmtLen(w.w0)), el('td', {}, fmtLen(w.z)), el('td', {}, fmtLen(w.zR)),
-        el('td', {}, fmtAngle(w.theta)), el('td', { class: 'muted' }, w.real ? '' : 'virtual (outside this stretch)')));
+        el('td', {}, fmtAngle(w.theta)), el('td', { class: 'muted' }, note)));
     });
     $('#waists').replaceChildren(...rows);
   }
@@ -656,7 +660,7 @@ export function createBench(app) {
   function drawLensPlot(e, f, before) {
     if (!lensPlot) return;
     const wrap = lensPlot.parentElement;
-    if (!(f > 0) || before.n !== 1) { wrap.hidden = true; return; }
+    if (!(f > 0) || !Number.isFinite(f) || before.n !== 1) { wrap.hidden = true; return; }
     wrap.hidden = false;
     const { ctx, width, height } = fitCanvas(lensPlot);
     const c = themeColors();
