@@ -51,18 +51,26 @@ export const SYSTEMS = [
       const w = omega, T = s1 - s0;
       return ((m * w) / (2 * Math.sin(w * T))) * ((q0 * q0 + q1 * q1) * Math.cos(w * T) - 2 * q0 * q1);
     },
+    // Every swing takes 2π/ω, whatever its size: closed orbits of that period only, a family.
+    periodic: { period: ({ omega }) => (2 * Math.PI) / omega },
+    family: ({ m, omega }, s0, q0, s1, B) => oscillatorOrbit(m, omega, s0, q0, s1, B),
     blurb: 'Shorter than half a period (T < π/ω), the true path minimises the action.  Longer, it is only a saddle point: there are nearby paths with less action.',
   },
   {
     id: 'pendulum', label: 'Pendulum',
-    s: 't', q: 'θ', s0: 0, s1: 8, q0: 0, q1: 1, qrange: [-4, 4], knots: 8, vmax: 6, tmax: 20,
+    s: 't', q: 'θ', s0: 0, s1: 8, q0: 0, q1: 1, qrange: [-4, 4], knots: 12, vmax: 6, tmax: 20,
     params: {},
     formula: 'L = \\tfrac12\\dot\\theta^2 + \\cos\\theta',
     make: () => mechanical(1, (x) => -Math.cos(x), (x) => Math.sin(x)),
+    // The period grows with the swing, from 2π: a trip of T > 2π picks the amplitude.  Swings
+    // about the bottom only (turning points within ±π).
+    periodic: { range: [-Math.PI, Math.PI] },
     blurb: 'A nonlinear system: between the same two events there can be several true paths, swinging different ways, each with its own action.',
   },
   {
-    id: 'twin', label: 'Twin paradox', vertical: true,
+    // Straight world lines, the traveller's legs at constant speed (a smooth curve through the
+    // turn-round would overshoot the light cone).
+    id: 'twin', label: 'Twin paradox', vertical: true, mode: 'segments',
     s: 't', q: 'x', s0: 0, s1: 10, q0: 0, q1: 0, qrange: [-7, 7], knots: 5, vmax: 0.999,
     params: { m: { value: 1, min: 0.1, max: 5 } },
     formula: 'L = -mc^2\\sqrt{1-\\dot x^2/c^2}',
@@ -87,7 +95,7 @@ export const SYSTEMS = [
   },
   {
     id: 'refraction', label: 'Light: refraction',
-    s: 'x', q: 'y', s0: 0, s1: 10, q0: 3, q1: -3, qrange: [-5, 5], knots: 7, vmax: 4,
+    s: 'x', q: 'y', s0: 0, s1: 10, q0: 3, q1: -3, qrange: [-5, 5], knots: 9, vmax: 4,
     params: { n1: { value: 1, min: 1, max: 2 }, n2: { value: 1.5, min: 1, max: 2.5 } },
     formula: 'L = n(y)\\sqrt{1+y\'^2}',
     make: ({ n1, n2 }) => ({
@@ -98,11 +106,21 @@ export const SYSTEMS = [
   },
   {
     id: 'brachistochrone', label: 'Brachistochrone', flip: true, singularStart: true, lockStart: true,
-    s: 'x', q: 'depth', s0: 0, s1: Math.PI, q0: 0, q1: 2, qrange: [-0.4, 3], knots: 6, vmax: 50,
+    s: 'x', q: 'depth', s0: 0, s1: Math.PI, q0: 0, q1: 2, qrange: [-0.4, 3], knots: 8, vmax: 50,
     params: { g: { value: 1, min: 0.2, max: 5 } },
     formula: 'L = \\frac{\\sqrt{1+y\'^2}}{\\sqrt{2gy}}',
     make: ({ g }) => ({
       L: (q, v) => map3(q, v, q, (y, u) => (y > 0 ? Math.sqrt(1 + u * u) / Math.sqrt(2 * g * y) : NaN)),
+      // Exact derivatives: differences would step above the start, where L is undefined.
+      derivatives: (q, v) => {
+        const n = q.length, c = 1 / Math.sqrt(2 * g), out = { Lq: new Float64Array(n), Lv: new Float64Array(n), Lqq: new Float64Array(n), Lqv: new Float64Array(n), Lvv: new Float64Array(n) };
+        for (let i = 0; i < n; i++) {
+          const y = q[i] > 0 ? q[i] : NaN, r = Math.sqrt(1 + v[i] * v[i]), y12 = c / Math.sqrt(y), y32 = y12 / y, y52 = y32 / y;
+          out.Lq[i] = -0.5 * r * y32; out.Lv[i] = (v[i] / r) * y12;
+          out.Lqq[i] = 0.75 * r * y52; out.Lqv[i] = -0.5 * (v[i] / r) * y32; out.Lvv[i] = y12 / (r * r * r);
+        }
+        return out;
+      },
     }),
     // The shooting method can't start at y = 0 (L is infinite there): the cycloid, directly.
     truePaths: ({ g }, s0, q0, s1, q1) => [cycloid(g, s1 - s0, q1 - q0)].filter(Boolean),
@@ -145,6 +163,21 @@ export function typedSystem(kind, expr, params, m = 1) {
 
 export function parseTyped(kind, source) {
   return parse(source, { variables: kind === 'V' ? ['x', 't'] : ['x', 'v', 't'] });
+}
+
+/**
+ * The harmonic oscillator's closed orbits through q0 at s0 with period s1 - s0 = 2π/ω: a whole
+ * family, x = q0 cos ω(t - s0) + B sin ω(t - s0), one for every B, because every amplitude takes
+ * the same time.  Each has S = (m/2) [x ẋ] from s0 to s1 (integrate ẋ² by parts) = 0.  Returns
+ * the one with the given B, sampled like a true path.
+ */
+export function oscillatorOrbit(m, omega, s0, q0, s1, B) {
+  const n = 400, s = new Float64Array(n + 1), q = new Float64Array(n + 1), v = new Float64Array(n + 1);
+  for (let j = 0; j <= n; j++) {
+    const t = s0 + ((s1 - s0) * j) / n, u = omega * (t - s0);
+    s[j] = t; q[j] = q0 * Math.cos(u) + B * Math.sin(u); v[j] = omega * (B * Math.cos(u) - q0 * Math.sin(u));
+  }
+  return { s, q, v, S: 0.5 * m * (q[n] * v[n] - q[0] * v[0]), v0: v[0], index: 0, closed: true, family: true };
 }
 
 /**
