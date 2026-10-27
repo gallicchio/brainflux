@@ -109,4 +109,49 @@ static potentials are cell-averaged so an edge sits where it was typed, and the 
 follows the potential where the wave function is.  33 unit tests and a scripted run of every
 experiment pass.
 
-*(continuing: the least-action demo next)*
+**The principle of least action (`action/`, new).**  Paths are drawn as q(t) through knots you
+drag (a smooth spline or straight segments); the action updates live and every change is added
+to a strip chart, so the record of your descent is there as you asked.  On "phase space": the
+Lagrangian action, a functional of q(t), is the one that is (often) minimal; the phase-space
+action with p varied freely is never minimal (for each q(t) it is a maximum over p, which gives
+back the Lagrangian action), so the path is drawn in (t, q) and its image in phase space,
+(q, dL/dq'), is drawn beside it over the contours of H: the true path follows one contour, a
+drawn one crosses them.  True paths are found by shooting, each labelled minimum or saddle by
+its Morse index (Jacobi equation).  Systems chosen so the answers are homework answers: free
+particle (S = m dx^2/2T), throw and catch (-m g^2 T^3/24), harmonic oscillator (a minimum
+only while T < pi/omega: beyond it "Roll downhill" runs away below the true action), pendulum
+(five true paths between the same events), twin paradox (S = -m tau: most proper time),
+Fermat (mirage, refraction: Snell's law is the conserved H), brachistochrone (the cycloid),
+typed V(x, t) or L(x, v, t) (e^{gamma t}(v^2 - x^2)/2 is a damped oscillator).  Also hints
+(arrows: where each knot should go), the energy along the path (flat only on the true one), and
+Feynman's phasor e^{iS/hbar}.
+
+**Scattering in 2D (`schrodinger2d/`, new).**  Split-operator on 256^2 with an absorbing
+border.  The incident Gaussian is known in closed form, so psi_sc = psi - psi_inc is exact; on a
+detector circle the outward flux gives dsigma/dtheta, the interference flux gives the shadow,
+and time Fourier transforms at the central energy give S_m = e^{2 i delta_m} for every partial
+wave (Hankel functions, no far-field approximation; corrected for the beam's own partial-wave
+content, which was the last 9%).  Checked: a weak bump against Born to 0.5%, a tall disk with
+|S_m| = 1 to 0.4% and the optical theorem to 0.05%, the shadow equal to the scattered flux.
+Targets: hard disk (with the exact hard-disk curve), weak bump, attractive well (resonance),
+screened Coulomb, two disks, double slit, crystal (Bragg), typed V(x, y).  A collision takes
+about four seconds.
+
+**Plane waves (`planewave/`, from your PlaneWave applet).**  Drag k; the four sign conventions
+and which way each travels; a crest tracker and the phasor at the origin; two waves (standing,
+crossed, beats); and a packet, with phase and group velocity as the chord and tangent of
+omega(k) for light, Schrödinger, deep water, relativistic or typed dispersion.
+
+**Two more from the old site.**  *Diffraction* (`diffraction/`, the LightPropagation idea):
+paint an aperture, slide the screen from near field to far field by the exact angular
+spectrum method, with a side view (the Talbot carpet, the zone plate's focus), the Arago spot,
+white light, speckle.  *Fourier series you can hear* (`fourier/`, the SoundFourier idea):
+draw a period or drag its harmonics and listen through Web Audio; Gibbs, phases the ear can't
+hear, the missing fundamental.  I did not bundle the U. Iowa instrument recordings from
+`java/Resources/sound/` (their terms need checking); the sound demo synthesises instead.
+
+**Testing.**  57 unit tests in Chromium and Firefox, and a scripted student for every demo
+that runs every experiment and checks physics along the way.  Screenshots were looked at for
+every experiment, in light and dark, at desktop and phone widths.
+
+*(continuing: an independent code review is running; its findings will be fixed next)*
