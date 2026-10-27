@@ -46,7 +46,7 @@ export function sqrtEps(er, ei) {
 export const MATERIALS = {
   air: {
     name: 'Air', short: 'air', kind: 'dielectric', index: () => [1, 0], range: [200, 2000],
-    ref: 'n = 1 (air is 1.0003; the difference does not show here)',
+    ref: 'Real air is 1.0003; the difference does not show here',
   },
   water: {
     name: 'Water', short: 'water', kind: 'dielectric', range: [182, 1129],
@@ -89,7 +89,7 @@ export const MATERIALS = {
   },
   oil: {
     name: 'Oil (n = 1.47)', short: 'oil', kind: 'dielectric', index: () => [1.47, 0], range: [200, 2000],
-    ref: 'a typical vegetable or mineral oil, n ≈ 1.47, dispersion ignored',
+    ref: 'A typical vegetable or mineral oil, its dispersion ignored',
   },
   silver: {
     name: 'Silver', short: 'Ag', kind: 'metal', range: [250, 2000],

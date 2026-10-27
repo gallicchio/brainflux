@@ -138,6 +138,23 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     d = b.eval('__app.state.layers[0].d')
     check(500 < d < 700, f'clicking half-way down the oil wedge (0 to 1200 nm) gives {d} nm')
 
+    # Typed materials, including awkward ones: a layer of index exactly 0, and an incident medium
+    # that is a free-electron metal at this wavelength (its kappa is ignored there).
+    setup(b, 'soap')
+    def type_material(sel, src):
+        b.eval(f'__app.selectMedium({sel})')
+        b.eval("(() => { const s = document.getElementById('material'); s.value = 'typed'; s.dispatchEvent(new Event('change')); })()")
+        b.eval(f"(() => {{ const i = document.querySelector('#typed-box .expr input'); i.value = {json.dumps(src)}; i.dispatchEvent(new Event('change')); }})()")
+        b.sleep(0.3)
+    type_material(0, 'A + B/lambda^2')
+    cauchy = b.eval('__app.point().st.nr[0]')
+    check(abs(cauchy - (1.5 + 0.004 / 0.55 ** 2)) < 1e-9 and b.eval("document.querySelectorAll('#typed-box .params .slider').length") == 2,
+          f'a typed Cauchy layer: n(550) = {cauchy:.5f}, with sliders for A and B')
+    type_material(0, '0')
+    type_material(-1, 'sqrt(1 - (lambda/0.3)^2)')
+    finite = b.eval("(() => { const c = __app.compute(); return ['R', 'T', 'A'].every((q) => ['s', 'p'].every((p) => c.spec[q][p].every(Number.isFinite) && c.x2[q][p].every(Number.isFinite))); })()")
+    check(finite and 'NaN' not in b.eval("document.getElementById('readouts').innerText"), 'awkward typed indices still give finite curves')
+
     # The numbers the help text quotes.
     def readout(): return b.eval("document.getElementById('readouts').innerText").replace('\n', '  ')
     setup(b, 'tir')
@@ -211,7 +228,9 @@ with Browser('thinfilms/index.html#setup=soap', size=(400, 850)) as b:
     wide = b.eval('document.documentElement.scrollWidth')
     check(wide <= 400, f'no sideways scrolling on a phone (page {wide} px wide)')
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
-    b.goto('thinfilms/index.html#setup=bragg'); b.wait('window.__app && __app.ready'); b.sleep(0.8)
+    # (A new query string, so that the page loads again rather than just changing its hash.)
+    b.goto('thinfilms/index.html?dark#setup=bragg'); b.wait('window.__app && __app.ready'); b.sleep(0.8)
+    check(b.eval('__app.state.layers.length') == 11, 'the Bragg mirror on a phone, dark')
     b.screenshot('build/tf-phone-dark.png')
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions on the phone' + ('' if not errors else ': ' + '; '.join(errors[:3])))

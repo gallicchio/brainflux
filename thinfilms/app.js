@@ -74,7 +74,10 @@ function matOf(m) {
 function indices(m, nms) {
   try {
     const [n, k] = indexArray(matOf(m), nms);
-    for (let i = 0; i < n.length; i++) if (!Number.isFinite(n[i]) || !Number.isFinite(k[i])) { n[i] = 1; k[i] = 0; }
+    for (let i = 0; i < n.length; i++) {
+      if (!Number.isFinite(n[i]) || !Number.isFinite(k[i])) { n[i] = 1; k[i] = 0; }
+      else if (n[i] * n[i] + k[i] * k[i] < 1e-12) n[i] = 1e-6;   // N = 0 exactly has no admittance
+    }
     return [n, k];
   } catch { return [new Float64Array(nms.length).fill(1), new Float64Array(nms.length)]; }
 }
@@ -82,7 +85,8 @@ function indices(m, nms) {
 function index1(m, nm) {
   try {
     const v = matOf(m).index(nm);
-    return Number.isFinite(v[0]) && Number.isFinite(v[1]) ? v : [1, 0];
+    if (!Number.isFinite(v[0]) || !Number.isFinite(v[1])) return [1, 0];
+    return v[0] * v[0] + v[1] * v[1] < 1e-12 ? [1e-6, 0] : v;
   } catch { return [1, 0]; }
 }
 
@@ -94,7 +98,7 @@ function stackAt(nm, reuse = false) {
   if (!reuse) st = { nr: new Float64Array(L), ni: new Float64Array(L), d: new Float64Array(L) };
   else if (st.nr.length !== L) { st.nr = new Float64Array(L); st.ni = new Float64Array(L); st.d = new Float64Array(L); }
   for (let j = 0; j < L; j++) { const m = state.layers[j], v = index1(m, nm); st.nr[j] = v[0]; st.ni[j] = v[1]; st.d[j] = m.d; }
-  st.n0 = index1(state.inc, nm)[0]; st.ns = index1(state.sub, nm);
+  st.n0 = Math.max(0.01, index1(state.inc, nm)[0]); st.ns = index1(state.sub, nm);
   return st;
 }
 /** Index tables for every medium over nms, and a function filling the stack at sample i. */
@@ -106,7 +110,7 @@ function stackTable(nms) {
     at(i) {
       for (let j = 0; j < L; j++) { nr[j] = lay[j][0][i]; ni[j] = lay[j][1][i]; }
       ns[0] = sub[0][i]; ns[1] = sub[1][i];
-      return { n0: inc[0][i], nr, ni, d, ns };
+      return { n0: Math.max(0.01, inc[0][i]), nr, ni, d, ns };
     },
   };
 }
@@ -114,7 +118,7 @@ function stackTable(nms) {
 // --------------------------------------------------------------------------- computing
 
 let comp = {};                 // everything the drawing needs, recomputed by compute()
-const ws = makeWorkspace(512);
+let ws = makeWorkspace(64);  // grown as needed: room for every layer
 
 // Each part of the computation is kept until something it depends on changes, so that dragging
 // the wavelength does not recompute the curves against wavelength, and so on.
@@ -190,6 +194,7 @@ function pointValues() {
 
 function computeField(zs) {
   const st = stackAt(state.lambda, true), beta = st.n0 * Math.sin(state.theta * DEG);
+  if (ws.Br.length < st.nr.length) ws = makeWorkspace(2 * st.nr.length);
   solve(st.n0, st.nr, st.ni, st.d, st.ns, state.lambda, beta, state.fieldPol, ws);
   const f = field(ws, zs), norm = incidentE2(ws);
   for (let i = 0; i < zs.length; i++) f.E2[i] /= norm;
@@ -441,7 +446,7 @@ function drawStack(now) {
   const cv = $('#stack');
   const { ctx, width, height } = fitCanvas(cv);
   ctx.clearRect(0, 0, width, height);
-  const c = colors, f = new Frame(ctx, width, height, { left: 46, right: 12, top: 30, bottom: 30 });
+  const c = colors, f = new Frame(ctx, width, height, { left: 46, right: 12, top: 30, bottom: 34 });
   frames.stack = f;
   const [z0, z1] = zRange();
   f.x0 = z0; f.x1 = z1;
@@ -521,7 +526,7 @@ function drawStack(now) {
     }
   }
   ctx.restore();
-  f.axes({ colors: c, xlabel: 'z (nm)', ylabel: wave ? `Re ${state.fieldPol === 's' ? 'E_y' : 'E_x'}` : '|E|²' });
+  f.axes({ colors: c, xlabel: 'depth z (nm)', ylabel: wave ? `Re E (${state.fieldPol === 's' ? 'y' : 'x'}), tangential` : '|E|²' });
   // Handles on each layer's right-hand edge, and labels above the bands.
   ctx.save();
   ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
@@ -954,8 +959,9 @@ function insertLayer() {
   const at = state.sel < 0 ? 0 : Math.min(state.sel + 1, nLayers());
   const like = isLayer(state.sel) ? state.layers[state.sel] : { mat: 'silica' };
   const mat = like.mat === 'air' ? 'silica' : like.mat;
-  const n = index1({ ...like, mat }, state.lambda)[0];
-  state.layers.splice(at, 0, { ...JSON.parse(JSON.stringify(like)), mat, d: +(state.lambda / (4 * Math.max(n, 1))).toFixed(1) });
+  // A quarter wave of a dielectric; 30 nm of a metal (a quarter wave would be opaque).
+  const n = index1({ ...like, mat }, state.lambda)[0], metal = MATERIALS[mat]?.kind === 'metal';
+  state.layers.splice(at, 0, { ...JSON.parse(JSON.stringify(like)), mat, d: metal ? 30 : +(state.lambda / (4 * Math.max(n, 1))).toFixed(1) });
   designLive = false;
   selectMedium(at); kick();
 }
@@ -963,7 +969,8 @@ function deleteLayer() {
   if (!isLayer(state.sel)) return;
   state.layers.splice(state.sel, 1);
   designLive = false;
-  selectMedium(Math.min(state.sel, nLayers() - 1 < 0 ? nLayers() : state.sel)); kick();
+  // The layer that took its place, or the one before it, or the substrate if none are left.
+  selectMedium(nLayers() ? Math.min(state.sel, nLayers() - 1) : 0); kick();
 }
 
 function selectMedium(i) {
@@ -1085,7 +1092,7 @@ const dmaxSlider = slider({ label: 'up to (nm)', min: 20, max: 3000, log: true, 
 const brightSlider = slider({ label: 'brightness', min: 0.25, max: 4, log: true, value: 1, title: 'Brighten or dim the picture (1: the brightest colour fills the screen)', onInput: (v) => { state.film.bright = v; kick(); } });
 const illumSeg = segmented([{ value: 'd65', label: 'daylight (D65)' }, { value: 'e', label: 'equal energy' }], state.illum, (v) => { state.illum = v; exposureKey = ''; kick(); }, { label: 'Illuminant' });
 $('#film-box').append(el('div', { class: 'row' }, profileSeg, drainToggle), hbSlider, dmaxSlider, brightSlider, el('div', { class: 'row' }, el('span', { class: 'small muted' }, 'Light:'), illumSeg),
-  el('div', { class: 'note' }, 'The picture shows the selected layer getting thicker from top to bottom.  Click it to choose a thickness.'));
+  el('div', { class: 'note' }, 'The picture shows the selected layer (or the last one selected) getting thicker from top to bottom.  Click it to choose a thickness.'));
 function syncFilmControls() {
   const drain = state.film.profile === 'drain';
   hbSlider.hidden = !drain; dmaxSlider.hidden = drain; drainToggle.hidden = !drain;
@@ -1291,7 +1298,7 @@ function decodeMedium(a, layer) {
 let hashTimer = 0;
 function scheduleHash() { clearTimeout(hashTimer); hashTimer = setTimeout(updateHash, 400); }
 function updateHash() {
-  if (animating() && state.film.running) return;   // not while the film drains
+  if (draining()) return;   // not while the film drains: the address keeps the set-up
   writeHash({
     st: JSON.stringify([encodeMedium(state.inc), state.layers.map(encodeMedium), encodeMedium(state.sub)]),
     lam: r5(state.lambda), th: r5(state.theta), sel: state.sel, pol: state.pol === 'sp' ? undefined : state.pol,

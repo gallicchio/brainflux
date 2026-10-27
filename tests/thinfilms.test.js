@@ -358,3 +358,37 @@ test('the field: |E|^2 is normalised to the incident wave (1 in front of a non-r
     for (const v of f.E2) close(v / incidentE2(ws), 1, 1e-12, pol);
   }
 });
+
+test('the page: every experiment sets up and draws without an error, in this browser', async () => {
+  // The demo in a frame of this page (same origin), so that the unit-test run in each browser
+  // also exercises the interface.
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'width:1200px;height:800px;border:0';
+  document.body.append(frame);
+  const errors = [];
+  const ready = new Promise((resolve) => frame.addEventListener('load', resolve));
+  frame.src = '../thinfilms/index.html';
+  await ready;
+  const win = frame.contentWindow;
+  win.addEventListener('error', (e) => errors.push(e.message));
+  win.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
+  for (let i = 0; i < 100 && !win.__app?.ready; i++) await new Promise((r) => setTimeout(r, 50));
+  assert(win.__app?.ready, 'the page did not start');
+  const frames = (n) => new Promise((resolve) => {
+    let k = 0;
+    const f = () => (++k >= n ? resolve() : win.requestAnimationFrame(f));
+    win.requestAnimationFrame(f);
+    setTimeout(resolve, 1000);
+  });
+  const names = Object.keys(win.__app.setups);
+  for (const name of names) {
+    win.__app.setups[name]();
+    await frames(3);
+    const c = win.__app.compute();
+    for (const q of ['R', 'T', 'A']) for (const p of ['s', 'p']) assert(c.spec[q][p].every(Number.isFinite), `${name}: ${q}_${p} not finite`);
+    assert(c.swatch.R.every(Number.isFinite), `${name}: swatch`);
+  }
+  frame.remove();
+  assert(!errors.length, errors.join('; '));
+  return `${names.length} experiments`;
+});

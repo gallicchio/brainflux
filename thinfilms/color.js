@@ -139,11 +139,8 @@ export function chromaticity([X, Y, Z]) { const s = X + Y + Z; return s > 0 ? [X
 /** An sRGB colour for monochromatic light of wavelength nm, for drawing a spectrum band. */
 export function spectralColor(nm) {
   const [x, y, z] = cmf(nm);
-  const lin = mul(XYZ_TO_RGB, [x, y, z]);
-  // Desaturate into the gamut and normalise to the brightest channel, then dim the ends where
-  // the eye is less sensitive.
-  const out = toDisplay(lin.map((v) => v * 1.6));
-  return out;
+  // Brightened, then brought into the gamut (spectral colours lie outside it) by toDisplay.
+  return toDisplay(mul(XYZ_TO_RGB, [x, y, z]).map((v) => v * 1.6));
 }
 
 /** Evenly spaced wavelengths from a to b (inclusive) in steps of h nm. */
