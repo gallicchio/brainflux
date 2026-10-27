@@ -53,7 +53,21 @@ function evalPotential() {
 /** The detector radius: as large as fits inside the absorbing border with room to spare. */
 function detectorRadius() { return Math.max(6, Math.min(18, sim.inner - 6)); }
 
+// The set-up in the address, at every restart: target (with its typed V and parameters if
+// changed), packet, grid.
+function updateHash() {
+  const t = state.target, r = (v) => +(+v).toPrecision(4), h = { target: t.id };
+  if (vField.source !== t.V) h.V = vField.source;
+  const p = Object.fromEntries(Object.entries(Vparams).map(([k, v]) => [k, r(v)]));
+  if (JSON.stringify(p) !== JSON.stringify(Object.fromEntries(Object.entries(t.params).map(([k, v]) => [k, r(v)])))) h.p = JSON.stringify(p);
+  for (const k of ['k0', 'sy', 'sx', 'b']) if (state[k] !== { k0: 2, sy: 6, sx: 2.5, b: 0 }[k]) h[k] = r(state[k]);
+  if (state.n !== 256) h.n = state.n;
+  if (state.L !== 64) h.L = state.L;
+  writeHash(h);
+}
+
 function restart() {
+  updateHash();
   if (!sim || sim.n !== state.n || sim.L !== state.L) sim = new Sim2D({ n: state.n, L: state.L });
   const raw = evalPotential();
   const prep = preparePotential2D(raw, state.n, sim.dx);
@@ -392,7 +406,6 @@ function chooseTarget(t, { run = true } = {}) {
   Vexpr = vField.expr; Vparams = vField.params;
   restart();
   setRunning(run);
-  writeHash({ target: t.id });
 }
 
 // The packet.
@@ -469,7 +482,16 @@ drawer($('#help'), $('#help-button'), setups);
 
 const hash = readHash();
 if (setups[hash.setup]) setups[hash.setup]();
-else { chooseTarget(byId(hash.target) || TARGETS[0], { run: true }); }
+else {
+  const t = byId(hash.target) || TARGETS[0];
+  try {
+    for (const k of ['k0', 'sy', 'sx', 'b']) if (Number.isFinite(+hash[k]) && hash[k] !== undefined) { state[k] = +hash[k]; packetSliders[k].value = +hash[k]; }
+    if ([128, 256, 512].includes(+hash.n)) { state.n = +hash.n; gridSeg.value = state.n; }
+    if (+hash.L >= 32 && +hash.L <= 128) { state.L = +hash.L; boxSlider.value = state.L; }
+    const typed = hash.V || hash.p ? { ...t, V: hash.V || t.V, params: hash.p ? JSON.parse(hash.p) : t.params } : t;
+    chooseTarget(typed, { run: true });
+  } catch { chooseTarget(t, { run: true }); }
+}
 
 window.__app = { state, get sim() { return sim; }, get detector() { return detector; }, get pw() { return pwResult; }, get born() { return born; },
   get finished() { return finished; }, setups, restart, ready: true, parse };
