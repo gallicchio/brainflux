@@ -103,6 +103,8 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     run(b, 'spread')
     ms = b.eval('__app.bench()')
     check(ms < 33, f"spreading in glass: {ms:.1f} ms an animation frame")
+    vac = b.eval('[0, 0.5, 1, 1.7, 2.3, 3.1, 3.9, 4.6, 5].map((mm) => __app.vacuumInView(mm / 1.97327e-4))')
+    check(vac[0] > 0.99 and max(vac[2:]) < 1e-12, f"moving with the pulse, the vacuum pulse is in view at z = 0 ({vac[0]:.3f}) and gone, not wrapped round, beyond 1 mm (largest {max(vac[2:]):.1e})")
     run(b, 'glass')
     o = b.eval('[__app.optics(1.8892).n, __app.optics(2.5506).n]')
     check(abs(o[0] - 1.4564) < 2e-4 and abs(o[1] - 1.4632) < 2e-4, f"fused silica: n(656 nm) = {o[0]:.4f}, n(486 nm) = {o[1]:.4f} (Malitson 1.4564, 1.4632)")

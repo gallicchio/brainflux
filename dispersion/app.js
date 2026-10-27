@@ -669,10 +669,20 @@ const frameShift = (z) => (state.pulse.frame === 'group' && Number.isFinite(cach
 function pulseAt(z) {
   const P = ensurePropagator(), tc = frameShift(z), N = P.N;
   const a = P.field(z, tc), mr = Float64Array.from(a.re), mi = Float64Array.from(a.im);
-  let vr, vi;
-  if (vacCache && vacCache.tc === tc) ({ vr, vi } = vacCache);
-  else { const v = P.field(z, tc, true); vr = Float64Array.from(v.re); vi = Float64Array.from(v.im); vacCache = { tc, vr, vi }; }
-  return { P, tc, t: P.t, mr, mi, vr, vi, N };
+  // The vacuum pulse is the incident one (as smoothed for the grid), moved by the frame's shift:
+  // read off by interpolation, never through the FFT, so that it cannot wrap round the periodic
+  // window when the frame moving with the pulse has left it far behind.
+  if (!vacCache || vacCache.P !== P) { const v = P.field(0, 0, true); vacCache = { P, br: Float64Array.from(v.re), bi: Float64Array.from(v.im), tc: NaN }; }
+  if (vacCache.tc !== tc) {
+    const { br, bi } = vacCache, vr = new Float64Array(N), vi = new Float64Array(N), shift = tc / P.dt;
+    for (let n = 0; n < N; n++) {
+      const u = n + shift, k = Math.floor(u), f = u - k;
+      if (k < 0 || k + 1 >= N) continue;
+      vr[n] = br[k] * (1 - f) + br[k + 1] * f; vi[n] = bi[k] * (1 - f) + bi[k + 1] * f;
+    }
+    Object.assign(vacCache, { tc, vr, vi, env: null });
+  }
+  return { P, tc, t: P.t, mr, mi, vr: vacCache.vr, vi: vacCache.vi, N };
 }
 
 function measure(d, z) {
@@ -1213,6 +1223,13 @@ const frameSeg = segmented([
   { value: 'vac', label: 't − z/c', title: 'Time after a flash of light through vacuum would arrive' },
   { value: 'group', label: 't − z/v_g', title: 'Moving with the group velocity at the carrier' },
 ], state.pulse.frame, (v) => { state.pulse.frame = v; propKey = ''; fitView(); }, { label: 'Time axis' });
+// (Moving with the pulse only makes sense for a Gaussian: a front travels at c, and would be left
+// behind, out of the computing window.)
+function syncFrame() {
+  if (state.pulse.shape !== 'gauss') state.pulse.frame = 'vac';
+  frameSeg.value = state.pulse.frame;
+  frameSeg.querySelectorAll('button')[1].disabled = state.pulse.shape !== 'gauss';
+}
 const logToggle = toggle('log |E|', state.pulse.log, (on) => { state.pulse.log = on; dirty(); scheduleHash(); }, 'Show the envelope on a logarithmic scale: how small is the field before the front?');
 $('#frame-row').append(frameSeg, logToggle);
 
@@ -1224,7 +1241,7 @@ function syncPulseSliders() {
   zSlider.setRange(0, P.zmax * u.zS); zSlider.value = P.z * u.zS;
   TSlider.hidden = P.shape === 'step';
   tfSlider.hidden = P.shape !== 'front';
-  shapeSeg.value = P.shape; frameSeg.value = P.frame; logToggle.on = P.log;
+  shapeSeg.value = P.shape; syncFrame(); logToggle.on = P.log;
   zSlider.querySelector('label').textContent = u.zu ? `z (${u.zu})` : 'z';
   TSlider.querySelector('label').textContent = u.tu ? `T (${u.tu})` : 'T';
   tfSlider.querySelector('label').textContent = u.tu ? `front (${u.tu})` : 'front';
@@ -1390,6 +1407,13 @@ window.__app = {
   pulse: () => lastPulse,
   pulseAt: (z) => measure(pulseAt(z), z),
   chiT: (ts) => Array.from(chiTAt(Float64Array.from(ts))),
+  /** The largest |E| of the vacuum pulse inside the time axis at distance z. */
+  vacuumInView(z) {
+    const d = pulseAt(z), [lo, hi] = state.pulse.view;
+    let m = 0;
+    for (let n = 0; n < d.N; n++) if (d.t[n] >= lo && d.t[n] <= hi) m = Math.max(m, Math.hypot(d.vr[n], d.vi[n]));
+    return m;
+  },
   acausal: () => acausalFraction(),
   sumRule: () => sumRule(),
   handles: () => handles.map((h) => ({ ...h })),
