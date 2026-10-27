@@ -16,7 +16,7 @@ from PIL import Image
 
 WIDTH = 1040   # of the page, in CSS pixels, that the thumbnail shows
 
-# demo: (address, seconds to let it run)
+# demo: (address, seconds to let it run[, JavaScript to run first])
 DEMOS = {
     'thinfilms': ('#setup=soap', 3),
     'dispersion': ('#setup=spread', 3),
@@ -27,14 +27,17 @@ DEMOS = {
     'arrays': ('#setup=steer', 3),
     'beams': ('#setup=waist', 3),
     'phasespace': ('#setup=anharmonic&t=8', 3),
+    'schrodinger2d': ('#setup=crystal', 1, '__app.runUntil(0.55 * __app.tEnd)'),
 }
 
 
-def thumb(name, address, wait):
+def thumb(name, address, wait, js=None):
     with Browser(f'{name}/index.html{address}', size=(1400, 900)) as b:
         b.wait("document.readyState === 'complete'")
         b.sleep(1)
         b.key('Escape')
+        if js:
+            b.eval(js)
         b.sleep(wait)
         top = b.eval("(() => { const h = document.querySelector('header.bar'); return h ? h.getBoundingClientRect().bottom : 0; })()")
         png = b.screenshot(f'build/thumb-{name}.png')
