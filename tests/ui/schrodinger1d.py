@@ -57,6 +57,7 @@ with Browser('schrodinger1d/index.html', size=(1400, 950)) as b:
     check('Make a measurement' in b.eval("document.querySelector('.controls').textContent"), 'the measurement panel says what it does')
     help_text = b.eval("document.querySelector('#help').innerHTML")
     check('tilde' not in help_text and 'ψ̃' not in help_text, 'the momentum wave function is φ(p) in the help')
+    pause(b); b.sleep(0.2)          # (a last frame drawn, which the marks must match)
     o = b.eval(OBS)
     marks = b.eval('__app.marks')
     check(len(marks) == 2 and abs(marks[0]['mean'] - o['x']) < 0.05 and abs(marks[0]['sd'] - o['sx']) < 0.05

@@ -16,7 +16,6 @@
    nothing moves as the numbers change. */
 .readouts .ro { white-space: nowrap; }
 .readouts b { display: inline-block; text-align: right; color: var(--ink); font-weight: 600; }
-.readouts .warn { color: var(--warn); }
 
 /* The name of each plot, with a key to its marks, in the corner of its frame. */
 .plot-key {
@@ -60,6 +59,7 @@ details.panel summary { cursor: pointer; }
 details.panel[open] summary { margin-bottom: 6px; }
 .note { font-size: 12px; color: var(--ink-3); }
 .err { font-size: 12px; color: var(--warn); }
+.note.warn { color: var(--warn); }
 
 .wheel-figure { display: flex; gap: 12px; align-items: center; }
 .wheel-figure canvas { width: 100px; height: 100px; border-radius: 50%; flex: 0 0 auto; }

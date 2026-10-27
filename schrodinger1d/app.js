@@ -586,7 +586,7 @@ function fixedNum(v, dec, w) {
 // The readouts: a slot for each quantity, each a fixed number of characters wide, so that
 // nothing moves as the numbers change.  Built again only when the quantities shown change.
 const readoutBox = $('#readouts');
-let readoutLayout = '', readoutValues = [], readoutWarn = null;
+let readoutLayout = '', readoutValues = [];
 function updateReadouts(o) {
   // [label, value, decimals, width in characters, what follows]
   const items = [
@@ -602,15 +602,14 @@ function updateReadouts(o) {
   if (layout !== readoutLayout) {
     readoutLayout = layout;
     readoutValues = items.map(([, , , w]) => el('b', { style: { width: `${w + 0.5}ch` } }));
-    readoutWarn = el('span', { class: 'warn' }, 'running as fast as this computer can');
-    readoutBox.replaceChildren(...items.map(([k, , , , after], i) => el('span', { class: 'ro' }, k, ' ', readoutValues[i], after ? ` ${after}` : '')), readoutWarn);
+    readoutBox.replaceChildren(...items.map(([k, , , , after], i) => el('span', { class: 'ro' }, k, ' ', readoutValues[i], after ? ` ${after}` : '')));
   }
   items.forEach(([, v, dec, w], i) => {
     const s = fixedNum(v, dec, w);
     if (readoutValues[i].textContent !== s) readoutValues[i].textContent = s;
   });
-  // Its place is kept, shown or not, so that it can't push the plots down.
-  readoutWarn.style.visibility = slowed ? 'visible' : 'hidden';
+  // Under the speed, its place kept, shown or not, so that nothing below it moves.
+  slowNote.style.visibility = slowed ? 'visible' : 'hidden';
 }
 
 // The keys in the plots' corners name only what is drawn.
@@ -660,7 +659,8 @@ reverseButton.addEventListener('click', () => {
 
 const speedSlider = slider({ label: 'Speed', min: 0.02, max: 100, log: true, value: state.speed,
   title: 'Simulated time per second', onInput: (v) => { state.speed = v; } });
-$('#speed-box').append(speedSlider);
+const slowNote = el('div', { class: 'note warn', style: { visibility: 'hidden' } }, 'Running as fast as this computer can.');
+$('#speed-box').append(speedSlider, slowNote);
 
 // The potential buttons and the typed V.
 const potButtons = {};
