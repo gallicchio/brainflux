@@ -1,6 +1,6 @@
 // The 2D scattering demo: a packet, a target, and the scattering theory measured as it goes.
 
-import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves, preparePotential2D } from './sim.js';
+import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, radialWaves, preparePotential2D } from './sim.js';
 import { fft2Centered } from '../lib/fft.js';
 import { colorize, autoBrightness } from '../lib/complexcolor.js';
 import { parse } from '../lib/expr.js';
@@ -9,7 +9,7 @@ import { fitCanvas, Frame, themeColors } from '../lib/plot.js';
 
 // The targets: typed potentials in x, y, r, theta, with their parameters.
 const TARGETS = [
-  { id: 'disk', label: 'Hard disk', V: 'V0/(1 + exp((r - a)/w))', params: { V0: 8, a: 1.5, w: 0.25 }, hardDisk: true },
+  { id: 'disk', label: 'Hard disk', V: 'V0/(1 + exp((r - a)/w))', params: { V0: 8, a: 1.5, w: 0.25 } },
   { id: 'bump', label: 'Weak bump', V: 'V0 exp(-r^2/(2 a^2))', params: { V0: 0.3, a: 1 } },
   { id: 'well', label: 'Attractive well', V: '-V0/(1 + exp((r - a)/w))', params: { V0: 2.5, a: 2, w: 0.25 } },
   { id: 'coulomb', label: 'Screened Coulomb', V: 'Z exp(-r/l)/sqrt(r^2 + 0.25)', params: { Z: 1, l: 4 } },
@@ -32,7 +32,7 @@ const state = {
 };
 
 let sim, packet, detector, Vexpr, Vparams = {};
-let dt = 0.05, born = null, exact = null, waves = null, pwResult = null;
+let dt = 0.05, born = null, exact = null, waves = null, pwResult = null, warning = '';
 let finished = false, tEnd = 30, potentialImage = null;
 
 // --------------------------------------------------------------------- set-up
@@ -69,11 +69,26 @@ function updateHash() {
 function restart() {
   updateHash();
   if (!sim || sim.n !== state.n || sim.L !== state.L) sim = new Sim2D({ n: state.n, L: state.L });
+  warning = '';
+  // The absorbing border must be wider than the longest wavelength in the packet, or slow waves
+  // bounce off it (at least a tenth of the box, at most a quarter).
+  const kSlow = Math.max(0.2, state.k0 - 1 / state.sx);
+  const want = Math.ceil((1.2 * 2 * Math.PI) / kSlow / sim.dx);
+  sim.layer = Math.min(Math.round(state.n / 4), Math.max(Math.round(state.n / 10), want));
+  if (want > state.n / 4) warning = 'The packet is too slow for this box: its longest waves reflect off the border.  Enlarge the box (Grid).';
+  if (state.k0 + 2 / state.sx > (0.7 * Math.PI) / sim.dx) warning = `The grid is too coarse for k₀ = ${fmt(state.k0, 3)}: refine it or shrink the box (Grid).`;
   const raw = evalPotential();
   const prep = preparePotential2D(raw, state.n, sim.dx);
   sim.setPotential(prep.V);
   sim.absorbSpeed = state.k0 + 4 / state.sx;
-  // The packet starts clear of the target and of the absorbing border.
+  sim.h = 0;
+  // The packet starts clear of the target and of the absorbing border; a packet too long for
+  // the box is shortened to fit.
+  const room = sim.inner - 3;
+  if (6.6 * state.sx > room) {
+    state.sx = Math.max(0.5, room / 6.6); packetSliders.sx.value = +state.sx.toFixed(2);
+    warning = warning || 'The packet was shortened to fit the box.';
+  }
   const x0 = -(sim.inner - 3.6 * state.sx);
   packet = new Packet({ x0, y0: state.b, sx: state.sx, sy: state.sy, k0: state.k0 });
   const N = state.n * state.n, re = new Float64Array(N), im = new Float64Array(N);
@@ -89,15 +104,22 @@ function restart() {
   const R = detectorRadius();
   detector = new Detector(R, 256);
   detector.reset(E);
-  tEnd = (Math.abs(x0) + R + 4 * state.sx) / (state.k0 - 2 / (2 * state.sx)) + 6;
+  // Done when the slowest part of the packet (no slower than 0.3 k0) has passed the detector.
+  const vSlow = Math.max(state.k0 - 1 / state.sx, 0.3 * state.k0);
+  tEnd = (Math.abs(x0) + R + 4 * state.sx) / vSlow + 6;
   finished = false;
-  // Born and, for the hard disk, the exact answer (radius where V crosses E, roughly).
+  $('#play').textContent = state.running ? 'Pause' : 'Play';
   const th = Array.from(detector.theta);
   born = state.target.extended ? null : bornCrossSection(sim, state.k0, th);
+  // For a potential that depends on r alone, the exact answer of time-independent scattering
+  // theory: phase shifts from the radial equation (see radialWaves), for the very same V.
   exact = null;
-  if (state.target.hardDisk && Vparams.V0 > E) {
-    const a = Vparams.a + Vparams.w * Math.log(Vparams.V0 / E - 1);
-    exact = { a, pw: fromPartialWaves(hardDiskWaves(state.k0, a, 30), state.k0, th) };
+  if (Vexpr && !['x', 'y', 'theta'].some((v) => Vexpr.uses(v))) {
+    try {
+      const Vr = (r) => Vexpr.evaluate({ r, x: r, y: new Float64Array(r.length), theta: new Float64Array(r.length), ...Vparams }, r.length).re;
+      const w = radialWaves(Vr, state.k0, 24);
+      exact = { waves: w, pw: fromPartialWaves(w, state.k0, th) };
+    } catch { exact = null; }
   }
   waves = null; pwResult = null;
   potentialImage = makePotentialImage(prep.V);
@@ -262,7 +284,7 @@ function drawCrossSection() {
   ctx.clearRect(0, 0, width, height);
   const f = new Frame(ctx, width, height, { left: 48, right: 8, top: 8, bottom: 32 });
   const th = detector.theta, M = th.length;
-  const deg = (j) => { let d = (th[j] * 180) / Math.PI; if (d > 180) d -= 360; return d; };
+
   const flux = detector.crossSection();
   const series = [];
   if (state.target.extended) {
@@ -278,6 +300,7 @@ function drawCrossSection() {
   if (pwResult) series.push(['pw', pwResult.f.map(([a, b]) => a * a + b * b)]);
   if (born) series.push(['born', born]);
   if (exact) series.push(['exact', exact.pw.f.map(([a, b]) => a * a + b * b)]);
+  if (warning) { ctx.save(); ctx.fillStyle = c.warn; ctx.font = '12px system-ui, sans-serif'; ctx.fillText(warning.split(':')[0], f.left + 6, f.top + 14); ctx.restore(); }
   // Log scale, from the largest value down five decades.
   let top = 0;
   for (const [, s] of series) for (let j = 0; j < M; j++) if (Number.isFinite(s[j])) top = Math.max(top, s[j]);
@@ -291,8 +314,8 @@ function drawCrossSection() {
     ctx.beginPath();
     let on = false;
     for (let a = 0; a <= M; a++) {
-      const j = (a + M / 2) % M; // from -180 to 180
-      const v = s[j], d = a === M ? 180 : deg(j);
+      const j = (a + M / 2) % M, d = -180 + (360 * a) / M; // from -180 to 180
+      const v = s[j];
       if (!(v > 0)) { on = false; continue; }
       const x = f.X(d), y = f.Y(Math.log10(v));
       if (!on) { ctx.moveTo(x, y); on = true; } else ctx.lineTo(x, y);
@@ -325,8 +348,8 @@ function drawWaves() {
   }
   if (exact) {
     ctx.strokeStyle = COLORS.exact; ctx.lineWidth = 1.5;
-    const hd = hardDiskWaves(state.k0, exact.a, mmax);
-    for (const w of hd) {
+    for (const w of exact.waves) {
+      if (Math.abs(w.m) > mmax) continue;
       const s2 = ((w.Sre - 1) ** 2 + w.Sim ** 2) / 4, x = f.X(w.m), y = f.Y(s2);
       ctx.beginPath(); ctx.moveTo(x - bw / 2 - 1, y); ctx.lineTo(x + bw / 2 + 1, y); ctx.stroke();
     }
@@ -345,7 +368,8 @@ function updateReadouts() {
   $('#readouts').innerHTML = [
     ['t', sim.t.toFixed(2)], ['k₀', fmt(state.k0, 3)], ['λ', fmt((2 * Math.PI) / state.k0, 3)],
     ['E', fmt(packet.energy, 3)], ['in the box', fmt(inBox, 3)], ['time step', fmt(dt, 2)],
-  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + (finished ? '<span><b>done</b>: the packet has gone</span>' : '');
+  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + (finished ? '<span><b>done</b>: the packet has gone</span>' : '')
+    + (warning ? `<span style="color:var(--warn)">${warning}</span>` : '');
   // The table of total cross sections.
   const dth = (2 * Math.PI) / detector.M, tot = detector.totals();
   const rows = [];
@@ -355,11 +379,11 @@ function updateReadouts() {
   if (pwResult) rows.push(['partial waves, (1/k) Σ |S−1|²', pwResult.sigma], ['optical theorem, from f(0)', pwResult.optical]);
   else if (!state.target.extended && detector.fluence > 1e-6) rows.push(['partial waves and optical theorem', NaN]);
   if (born) rows.push(['first Born approximation', born.reduce((s, v) => s + v * dth, 0)]);
-  if (exact) rows.push([`exact hard disk, a = ${fmt(exact.a, 3)}`, exact.pw.sigma]);
+  if (exact) rows.push(['exact: the radial equation', exact.pw.sigma]);
   $('#sigmas').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${Number.isNaN(v) ? 'when the packet has gone' : fmt(v, 4)}</td></tr>`).join('')
     + (rows.length ? '<tr><td colspan="2" class="muted">σ is a length in 2D</td></tr>' : '');
   const legend = [['flux', 'measured'], ['pw', '|f|² at k₀'], ['born', 'Born']];
-  if (exact) legend.push(['exact', 'hard disk']);
+  if (exact) legend.push(['exact', 'exact (stationary)']);
   $('#xs-legend').innerHTML = legend.filter(([k]) => k !== 'born' || born).map(([k, l]) => `<span><i style="border-color:${COLORS[k] || themeColors().accent}${k === 'flux' ? '' : ';border-top-style:dashed'}"></i>${l}</span>`).join('');
 }
 
@@ -389,7 +413,15 @@ const vField = exprField({
   value: state.target.V, variables: ['x', 'y', 'r', 'theta'],
   hints: { V0: { min: -5, max: 20, value: 2 }, a: { min: 0.2, max: 4, value: 1 }, w: { min: 0.05, max: 1, value: 0.25 },
     Z: { min: -3, max: 3, value: 1 }, l: { min: 0.5, max: 10, value: 4 }, d: { min: 0, max: 12, value: 5 }, c: { min: 1, max: 5, value: 2.5 }, s: { min: 0.1, max: 1, value: 0.3 } },
-  onChange: (expr, params) => { Vexpr = expr; Vparams = params; restartSoon(); },
+  onChange: (expr, params) => {
+    Vexpr = expr; Vparams = params;
+    // A formula of one's own is a typed target: the preset's notes no longer apply.
+    if (expr.source !== state.target.V && state.target.id !== 'typed') {
+      state.target = { ...byId('typed'), V: expr.source, params };
+      for (const [id, b] of Object.entries(targetButtons)) b.setAttribute('aria-pressed', String(id === 'typed'));
+    }
+    restartSoon();
+  },
 });
 $('#v-field').append(vField);
 
@@ -409,15 +441,18 @@ function chooseTarget(t, { run = true } = {}) {
 }
 
 // The packet.
+// Typed values can be anything: keep them where the simulation makes sense.
+const LIMITS = { k0: [0.3, 6], sy: [0.5, 20], sx: [0.5, 10], b: [-20, 20], L: [32, 128] };
+const clampTo = (k, v) => Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v));
+const packetSlider = (k, opts) => {
+  const sl = slider({ ...opts, value: state[k], onInput: (v) => { state[k] = clampTo(k, v); if (state[k] !== v) sl.value = state[k]; restartSoon(); } });
+  return sl;
+};
 const packetSliders = {
-  k0: slider({ label: '<math><msub><mi>k</mi><mn>0</mn></msub></math>', labelHTML: true, min: 0.5, max: 4, value: state.k0, title: 'The momentum (and wavenumber) of the packet: λ = 2π/k₀',
-    onInput: (v) => { state.k0 = v; restartSoon(); } }),
-  sy: slider({ label: 'width', min: 1, max: 10, value: state.sy, title: 'The width of the beam across its direction (σ of |ψ|²): wide is plane-wave-like',
-    onInput: (v) => { state.sy = v; restartSoon(); } }),
-  sx: slider({ label: 'length', min: 1, max: 5, value: state.sx, title: 'The length of the packet along its direction: longer means a narrower spread of energies',
-    onInput: (v) => { state.sx = v; restartSoon(); } }),
-  b: slider({ label: '<math><mi>b</mi></math>', labelHTML: true, min: -10, max: 10, value: state.b, title: 'The impact parameter: how far off centre the packet is aimed',
-    onInput: (v) => { state.b = v; restartSoon(); } }),
+  k0: packetSlider('k0', { label: '<math><msub><mi>k</mi><mn>0</mn></msub></math>', labelHTML: true, min: 0.5, max: 4, title: 'The momentum (and wavenumber) of the packet: λ = 2π/k₀' }),
+  sy: packetSlider('sy', { label: 'width', min: 1, max: 10, title: 'The width of the beam across its direction (σ of |ψ|²): wide is plane-wave-like' }),
+  sx: packetSlider('sx', { label: 'length', min: 1, max: 5, title: 'The length of the packet along its direction: longer means a narrower spread of energies' }),
+  b: packetSlider('b', { label: '<math><mi>b</mi></math>', labelHTML: true, min: -10, max: 10, title: 'The impact parameter: how far off centre the packet is aimed' }),
 };
 $('#packet-box').append(...Object.values(packetSliders));
 
@@ -440,8 +475,8 @@ $('#bright-box').append(slider({ label: 'Brightness', min: -1.5, max: 1.5, value
 // The grid.
 const gridSeg = segmented([128, 256, 512].map((n) => ({ value: n, label: `${n}²`, title: n === 512 ? 'Finer but four times slower' : n === 128 ? 'Coarser and four times faster' : 'The default' })),
   state.n, (n) => { state.n = n; restart(); kick(); }, { label: 'Grid' });
-const boxSlider = slider({ label: 'box', min: 32, max: 128, step: 16, value: state.L, title: 'The side of the square simulated (the absorbing border is a tenth of it on each side)',
-  onInput: (v) => { state.L = v; restartSoon(); } });
+const boxSlider = slider({ label: 'box', min: 32, max: 128, step: 16, value: state.L, title: 'The side of the square simulated (the absorbing border is a tenth of it on each side, or more for slow packets)',
+  onInput: (v) => { state.L = clampTo('L', v); if (state.L !== v) boxSlider.value = state.L; restartSoon(); } });
 $('#grid-box').append(gridSeg, boxSlider, el('div', { class: 'small muted' }, 'Units: ħ = m = 1.  A finer grid follows sharper potentials and faster packets.'));
 
 document.addEventListener('keydown', (e) => {
@@ -454,8 +489,9 @@ window.addEventListener('resize', () => kick());
 // --------------------------------------------------------------------- experiments
 
 const byId = (id) => TARGETS.find((t) => t.id === id);
-function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, view = 'total', params, speed = 4 } = {}) {
-  Object.assign(state, { k0, sy, sx, b, view, speed });
+function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, view = 'total', params, speed = 4, L = 64 } = {}) {
+  Object.assign(state, { k0, sy, sx, b, view, speed, L });
+  boxSlider.value = L;
   packetSliders.k0.value = k0; packetSliders.sy.value = sy; packetSliders.sx.value = sx; packetSliders.b.value = b;
   viewSeg.value = view; speedSlider.value = speed;
   const t = byId(id);
@@ -467,7 +503,7 @@ const setups = {
   shadow: () => go('disk', { view: 'scattered' }),
   born: () => go('bump'),
   ring: () => go('bump', { params: { V0: 0.6 } }),
-  swave: () => go('disk', { k0: 0.8, sx: 3, sy: 8, params: { a: 1, w: 0.2 } }),
+  swave: () => go('disk', { k0: 0.8, sx: 3, sy: 8, L: 112, params: { a: 1, w: 0.2 } }),
   resonance: () => go('well', { k0: 1.2, sx: 3, sy: 7 }),
   coulomb: () => go('coulomb', { k0: 2 }),
   two: () => go('two', { sy: 8 }),
@@ -485,7 +521,7 @@ if (setups[hash.setup]) setups[hash.setup]();
 else {
   const t = byId(hash.target) || TARGETS[0];
   try {
-    for (const k of ['k0', 'sy', 'sx', 'b']) if (Number.isFinite(+hash[k]) && hash[k] !== undefined) { state[k] = +hash[k]; packetSliders[k].value = +hash[k]; }
+    for (const k of ['k0', 'sy', 'sx', 'b']) if (hash[k] !== undefined && Number.isFinite(+hash[k])) { state[k] = clampTo(k, +hash[k]); packetSliders[k].value = state[k]; }
     if ([128, 256, 512].includes(+hash.n)) { state.n = +hash.n; gridSeg.value = state.n; }
     if (+hash.L >= 32 && +hash.L <= 128) { state.L = +hash.L; boxSlider.value = state.L; }
     const typed = hash.V || hash.p ? { ...t, V: hash.V || t.V, params: hash.p ? JSON.parse(hash.p) : t.params } : t;

@@ -502,3 +502,48 @@ export function preparePotential2D(V, n, dx, { kc = 0.75 * Math.PI / dx, delta =
   for (let i = 0; i < N; i++) re[i] /= N;
   return { V: re, step: 1.2 / (kc * kc) };
 }
+
+/**
+ * Exact partial waves of a radially symmetric potential, from the time-independent radial
+ * equation: with psi = R(r) e^{im theta} and u = sqrt(r) R,
+ *     u'' = [2m(V(r) - E) + (m^2 - 1/4)/r^2] u      (hbar = mass = 1, E = k^2/2),
+ * integrated outwards by Numerov's method from u ~ r^{|m|+1/2}, and matched beyond the
+ * potential to sqrt(r) [A J_m(kr) + B Y_m(kr)]: tan delta_m = -B/A.  Returns [{m, Sre, Sim}]
+ * for m = -mmax ... mmax (delta_{-m} = delta_m).  V is a function of an array of radii.
+ */
+export function radialWaves(V, k, mmax = 24, { h = 0.005, rmax } = {}) {
+  // Where does the potential end?  Out to where |V| < 1e-8 of its largest value (at most 80).
+  if (!rmax) {
+    const rs = Float64Array.from({ length: 1600 }, (_, i) => 0.05 + i * 0.05), vs = V(rs);
+    let vmax = 0;
+    for (const v of vs) vmax = Math.max(vmax, Math.abs(v));
+    rmax = 5;
+    for (let i = 0; i < rs.length; i++) if (Math.abs(vs[i]) > 1e-8 * vmax) rmax = Math.max(rmax, rs[i] + 1);
+    rmax = Math.min(rmax, 80);
+  }
+  const N = Math.ceil(rmax / h), r = Float64Array.from({ length: N + 1 }, (_, i) => (i + 1) * h);
+  const Vr = V(r), out = [], k2 = k * k;
+  const r1 = r[N - 8], r2 = r[N];
+  const J1 = besselJ(mmax, k * r1), Y1 = besselY(mmax, k * r1), J2 = besselJ(mmax, k * r2), Y2 = besselY(mmax, k * r2);
+  for (let m = 0; m <= mmax; m++) {
+    const c = m * m - 0.25, f = (i) => 2 * Vr[i] - k2 + c / (r[i] * r[i]), w = (h * h) / 12;
+    let u0 = Math.pow(r[0], m + 0.5), u1 = Math.pow(r[1], m + 0.5);
+    let f0 = f(0), f1 = f(1), ua = 0;
+    for (let i = 1; i < N; i++) {
+      const f2 = f(i + 1);
+      const u2 = (2 * u1 * (1 + 5 * w * f1) - u0 * (1 - w * f0)) / (1 - w * f2);
+      u0 = u1; u1 = u2; f0 = f1; f1 = f2;
+      if (i + 1 === N - 8) ua = u2;
+      if (Math.abs(u1) > 1e200) { u0 *= 1e-200; u1 *= 1e-200; ua *= 1e-200; }
+    }
+    // u/sqrt(r) = A J + B Y at r1 and r2.
+    const a1 = ua / Math.sqrt(r1), a2 = u1 / Math.sqrt(r2);
+    const det = J1[m] * Y2[m] - J2[m] * Y1[m];
+    const A = (a1 * Y2[m] - a2 * Y1[m]) / det, B = (J1[m] * a2 - J2[m] * a1) / det;
+    const d = Math.atan2(-B, A);
+    out[m] = { Sre: Math.cos(2 * d), Sim: Math.sin(2 * d) };
+  }
+  const waves = [];
+  for (let m = -mmax; m <= mmax; m++) waves.push({ m, ...out[Math.abs(m)] });
+  return waves;
+}

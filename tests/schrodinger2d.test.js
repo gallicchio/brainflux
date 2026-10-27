@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves } from '../schrodinger2d/sim.js';
+import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves, radialWaves } from '../schrodinger2d/sim.js';
 
 function setup({ n = 128, L = 64, absorb = true, V, packet }) {
   const sim = new Sim2D({ n, L, absorb });
@@ -74,4 +74,25 @@ test('a tall disk: unitary S-matrix, and three total cross sections that agree (
   // Compare with a hard disk of about the same radius.
   const hd = fromPartialWaves(hardDiskWaves(k0, a), k0, [0]);
   return `|S|-1 <= ${worst.toExponential(1)}; sigma: partial waves ${pw.sigma.toFixed(3)}, optical ${pw.optical.toFixed(3)}, flux ${tot.scattered.toFixed(3)}, shadow ${tot.shadow.toFixed(3)}; hard disk a=${a}: ${hd.sigma.toFixed(3)}`;
+});
+
+test('the radial equation gives the hard disk\'s phase shifts, and the tall disk\'s match the movie', () => {
+  // A very tall, very sharp disk is a hard disk.
+  const k = 2, a = 1.5;
+  const hard = radialWaves((r) => r.map((x) => 1e4 / (1 + Math.exp((x - a) / 0.002))), k, 12, { h: 0.0005, rmax: 4 });
+  const exact = hardDiskWaves(k, a, 12);
+  let worst = 0;
+  for (let i = 0; i < exact.length; i++) worst = Math.max(worst, Math.hypot(hard[i].Sre - exact[i].Sre, hard[i].Sim - exact[i].Sim));
+  assert(worst < 0.03, `hard disk S_m off by up to ${worst}`);
+  // The tall soft disk of the earlier test: the time-dependent S_m against the stationary ones.
+  const V0 = 20, w = 0.2;
+  const { p, det } = scatter((x, y) => V0 / (1 + Math.exp((Math.hypot(x, y) - a) / w)), { k0: k, dt: 0.015 });
+  const movie = det.partialWaves(k, 12, p);
+  const still = radialWaves((r) => r.map((x) => V0 / (1 + Math.exp((x - a) / w))), k, 12);
+  let worst2 = 0;
+  for (let i = 0; i < movie.length; i++) if (Math.abs(movie[i].m) <= 6) worst2 = Math.max(worst2, Math.hypot(movie[i].Sre - still[i].Sre, movie[i].Sim - still[i].Sim));
+  assert(worst2 < 0.03, `movie against stationary S_m off by up to ${worst2}`);
+  const s1 = fromPartialWaves(movie, k, [0]).sigma, s2 = fromPartialWaves(still, k, [0]).sigma;
+  close(s1 / s2, 1, 0.01, 'sigma');
+  return `hard disk |dS| <= ${worst.toExponential(1)}; movie vs stationary |dS| <= ${worst2.toExponential(1)}; sigma ${s1.toFixed(4)} vs ${s2.toFixed(4)}`;
 });
