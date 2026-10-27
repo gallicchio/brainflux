@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispersion and Kramers–Kronig · BrainFlux</title>
+<meta name="description" content="Build ε(ω) from resonances you drag, see the index, the absorption and the reflectance, draw one and get the other by Kramers–Kronig, and send pulses through the medium.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="dispersion.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Dispersion and Kramers–Kronig</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="dsp" id="main" data-view="pulse">
+  <section class="stage">
+    <div class="row view-row" id="view-row"></div>
+    <div class="plot-wrap resp" id="resp-wrap"><canvas id="resp" tabindex="0" aria-label="The response of the medium against frequency: drag the round handles to move a resonance or change its strength, the small ones to change its width"></canvas></div>
+    <div class="plot-wrap refl" id="refl-wrap"><canvas id="refl" aria-label="The reflectance at normal incidence against frequency"></canvas></div>
+    <div class="plot-wrap pulse" id="pulse-wrap"><canvas id="pulse" aria-label="The pulse after a distance z in the medium, against the same pulse in vacuum"></canvas></div>
+    <div class="plot-wrap kk" id="kkim-wrap"><canvas id="kkim" aria-label="The imaginary part of chi: draw on it"></canvas></div>
+    <div class="plot-wrap kk" id="kkre-wrap"><canvas id="kkre" aria-label="The real part of chi: draw on it"></canvas></div>
+    <div class="plot-wrap kk" id="kkt-wrap"><canvas id="kkt" aria-label="The impulse response chi(t)"></canvas></div>
+    <div class="readout small" id="readout" aria-live="off"></div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="label">Medium</div>
+      <div class="button-grid" id="media"></div>
+      <div class="row" id="source-row"></div>
+      <div class="small muted" id="source-note"></div>
+      <div class="row" id="back-row" hidden></div>
+      <div id="osc-box" class="stack">
+        <div class="row osc-chips" id="osc-chips"></div>
+        <div id="osc-sliders" class="stack"></div>
+      </div>
+      <div id="typed-box" class="stack" hidden>
+        <div id="chi-field"></div>
+        <div class="row" id="typed-presets"></div>
+      </div>
+      <details id="more-medium">
+        <summary class="small">Background and range</summary>
+        <div id="range-box" class="stack"></div>
+      </details>
+    </div>
+    <div class="panel" id="kk-panel">
+      <div class="label">Kramers–Kronig</div>
+      <div class="small muted">Draw on either plot; the other follows.</div>
+      <div class="row" id="kk-row"></div>
+    </div>
+    <div class="panel" id="pulse-panel">
+      <div class="label">Pulse</div>
+      <div class="row">
+        <button type="button" id="play" class="primary" title="Send the pulse through again and again (space)">Pause</button>
+        <button type="button" id="fit" title="Fit the time axis to the pulse at the largest distance">Fit time axis</button>
+      </div>
+      <div id="shape-row"></div>
+      <div id="pulse-box" class="stack"></div>
+      <div class="row" id="frame-row"></div>
+    </div>
+    <div class="panel" id="show-panel">
+      <div class="label">Show</div>
+      <div class="row" id="shows"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A light wave $e^{i(kz-\omega t)}$ shakes the charges in a medium, and their response adds to
+  the field: $\varepsilon(\omega)=1+\chi(\omega)$.  Here the charges are damped oscillators,
+  $$\varepsilon(\omega)=1+\sum_j\frac{\omega_{pj}^2}{\omega_j^2-\omega^2-i\gamma_j\omega},$$
+  each with its resonance $\omega_j$, its width $\gamma_j$ and its strength $\omega_{pj}^2=f_j\omega_p^2$
+  ($\omega_j=0$ is a free electron: a Drude metal).  The wave then travels as
+  $e^{i(\tilde n\omega z/c-\omega t)}$ with $\tilde n=n+i\kappa=\sqrt{\varepsilon}$: $n$ sets its speed,
+  $\kappa$ its absorption, and $R=|(\tilde n-1)/(\tilde n+1)|^2$ is the fraction reflected at normal
+  incidence.  Drag the round handles to move a resonance or change its strength, the small ones
+  to change its width.  The three views: the <em>medium</em>, <em>Kramers–Kronig</em> (draw
+  $\mathrm{Im}\,\chi$ or $\mathrm{Re}\,\chi$ and get the other, and the response in time), and
+  <em>pulses</em> sent through it, computed exactly frequency by frequency.</p>
+
+  <article class="exp" data-setup="one">
+    <h3>1. One resonance</h3>
+    <p>One line at $\omega_0=2$.  $\varepsilon''$ (orange) is the absorption line, a peak of width
+    $\gamma$.  $\varepsilon'$ (blue) rises towards the line from both sides: that is normal
+    dispersion, $dn/d\omega>0$, where light is not absorbed.  Inside the line it falls: anomalous
+    dispersion, and only where the medium absorbs.  Just above the line $\varepsilon'$ goes
+    negative, $n$ drops below 1 and the medium reflects strongly.  Drag the line about, make it
+    wider, stronger, add a second one.</p>
+  </article>
+
+  <article class="exp" data-setup="delay">
+    <h3>2. A pulse is late: the group velocity</h3>
+    <p>A pulse with its spectrum (the grey hump) below the line, sent through $z=200$ of the
+    medium, against the same pulse through vacuum (dashed).  It arrives late by
+    $z(n_g-1)/c$, where $n_g=n+\omega\,dn/d\omega=c\,dk/d\omega$ is the group index (green): the read-out
+    compares the prediction with the measured peak.  The crests inside travel at $c/n$, faster
+    than the pulse.  Drag the carrier (the vertical line) closer to the line: $n_g$ grows, the
+    pulse is later, and it spreads, because its two sides see different $n_g$.</p>
+  </article>
+
+  <article class="exp" data-setup="spread">
+    <h3>3. A short pulse spreads, red first</h3>
+    <p>A 10 fs pulse at 800 nm through fused silica, in the frame moving with the pulse.  In the
+    visible and near infrared glass has normal dispersion, so red light (lower $\omega$, lower
+    $n_g$) runs ahead of blue: the pulse spreads and is <em>chirped</em>, red at its front and blue
+    at its back (the colour of the envelope is the local frequency).  After 5 mm it is about
+    five times longer: a 10 fs pulse doubles in length in under 2 mm of glass, which is why
+    femtosecond lasers need prism or grating compressors.</p>
+  </article>
+
+  <article class="exp" data-setup="glass">
+    <h3>4. Glass: why a prism spreads blue more</h3>
+    <p>Fused silica, as three oscillators (Malitson's fit): two resonances in the ultraviolet
+    (10.7 and 18 eV), one in the infrared (0.13 eV, at the left edge).  The visible band (the
+    rainbow strip) lies between them, where nothing absorbs and $n$ rises gently towards the
+    ultraviolet lines: $n=1.456$ in the red (656 nm), $1.463$ in the blue (486 nm).  So blue is
+    bent more.  The rise steepens towards the resonance, which is why violet is spread more than
+    red.  Tap the plot to read $n$ at any frequency.</p>
+  </article>
+
+  <article class="exp" data-setup="metal">
+    <h3>5. A metal and its plasma frequency</h3>
+    <p>Free electrons, $\varepsilon=1-\omega_p^2/(\omega^2+i\gamma\omega)$, for sodium:
+    $\hbar\omega_p=5.9$ eV.  Below $\omega_p$, $\varepsilon'<0$, $\tilde n$ is almost purely imaginary,
+    the wave dies within a skin depth and $R$ is nearly 1: a mirror.  Above $\omega_p$ the
+    electrons cannot keep up, $\varepsilon'>0$ and the metal turns transparent.  Sodium, like the
+    other alkali metals, is transparent in the ultraviolet below about 210 nm (Wood, 1933).
+    Drag the $\omega_p$ handle; widen $\gamma$ to see the edge soften.</p>
+  </article>
+
+  <article class="exp" data-setup="ionosphere">
+    <h3>6. The ionosphere reflects AM radio</h3>
+    <p>The same physics with $10^{12}$ electrons per cubic metre: $f_p=\omega_p/2\pi\approx9$ MHz
+    (frequencies here are $f$ in MHz).  AM broadcasts (0.5 to 1.7 MHz) are below $f_p$ and
+    bounce back, which is why they are heard far beyond the horizon at night.  FM (around
+    100 MHz) and satellite signals go straight through.  This is the idealised sharp surface
+    at normal incidence; the real ionosphere is gradual, and reflects each frequency where
+    $f_p$ of the local density reaches it.  At a slant it reflects frequencies up to
+    $f_p/\cos\theta$, which is how shortwave goes round the world.</p>
+  </article>
+
+  <article class="exp" data-setup="reststrahlen">
+    <h3>7. Reststrahlen: a mirror between $\omega_\mathrm{TO}$ and $\omega_\mathrm{LO}$</h3>
+    <p>Rock salt in the infrared (frequencies in THz).  The ions vibrate against each other at
+    the transverse optical frequency $\omega_\mathrm{TO}=4.9$ THz; the electrons respond
+    instantly at these frequencies and add the background $\varepsilon_\infty=2.34$.  Between
+    $\omega_\mathrm{TO}$ and the zero of $\varepsilon'$ at
+    $\omega_\mathrm{LO}=\omega_\mathrm{TO}\sqrt{\varepsilon(0)/\varepsilon_\infty}=7.8$ THz (Lyddane, Sachs
+    and Teller) $\varepsilon'<0$ and the crystal reflects almost everything.  Repeated
+    reflections off such crystals filter out all but these "residual rays" (Rubens, 1897).</p>
+  </article>
+
+  <article class="exp" data-setup="draw">
+    <h3>8. Draw the absorption, get the index</h3>
+    <p>Here $\mathrm{Im}\,\chi$ is a flat band of absorption, drawn by hand, and $\mathrm{Re}\,\chi$ is
+    what causality makes of it:
+    $$\mathrm{Re}\,\chi(\omega)=\frac1\pi\,P\!\int_{-\infty}^{\infty}\frac{\mathrm{Im}\,\chi(\omega')}{\omega'-\omega}\,d\omega'$$
+    (Kramers–Kronig), with logarithmic peaks at the sharp edges of the band.  Draw on
+    $\mathrm{Im}\,\chi$: an absorption line anywhere gives normal dispersion everywhere else.  Or
+    draw on $\mathrm{Re}\,\chi$ and see what absorption it needs (orange below zero would be gain).
+    The bottom plot is $\chi(t)$, the response to a kick at $t=0$: zero before it.  The
+    transform is done with FFTs on a grid out to 8 times the plotted range; an error of about
+    0.1% comes from that grid.</p>
+  </article>
+
+  <article class="exp" data-setup="acausal">
+    <h3>9. Break causality</h3>
+    <p>A medium that absorbs exactly as the single line does, but with $\mathrm{Re}\,\chi=0$: no
+    dispersion at all.  Its response $\chi(t)$ is odd in time: it starts responding before the
+    kick, as much as after.  Kramers–Kronig is causality written in frequency: a response that
+    vanishes for $t<0$ has real and imaginary parts that are Hilbert transforms of each other.
+    With <em>Break causality</em> on, draw on either side and watch $\chi(t)$ leak into the past;
+    turn it off and the other side is recomputed, and the past goes quiet.</p>
+  </article>
+
+  <article class="exp" data-setup="sumrule">
+    <h3>10. The f-sum rule</h3>
+    <p>However a line is drawn, its area is fixed:
+    $$\int_0^\infty\omega\,\varepsilon''(\omega)\,d\omega=\frac{\pi}{2}\,\omega_p^2,\qquad \omega_p^2=\frac{Ne^2}{\varepsilon_0m}.$$
+    Drag a line's width handles: it gets lower as it gets wider and the read-out does not move.
+    Move it: still the same.  Only the strength (the number of electrons) changes it.  This is
+    Kramers–Kronig at high frequency, where every electron responds as if it were free,
+    $\chi\to-\omega_p^2/\omega^2$.</p>
+  </article>
+
+  <article class="exp" data-setup="superluminal">
+    <h3>11. Faster than light? The peak exits early</h3>
+    <p>A long pulse tuned to the middle of a weak absorption line, where $dn/d\omega<0$ so steeply
+    that $n_g$ is negative ($-0.98$).  The peak of what comes out leaves the medium <em>before</em>
+    the peak of a pulse through vacuum arrives: 7 time units early at $z=5$, 13 at $z=10$.  But
+    it is mostly absorbed: by $z=10$ the peak is 18% as high (the curve is scaled up to be seen).
+    Nothing is going faster than light: the medium absorbs the back of the pulse more than its
+    front, and the front was already there, in the smooth Gaussian, long before the peak.</p>
+  </article>
+
+  <article class="exp" data-setup="front">
+    <h3>12. ...and a front never arrives early</h3>
+    <p>The same pulse, cut off sharply in front (before the cut there is no field at all).  Now
+    the output piles up behind the front, and the front itself arrives at exactly $t=z/c$:
+    before it the field is zero, at the level of the arithmetic ($10^{-10}$ on the logarithmic
+    scale).  Information travels with fronts, and fronts travel at $c$: as $\omega\to\infty$ every
+    medium has $n\to1$.  The cut is smoothed over a few time steps of the computation.</p>
+  </article>
+
+  <article class="exp" data-setup="precursors">
+    <h3>13. Precursors</h3>
+    <p>A carrier switched on suddenly at $t=0$ into a dense medium (Brillouin's own numbers,
+    1914).  The first thing to arrive, exactly at $t=z/c$, is the Sommerfeld precursor: the
+    highest frequencies, which see $n\approx1$, wiggling slower and slower.  Next comes the
+    Brillouin precursor, the lowest frequencies, near $t=n(0)z/c$, and only then the signal at
+    the carrier frequency, much later and weaker.  Move the carrier above the line, into the
+    band where it is absorbed, and only the precursors get through.</p>
+  </article>
+
+  <article class="exp" data-setup="typed">
+    <h3>14. Type χ(ω): the sign of i</h3>
+    <p>$\chi(\omega)=\omega_p^2/(\omega_0^2-\omega^2-i\gamma\omega)$ typed in (as
+    <code>wp^2/(w0^2 - w^2 - i g w)</code>).  Its pole is at $\omega=-i\gamma/2\pm\ldots$, in the
+    lower half-plane, and $\chi(t)$ is causal.  Change $-i$ to $+i$: the pole moves to the upper
+    half-plane, $\chi(t)$ lives entirely in the past, and $\mathrm{Im}\,\chi<0$, which is gain.
+    (With $e^{+i\omega t}$, the engineers' convention, the signs are the other way round.)  Try a
+    constant (an instantaneous response, $\delta(t)$) or <code>i s/w</code> (a conductor).</p>
+  </article>
+
+  <p>Approximations: the medium is linear and its response local (no spatial dispersion); the
+  pulse is a plane wave already inside the medium (no reflection at its surface); the time grid
+  is periodic and wide enough that nothing wraps round.</p>
+
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

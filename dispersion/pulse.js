@@ -44,7 +44,8 @@ export function support(shape, p) {
  * Choose the time grid.  view = [lo, hi] is the stretch of τ to be shown (in the frame chosen);
  * wTop is the highest frequency at which the medium does anything interesting.
  * A Gaussian needs frequencies up to ω0 + 14/T (beyond which its spectrum is below 1e-8).  A
- * front has every frequency: the grid goes as high as the view can show (2000 steps across it),
+ * front has every frequency: the grid goes well above the carrier and the medium's lines
+ * (where n → 1),
  * and the incident spectrum is rolled off by a Gaussian at Ω/5 (`smooth`), which rounds the
  * front over a couple of time steps instead of letting it ring before it starts.
  * For a step, p.tOff (where the carrier is switched off again, smoothly, after the view) is set.
@@ -52,7 +53,8 @@ export function support(shape, p) {
 export function planGrid(shape, p, view, wTop = 0, maxN = 1 << 17) {
   const span = view[1] - view[0];
   const sharp = shape !== 'gauss';
-  const Omega = sharp ? Math.max((2000 * Math.PI) / span, 40 * p.w0, 10 * wTop) : (p.w0 + 14 / p.T) / 0.75;
+  // (2000 samples across the view, so that every pixel column of a plot has a couple.)
+  const Omega = Math.max((2000 * Math.PI) / span, sharp ? Math.max(24 * p.w0, 6 * wTop) : (p.w0 + 14 / p.T) / 0.75);
   let dt = Math.PI / Omega;
   if (shape === 'step') { p.tOff = view[1] + 0.3 * span; p.tRamp = Math.max(2 * Math.PI / p.w0, 0.03 * span); }
   // The window must hold the view, the incident field, and (for a step) its switching off,
@@ -92,10 +94,15 @@ export class Propagator {
   setInput(E0, smooth = 0) {
     const { N, half } = this, a = Float64Array.from(E0), b = new Float64Array(N);
     ifft(a, b); // a_k = (1/N) Σ E_n e^{+2πikn/N}: the spectrum (up to the phase of t0, which cancels)
+    let top = 0;
     for (let k = 0; k < half; k++) {
       const f = smooth > 0 ? Math.exp(-0.5 * ((k * this.dw) / smooth) ** 2) : 1;
       this.Xr[k] = a[k] * f; this.Xi[k] = b[k] * f;
+      top = Math.max(top, this.Xr[k] ** 2 + this.Xi[k] ** 2);
     }
+    // Frequencies above the last one carrying more than 1e-32 of the peak power are skipped.
+    this.kmax = 0;
+    for (let k = half - 1; k >= 0; k--) if (this.Xr[k] ** 2 + this.Xi[k] ** 2 > 1e-32 * top) { this.kmax = k; break; }
     this.input = E0;
   }
 
@@ -121,9 +128,9 @@ export class Propagator {
    * overwritten by the next call).  vacuum = true leaves out the medium.
    */
   field(z, tc = 0, vacuum = false) {
-    const { N, half, ar, ai, Xr, Xi, pr, pi, dw } = this;
+    const { ar, ai, Xr, Xi, pr, pi, dw } = this;
     ar.fill(0); ai.fill(0);
-    for (let k = 0; k < half; k++) {
+    for (let k = 0; k <= this.kmax; k++) {
       const amp = vacuum ? 1 : Math.exp(-pi[k] * z);
       if (amp < 1e-300 && k > 0) continue;
       const ph = (vacuum ? 0 : pr[k] * z) - k * dw * tc;

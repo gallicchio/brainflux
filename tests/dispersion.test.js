@@ -150,7 +150,9 @@ test('breaking causality: a response with Re χ removed is odd in time, half of 
 // ------------------------------------------------------------------- the sum rule
 
 test('the f-sum rule: ∫ ω Im ε dω = π ω_p²/2, whatever the lines look like', () => {
-  const sets = [OSCS, [{ w0: 0, g: 0.05, wp: 3 }], [{ w0: 4, g: 0.01, wp: 0.5 }, { w0: 0, g: 1, wp: 1 }], [{ w0: 1, g: 5, wp: 2 }]];
+  // (The last set is fused silica with lines 1e-4 wide, as in the demo.)
+  const silica = [[0.6961663, 18.1253], [0.4079426, 10.6661], [0.8974794, 0.125283]].map(([B, w0]) => ({ w0, g: 1e-4, wp: Math.sqrt(B) * w0 }));
+  const sets = [OSCS, [{ w0: 0, g: 0.05, wp: 3 }], [{ w0: 4, g: 0.01, wp: 0.5 }, { w0: 0, g: 1, wp: 1 }], [{ w0: 1, g: 5, wp: 2 }], silica];
   const notes = [];
   for (const s of sets) {
     const wp2 = s.reduce((a, o) => a + o.wp * o.wp, 0), I = sumRuleOscillators(s);

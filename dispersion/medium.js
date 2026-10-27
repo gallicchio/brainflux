@@ -121,8 +121,9 @@ export function gridResponse(grid, re, im, chiInf = 0) {
           out.im[i] = s * im[last] * q * q * q;
           continue;
         }
+        // (The sample at ω = 0 may hold a free-electron δ(ω): read the one next to it instead.)
         const u = x / dw, k = Math.floor(u), f = u - k;
-        out.re[i] = chiInf + re[k] * (1 - f) + re[k + 1] * f;
+        out.re[i] = chiInf + re[k === 0 ? 1 : k] * (1 - f) + re[k + 1] * f;
         out.im[i] = s * (im[k] * (1 - f) + im[k + 1] * f);
       }
       return out;
@@ -254,12 +255,14 @@ export function sampleOnGrid(resp, grid) {
  */
 export function sumRuleOscillators(oscs) {
   if (!oscs.length) return 0;
-  let wmax = 0, gmin = Infinity;
-  for (const o of oscs) { wmax = Math.max(wmax, o.w0, o.wp, o.g); gmin = Math.min(gmin, Math.max(o.g, 1e-6)); }
+  let wmax = 0;
+  for (const o of oscs) wmax = Math.max(wmax, o.w0, o.wp, o.g);
+  // Break points closing in on every line geometrically (its tails fall as 1/(ω − ω_j)²).
   const brk = new Set([0]);
   for (const o of oscs) {
     const g = Math.max(o.g, 1e-6);
-    for (const s of [-40, -10, -3, -1, 0, 1, 3, 10, 40]) { const x = o.w0 + s * g; if (x > 0) brk.add(x); }
+    brk.add(o.w0);
+    for (let s = 0.5; s * g < 4 * wmax + 1; s *= 2) for (const x of [o.w0 - s * g, o.w0 + s * g]) if (x > 0) brk.add(x);
   }
   let W = 4 * wmax + 1;
   for (let i = 0; i < 12; i++) { brk.add(W); W *= 3; }
