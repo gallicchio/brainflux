@@ -3,7 +3,7 @@
 
 import { fft2Centered } from '../lib/fft.js';
 import { colorize, autoBrightness, drawWheel, MODES } from '../lib/complexcolor.js';
-import { el, $, slider, segmented, toggle, drawer, toast, readHash, writeHash, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, drawer, toast, readHash, writeHash, fmt, fixedNum, setSlots } from '../lib/ui.js';
 import { paint, stroke, mask, roll, OPERATIONS, graft, resample } from './tools.js';
 import { PRESETS, makePreset, imageData } from './presets.js';
 
@@ -363,17 +363,20 @@ function onUp(side) {
   schedule();
 }
 
+// The value under the pointer: each number in a slot of its own (fixed decimals, room for a
+// sign), so that nothing in the line moves as the pointer does.
 function showReadout(side, p) {
   const n = state.n, x = p.i - n / 2, y = n / 2 - p.j, idx = p.j * n + p.i;
   const re = side.re[idx], im = side.im[idx], mag = Math.hypot(re, im);
-  const phase = mag ? `${Math.round((Math.atan2(im, re) * 180) / Math.PI)}°` : '';
-  const value = `|${side.key === 'x' ? 'f' : 'F'}| ${fmt(mag)}${phase ? ' ∠ ' + phase : ''}`;
+  const deg = (Math.atan2(im, re) * 180) / Math.PI;
+  const value = [`   |${side.key === 'x' ? 'f' : 'F'}| `, { v: mag, dec: 3, w: 7, tiny: true },
+    { text: mag ? ' ∠' : ' ', w: 2 }, { text: mag ? `${fixedNum(Math.round(deg), 0)}°` : ' ', w: 5 }];
   if (side.key === 'x') {
-    side.readout.textContent = `x ${x}, y ${y}   ${value}`;
+    setSlots(side.readout, ['x ', { v: x, dec: 0, w: 4 }, ', y ', { v: y, dec: 0, w: 4 }, ...value]);
   } else {
     const k = Math.hypot(x, y);
-    const wave = k ? `   λ ${fmt(n / k)} px, ${Math.round((Math.atan2(y, x) * 180) / Math.PI)}°` : '   (the average)';
-    side.readout.textContent = `kx ${x}, ky ${y}   ${value}${wave}`;
+    const wave = k ? ['   λ ', { v: n / k, dec: 1, w: 5 }, ' px, ', { v: Math.round((Math.atan2(y, x) * 180) / Math.PI), dec: 0, w: 4 }, '°'] : ['   (the average)'];
+    setSlots(side.readout, ['kx ', { v: x, dec: 0, w: 4 }, ', ky ', { v: y, dec: 0, w: 4 }, ...value, ...wave]);
   }
 }
 

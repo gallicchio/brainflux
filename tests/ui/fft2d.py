@@ -138,6 +138,27 @@ with Browser('fft2d/index.html', size=(1400, 950)) as b:
     for n in (64, 512, 256):
         b.eval(f"__app.setResolution({n})"); b.sleep(0.6)
         check(b.eval("__app.sides.k.re.length") == n * n, f'resolution {n}')
+    # The values under the pointer keep still as it moves (coordinates of either sign, magnitudes
+    # from tiny to large, any phase): every number in a slot of its own, the select beside them put.
+    b.eval("__app.loadPreset('portrait')"); b.sleep(0.5)
+    for sel, name in ((X, 'image'), (K, 'transform')):
+        x, y, w, h = b.box(sel)
+        side = sel.split()[0]
+        def hover(fx, fy):
+            b.mouse('mouseMoved', x + fx * w, y + fy * h)
+            b.sleep(0.15)
+        words = [', y', '|f|', '∠'] if name == 'image' else [', ky', '|F|', '∠', 'λ', ' px']
+        hover(0.1, 0.1)
+        at = [b.text_x(f'{side} .readout', words)]
+        def step(p):
+            hover(*p)
+            at.append(b.text_x(f'{side} .readout', words))
+        pts = [(0.9, 0.9), (0.56, 0.5), (0.52, 0.47), (0.03, 0.6), (0.7, 0.2), (0.45, 0.55), (0.98, 0.02)]
+        moves, texts = b.steady(f'{side} .foot-row select, {side} .readout, {side} .readout .fixnum', [lambda p=p: step(p) for p in pts])
+        b.mouse('mouseMoved', 2, 2)
+        shifts = [max(abs(a[i][0] - at[0][i][0]) for a in at) if all(a[i] for a in at) else None for i in range(len(words))]
+        check(not moves and len(texts) >= 5 and None not in shifts and max(shifts) <= 0.5,
+              f'{name}: the values under the pointer keep still as it moves (words {words} shift by {shifts} px; {moves[:3] or "no box moved"})')
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions or console errors' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 

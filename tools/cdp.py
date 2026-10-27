@@ -200,6 +200,19 @@ class Browser:
             .filter((r) => r.width || r.height)
             .map((r) => [r.left + scrollX, r.top + scrollY, r.width, r.height].map((v) => Math.round(v * 10) / 10))''')
 
+    def text_x(self, selector, needles):
+        """Where, in the first element matching selector, each of needles (words of its text) starts:
+        [x, y] of its first occurrence (None if absent), for checking that the words in a line of
+        text keep still while numbers before them change."""
+        return self.eval(f'''(() => {{ const e = document.querySelector({json.dumps(selector)}); if (!e) return null;
+            const walk = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), nodes = [];
+            for (let n; (n = walk.nextNode());) nodes.push(n);
+            return {json.dumps(needles)}.map((w) => {{
+              for (const n of nodes) {{ const i = n.textContent.indexOf(w); if (i < 0) continue;
+                const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + w.length);
+                const b = r.getBoundingClientRect(); return [Math.round((b.left + scrollX) * 10) / 10, Math.round((b.top + scrollY) * 10) / 10]; }}
+              return null; }}); }})()''')
+
     def steady(self, selector, steps, tol=0.5):
         """Run each of steps (callables that change the numbers shown) and compare the boxes of the
         elements matching selector with those before.  Returns (moves, texts): moves lists
