@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Least Action · BrainFlux</title>
+<meta name="description" content="Draw a path between two events and watch its action; find the path nature takes.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="action.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>The principle of least action</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="act">
+  <section class="plots">
+    <div class="readout" id="readout" aria-live="polite"></div>
+    <div class="plot-wrap path-wrap"><canvas id="path" tabindex="0" aria-label="The path: drag its knots up and down"></canvas></div>
+    <div class="row3">
+      <div class="plot-wrap small-wrap"><canvas id="history" aria-label="The action of every path you have drawn, newest on the right"></canvas><canvas id="phasor" width="64" height="64" aria-label="The phasor exp(iS/ħ)"></canvas></div>
+      <div class="plot-wrap small-wrap" id="phase-wrap"><canvas id="phase" aria-label="The path in phase space, over the energy contours"></canvas></div>
+      <div class="plot-wrap small-wrap" id="energy-wrap"><canvas id="energy" aria-label="The energy along the path"></canvas></div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="label">System</div>
+      <div id="systems" class="button-grid"></div>
+      <div id="formula" class="formula"></div>
+      <div id="blurb" class="small muted"></div>
+      <div id="typed"></div>
+      <div id="params" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">The path you draw</div>
+      <div class="row">
+        <button type="button" id="roll" aria-pressed="false" title="Let every knot slide downhill in the action, steepest first">Roll downhill</button>
+        <button type="button" id="straight" title="Back to a straight line between the end points">Straight line</button>
+      </div>
+      <div id="knot-box"></div>
+      <div id="mode-box"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Show</div>
+      <div class="row" id="shows"></div>
+      <div id="hbar-box"></div>
+      <div id="truth" class="small"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>Between two events, $(t_1,x_1)$ and $(t_2,x_2)$, a particle could move along any path
+  $x(t)$.  Each path has an <em>action</em>
+  $$S[x]=\int_{t_1}^{t_2}L(x,\dot x,t)\,dt,\qquad L=T-V,$$
+  and the path the particle actually takes makes $S$ stationary: every small change of the path
+  changes $S$ only at second order.  The condition is the Euler-Lagrange equation
+  $\frac{d}{dt}\frac{\partial L}{\partial\dot x}=\frac{\partial L}{\partial x}$, which for $L=\tfrac12
+  m\dot x^2-V$ is Newton's $m\ddot x=-V'(x)$.</p>
+  <p>Drag the knots (anywhere above or below one works; the end points move too) and watch $S$.
+  Every change is added to the chart at the bottom left, so you can see yourself going
+  downhill.</p>
+
+  <article class="exp" data-setup="find">
+    <h3>1. Find the path</h3>
+    <p>A free particle must get from $x=0$ to $x=4$ in 2 seconds; the path starts out bent.
+    Straighten it by dragging the knots and watch the action fall to its least value,
+    $m(\Delta x)^2/2T=4$: constant speed is the cheapest way.  Then turn on <em>True path</em> to
+    check.</p>
+  </article>
+
+  <article class="exp" data-setup="throw">
+    <h3>2. Throw and catch</h3>
+    <p>A ball thrown up and caught at the same height two seconds later.  Shape the path, and
+    watch the readout split $S$ into $\int T\,dt$ and $-\int V\,dt$: going higher earns potential
+    energy (lowering $S$) but costs kinetic energy (raising it).  The parabola,
+    $x=\tfrac12 gt(T-t)$, is the best compromise, with $S=-mg^2T^3/24$.</p>
+  </article>
+
+  <article class="exp" data-setup="hints">
+    <h3>3. Which way is downhill?</h3>
+    <p>The arrows show where each knot would have to go to lower the action most, if the others
+    stayed put.  Follow them, or press <em>Roll downhill</em> and let every knot slide at once:
+    the path settles onto the true one.  The arrows are the Euler-Lagrange equation:
+    $\delta S=\int\left(\frac{\partial L}{\partial x}-\frac{d}{dt}\frac{\partial L}{\partial\dot x}\right)\delta x\,dt$,
+    and where the bracket vanishes, no small change helps.</p>
+  </article>
+
+  <article class="exp" data-setup="energy">
+    <h3>4. Only the true path conserves energy</h3>
+    <p>The panel at the bottom right plots the energy $E=\dot x\,\partial L/\partial\dot x-L$
+    along your path.  It wanders up and down; on the true path (dashed) it is flat.  Energy
+    conservation is a consequence of the action principle, when $L$ does not depend on $t$
+    (Noether's theorem).</p>
+  </article>
+
+  <article class="exp" data-setup="phase">
+    <h3>5. Phase space</h3>
+    <p>The middle panel draws your path in phase space, $(x,p)$ with
+    $p=\partial L/\partial\dot x$, over the contours of the Hamiltonian $H(x,p)$.  The true path
+    runs along one contour.  Yours crosses them, and every crossing is a place where your path
+    gains or loses energy that no force supplied.</p>
+  </article>
+
+  <article class="exp" data-setup="saddle">
+    <h3>6. When the action is not least</h3>
+    <p>A harmonic oscillator, but now the trip takes $T=4$, longer than half a period
+    ($\pi$).  The true path still makes $S$ stationary, but it is a saddle: press <em>Roll
+    downhill</em> and the path runs away, its action falling below the true path's without
+    end.  Lower $T$ below $\pi$ and the true path becomes a minimum again.  The point $t=\pi$,
+    where every path from the start refocuses, is a <em>conjugate point</em>.  "Least action" is
+    really "stationary action".</p>
+  </article>
+
+  <article class="exp" data-setup="pendulum">
+    <h3>7. More than one true path</h3>
+    <p>A pendulum, from $\theta=0$ to $\theta=1$ in 8 seconds.  Several motions do it: swinging
+    once, twice, the other way first.  Each is a true path, a stationary point of $S$, listed
+    under <em>Show</em> with its action and its Morse index (how many independent directions lower
+    $S$).  Drag your path near each one in turn.</p>
+  </article>
+
+  <article class="exp" data-setup="twin">
+    <h3>8. The twin paradox</h3>
+    <p>Time runs up, space across; the end points are two events at the same place, 10 years
+    apart.  A free particle's action is $-mc^2\tau$, where $\tau$ is the time its own clock
+    shows.  The twin who stays home (the straight world line) has the least action and so the
+    longest $\tau$: every journey away and back ages the traveller less.  Paths steeper than
+    the light cone (45°) are impossible, and get no action at all.</p>
+  </article>
+
+  <article class="exp" data-setup="light">
+    <h3>9. Fermat's principle</h3>
+    <p>Light from one point to another takes the path of least optical length $\int n\,ds$.
+    Here air is above and glass ($n=1.5$) below, and the true ray bends at the surface.  In
+    the phase-space panel the conserved quantity is $-n\cos\phi$, $\phi$ measured from the
+    surface: that is Snell's law, $n_1\sin\theta_1=n_2\sin\theta_2$.  Try the mirage too.</p>
+  </article>
+
+  <article class="exp" data-setup="brach">
+    <h3>10. The brachistochrone</h3>
+    <p>A bead slides without friction from rest at the top left to the bottom right.  Which
+    curve gets it there first?  The "action" is now the time.  The straight line is not the
+    fastest: diving steeply at first gains speed early.  The fastest curve is a cycloid,
+    $\pi\sqrt{a/g}$ here.</p>
+  </article>
+
+  <article class="exp" data-setup="segments">
+    <h3>11. Straight segments</h3>
+    <p>Feynman's way of thinking, and E. F. Taylor's way of teaching: a path of straight
+    segments, the particle moving at constant speed along each.  With a few segments, the best
+    you can do is a little above the true action; add segments (the <em>Knots</em> slider) and
+    the minimum comes down to it.</p>
+  </article>
+
+  <article class="exp" data-setup="feynman">
+    <h3>12. Feynman's phasors</h3>
+    <p>In quantum mechanics every path contributes, with weight $e^{iS/\hbar}$.  The little
+    clock beside the chart shows that arrow for your path.  Drag a knot near the true path: the
+    arrow barely turns, because $S$ is stationary there, so nearby paths add up in step.  Far
+    from it, the arrow spins, and the paths cancel.  Make $\hbar$ smaller and only paths ever
+    closer to the true one survive: the classical limit.</p>
+  </article>
+
+  <article class="exp" data-setup="damped">
+    <h3>13. Friction from a Lagrangian</h3>
+    <p>$L=e^{\gamma t}(\tfrac12\dot x^2-\tfrac12x^2)$ looks like a curiosity, but its
+    Euler-Lagrange equation is $\ddot x+\gamma\dot x+x=0$: a damped oscillator.  Here the energy
+    (bottom right) is not conserved, because $L$ depends on $t$.</p>
+  </article>
+
+  <article class="exp" data-setup="typed">
+    <h3>14. Your own potential</h3>
+    <p>Type any $V(x,t)$: a double well $\tfrac14x^4-x^2$ to start with.  The true paths are found
+    numerically (by shooting: trying every starting speed and keeping those that arrive).  A
+    potential that depends on $t$ does not conserve energy.</p>
+  </article>
+
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
