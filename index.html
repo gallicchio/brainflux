@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrainFlux: interactive physics</title>
+<meta name="description" content="Interactive demonstrations for physics majors: the 2D Fourier transform, the Schrödinger equation in one and two dimensions, the principle of least action, plane waves.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="lib/style.css">
+<style>
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  .intro { max-width: 46em; font-size: 16px; color: var(--ink-2); }
+  .intro h1 { font-size: 30px; color: var(--ink); margin: 8px 0 6px; }
+  .intro h1 span { color: var(--accent); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; margin-top: 24px; }
+  .card { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; box-shadow: var(--shadow); }
+  .card:hover { border-color: var(--accent); }
+  .card img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; object-position: top left; background: #000; display: block; }
+  .card .body { padding: 12px 14px 14px; }
+  .card h2 { margin: 0 0 4px; font-size: 18px; }
+  .card p { margin: 0; color: var(--ink-2); }
+  .card .tag { display: inline-block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--ink-3); margin-top: 8px; }
+  footer { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; color: var(--ink-3); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="intro">
+    <h1>Brain<span>Flux</span></h1>
+    <p>Interactive demonstrations for physics majors.  Each one opens already doing something
+    worth watching; change anything and see what happens.  Every demo has a drawer of guided
+    experiments, each of which sets itself up with one click.</p>
+  </div>
+  <div class="cards" id="cards">
+    <a class="card" href="fft2d/">
+      <img src="docs/fft2d.jpg" alt="Fourier's portrait beside its two-dimensional Fourier transform">
+      <div class="body">
+        <h2>2D Fourier transform</h2>
+        <p>Paint on a picture or on its Fourier transform and watch the other change as you
+        paint.  Filter the stripes off Fourier's jacket, swap phases between pictures, find the
+        reciprocal lattice of a crystal.</p>
+        <span class="tag">Fourier analysis · optics · crystallography</span>
+      </div>
+    </a>
+  </div>
+</main>
+<footer>
+  BrainFlux began in 2001 as a set of Java applets by Jason Gallicchio, and was rebuilt in 2026
+  as plain web pages that need nothing but a browser.
+  <a href="https://github.com/gallicchio/brainflux">Source on GitHub</a>; code MIT, text CC BY 4.0.
+</footer>
+</body>
+</html>

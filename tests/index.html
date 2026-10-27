@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BrainFlux tests</title>
+<style>body { font: 14px/1.4 ui-monospace, monospace; margin: 1em; } </style>
+</head>
+<body>
+<h1>BrainFlux tests</h1>
+<pre id="results">running...</pre>
+<script type="module">
+  import { run } from './harness.js';
+  // Each module registers its tests on import.  ?only=name runs one file.
+  const files = ['fft', 'expr'];
+  const only = new URLSearchParams(location.search).get('only');
+  for (const f of files) if (!only || only === f) await import(`./${f}.test.js`);
+  const failed = await run(document.getElementById('results'));
+  // tools/run_page.py waits for this report; in a normal browser the POST just fails quietly.
+  fetch('/__report', { method: 'POST', body: document.getElementById('results').textContent })
+    .catch(() => {});
+</script>
+</body>
+</html>

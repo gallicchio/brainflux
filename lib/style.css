@@ -1,0 +1,159 @@
+/* The common look of the BrainFlux demos.  Plain CSS: custom properties for the colours (light
+   and dark follow the system setting), a header bar, panels, compact controls and the
+   experiments drawer. */
+
+:root {
+  --bg: #f4f3ef;
+  --panel: #ffffff;
+  --panel-2: #f0efea;
+  --ink: #1d1d1f;
+  --ink-2: #55565c;
+  --ink-3: #8a8b91;
+  --line: #d9d8d2;
+  --accent: #2f62d8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3eafb;
+  --warn: #b3261e;
+  --good: #1f7a3a;
+  --canvas-bg: #000000;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --radius: 8px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131417;
+    --panel: #1c1d22;
+    --panel-2: #24252b;
+    --ink: #ececef;
+    --ink-2: #b4b5bc;
+    --ink-3: #7d7e86;
+    --line: #34353d;
+    --accent: #7aa2ff;
+    --accent-ink: #0d1220;
+    --accent-soft: #233056;
+    --warn: #ff8a80;
+    --good: #7ad694;
+    --shadow: none;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 14px/1.45 var(--font); -webkit-text-size-adjust: 100%; }
+
+a { color: var(--accent); }
+
+/* ------------------------------------------------------------------ header */
+
+.bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  position: sticky; top: 0; z-index: 20;
+}
+.bar .home { font-weight: 700; text-decoration: none; color: var(--ink); letter-spacing: 0.02em; }
+.bar .home span { color: var(--accent); }
+.bar h1 { font-size: 16px; font-weight: 600; margin: 0; color: var(--ink-2); }
+.bar .spacer { flex: 1; }
+
+/* ----------------------------------------------------------------- controls */
+
+button, select, input, textarea { font: inherit; color: inherit; }
+
+button {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 4px 10px; cursor: pointer; min-height: 30px; line-height: 1.2;
+}
+button:hover { border-color: var(--ink-3); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.icon { padding: 3px; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; }
+button.icon svg { width: 20px; height: 20px; }
+
+select {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 4px 6px; min-height: 30px;
+}
+
+input[type="text"], input[type="number"], textarea {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px;
+}
+input[type="number"] { width: 6em; }
+input.bad, textarea.bad { border-color: var(--warn); }
+
+.seg { display: inline-flex; flex-wrap: wrap; }
+.seg > button { border-radius: 0; margin-left: -1px; }
+.seg > button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg > button:last-child { border-radius: 0 6px 6px 0; }
+.seg > button[aria-pressed="true"] { position: relative; z-index: 1; }
+
+/* A slider with its label and an editable value. */
+.slider { display: grid; grid-template-columns: minmax(3.2em, auto) 1fr 5.2em; align-items: center; gap: 6px; }
+.slider label { color: var(--ink-2); white-space: nowrap; }
+.slider label math { font-size: 1.05em; }
+.slider input[type="range"] { width: 100%; min-width: 60px; accent-color: var(--accent); }
+.slider input[type="number"] { width: 100%; padding: 2px 4px; text-align: right; }
+
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.label { color: var(--ink-2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.muted { color: var(--ink-3); }
+.small { font-size: 12px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 10px;
+}
+
+/* A typed expression with its MathML preview and error line. */
+.expr { display: grid; gap: 4px; }
+.expr .line { display: flex; gap: 6px; align-items: center; }
+.expr .line > label { color: var(--ink-2); white-space: nowrap; }
+.expr input { flex: 1; min-width: 0; font-family: var(--mono); }
+.expr .preview { min-height: 1.6em; overflow-x: auto; color: var(--ink); }
+.expr .preview math { font-size: 1.15em; }
+.expr .error { color: var(--warn); font-size: 12px; min-height: 0; }
+.params { display: grid; gap: 4px; }
+
+/* -------------------------------------------------------------- the drawer */
+
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw);
+  background: var(--panel); border-left: 1px solid var(--line); z-index: 30;
+  transform: translateX(100%); transition: transform 0.2s ease; overflow-y: auto;
+  padding: 0 18px 40px; box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+}
+.drawer.open { transform: none; }
+.drawer header {
+  position: sticky; top: 0; background: var(--panel); display: flex; align-items: center;
+  gap: 8px; padding: 12px 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px;
+}
+.drawer header h2 { margin: 0; font-size: 17px; flex: 1; }
+.drawer h3 { font-size: 15px; margin: 18px 0 4px; }
+.drawer p, .drawer li { color: var(--ink); }
+.drawer .exp { border-top: 1px solid var(--line); padding-top: 4px; }
+.drawer .exp .setup { margin: 4px 0 2px; }
+.drawer math[display="block"] { margin: 8px 0; }
+.drawer figure { margin: 8px 0; }
+.drawer figure img { max-width: 100%; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+
+/* ------------------------------------------------------------------- misc */
+
+canvas { display: block; touch-action: none; }
+.pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
+kbd { font-family: var(--mono); font-size: 0.9em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel-2); }
+.toast {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40;
+  background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw;
+}
+.toast.show { opacity: 0.94; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

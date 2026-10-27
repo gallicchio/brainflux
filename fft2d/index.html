@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2D Fourier Transform · BrainFlux</title>
+<meta name="description" content="Paint on an image or on its Fourier transform and watch the other side change in real time.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="fft2d.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>2D Fourier transform</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="fft">
+  <section class="side" id="side-x" aria-label="The image">
+    <div class="side-head">
+      <h2>Image <span class="fn">f(x, y)</span></h2>
+      <select class="mode" aria-label="How to draw the image"></select>
+    </div>
+    <div class="canvas-wrap"><canvas class="view" tabindex="0" aria-label="The image: paint on it"></canvas></div>
+    <div class="side-foot">
+      <div class="bright"></div>
+      <select class="ops" aria-label="Operations on the image"></select>
+      <div class="readout mono small" aria-live="off">&nbsp;</div>
+    </div>
+  </section>
+
+  <section class="tools panel" aria-label="Tools">
+    <div class="label">Tool</div>
+    <div id="tool-buttons"></div>
+    <div id="tool-options" class="stack"></div>
+    <div id="picker-box" class="stack">
+      <div class="label">Paint with</div>
+      <canvas id="picker" width="120" height="120" aria-label="Choose the complex value to paint: brightness is magnitude, colour is phase"></canvas>
+      <div class="row" id="quick-values"></div>
+      <div id="value-readout" class="mono small muted"></div>
+    </div>
+    <div class="stack">
+      <div class="row" id="paint-options"></div>
+    </div>
+    <div class="label">Resolution</div>
+    <div id="resolution"></div>
+    <div class="row">
+      <button type="button" id="undo" title="Undo (Ctrl+Z)">Undo</button>
+      <button type="button" id="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+    </div>
+  </section>
+
+  <section class="side" id="side-k" aria-label="The Fourier transform">
+    <div class="side-head">
+      <h2>Fourier transform <span class="fn">F(k<sub>x</sub>, k<sub>y</sub>)</span></h2>
+      <select class="mode" aria-label="How to draw the transform"></select>
+    </div>
+    <div class="canvas-wrap"><canvas class="view" tabindex="0" aria-label="The Fourier transform: paint on it"></canvas></div>
+    <div class="side-foot">
+      <div class="bright"></div>
+      <select class="ops" aria-label="Operations on the transform"></select>
+      <div class="readout mono small" aria-live="off">&nbsp;</div>
+    </div>
+  </section>
+
+  <section class="gallery panel" aria-label="Gallery">
+    <div class="gallery-head">
+      <span class="label">Start from</span>
+      <div id="size-box" class="size-box"></div>
+      <span class="spacer"></span>
+      <button type="button" id="upload" title="Use a picture of your own (or drop one on the image, or paste one)">Your picture…</button>
+      <input type="file" id="file" accept="image/*" hidden>
+      <button type="button" id="camera" aria-pressed="false" title="Transform your camera's picture live">Camera</button>
+    </div>
+    <div id="presets" class="presets"></div>
+  </section>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+
+  <p>Two pictures of the same thing.  On the left an image $f(x,y)$; on the right its
+  two-dimensional discrete Fourier transform
+  $$F(k_x,k_y)=\frac{1}{N}\sum_{x,y} f(x,y)\,e^{-2\pi i\,(k_x x+k_y y)/N}$$
+  which says how much of each plane wave $e^{2\pi i (k_x x + k_y y)/N}$ the image contains.
+  Paint on either side and the other is recomputed as you paint.  The origin of both is the
+  centre pixel; $k$ counts the cycles a wave makes across the whole image.</p>
+
+  <p>Both sides are complex.  Brightness is the magnitude, from black (zero) to white (very
+  large), and colour is the phase:</p>
+  <figure class="wheel-figure"><canvas id="legend" width="132" height="132"></canvas>
+  <figcaption class="small muted">The complex plane: red is positive real, cyan negative real,
+  yellow-green $+i$, violet $-i$.  The <em>Brightness</em> sliders only change the drawing, not
+  the data; transforms span many orders of magnitude, so brightness is
+  $\tfrac{2}{\pi}\arctan(|F|/R)$.</figcaption></figure>
+
+  <article class="exp" data-setup="jacket">
+    <h3>1. Take the stripes off Fourier's jacket</h3>
+    <p>The engraver shaded the jacket with parallel lines.  To a Fourier transform, a family of
+    lines with one spacing and one direction is a pair of bright spots at $\pm\vec k$, away from
+    the centre, at a distance set by the spacing and in the direction across the lines.  Erase
+    those spots (with <em>Mirror</em> on, each stroke erases its partner at $-\vec k$ too) and the
+    stripes fade from the image while the rest stays sharp.  This is a <em>notch filter</em>.</p>
+  </article>
+
+  <article class="exp" data-setup="lowpass">
+    <h3>2. Low-pass filter: blur</h3>
+    <p>With the mask tool, press on the centre of the transform and drag outwards: everything
+    farther from the centre than the pointer is set to zero, as you drag.  Only long
+    wavelengths survive, and the image blurs; drag back out and it sharpens.  The faint rings
+    near sharp edges are <em>ringing</em>, the price of cutting the spectrum off abruptly.</p>
+  </article>
+
+  <article class="exp" data-setup="highpass">
+    <h3>3. High-pass filter: edges</h3>
+    <p>Now the mask zeroes the inside instead.  Without the low frequencies, smooth areas lose
+    their brightness and only edges, curls of hair and hatching remain.  Smaller masks remove
+    less.</p>
+  </article>
+
+  <article class="exp" data-setup="gaussian">
+    <h3>4. A Gaussian transforms into a Gaussian</h3>
+    <p>Move the <em>Size</em> slider.  A Gaussian of width $\sigma$ transforms into a Gaussian of
+    width $N/(2\pi\sigma)$: the narrower one is, the wider the other.  This is the uncertainty
+    principle of quantum mechanics, $\sigma_x\sigma_p\ge\hbar/2$, in disguise, and the Gaussian is
+    the shape that makes the product smallest.  Paint a single pixel: its transform is flat.</p>
+  </article>
+
+  <article class="exp" data-setup="shift">
+    <h3>5. Shifting multiplies by a phase</h3>
+    <p>Drag the image with the hand tool.  The magnitude of the transform does not change at all
+    (it is being drawn as magnitude only); only its phase does, by $e^{-2\pi i\,\vec k\cdot\vec a/N}$
+    for a shift $\vec a$.  Switch the transform's drawing back to <em>magnitude and phase</em> to
+    see the colour ramp: stripes perpendicular to the shift, closer together the farther you
+    drag.  Drag the transform instead, and the image gets the phase ramp.</p>
+  </article>
+
+  <article class="exp" data-setup="box">
+    <h3>6. A square becomes a sinc</h3>
+    <p>The transform of a square is $\mathrm{sinc}(k_x)\,\mathrm{sinc}(k_y)$: a bright centre with
+    lobes along the axes falling off as $1/k$.  Raise the transform's brightness to see the faint
+    lobes off the axes; lower it to see how much brighter the centre is.  Shrink the square and
+    the sinc spreads.  Try the disk (the Airy pattern) and the ring too.</p>
+  </article>
+
+  <article class="exp" data-setup="slits">
+    <h3>7. Slits, gratings and diffraction</h3>
+    <p>Far from an aperture, the light it lets through makes the pattern $|F|^2$: the Fourier
+    transform <em>is</em> Fraunhofer diffraction.  The transform is drawn as intensity $|F|^2$.  A
+    single slit gives a wide envelope across the slit; two slits put fringes inside it, spaced by
+    the inverse of the separation; seven slits sharpen the fringes into the orders of a grating.</p>
+  </article>
+
+  <article class="exp" data-setup="lattice">
+    <h3>8. Crystals and the reciprocal lattice</h3>
+    <p>A lattice of atoms with spacing $a$ transforms into a lattice of spots with spacing
+    $N/a$: the reciprocal lattice of X-ray and electron diffraction.  Make the lattice finer
+    and the spots move apart.  The hexagonal lattice's reciprocal lattice is hexagonal and
+    rotated by 30°.  In the brick wall, some spots are missing: the bricks' offset rows cancel
+    them (a <em>structure factor</em>).</p>
+  </article>
+
+  <article class="exp" data-setup="hermitian">
+    <h3>9. Real images have symmetric transforms</h3>
+    <p>A real image has $F(-\vec k)=F(\vec k)^*$: points opposite each other through the centre
+    have the same brightness and opposite phase (red facing cyan).  Paint on the transform with
+    <em>Mirror</em> off and the image picks up colour: it has become complex.  Turn <em>Mirror</em>
+    on, and every stroke is copied to $-\vec k$ with the conjugate value: the image stays real.</p>
+  </article>
+
+  <article class="exp" data-setup="phase">
+    <h3>10. Phase or magnitude: which one carries the picture?</h3>
+    <p>The transform's phase has been thrown away (<em>Keep only the magnitude</em>): the image is
+    unrecognisable.  Undo, and choose <em>Keep only the phase</em> from the transform's menu
+    instead: Fourier is still there.  The phases say where the edges are.  X-ray crystallography
+    can measure only $|F|^2$, which is why finding the phases (the <em>phase problem</em>) is the
+    hard part of solving a crystal structure.</p>
+  </article>
+
+  <article class="exp" data-setup="swap">
+    <h3>11. Swap the phases of two pictures</h3>
+    <p>The transform of the author's photograph has been given the phases of Fourier's
+    transform, keeping its own magnitudes.  The result looks like Fourier, not like the author.
+    (The menus do this: <em>Remember this</em> on one transform, load another picture, then
+    <em>Use remembered phase</em>.  Try it the other way round.)</p>
+  </article>
+
+  <article class="exp" data-setup="wave">
+    <h3>12. Every point of k-space is a plane wave</h3>
+    <p>One bright pixel in the transform is one plane wave $e^{2\pi i\,\vec k\cdot\vec r/N}$ in the
+    image: stripes of rotating colour, perpendicular to $\vec k$, with $|\vec k|$ of them across
+    the image.  The transform is shown magnified 8 times.  Drag the pixel with the hand tool and
+    the stripes turn and change spacing.  Paint a second pixel (with the brush, size 1) and two
+    waves interfere.</p>
+  </article>
+
+  <article class="exp" data-setup="comb">
+    <h3>13. Sampling: painting on a lattice</h3>
+    <p>With <em>Repeat 4×4</em>, every brush mark is copied onto a 4×4 lattice: the image is
+    the mark convolved with a comb.  Its transform is the mark's transform multiplied by a comb:
+    zero except at every fourth frequency.  Periodic in one domain, discrete (sampled) in the
+    other.</p>
+  </article>
+
+  <h3>Things to know</h3>
+  <ul>
+    <li>Both pictures wrap around: the discrete transform treats the image as one tile of a
+    periodic wallpaper, so paint that leaves one edge comes back on the other.</li>
+    <li>The transform here is unitary: $\sum|f|^2=\sum|F|^2$ (Parseval), so equal colours mean
+    equal values on both sides.</li>
+    <li>Keys: <kbd>H</kbd> hand, <kbd>B</kbd> brush, <kbd>E</kbd> eraser, <kbd>M</kbd> mask,
+    <kbd>[</kbd> <kbd>]</kbd> brush size, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo.</li>
+    <li>Your own pictures never leave your computer; everything is computed in the page.</li>
+  </ul>
+  <p class="small muted">Rewritten in 2026 from the BrainFlux FFT2D Java applet (2001).
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>,
+  MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

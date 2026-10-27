@@ -1,0 +1,58 @@
+# BrainFlux: interactive physics
+
+Interactive demonstrations for physics majors (sophomores to seniors), rebuilt from the
+BrainFlux Java applets of 2001-2007 as plain web pages.
+
+| demo | what you do |
+|---|---|
+| [2D Fourier transform](fft2d/) | Paint on a picture or on its Fourier transform; the other side follows as you paint.  Filter, shift, swap phases, find the reciprocal lattice. |
+
+Each demo opens already doing something worth watching, has preset buttons beside every text
+box, a slider (with a typed value) for every number, and a drawer of guided experiments that set
+themselves up with one click.
+
+## Running it
+
+There is nothing to build or install.  The pages are static HTML, CSS and JavaScript modules
+with no dependencies, served as they are by GitHub Pages.  To run them locally, serve the
+repository with any static web server, for example
+
+    python3 -m http.server
+
+and open <http://localhost:8000/>.  (Opening `index.html` straight from the disk does not work:
+browsers refuse to load JavaScript modules from `file://` URLs.)
+
+## How it is made
+
+- **No frameworks, no build step, no CDN.**  HTML, CSS, ES2020 JavaScript, Canvas 2D, Pointer
+  Events and MathML: standards every current browser supports and will keep supporting.
+- **`lib/`** holds the shared pieces: a radix-2 FFT (`fft.js`), complex numbers drawn as colours
+  (`complexcolor.js`), a parser for the expressions students type, with live MathML previews
+  and automatic sliders for free parameters (`expr.js`), a small TeX-to-MathML translator for the
+  explanations (`mathml.js`), and a few DOM helpers (`ui.js`, `style.css`).
+- **Each demo** is a folder with an `index.html` (the page and its experiments), an `app.js`
+  (the interface) and the physics in modules that don't touch the page, so they can be tested.
+- **Links to set-ups**: the address bar keeps the state that matters (e.g.
+  `fft2d/#preset=jacket&n=512`), and `#setup=<name>` opens a guided experiment, so a set-up
+  can be linked from a homework.
+
+## Tests
+
+    tools/run_page.py tests/index.html     # the physics and maths modules, in headless Chromium
+    python3 tests/ui/fft2d.py              # drive a demo like a student, checking the physics
+
+`tools/run_page.py` serves the repository and reads back the report the test page posts;
+`tools/cdp.py` drives a page through the Chrome DevTools protocol (standard-library Python
+only).  Both need Chromium (or Chrome) installed.
+
+## History
+
+BrainFlux.org (2001-2013) hosted Java applets by Jason Gallicchio: a two-dimensional FFT you
+could paint on, a one-dimensional Schrödinger equation solver, a complex plane wave and
+others.  Java applets stopped running in browsers years ago; these pages keep their spirit
+(real time, interactive, built to teach) with new physics and features.
+`CLAUDE_CODE_CHAT.md` records how they were rebuilt, and `PLAN.md` the decisions.
+
+## Licence
+
+Code: MIT.  Text, figures and screenshots: CC BY 4.0.  See `LICENSE` and `LICENSE-CONTENT.md`.
