@@ -48,6 +48,7 @@ To publish it: push to GitHub and turn on Pages for the `main` branch, root fold
 
 ## Tests
 
+    tools/test_all.sh                      # everything below, one line per suite
     tools/run_page.py tests/index.html     # the physics and maths modules, in headless Chromium
     python3 tests/ui/fft2d.py              # drive a demo like a student, checking the physics
     python3 tests/ui/schrodinger1d.py
