@@ -73,6 +73,16 @@
         <span class="tag">quantum mechanics · scattering theory</span>
       </div>
     </a>
+    <a class="card" href="planewave/">
+      <img src="docs/planewave.jpg" alt="Two crossed plane waves making interference fringes, with their wavevectors drawn as arrows">
+      <div class="body">
+        <h2>Plane waves</h2>
+        <p>What $e^{i(\vec k\cdot\vec r-\omega t)}$ means: drag the wavevector, try the four sign
+        conventions, superpose waves into standing waves, fringes and beats, and separate phase
+        from group velocity in a packet.</p>
+        <span class="tag">waves · optics · quantum mechanics</span>
+      </div>
+    </a>
   </div>
 </main>
 <footer>
@@ -80,5 +90,9 @@
   as plain web pages that need nothing but a browser.
   <a href="https://github.com/gallicchio/brainflux">Source on GitHub</a>; code MIT, text CC BY 4.0.
 </footer>
+<script type="module">
+  import { renderMath } from './lib/mathml.js';
+  renderMath(document.getElementById('cards'));
+</script>
 </body>
 </html>

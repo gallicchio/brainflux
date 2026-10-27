@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plane Waves · BrainFlux</title>
+<meta name="description" content="What exp(i(k·r − ωt)) means: drag the wavevector, change the sign conventions, superpose waves, separate phase and group velocity.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="planewave.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Plane waves</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="pw">
+  <section class="stage">
+    <div class="row mode-row" id="mode-row"></div>
+    <div class="wave-wrap" id="wave-wrap"><canvas id="wave" tabindex="0" aria-label="The wave: drag the arrow's tip to set the wavevector"></canvas></div>
+    <div class="packet-wrap" id="packet-wrap" hidden>
+      <div class="plot-wrap tall"><canvas id="packet" aria-label="A wave packet: its real part and its envelope"></canvas></div>
+      <div class="plot-wrap short"><canvas id="dispersion" aria-label="The dispersion relation omega(k), with the phase and group velocities as slopes"></canvas></div>
+    </div>
+    <div class="formula" id="formula" aria-live="polite"></div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="row">
+        <button type="button" id="play" class="primary" title="Play or pause (space)">Pause</button>
+        <button type="button" id="reset" title="Back to t = 0">t = 0</button>
+      </div>
+      <div id="speed-box"></div>
+    </div>
+    <div class="panel" id="wave-panel">
+      <div class="label">The wave</div>
+      <div id="convention" class="conv"></div>
+      <div id="wave-box" class="stack"></div>
+    </div>
+    <div class="panel" id="two-panel" hidden>
+      <div class="label">The second wave</div>
+      <div class="row" id="two-presets"></div>
+      <div id="two-box" class="stack"></div>
+    </div>
+    <div class="panel" id="packet-panel" hidden>
+      <div class="label">Dispersion</div>
+      <div class="button-grid" id="dispersions"></div>
+      <div id="omega-field"></div>
+      <div id="packet-box" class="stack"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Show</div>
+      <div class="row" id="shows"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>A plane wave $\psi(\vec r,t)=A\,e^{i(\vec k\cdot\vec r-\omega t)}$ has the same value all along
+  each line perpendicular to $\vec k$, and its phase advances by $2\pi$ every wavelength
+  $\lambda=2\pi/|\vec k|$ along $\vec k$.  The colours are its phase (red is positive real, cyan
+  negative); drag the arrow's tip to change $\vec k$.  This is the BrainFlux <em>PlaneWave</em>
+  applet of 2002, with more to do.</p>
+
+  <article class="exp" data-setup="direction">
+    <h3>1. Which way does it go?</h3>
+    <p>Choose each of the four forms in turn and watch the crests (the white dot rides one).
+    $e^{i(\vec k\cdot\vec r-\omega t)}$ and $e^{-i(\vec k\cdot\vec r-\omega t)}$ both travel along
+    $\vec k$: they are complex conjugates, the same wave with its colours turning the other way
+    (physicists write the first, electrical engineers, with $j=-i$, the second).  When
+    $\vec k\cdot\vec r$ and $\omega t$ have the same sign, the wave travels against $\vec k$.  What
+    matters is the relative sign: a crest is where the phase is constant, $\vec k\cdot\vec r=\omega t$.</p>
+  </article>
+
+  <article class="exp" data-setup="phasor">
+    <h3>2. At one point, the phase goes round</h3>
+    <p>The little complex plane shows $\psi$ at the centre of the picture: an arrow going round
+    the circle, $\omega/2\pi$ times a second.  With $e^{-i\omega t}$ it turns clockwise: that is the
+    sign quantum mechanics fixes, $e^{-iEt/\hbar}$ for energy $E>0$.  Change the phase of $A$
+    and every crest shifts sideways: a phase is a position.</p>
+  </article>
+
+  <article class="exp" data-setup="real">
+    <h3>3. The real part is what a ripple tank shows</h3>
+    <p>Only $\mathrm{Re}\,\psi=|A|\cos(\vec k\cdot\vec r-\omega t+\varphi)$, in grey: crests light,
+    troughs dark.  A real wave needs both $e^{i(\vec k\cdot\vec r-\omega t)}$ and its conjugate; the
+    complex wave carries the direction of travel in its phase alone.</p>
+  </article>
+
+  <article class="exp" data-setup="standing">
+    <h3>4. Standing waves</h3>
+    <p>Two equal waves travelling in opposite directions, $\vec k_2=-\vec k_1$.  The sum
+    $2\cos(\vec k\cdot\vec r)\,e^{-i\omega t}$ does not travel at all: its nodes (black) stay put
+    and between them the whole region changes colour together.  This is a string, an organ
+    pipe, a particle in a box.</p>
+  </article>
+
+  <article class="exp" data-setup="crossed">
+    <h3>5. Crossed beams make fringes</h3>
+    <p>Two waves crossing at an angle.  Where they are in step the sum is bright, out of step
+    dark: fringes along $\vec k_1+\vec k_2$, spaced by $2\pi/|\vec k_1-\vec k_2|$.  Drag either
+    arrow to change the angle: the wider it is, the finer the fringes.  This is how a hologram is
+    recorded.</p>
+  </article>
+
+  <article class="exp" data-setup="beats">
+    <h3>6. Beats</h3>
+    <p>Two waves in the same direction with slightly different $|\vec k|$ (and so, for light,
+    different $\omega$).  The sum is a fast wave inside a slow envelope that drifts along: the
+    first step towards a wave packet.</p>
+  </article>
+
+  <article class="exp" data-setup="schrodinger">
+    <h3>7. Phase velocity and group velocity</h3>
+    <p>A packet of waves near $k_0$, for a free quantum particle, $\omega=\hbar k^2/2m$.  The crests
+    (dot) move at the phase velocity $\omega/k$; the packet (triangle) at the group velocity
+    $d\omega/dk$, twice as fast: crests are born at the back and die at the front.  On the
+    $\omega(k)$ plot the two velocities are slopes: of the line from the origin, and of the
+    tangent.</p>
+  </article>
+
+  <article class="exp" data-setup="water">
+    <h3>8. Deep water waves</h3>
+    <p>$\omega=\sqrt{gk}$: now the group moves at half the phase velocity, and crests run forward
+    through the packet and vanish at its front, as you can see behind a boat or a duck.</p>
+  </article>
+
+  <article class="exp" data-setup="light">
+    <h3>9. Light in vacuum</h3>
+    <p>$\omega=c|k|$: every wavelength moves at the same speed, so the packet keeps its shape
+    and crests ride along with it.  No dispersion.</p>
+  </article>
+
+  <article class="exp" data-setup="relativistic">
+    <h3>10. Faster than light, harmlessly</h3>
+    <p>$\omega=\sqrt{c^2k^2+\mu^2}$, a relativistic particle (or light in a waveguide, or in a
+    plasma).  The crests move faster than $c=1$; the packet, which carries the energy and the
+    information, slower; and $v_\text{phase}\,v_\text{group}=c^2$.</p>
+  </article>
+
+  <p class="small muted">Rewritten in 2026 from the BrainFlux PlaneWave Java applet (2002).
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>,
+  MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

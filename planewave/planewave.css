@@ -1,0 +1,26 @@
+.pw {
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px;
+  padding: 12px; max-width: 1400px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
+.mode-row { justify-content: center; }
+.wave-wrap { width: 100%; max-width: calc(100vh - 190px); aspect-ratio: 1; margin: 0 auto; background: #000; border-radius: var(--radius); overflow: hidden; }
+.wave-wrap canvas { width: 100%; height: 100%; cursor: crosshair; }
+.packet-wrap { display: flex; flex-direction: column; gap: 8px; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.plot-wrap canvas { width: 100%; height: 100%; }
+.plot-wrap.tall { height: max(260px, 42vh); }
+.plot-wrap.short { height: max(180px, 26vh); }
+.formula { text-align: center; color: var(--ink-2); min-height: 2.2em; }
+.formula math { font-size: 1.15em; color: var(--ink); }
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.conv { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.conv button { padding: 4px; min-height: 40px; }
+.conv button math { font-size: 1.15em; }
+.button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+@media (max-width: 900px) {
+  .pw { grid-template-columns: minmax(0, 1fr); }
+  .stage { position: static; }
+}
