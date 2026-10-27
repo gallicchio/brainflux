@@ -87,9 +87,7 @@ with Browser('radiation/index.html', size=(1400, 900)) as b:
         b.eval(f'__app.setups.{name}()'); b.sleep(0.5)
         P, L = b.eval('__app.powerLog.at(-1).slice(1)')
         check(abs(P / L / gamma(beta)**4 - 1) < 1e-6, f'circle at β = {beta}: P/P_Larmor = {P / L:.4f} = γ⁴ = {gamma(beta)**4:.4f}')
-    q = charge(b)
-    phv = math.atan2(q['vy'], q['vx'])
-    half = b.eval(f'(() => {{ const m = __app.dPdOmega({phv}); let d = 0; while (__app.dPdOmega({phv} + d) > m / 2) d += 1e-4; return d; }})()')
+    half = b.eval('(() => { const q = __app.charge(), p = Math.atan2(q.vy, q.vx), m = __app.dPdOmega(p); let d = 0; while (__app.dPdOmega(p + d) > m / 2) d += 1e-4; return d; })()')
     check(0.2 / gamma(0.9) < half < 1 / gamma(0.9), f'synchrotron beam: half power {half:.3f} rad either side of v (1/γ = {1 / gamma(0.9):.3f})')
 
     # Constant proper acceleration: constant Liénard power (2/3) g²/c³ while it lasts.
@@ -120,6 +118,13 @@ with Browser('radiation/index.html', size=(1400, 900)) as b:
     check(b.eval('__app.mode') == 'chase' and 'too fast' in note and math.hypot(q['vx'], q['vy']) < 0.98 * q['c'],
           f'a typed path at β = 3.75 is chased instead ("{note[:40]}...")')
     b.screenshot('build/rad-typed.png')
+
+    # Dragging a parameter's slider: the same slider keeps going (it is not rebuilt under the pointer).
+    b.eval('__app.setups.power()'); b.sleep(0.3)
+    r = b.eval("""(() => { const r = document.querySelector('#params input[type=range]'); r.value = 300; r.dispatchEvent(new Event('input'));
+        const v1 = __app.values.circle.beta; r.value = 600; r.dispatchEvent(new Event('input'));
+        return [r.isConnected, v1, __app.values.circle.beta, __app.charge()]; })()""")
+    check(r[0] and r[1] != r[2] and abs(math.hypot(r[3]['vx'], r[3]['vy']) / r[3]['c'] - r[2]) < 1e-9, f'dragging the β slider changes the motion as it goes (β {r[1]} then {r[2]})')
 
     # The speed of light.
     b.eval('__app.setups.power()'); b.sleep(0.3)

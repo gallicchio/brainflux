@@ -48,13 +48,17 @@ const O = new Float64Array(6), TGT = [0, 0];
 function pushSample(t) {
   if (mode === 'preset') { motion.at(t - offset, O); traj.push(O[0], O[1], O[2], O[3], O[4], O[5]); return; }
   if (mode === 'hand') { if (!pointer.at(t, TGT)) { TGT[0] = follower.x; TGT[1] = follower.y; } }
-  else { motion.at(t - offset, O); TGT[0] = O[0]; TGT[1] = O[1]; }
+  else {
+    motion.at(t - offset, O);
+    // (A typed path may be undefined at times: then the charge heads for where it last was.)
+    if (Number.isFinite(O[0]) && Number.isFinite(O[1])) { TGT[0] = O[0]; TGT[1] = O[1]; }
+  }
   follower.step(H, TGT[0], TGT[1], state.c);
   traj.push(follower.x, follower.y, follower.vx, follower.vy, follower.ax, follower.ay);
 }
 
 /** Start (or restart) a motion: its whole past goes into the history at once. */
-function startMotion(id, { restart = true } = {}) {
+function startMotion(id, { restart = true, keepLog = false } = {}) {
   state.preset = id;
   lw.c = probeLW.c = state.c;
   let note = '', warn = false;
@@ -76,11 +80,12 @@ function startMotion(id, { restart = true } = {}) {
   }
   if (!motion.follow) cam = [0, 0];
   for (const [k, b] of Object.entries(presetButtons)) b.setAttribute('aria-pressed', String(k === id));
-  showParams(id);
+  if (shownParams !== id) showParams(id);
   $('#motion-note').textContent = note;
   $('#motion-note').classList.toggle('warn', warn);
   $('#replay').disabled = id === 'rest';
-  powerLog.length = 0; powerTop = 0; probeHist.length = 0;
+  if (!keepLog) { powerLog.length = 0; powerTop = 0; }
+  probeHist.length = 0;
   dirty = true;
   saveHash();
 }
@@ -120,7 +125,7 @@ function advance(dt) {
   // One-shot motions start again once their radiation has left the view.
   if (mode === 'preset' && motion.end !== undefined && state.replay) {
     const clear = (viewHalfDiagonal() + 6) / state.c + 1.5;
-    if (traj.tEnd - offset > motion.end + clear) startMotion(state.preset);
+    if (traj.tEnd - offset > motion.end + clear) startMotion(state.preset, { keepLog: true });
   }
 }
 
@@ -148,7 +153,10 @@ function computeMap(t) {
   const [x0, x1, y0, y1] = viewBox(), dx = (x1 - x0) / gw, dy = (y1 - y0) / gh;
   let rowGuess = NaN;
   const t0 = performance.now();
-  for (let j = 0; j < gh; j++) {
+  // If the charge never accelerated in all its stored past, there is no radiation anywhere.
+  const quiet = traj.activity(traj.tStart, t)[0] <= 1e-6 * state.c * state.c;
+  if (quiet) mapVals.fill(0);
+  for (let j = 0; j < (quiet ? 0 : gh); j++) {
     const y = y1 - (j + 0.5) * dy;
     let guess = rowGuess;
     for (let i = 0; i < gw; i++) {
@@ -204,13 +212,12 @@ function drawField() {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(mapCanvas, 0, 0, width, height);
   }
-  timing.mapDraw = performance.now() - t0 - (timing.map || 0);
   drawGrid(ctx);
   if (state.fronts) drawFronts(ctx, t);
-  if (state.trail) drawTrail(ctx, t);
+  if (state.trail) drawTrail(ctx);
   if (state.lines !== 'off') {
     const t1 = performance.now();
-    const r = fieldLines(lw, t, state.lines, state.count, viewBox(), { tol: 1.5e-3 * VIEW / 20 });
+    const r = fieldLines(lw, t, state.lines, state.count, viewBox(), { tol: 1.5e-3 * VIEW / 20, maxEvaluations: 60000 });
     lines = r.lines; lineEvals = r.evaluations;
     timing.lines = performance.now() - t1;
     ctx.lineWidth = 1.3;
@@ -242,7 +249,7 @@ function drawGrid(ctx) {
   }
 }
 
-function drawTrail(ctx, t) {
+function drawTrail(ctx) {
   // The last few seconds of the path.
   const k1 = traj.n - 1, k0 = Math.max(traj.kStart, k1 - Math.round(4 / H));
   ctx.strokeStyle = 'rgba(255, 120, 110, 0.45)';
@@ -256,7 +263,6 @@ function drawTrail(ctx, t) {
   }
   ctx.stroke();
   ctx.setLineDash([]);
-  void t;
 }
 
 function drawFronts(ctx, t) {
@@ -327,7 +333,7 @@ function drawProbe(ctx, t) {
   ctx.strokeStyle = 'rgba(140, 200, 255, 0.95)';
   ctx.beginPath(); ctx.moveTo(ex - 5, ey - 5); ctx.lineTo(ex + 5, ey + 5); ctx.moveTo(ex - 5, ey + 5); ctx.lineTo(ex + 5, ey - 5); ctx.stroke();
   // The fields at the probe, on one scale (so that they add as arrows): the biggest is 70 px.
-  const vec = [[f.evx, f.evy, '#8cc8ff', 'velocity'], [f.eax, f.eay, '#ffab40', 'acceleration'], [f.ex, f.ey, '#ffffff', 'E']];
+  const vec = [[f.evx, f.evy, '#6cb4ff'], [f.eax, f.eay, '#ffa040'], [f.ex, f.ey, '#ffffff']];
   const big = Math.max(...vec.map(([a, b]) => Math.hypot(a, b))) || 1;
   for (const [a, b, col] of vec) arrow(ctx, px, py, px + (70 * a) / big, py - (70 * b) / big, col);
   ctx.fillStyle = '#ffd75e'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
@@ -495,7 +501,9 @@ function updateReadout() {
   if (L > 1e-12) parts.push(`P/P<sub>Larmor</sub> = <b>${fmt(P / L, 4)}</b>`);
   if (state.probe && probeInfo) {
     const f = probeInfo;
-    parts.push(`probe: |E<sub>vel</sub>| = <b>${fmt(f.ev, 3)}</b>`, `|E<sub>acc</sub>| = <b>${fmt(f.ea, 3)}</b> (peak in 3 s: ${fmt(f.peak, 3)})`, `light left it ${fmt(traj.tEnd - f.tr, 3)} s ago`);
+    parts.push(`<i class="sw vel"></i>probe: |E<sub>vel</sub>| = <b>${fmt(f.ev, 3)}</b>`,
+      `<i class="sw acc"></i>|E<sub>acc</sub>| = <b>${fmt(f.ea, 3)}</b> (peak in 3 s: ${fmt(f.peak, 3)})`,
+      `the light arriving there left ${fmt(traj.tEnd - f.tr, 3)} s ago`);
   }
   const html = parts.map((p) => `<span>${p}</span>`).join('');
   if (html !== lastReadout) { $('#readout').innerHTML = html; lastReadout = html; }
@@ -580,7 +588,9 @@ for (const id of ORDER) {
   presetButtons[id] = b;
 }
 
+let shownParams;
 function showParams(id) {
+  shownParams = id;
   const box = $('#params');
   box.replaceChildren();
   $('#typed').hidden = id !== 'typed';
@@ -630,7 +640,7 @@ function setRunning(on) {
   dirty = true;
 }
 $('#play').addEventListener('click', () => setRunning(!state.running));
-$('#replay').addEventListener('click', () => { if (mode === 'preset') startMotion(state.preset); });
+$('#replay').addEventListener('click', () => { if (mode !== 'hand') startMotion(state.preset, { keepLog: true }); });
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === ' ') { e.preventDefault(); setRunning(!state.running); }
@@ -641,7 +651,7 @@ const cSlider = slider({
   title: 'The speed of light, in units per second (the view is 20 units across its shorter side)',
   onInput: (v) => {
     state.c = v;
-    if (mode === 'preset') startMotion(state.preset);
+    if (mode !== 'hand') startMotion(state.preset);
     else {
       // Slower light might now be slower than the charge: start again from rest.
       traj.at(traj.tEnd);
@@ -710,6 +720,7 @@ function fromHash(h) {
   } else {
     for (const k of Object.keys(values[h.m])) if (Number.isFinite(+h['p_' + k]) && h['p_' + k] !== undefined) values[h.m][k] = +h['p_' + k];
   }
+  shownParams = undefined;   // the values changed under the sliders
   startMotion(h.m);
   return true;
 }
@@ -730,6 +741,7 @@ function go(id, { params = {}, c = 8, lines = 'total', count = 24, map = 'off', 
   setExtras({ trail, fronts, probe: !!probe });
   if (probe) state.probeAt = probe;
   setRunning(true);
+  shownParams = undefined;
   startMotion(id);
 }
 

@@ -6,6 +6,9 @@
 .readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 16px; padding: 0 4px; min-height: 1.6em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .readout b { color: var(--ink); font-weight: 600; }
 .readout .warn { color: var(--warn); }
+.readout .sw { display: inline-block; width: 14px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.readout .sw.vel { background: #3d95f0; }
+.readout .sw.acc { background: #f08a20; }
 .field-wrap { position: relative; height: max(320px, calc(100vh - 330px)); background: #05070b; border-radius: var(--radius); overflow: hidden; }
 .field-wrap canvas { width: 100%; height: 100%; cursor: grab; }
 .field-wrap canvas.dragging { cursor: grabbing; }

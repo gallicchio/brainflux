@@ -22,6 +22,7 @@ const E1 = 71 / 57600, E3 = -71 / 16695, E4 = 71 / 1920, E5 = -17253 / 339200, E
  *   opts.limit()  called after each accepted step (the last dir() call was at the new point):
  *                 a further limit on the next step, or Infinity
  *   opts.keep(x, y)  false ends the curve (it has left the view, say)
+ *   opts.more()   false ends the curve (out of time, say)
  *   opts.maxLength, opts.maxPoints
  * The points go into out (x0, y0, x1, y1, ...); returns how many there are.
  */
@@ -34,6 +35,7 @@ export function traceCurve(dir, x0, y0, opts, out) {
   if (!dir(x, y, d)) return n;
   let k1x = d[0], k1y = d[1], lim = opts.limit ? opts.limit() : Infinity;
   while (n < maxPoints && len < maxLength) {
+    if (opts.more && !opts.more()) break;
     h = Math.min(h, hmax, lim);
     let ok = true, k2x, k2y, k3x, k3y, k4x, k4y, k5x, k5y, k6x, k6y, k7x = 0, k7y = 0, xn = 0, yn = 0;
     if ((ok = dir(x + h * A21 * k1x, y + h * A21 * k1y, d))) {
@@ -69,6 +71,15 @@ export function traceCurve(dir, x0, y0, opts, out) {
     const ey = h * (E1 * k1y + E3 * k3y + E4 * k4y + E5 * k5y + E6 * k6y + E7 * k7y);
     const err = Math.sqrt(ex * ex + ey * ey);
     if (err <= tol || h <= hmin) {
+      // Where the curve turns within the step, points in between (the cubic through both ends
+      // with their tangents), so that it is drawn smooth rather than as a chord.
+      const turn = Math.acos(Math.max(-1, Math.min(1, k1x * k7x + k1y * k7y)));
+      const m = Math.min(16, Math.ceil(turn / 0.06));
+      for (let j = 1; j < m && n < maxPoints - 1; j++) {
+        const s = j / m, s2 = s * s, s3 = s2 * s;
+        const a = 2 * s3 - 3 * s2 + 1, b = (s3 - 2 * s2 + s) * h, c = -2 * s3 + 3 * s2, e = (s3 - s2) * h;
+        out[2 * n] = a * x + b * k1x + c * xn + e * k7x; out[2 * n + 1] = a * y + b * k1y + c * yn + e * k7y; n++;
+      }
       x = xn; y = yn; len += h;
       out[2 * n] = x; out[2 * n + 1] = y; n++;
       k1x = k7x; k1y = k7y;
@@ -90,8 +101,10 @@ let BUF = new Float64Array(6000);
  *   count: lines leaving the charge, equally spaced in angle in its rest frame (so that, as in
  *          three dimensions, the density of lines shows the strength of the field)
  *   box: [xmin, xmax, ymin, ymax], the region to trace in
- *   opts: tol, hmax, maxLength, maxPoints (per line), angle0 (offset of the first line)
- * Returns { lines: [Float64Array of x, y pairs], evaluations }.
+ *   opts: tol, hmax, maxLength, maxPoints (per line), angle0 (offset of the first line),
+ *         maxEvaluations (of the field, for all the lines: when the field is very busy, the
+ *         lines are cut short rather than let the picture freeze)
+ * Returns { lines: [Float64Array of x, y pairs], evaluations, cut (lines cut short) }.
  */
 export function fieldLines(lw, t, part, count, box, opts = {}) {
   const traj = lw.path, c = lw.c, h = traj.h ?? 1 / 240;
@@ -116,10 +129,10 @@ export function fieldLines(lw, t, part, count, box, opts = {}) {
     out[0] = ex / m; out[1] = ey / m;
     return true;
   };
-  // A step of length s moves the retarded time by up to s/(cκ), κ ≥ 1 − β.  So that no step
-  // jumps over a thin shell of radiation: a step may reach the nearest moment the charge was
-  // accelerating, but no further; and where it was, steps stay short enough to follow how fast
-  // its acceleration changed.
+  // A step Δr moves the retarded time by −n·Δr/(cκ), κ ≥ 1 − β: little along a shell, much
+  // across one.  So that no step jumps over a thin shell of radiation: a step may reach the
+  // nearest moment the charge was accelerating, but no further; and where it was, steps stay
+  // short enough to follow how fast its acceleration changed.
   const limit = () => {
     if (velocityOnly || !traj.quietFor) return Infinity;
     const b = Math.hypot(lw.bx, lw.by), kmin = Math.max(1 - b, 1 - BETA_MAX) * 0.5;
@@ -127,20 +140,26 @@ export function fieldLines(lw, t, part, count, box, opts = {}) {
     if (gap === Infinity) return Infinity;
     const w = gap + 32 * h, act = traj.activity(lw.tr - w, lw.tr + w), amax = act[0], jmax = act[1];
     const tau = Math.max(2 * h, jmax > 0 ? (h * amax) / jmax : Infinity);
-    const safe = Math.max(0.01, 0.5 * c * Math.max(lw.kappa, 1 - BETA_MAX) * tau);
-    return Math.max(safe, c * kmin * gap);
+    // How much of the line's direction is along n (the last field evaluated is at its end).
+    const em = Math.hypot(lw.ex, lw.ey), along = em > 0 ? Math.max(0.1, Math.abs(lw.nx * lw.ex + lw.ny * lw.ey) / em) : 1;
+    const safe = Math.max(0.01, (0.5 * c * Math.max(lw.kappa, 1 - BETA_MAX) * tau) / along);
+    return Math.max(safe, (c * kmin * gap) / along);
   };
   const margin = 0.05 * diag;
   const keep = (x, y) => x > x0 - margin && x < x1 + margin && y > y0 - margin && y < y1 + margin;
   const lines = [];
   if (BUF.length < 2 * maxPoints) BUF = new Float64Array(2 * maxPoints);
-  const buf = BUF;
+  const buf = BUF, budget = opts.maxEvaluations ?? Infinity;
+  let stopAt = Infinity, cut = 0;
+  const more = () => evaluations < stopAt;
   for (let k = 0; k < count; k++) {
     const th0 = (opts.angle0 ?? 0) + (2 * Math.PI * (k + 0.5)) / count;
     const [dx, dy] = seedDirection(th0, vx, vy, c);
     guess = NaN;
-    const n = traceCurve(dir, qx + eps * dx, qy + eps * dy, { tol, hmax, h0: eps, maxLength, maxPoints, limit, keep }, buf);
+    stopAt = evaluations + (budget - evaluations) / (count - k);   // a fair share of what is left
+    const n = traceCurve(dir, qx + eps * dx, qy + eps * dy, { tol, hmax, h0: eps, maxLength, maxPoints, limit, keep, more }, buf);
+    if (evaluations >= stopAt) cut++;
     lines.push(buf.slice(0, 2 * n));
   }
-  return { lines, evaluations };
+  return { lines, evaluations, cut };
 }
