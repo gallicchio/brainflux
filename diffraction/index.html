@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diffraction · BrainFlux</title>
+<meta name="description" content="Paint an aperture and watch light diffract from it, from the near field to the far field.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="diffraction.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Diffraction</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="dif">
+  <section class="pair">
+    <div class="side">
+      <div class="side-head"><h2>Aperture</h2><span class="small muted" id="ap-note">paint to open it, erase to close it</span></div>
+      <div class="sq"><canvas id="aperture" aria-label="The aperture: paint on it"></canvas></div>
+    </div>
+    <div class="side">
+      <div class="side-head"><h2 id="field-title">Light at distance z</h2><span class="small muted" id="field-note"></span></div>
+      <div class="sq"><canvas id="field" aria-label="The light on a screen at distance z"></canvas></div>
+    </div>
+    <div class="side wide">
+      <div class="side-head"><h2>From the side</h2><span class="small muted">the middle row of the screen, as z goes from 0 (top) to twice the screen's distance (bottom)</span></div>
+      <div class="side-wrap"><canvas id="side" aria-label="Side view: x across, distance down"></canvas></div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel">
+      <div class="label">Screen distance</div>
+      <div id="z-box"></div>
+      <div class="row" id="far-box"></div>
+      <div id="fresnel" class="small"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Light</div>
+      <div id="lambda-box"></div>
+      <div class="row" id="light-box"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Aperture</div>
+      <div id="presets" class="button-grid"></div>
+      <div id="preset-size"></div>
+      <div class="row" id="tool-box"></div>
+      <div id="brush-box"></div>
+    </div>
+    <div class="panel">
+      <div class="label">Show</div>
+      <div class="row" id="show-box"></div>
+      <div id="bright-box"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <p>Light of wavelength $\lambda$ passes through an aperture you can paint, and lands on a screen
+  a distance $z$ behind it.  The light just past the aperture is a sum of plane waves (its
+  Fourier transform), and each travels on with its own phase $e^{ik_zz}$,
+  $k_z=\sqrt{k^2-k_x^2-k_y^2}$.  Close to the aperture the screen shows a sharp shadow with
+  fringes at its edges (<em>Fresnel</em> diffraction); far away, the Fourier transform of the
+  aperture itself (<em>Fraunhofer</em>).  Which you see depends on the Fresnel number
+  $N_F=a^2/\lambda z$ for an aperture of size $a$: large near, small far.</p>
+
+  <article class="exp" data-setup="slit">
+    <h3>1. One slit, near and far</h3>
+    <p>Slide $z$ from short to long.  At first the slit's shadow is sharp, with ripples inside
+    its edges; then the ripples grow and merge; far away ($N_F\ll1$) the pattern settles into the
+    $\mathrm{sinc}^2$ of a slit, wider the narrower the slit.  Press <em>Far field</em> to jump to
+    the limit.</p>
+  </article>
+
+  <article class="exp" data-setup="edge">
+    <h3>2. The edge of a shadow</h3>
+    <p>A straight edge: light reaches into the geometrical shadow a little, and outside it the
+    brightness oscillates, overshooting by 37% at the first fringe.  The fringes are spaced as
+    $\sqrt{\lambda z}$: move the screen back and they spread out.</p>
+  </article>
+
+  <article class="exp" data-setup="arago">
+    <h3>3. The spot of Arago and Poisson</h3>
+    <p>An opaque disk.  At the centre of its shadow is a bright spot.  Poisson, judging
+    Fresnel's wave theory in 1818, derived this spot to show the theory absurd; Arago looked,
+    and it was there.  Every point of the disk's rim is the same distance from the centre, so
+    the waves from the rim all arrive in step.</p>
+  </article>
+
+  <article class="exp" data-setup="double">
+    <h3>4. Young's two slits</h3>
+    <p>Two slits a distance $d$ apart: in the far field, fringes spaced by $\lambda/d$ in angle,
+    inside the single slit's envelope.  The side view shows them form: two diverging beams,
+    overlapping and interfering.</p>
+  </article>
+
+  <article class="exp" data-setup="talbot">
+    <h3>5. The Talbot carpet</h3>
+    <p>A grating of period $d$ makes a perfect image of itself at $z_T=2d^2/\lambda$ and a shifted
+    one at half that, with finer and finer patterns between.  The side view draws this
+    "Talbot carpet", discovered by Henry Fox Talbot in 1836; the same pattern is the quantum
+    revival of a particle in a box, with $z$ for time.</p>
+  </article>
+
+  <article class="exp" data-setup="zone">
+    <h3>6. A Fresnel zone plate</h3>
+    <p>Rings, open and closed alternately, with radii $r_n=\sqrt{n\lambda f}$: every open ring
+    sends light to the point $z=f$ on the axis in step, so the plate focuses like a lens (and
+    also at $f/3$, $f/5$...).  Watch the side view for the bright focus.</p>
+  </article>
+
+  <article class="exp" data-setup="lens">
+    <h3>7. A lens is a phase</h3>
+    <p>A thin lens changes only the phase of the light, by $-kr^2/2f$: the aperture is drawn in
+    colour, the colour being the phase.  At $z=f$ the light gathers into the focus, the Airy
+    pattern of the lens's round opening.</p>
+  </article>
+
+  <article class="exp" data-setup="white">
+    <h3>8. White light</h3>
+    <p>Three wavelengths (red, green, blue) at once.  Every wavelength diffracts by a
+    different angle, so fringes come out coloured, and a grating spreads its orders into
+    spectra.</p>
+  </article>
+
+  <article class="exp" data-setup="speckle">
+    <h3>9. Speckle</h3>
+    <p>A random aperture, like rough glass or a laser lit wall: the light arriving at each point
+    is a sum of many waves with random phases, and the screen is a random pattern of bright
+    and dark grains, with the size of the far-field pattern of the whole aperture.</p>
+  </article>
+
+  <h3>Light and quantum mechanics</h3>
+  <p>For waves near the axis, $k_z\approx k-(k_x^2+k_y^2)/2k$, and the field obeys
+  $\partial_zU=\frac{i}{2k}\nabla_\perp^2U$: the free Schrödinger equation, with $z$ for time and
+  $1/k$ for $\hbar/m$.  Diffraction is the spreading of a wave packet.  (This demo uses the exact
+  $k_z$, not the approximation.)</p>
+  <p class="small muted">The idea of the BrainFlux LightPropagation applet (2004), finished in 2026.
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
