@@ -140,19 +140,8 @@ export const PRESETS = [
       }
       return out;
     } },
-  { id: 'bricks', label: 'Bricks', title: 'A brick wall: a lattice with a two-brick basis, so some reciprocal-lattice spots go dark',
-    side: 'x', sized: true, make: (n, s) => rasterize(n, (ctx) => {
-      const bw = Math.max(4, 0.125 * n * s), bh = bw / 2, m = Math.max(1, n / 128);
-      let seed = 3;
-      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-      for (let r = 0, y = -bh; y < n + bh; r++, y += bh) {
-        for (let x = -bw + (r % 2 ? bw / 2 : 0); x < n + bw; x += bw) {
-          const g = Math.round(150 + 80 * rnd());
-          ctx.fillStyle = `rgb(${g},${g},${g})`;
-          ctx.fillRect(x + m, y + m, bw - 2 * m, bh - 2 * m);
-        }
-      }
-    }) },
+  { id: 'bricks', label: 'Bricks', title: "A brick wall, the author's photograph: alternate courses are offset by a third of a brick, so in every other row of spots every third one goes dark",
+    side: 'x', image: 'images/bricks.png', how: 'fit' },
   { id: 'text', label: 'Text', title: 'Letters: their straight strokes become streaks perpendicular to them',
     side: 'x', make: (n) => rasterize(n, (ctx) => {
       ctx.font = `italic ${Math.round(n * 0.2)}px Georgia, "Times New Roman", serif`;

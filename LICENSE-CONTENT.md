@@ -14,8 +14,9 @@ long as you credit "Jason Gallicchio, BrainFlux" and link to the licence.
 |---|---|---|
 | `fft2d/images/fourier-portrait.png`, `fft2d/images/fourier-jacket.png` | Portrait of Joseph Fourier, engraved by Geille after a drawing by Julien-Léopold Boilly (1820s), cropped from a scan | public domain (the artists died in the 19th century) |
 | `fft2d/images/author.jpg` | Jason Gallicchio, about 2003 | © Jason Gallicchio, CC BY 4.0 |
+| `fft2d/images/bricks.png` | A brick wall, photographed by Jason Gallicchio in 2026; straightened, cropped to four bricks by eighteen courses and turned grey | © Jason Gallicchio, CC BY 4.0 |
 
-Every other picture in the demos (shapes, lattices, letters, bricks) is drawn by the code.
+Every other picture in the demos (shapes, lattices, letters) is drawn by the code.
 
 ## Code
 

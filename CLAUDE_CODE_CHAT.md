@@ -718,3 +718,66 @@ Every new demo got its card as it was merged, with a red *beta* badge, and the i
 says what it means.  I marked Least Action beta too, since you said it wasn't ready.  The order
 is the six finished demos, then the new ones in the order of the list of ideas, then Least
 Action.  The README lists them the same way.
+
+## Prompt 10
+
+> Commit and push whatever needs it.
+
+### Response 10 (2026-10-27)
+
+Committed the chat log and the plan.  The push failed from this session (`Permission denied
+(publickey)`: no SSH agent here, and the only key offered was refused), so that one commit was
+left for you to push.  The full test run then passed: the unit tests in Chromium and Firefox,
+and the UI test of all 19 demos.
+
+## Prompt 11
+
+> I have pushed. I took a photo of bricks for the 2dfft app. It's at
+> `brainflux/fft2d/images/20261027_174313_bricks.jpg`. Crop and rotate and make this black and
+> white and do whatever you need to do for the 2dfft app. Then delete this original photo so that
+> it doesn't get committed. This photo, like the others that I took, can now be under the same
+> license.
+
+### Response 11 (2026-10-27)
+
+*Bricks* in the gallery is now your photo, `fft2d/images/bricks.png` (512 × 512, grey), in
+place of the drawn wall.  The original is deleted.  `LICENSE-CONTENT.md` lists the photo under
+CC BY 4.0 like your portrait.
+
+**Straightening.**  More than a rotation was needed.  I followed the bed joints (the horizontal
+mortar lines) across 40 strips of the 4000 × 3000 photo:
+- the courses were about 9% taller at the bottom than at the top (the camera was tipped 6.4°
+  up at the wall), tilted 0.5°, and bowed by up to 12 px near the top and bottom edges (a
+  slight pincushion in the lens).
+- A camera model fitted to the joints, with radial distortion plus a rotation of roll, pitch and
+  yaw, takes them from 15.6 px rms off level, evenly spaced lines to 2.6 px.  What is left is
+  the wall itself: courses that differ by a couple of millimetres.
+- The head joints (the vertical ones) weren't used in the fit, so they are an independent
+  check.  After correction the bricks are 693 px wide at the top and at the bottom, and the
+  joints line up from course to course to 6 px rms.
+
+**Your wall isn't laid in half bond.**  Alternate courses are offset by a third of a brick
+(0.339 of the 693 px brick).  The pattern repeats every two courses, with two bricks in each
+repeat.  The spot at $(4m, 9n)$ has the structure factor $1+e^{2\pi i(m/3+n/2)}$, which is
+zero for $n$ odd and $m$ a multiple of 3: in every other row of spots, every third is missing.
+The transform shows exactly that.  Those spots are about ten times fainter than their
+neighbours.  I rewrote the brick sentence of experiment 8 and the preset's tooltip to say so.
+
+**The crop.**  A square photo of this wall holds four bricks across, so the crop is exactly 4
+brick lengths by 18 course heights (2772 × 2792 px, squeezed 0.7% to a square).  A whole number
+of periods means the picture tiles without a seam, so the spots are single pixels rather than
+smeared.  The lighting fell off by about 20% toward the edges.  I divided it out using the mean
+over one repeat of the pattern, which contains no lattice, smoothed by a polynomial.  Then I
+stretched the greys to the full range with a gamma of 1.6 so the brick faces sit nearer
+mid-grey.  The thin dark line under each brick is real: the shadow of its edge on the recessed
+mortar.  The grain of the brick faces gives a faint haze over all of k.  The help now compares
+it to disorder in a crystal.
+
+## Prompt 12
+
+> commit what needs committing and push if you can (otherwise I'll push).
+
+### Response 12 (2026-10-28)
+
+Committed the brick photo, its help text, the licence entry, the plan and this log.  The push
+failed again from this session (`Permission denied (publickey)`), so it is yours to push.

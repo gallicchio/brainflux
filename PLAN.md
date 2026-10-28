@@ -58,7 +58,8 @@ magnitude with arctan, as the old applet did.
   phase only, keep Re, keep Im; remember one transform and graft its phase onto another (the
   phase-versus-magnitude experiment).
 - Gallery: Fourier's portrait (the default), the stripes of his jacket (the low-pass filter
-  lesson), Gaussian, box (sinc), disk (Airy), ring, slits, gratings, lattices, points, text you
+  lesson), Gaussian, box (sinc), disk (Airy), ring, slits, gratings, lattices, the author's
+  photograph of a brick wall, points, text you
   type, your own picture (file, drag-and-drop, paste) and the webcam; the author's photo too, not
   first.  Resolutions 64 to 512.
 - Click one pixel of k-space and see its plane wave: the bridge to the plane-wave demo.
@@ -218,4 +219,3 @@ Left for later:
   refractive index); log sliders ignore `step`.  `lib/plot.js`: a log y axis.
 - `fft2d/presets.js` finds its images relative to the page; `import.meta.url` would let other
   demos load them without the `../fft2d/` prefix.
-- The author's own photograph of bricks for the FFT gallery.
