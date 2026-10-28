@@ -198,3 +198,24 @@ Fourier-series-with-sound demo (SoundFourier), both reusing `lib/`.
 Testing: 57 unit tests (`tools/run_page.py tests/index.html`, Chromium and Firefox), and a
 scripted run of every demo and every experiment (`tests/ui/*.py`) that checks the physics as it
 goes (Parseval, unitarity, Born, optical theorem, group velocity...).
+
+## Status, 2026-10-27 (evening)
+
+Twelve more demos, from the list of ideas in `CLAUDE_CODE_CHAT.md` (Response 3), built in
+parallel by agents in git worktrees and merged: `maxwell2d/`, `radiation/`, `arrays/`,
+`thinfilms/`, `dispersion/`, `interferometer/`, `imaging/`, `holography/`, `tomography/`,
+`beams/`, `drums/`, `phasespace/`.  They are on the landing page marked *beta* until the author
+has tried them, as is `action/`, reworked (knots that move in time, true paths at the start,
+periodic orbits).  The 1D Schrödinger, 2D scattering and diffraction demos were revised after
+the author's first look (Response 6), and every live readout now keeps its numbers in
+fixed-width slots (Response 8).
+
+Left for later:
+
+- Merge the near-duplicates: the CIE colour fit (`thinfilms/`, `interferometer/colour.js`) and
+  the wavelength colour (`diffraction/`, `holography/`) into `lib/`.
+- `lib/mathml.js`: matrices.  `lib/ui.js`: `guessRange` makes `n` a 0-10 integer (wrong for a
+  refractive index); log sliders ignore `step`.  `lib/plot.js`: a log y axis.
+- `fft2d/presets.js` finds its images relative to the page; `import.meta.url` would let other
+  demos load them without the `../fft2d/` prefix.
+- The author's own photograph of bricks for the FFT gallery.

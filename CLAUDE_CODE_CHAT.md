@@ -474,7 +474,7 @@ plain canvas, as the current demos do.
 
 > Build 1, 2, 3, 4, 5, 8, 9, 10, 12, 13, 18, 19. Do these in parallel to the extent possible.
 
-### Response 4 (2026-10-27; in progress)
+### Response 4 (2026-10-27)
 
 Twelve agents are building them at once, one demo each, each in its own git worktree and branch.
 Every agent got the same brief:
@@ -506,6 +506,42 @@ test lists.
 Phase space became a page of its own rather than a view in the 1D demo.  That way it can show a
 classical ensemble flowing beside the Wigner function without crowding the 1D demo.
 
+
+
+**Result.**  All twelve are built, merged into `main` and on the landing page, marked *beta*
+(Prompt 9).  Each has its physics in modules that don't touch the page, unit tests against
+exact results (in Chromium and Firefox), a scripted UI run of every experiment, and help text
+whose every quoted number was measured in the running demo.
+
+| folder | demo | experiments | unit tests |
+|---|---|---|---|
+| `maxwell2d/` | Maxwell's equations in 2D (FDTD, PML, beams, meters) | 14 | 17 |
+| `radiation/` | Radiation from a moving charge (Liénard–Wiechert) | 14 | 16 |
+| `arrays/` | Antenna arrays and aperture synthesis | 13 | 17 |
+| `thinfilms/` | Interfaces and thin films (transfer matrices, true colour) | 13 | 24 |
+| `dispersion/` | Dispersion and Kramers–Kronig | 14 | 16 |
+| `interferometer/` | Interferometers and coherence | 14 | 19 |
+| `imaging/` | Imaging: Abbe and phase contrast | 14 | 17 |
+| `holography/` | Holography | 13 | 14 |
+| `tomography/` | Tomography | 13 | 16 |
+| `beams/` | Gaussian beams and laser cavities | 14 | 12 |
+| `drums/` | Drums and billiards | 14 | 17 |
+| `phasespace/` | Quantum phase space (Wigner, Husimi) | 13 | 17 |
+
+What the agents asked of the shared code, and what I did at the merges:
+
+- The formula translator: `\sin^2` made invalid MathML (the power now goes on the name);
+  `\text{...}` lost its spaces; `\%` was an error; a script after `\right]` stopped the
+  brackets stretching.  All fixed, with tests.
+- The 2D scattering UI test waited on the clock and failed when sixteen agents loaded the
+  machine; it now steps the simulation itself (`__app.runUntil`).  `tools/cdp.py` waits up to a
+  minute for Chromium to start.
+- `tools/thumbs.py` makes each card's picture from the running demo.
+- Code shared between demos: imaging, tomography and holography reuse the 2D FFT's brushes and
+  pictures; holography's and beams' tests check themselves against the diffraction demo's
+  propagator; phase space uses the 1D Schrödinger solver.  Two near-duplicates are left to
+  merge later: the CIE colour fit (thin films and interferometers) and the wavelength colour
+  (diffraction and holography).
 
 ## Prompt 5
 
@@ -572,7 +608,7 @@ are unfinished demos.
 > are not anything like the Far field. The "Zone plate" does not look great, again probably
 > because of a resolution issue.
 
-### Response 6 (2026-10-27; in progress)
+### Response 6 (2026-10-27)
 
 The 2D FFT changes and the landing page order are done here.  Four agents are revising the 1D
 Schrödinger, 2D scattering, least action and diffraction demos, each in its own worktree, with
@@ -585,3 +621,100 @@ its edge is a ramp of greys, and its radius is 0.1 of the image (13 pixels at 12
 and its Airy rings are now round.  A test checks its area against $\pi R^2$.
 
 **Landing page.**  Scattering in 2D is third, at the top right; Least Action is last.
+
+The four revisions, merged:
+
+**1D Schrödinger.**  Every point is done.
+- The initial states are one row per kind (Packet · Coherent · Squeezed, Stationary · n = 0 ·
+  n = 1, ...), with exactly one button lit: the potential's default when it loads, the kind's
+  own button when a slider takes you away from a named state.
+- "Ground" is "n = 0".  Squeezed starts at $x_0=k_0=0$.  The plots are labelled Position and
+  Momentum, and the momentum one says $\phi(p)$.
+- The infinite well starts at $k_0=2$, and the view runs from −1 to 11 with grey walls.
+- Classical starts off.  $\langle x\rangle\pm\sigma_x$ and $\langle p\rangle\pm\sigma_p$ are bars.
+- "Make a measurement".  Each potential has its own smooth typed $\psi_0$.
+- Finite well: "On resonance" passes 98.5% ($2ak'=3\pi$), "Off resonance" 31%.  The well had to
+  be deepened from $V_0=5$ to 7: at 5, no energy transmits less than about 77%.
+- Found on the way, by the phase-space agent: the smooth double well was being treated as if
+  it had jumps and softened, which moved $E_0$ from 1.44057 to 1.44942 and the tunnelling period
+  from 56.2 to 55.2.  Jumps are now found in the fine samples, and smooth potentials are used
+  exactly as typed.
+
+**2D scattering.**
+- Weak bump: $V_0=1$ (18% of the packet scatters; Born is 7% high).
+- Double slit: the prediction never reached ±90° because none was drawn; the panel switched
+  itself off for any wall.  It now measures the flux of $\psi$ through the far half of the
+  detector circle against Fraunhofer's pattern over the whole −90° to 90°; they agree to ±88°.
+- Crystal: a *turn* slider sets the incoming direction.  At the Bragg angle ($2c\sin\alpha=
+  \lambda$, $\alpha=30°$) 26% of the packet reflects to 60°; at 20°, 4.5%.  Momentum space shows
+  the reciprocal lattice and the energy circle (Ewald's construction).
+
+**Least action.**
+- Knots move in time as well as space: up and down sets where, sideways sets when.  The slope is
+  the velocity: point at the path to read it.
+- Every set-up starts on its true path, so dragging makes $S$ worse, except where the true path
+  is a saddle, which experiment 6 is about.  *Back to true path*, *Bend it*, *Straight line*.
+- Closed paths: a *Periodic* end condition for the oscillator and pendulum.  With two fixed
+  ends at two times, the true path covers only an arc of an energy contour; it closes only if
+  it returns to the same point with the same momentum after a whole period.  In Periodic mode
+  the two ends are one free knot, stationarity there gives $p(T)=p(0)$, and the true orbit is a
+  closed loop.  For the oscillator every amplitude has period $2\pi/\omega$; for the pendulum
+  the period grows with the swing, so $T$ picks the amplitude.
+- Still marked beta until you have looked again.
+
+**Diffraction.**  The large-$z$ patterns were wrong, and why:
+- The field lived on a fixed 4.1 mm grid that wraps round.  Beyond $z_c=N\Delta x^2/\lambda=60$
+  mm the steepest light left one side and came back on the other.  The view was always the
+  middle 2 mm, so the pattern also outgrew it.  "Far field" was a separate calculation in other
+  units.  Against an exact Fresnel integral the slit was 11% wrong at 0.5 m and 212% at 3 m.
+- Now: the angular spectrum up to $z_c$, then a Fresnel transform whose grid grows with $z$, the
+  view zooming out with it.  The slider is logarithmic from 0.1 mm to 10 m, and *Far field*
+  moves it to the end, where the picture matches Fraunhofer to about 1%.  The slit is within
+  0.15% of the exact integral from 0.2 m to 10 m.
+- The zone plate's rings were narrower than two pixels and aliased.  Apertures are now
+  area-sampled, rings are at least 2.5 pixels wide, and the zone plate and lens open at the
+  focus on a linear intensity scale, zoomed 4×: a bright spot on a dark screen, 305 times the
+  incident intensity (324 in theory).
+
+## Prompt 7
+
+> Keep going. Did the 1D Schrodinger fixes get committed to main? The Squeezed state still seems
+> to start offset and the Infinite well starts too fast. I would guess that the fixes aren't in
+> yet.
+
+### Response 7 (2026-10-27)
+
+Right: they weren't merged yet.  The agent was still working, with sixteen agents loading the
+machine.  They are now (see Response 6).
+
+## Prompt 8
+
+> Keep going. One slightly annoying quirk of the "Schrödinger equation in one dimension" is the
+> text display at the top. As the significant figures change in things like <x> or <p>,
+> everything moves around. These text items should be fixed in position and not depend on the
+> actual numbers displayed, especially not on the number of significant figures and whether or
+> not there is a minus sign or a decimal point.
+
+### Response 8 (2026-10-27)
+
+Made a rule for every demo.  Each live number now has a slot of fixed width, with fixed
+decimals, a place kept for the sign (a true minus, and a figure space for plus), and right
+alignment; it goes to powers of ten only if it would overflow.  The 1D Schrödinger, 2D
+scattering and least-action agents, and the three still building new demos, applied it
+themselves; another agent swept the other thirteen.  Every one of them had numbers that moved
+something: up to 700 px in the dispersion demo's pulse readout, where the line rewrapped.
+`lib/ui.js` has `fixedNum`, `setSlots` and `setGroups`, and `lib/plot.js` has `fillSlots` for
+text drawn on canvases.  Every UI test now checks that labels and numbers stay within 0.5 px
+while the numbers change.
+
+## Prompt 9
+
+> As you make the new demos, make sure that they are included on the main page, but mark them as
+> being beta.
+
+### Response 9 (2026-10-27)
+
+Every new demo got its card as it was merged, with a red *beta* badge, and the introduction
+says what it means.  I marked Least Action beta too, since you said it wasn't ready.  The order
+is the six finished demos, then the new ones in the order of the list of ideas, then Least
+Action.  The README lists them the same way.
