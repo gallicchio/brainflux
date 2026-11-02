@@ -22,7 +22,7 @@ DEMOS = {
     'dispersion': ('#m=one&v=medium&w=1.9', 3),
     'interferometer': ('#setup=white', 3),
     'imaging': ('#setup=zernike', 3),
-    'holography': ('#setup=portrait', 3),
+    'holography': ('#setup=tilt', 3),
     'tomography': ('', 1, '__app.state.playing = false; while (__app.sc.count < 120) __app.stepScan()'),
     'arrays': ('#setup=steer', 3),
     'beams': ('#setup=start', 3),
