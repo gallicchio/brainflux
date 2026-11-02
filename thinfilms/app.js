@@ -754,17 +754,17 @@ function drawFilm() {
   ctx.restore();
   ctx.strokeStyle = view === 'T' ? '#777' : '#888'; ctx.lineWidth = 3;
   roundRect(ctx, fx, fy, fw, fh, 10); ctx.stroke();
-  // A thickness scale on the right.
-  ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 1;
+  // A thickness scale on the right, headed with what it is: the selected layer's thickness.
+  ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 1;
+  ctx.fillText('d (nm)', width - 3, fy - 6);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const top = state.film.profile === 'wedge' ? state.film.dmax : state.film.hBottom;
-  let first = true;           // the unit goes on the first label
   for (const t of niceTicks(0, top, 5)) {
     const y = filmHeightOf(t);
     if (y === null || t === 0 && state.film.profile !== 'wedge') continue;
     const py = fy + y * fh;
     ctx.beginPath(); ctx.moveTo(fx + fw + 2, py); ctx.lineTo(fx + fw + 6, py); ctx.stroke();
-    ctx.fillText(first ? `${t} nm` : String(t), fx + fw + 8, py);
-    first = false;
+    ctx.fillText(String(t), fx + fw + 8, py);
   }
   if (state.film.profile === 'drain') {
     const yb = (25 / state.film.hBottom) ** 2;

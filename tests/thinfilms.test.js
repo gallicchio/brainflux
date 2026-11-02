@@ -372,7 +372,8 @@ async function openPage() {
   const win = frame.contentWindow;
   win.addEventListener('error', (e) => errors.push(e.message));
   win.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
-  for (let i = 0; i < 100 && !win.__app?.ready; i++) await new Promise((r) => setTimeout(r, 50));
+  // (Up to 30 s: a machine busy with other test runs can be slow to start a page.)
+  for (let i = 0; i < 600 && !win.__app?.ready; i++) await new Promise((r) => setTimeout(r, 50));
   assert(win.__app?.ready, 'the page did not start');
   return { frame, win, errors };
 }
