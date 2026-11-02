@@ -88,6 +88,63 @@ export function reflectance(n, k) {
   return ((n - 1) * (n - 1) + k * k) / ((n + 1) * (n + 1) + k * k);
 }
 
+// ------------------------------------------------------------- one charge, one wave
+
+/**
+ * How the charge of one oscillator moves when the field E0 cos ωt drives it: x(t) = A x_s cos(ωt − δ),
+ * from x'' + γx' + ω_j²x = (q/m) E,
+ *     x̃ / x_s = ω_j² / (ω_j² − ω² − iγω) = A e^{iδ},
+ * where x_s = qE0/(mω_j²) is how far a steady field would pull it.  δ is the lag behind the field,
+ * from 0 (far below the resonance) through π/2 (at it) to π (far above).  For free charges
+ * (ω_j = 0) there is no spring and no static displacement: A is measured in units of qE0/(mω_p²)
+ * instead.  The oscillator's own χ_j = (S_j/ω_j²) A e^{iδ}: its in-phase part A cos δ is the
+ * dispersion, its quarter-period-late part A sin δ the absorption.
+ */
+export function drivenCharge(o, w) {
+  const a = o.w0 * o.w0 - w * w, b = o.g * w;
+  const ref = o.w0 > 0 ? o.w0 * o.w0 : o.wp * o.wp;
+  return { amp: ref / Math.hypot(a, b), lag: Math.atan2(b, a) };
+}
+
+/**
+ * A wave from vacuum meeting the medium at normal incidence: the reflected and transmitted
+ * amplitudes r = (1 − ñ)/(1 + ñ) and t = 2/(1 + ñ), as {rr, ri, tr, ti}.  (1 + r = t and
+ * 1 − r = ñ t: E and dE/dz are continuous at the surface.)
+ */
+export function fresnel(n, k) {
+  const d = (1 + n) * (1 + n) + k * k;
+  // (1 − ñ)(1 + ñ*) / |1 + ñ|² and 2(1 + ñ*) / |1 + ñ|².
+  return { rr: (1 - n * n - k * k) / d, ri: (-2 * k) / d, tr: (2 * (1 + n)) / d, ti: (-2 * k) / d };
+}
+
+/**
+ * The field of the wave e^{i(k₀z − φ)} (φ = ωt) arriving from z < 0 onto the medium at z = 0, at the
+ * positions zs measured in vacuum wavelengths λ₀ = 2πc/ω:
+ *     z < 0:  Re[(e^{ik₀z} + r e^{−ik₀z}) e^{−iφ}]      (the incident and the reflected wave)
+ *     z > 0:  Re[t e^{iñk₀z} e^{−iφ}] = |t| e^{−κk₀z} cos(nk₀z − φ + arg t)
+ * so inside, the crests are λ₀/n apart and the amplitude falls by e in c/(κω) = λ₀/(2πκ).
+ * Returns {E, env}: the field, and its envelope (the largest |E| over a period) at each z.
+ */
+export function surfaceWave(n, k, zs, phi) {
+  const { rr, ri, tr, ti } = fresnel(n, k), L = zs.length;
+  const E = new Float64Array(L), env = new Float64Array(L), c = Math.cos(phi), s = Math.sin(phi);
+  for (let i = 0; i < L; i++) {
+    const x = 2 * Math.PI * zs[i];
+    let ar, ai; // the complex amplitude at z, before the e^{−iφ}
+    if (x < 0) {
+      ar = Math.cos(x) + rr * Math.cos(x) + ri * Math.sin(x);
+      ai = Math.sin(x) + ri * Math.cos(x) - rr * Math.sin(x);
+    } else {
+      const d = Math.exp(-k * x), cn = Math.cos(n * x), sn = Math.sin(n * x);
+      ar = d * (tr * cn - ti * sn);
+      ai = d * (tr * sn + ti * cn);
+    }
+    E[i] = ar * c + ai * s;
+    env[i] = Math.hypot(ar, ai);
+  }
+  return { E, env };
+}
+
 // ----------------------------------------------------------------------- responses
 
 /**
@@ -231,6 +288,31 @@ export function impulseResponse(grid, re, im) {
   const s = grid.dw / (2 * Math.PI);
   for (let n = 0; n < a.length; n++) { a[n] *= s; b[n] *= s; }
   return { re: a, im: b };
+}
+
+/**
+ * One sliver of absorption: Im χ = h for a < |ω| < b (odd in ω, as Im χ must be), nothing else.
+ * Its share of Re χ, by Kramers–Kronig,
+ *     (1/π) ∫_a^b h [1/(ω' − ω) + 1/(ω' + ω)] dω' = (h/π) ln|(b² − ω²)/(a² − ω²)|,
+ * is positive below the sliver and negative above it, falling off as 2ω'h(b − a)/(π(ω'² − ω²))
+ * far from it (ω' its middle): the 1/(ω' − ω) of the Kramers–Kronig integral.
+ */
+export function sliverRe(a, b, h, w) {
+  return Float64Array.from(w, (x) => (h / Math.PI) * Math.log(Math.abs((b * b - x * x) / (a * a - x * x))));
+}
+
+/**
+ * The sliver's response to a kick at t = 0.  With its share of Re χ (causal = true):
+ *     χ(t) = (2/π) ∫_a^b h sin ω't dω' = (2h/π) (cos at − cos bt)/t   for t > 0, and 0 before:
+ * a ring at about ω' that starts with the kick.  Without it (Im χ alone, causal = false), half of
+ * that, (h/π)(cos at − cos bt)/t, for t < 0 as well: the ring is there before the kick too.
+ */
+export function sliverTime(a, b, h, t, causal = true) {
+  return Float64Array.from(t, (s) => {
+    if (causal && s <= 0) return 0;
+    if (s === 0) return 0;
+    return ((causal ? 2 : 1) * h / Math.PI) * (Math.cos(a * s) - Math.cos(b * s)) / s;
+  });
 }
 
 /** Sample a response on the grid's frequencies (both signs), without its instantaneous part. */

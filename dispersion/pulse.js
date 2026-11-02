@@ -103,7 +103,11 @@ export class Propagator {
     // Frequencies above the last one carrying more than 1e-32 of the peak power are skipped.
     this.kmax = 0;
     for (let k = half - 1; k >= 0; k--) if (this.Xr[k] ** 2 + this.Xi[k] ** 2 > 1e-32 * top) { this.kmax = k; break; }
-    this.input = E0;
+    // For pictures in space, the frequencies that matter to the eye: above 1e-12 of the peak power.
+    const sig = [];
+    for (let k = 0; k <= this.kmax; k++) if (this.Xr[k] ** 2 + this.Xi[k] ** 2 > 1e-12 * top) sig.push(k);
+    this.sig = Int32Array.from(sig);
+    this.input = E0; this._inc = null;
   }
 
   /** The medium: a function chi(w) -> {re, im} at frequencies w ≥ 0 (see medium.js). */
@@ -140,6 +144,69 @@ export class Propagator {
     }
     fft(ar, ai); // Σ_k X_k H_k e^{-2πikn/N}: back to time
     return { re: ar, im: ai };
+  }
+
+  /**
+   * A picture in space: the analytic signal inside the medium at one moment t (time since the
+   * incident peak crossed z = 0), at the M depths z_j = z0 + j dz (all ≥ 0), with its local
+   * frequency.  What field() gives at the retarded time τ = t − z, summed directly,
+   *     a(z, t) = Σ_k X_k e^{iω_k t0} e^{iñ_k ω_k z} e^{−iω_k t},
+   * over the frequencies that carry the pulse (sig), stepping each one in z by e^{iñωdz}.
+   * wTop > 0 leaves out frequencies above it, rolling off the top 40% below it smoothly (cos²):
+   * a sharp front, which has every frequency, is then drawn rounded over a time of about 3/wTop,
+   * which a picture cannot show anyway, at a fraction of the cost.
+   * Returns {re, im, w} (w: the local frequency, NaN where the field is negligible).
+   */
+  snapshot(t, z0, dz, M, wTop = 0) {
+    const out = { re: new Float64Array(M), im: new Float64Array(M), w: new Float64Array(M) };
+    const { Xr, Xi, pr, pi, dw, sig, t0 } = this, wr = new Float64Array(M), wi = new Float64Array(M);
+    if (!sig || !this.n) return out;
+    const knee = 0.6 * wTop;
+    for (const k of sig) {
+      const w = k * dw;
+      if (wTop > 0 && w > wTop) break;
+      const f = (k === 0 ? 1 : 2) * (wTop > 0 && w > knee ? Math.cos((0.5 * Math.PI * (w - knee)) / (wTop - knee)) ** 2 : 1);
+      // ñω z = ω z + (pr + i pi) z, with pr = (n − 1)ω, pi = κω.
+      const kr = w + pr[k], ki = pi[k];
+      const lnA0 = -ki * z0;
+      if (lnA0 < -700) continue;
+      const amp = Math.exp(Math.min(300, lnA0)), ph = kr * z0 + w * (t0 - t);
+      let cr = f * amp * (Xr[k] * Math.cos(ph) - Xi[k] * Math.sin(ph));
+      let ci = f * amp * (Xr[k] * Math.sin(ph) + Xi[k] * Math.cos(ph));
+      const g = Math.exp(Math.min(300, -ki * dz)), mr = g * Math.cos(kr * dz), mi = g * Math.sin(kr * dz);
+      const { re, im } = out;
+      for (let j = 0; j < M; j++) {
+        re[j] += cr; im[j] += ci; wr[j] += w * cr; wi[j] += w * ci;
+        const nr = cr * mr - ci * mi;
+        ci = cr * mi + ci * mr; cr = nr;
+        if (cr * cr + ci * ci < 1e-300 && j > 0) break;
+      }
+    }
+    let top = 0;
+    for (let j = 0; j < M; j++) top = Math.max(top, out.re[j] ** 2 + out.im[j] ** 2);
+    for (let j = 0; j < M; j++) {
+      const p = out.re[j] ** 2 + out.im[j] ** 2;
+      // The local frequency −d(arg a)/dt = Re(a* Σ ω c)/|a|².
+      out.w[j] = p > 1e-8 * top ? (out.re[j] * wr[j] + out.im[j] * wi[j]) / p : NaN;
+    }
+    return out;
+  }
+
+  /** The incident pulse in vacuum (as smoothed for the grid), its analytic signal at time τ, read
+   *  off the grid: E(z, t) = this at τ = t − z for z < 0.  Returns [re, im].  Between two samples
+   *  the modulus and the phase are interpolated (a carrier under a slow envelope comes out right
+   *  even when there are only a few samples to a period). */
+  incidentAt(tau) {
+    if (!this._inc) { const a = this.field(0, 0, true); this._inc = [Float64Array.from(a.re), Float64Array.from(a.im)]; }
+    const u = (tau - this.t0) / this.dt, k = Math.floor(u), f = u - k, [br, bi] = this._inc;
+    if (k < 0 || k + 1 >= this.N) return [0, 0];
+    const m0 = Math.hypot(br[k], bi[k]), m1 = Math.hypot(br[k + 1], bi[k + 1]);
+    if (!(m0 > 1e-12 && m1 > 1e-12)) return [br[k] * (1 - f) + br[k + 1] * f, bi[k] * (1 - f) + bi[k + 1] * f];
+    const p0 = Math.atan2(bi[k], br[k]);
+    let dp = Math.atan2(bi[k + 1], br[k + 1]) - p0;
+    dp -= 2 * Math.PI * Math.round(dp / (2 * Math.PI));
+    const m = m0 * (1 - f) + m1 * f, p = p0 + f * dp;
+    return [m * Math.cos(p), m * Math.sin(p)];
   }
 }
 
