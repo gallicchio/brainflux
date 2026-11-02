@@ -2,6 +2,7 @@ import { test, assert, close } from './harness.js';
 import {
   chiOscillators, chiTimeOscillators, sqrtEps, reflectance, oscillatorResponse, optics, groupIndex,
   FreqGrid, kkImToRe, kkReToIm, impulseResponse, sampleOnGrid, sumRuleOscillators, sumRuleGrid, simpson,
+  drivenCharge, fresnel, surfaceWave, sliverRe, sliverTime,
 } from '../dispersion/medium.js';
 import { incident, planGrid, Propagator, peakTime, moments, maxBefore } from '../dispersion/pulse.js';
 
@@ -147,6 +148,32 @@ test('breaking causality: a response with Re χ removed is odd in time, half of 
   assert(odd < 1e-12 && Math.abs(before / after - 1) < 1e-12, `odd ${odd}, energy before/after ${before / after}`);
 });
 
+test('one sliver of absorption: its share of Re χ and its ring in time, against the FFT', () => {
+  const grid = new FreqGrid(16384, 32), N = grid.N, dw = grid.dw, h = 0.7;
+  const ka = 400, kb = 460, a = (ka + 0.5) * dw, b = (kb + 0.5) * dw; // edges between samples
+  const im = new Float64Array(N);
+  for (let k = ka + 1; k <= kb; k++) { im[k] = h; im[N - k] = -h; }
+  const re = kkImToRe(im), ws = grid.w.subarray(1, 1200), exact = sliverRe(a, b, h, ws);
+  let err = 0;
+  for (let i = 0; i < ws.length; i++) if (Math.abs(i + 1 - ka - 0.5) > 20 && Math.abs(i + 1 - kb - 0.5) > 20) err = Math.max(err, Math.abs(re[i + 1] - exact[i]));
+  // (Each sampled edge rings by about h/(π² m) at m samples from it; a sliver has two close together.)
+  assert(err < (4 * h) / (Math.PI ** 2 * 20), `share of Re χ: max error ${err}`);
+  // Positive below the sliver, negative above: the 1/(ω' − ω) of the integral.
+  const mid = (a + b) / 2, far = sliverRe(a, b, h, Float64Array.of(0.5 * mid, 2 * mid));
+  assert(far[0] > 0 && far[1] < 0, `signs ${far}`);
+  close(far[1], (2 * mid * h * (b - a)) / (Math.PI * (mid * mid - 4 * mid * mid)), 0.01 * Math.abs(far[1]), 'far tail');
+  // In time: with its share (causal) the ring starts at the kick; without, it is odd.
+  const t = grid.times(), both = impulseResponse(grid, re, im).re, alone = impulseResponse(grid, new Float64Array(N), im).re;
+  const sc = sliverTime(a, b, h, t, true), so = sliverTime(a, b, h, t, false);
+  let e1 = 0, e2 = 0, top = 0;
+  for (let n = 0; n < N; n++) {
+    if (Math.abs(t[n]) > 2 && Math.abs(t[n]) < 60) { e1 = Math.max(e1, Math.abs(both[n] - sc[n])); e2 = Math.max(e2, Math.abs(alone[n] - so[n])); }
+    top = Math.max(top, Math.abs(sc[n]));
+  }
+  assert(e1 < 2e-3 * top && e2 < 2e-3 * top, `χ(t): errors ${e1}, ${e2} (peak ${top})`);
+  return `share of Re χ within ${err.toExponential(1)} of (h/π) ln|(b² − ω²)/(a² − ω²)|; χ(t) within ${(Math.max(e1, e2) / top).toExponential(1)} of the peak, causal and not`;
+});
+
 // ------------------------------------------------------------------- the sum rule
 
 test('the f-sum rule: ∫ ω Im ε dω = π ω_p²/2, whatever the lines look like', () => {
@@ -215,6 +242,48 @@ test('an ionic crystal: Re ε = 0 at ω_LO = ω_TO √(ε(0)/ε∞) (Lyddane–S
   const Rd = optics(damped, mid).R;
   assert(Math.min(...Rd) > 0.85, `R with damping ${Math.min(...Rd)}`);
   return `ω_LO = ${wLO.toFixed(3)}; with γ = 0.1 (2% of ω_TO), R ≥ ${Math.min(...Rd).toFixed(3)} across the middle 70% of the band`;
+});
+
+test('a driven charge: in step below the line, a quarter period late on it, opposite above', () => {
+  const o = { w0: 2, g: 0.2, wp: 1 };
+  const lo = drivenCharge(o, 0.01), at = drivenCharge(o, 2), hi = drivenCharge(o, 40);
+  close(lo.amp, 1, 1e-4, 'amplitude far below: the static pull');
+  close(lo.lag, 0, 1e-3, 'lag far below');
+  close(at.amp, o.w0 / o.g, 1e-12, 'amplitude at the resonance: Q = ω0/γ');
+  close(at.lag, Math.PI / 2, 1e-12, 'lag at the resonance');
+  close(hi.lag, Math.PI, 1e-2, 'lag far above');
+  close(hi.amp, (2 / 40) ** 2, 1e-5, 'amplitude far above: (ω0/ω)²');
+  // Its χ is (S/ω0²) A e^{iδ}: the in-phase part is Re χ, the late part Im χ.
+  for (const w of [0.5, 1.7, 1.95, 2.1, 3]) {
+    const d = drivenCharge(o, w), c = chiOscillators([o], Float64Array.of(w)), s = (o.wp * o.wp) / (o.w0 * o.w0);
+    close(s * d.amp * Math.cos(d.lag), c.re[0], 1e-12, `Re χ at ${w}`);
+    close(s * d.amp * Math.sin(d.lag), c.im[0], 1e-12, `Im χ at ${w}`);
+  }
+  // A free charge lags by more than a quarter period at every frequency.
+  const free = { w0: 0, g: 0.1, wp: 3 };
+  assert([0.05, 0.5, 5].every((w) => drivenCharge(free, w).lag > Math.PI / 2), 'free charge lag');
+});
+
+test('a wave meets the medium: E and dE/dz continuous, energy conserved, λ0/n inside', () => {
+  for (const [n, k] of [[1.5, 0], [1.29, 0.057], [0.72, 0.84], [0.05, 3], [2.4, 0]]) {
+    const { rr, ri, tr, ti } = fresnel(n, k);
+    close(1 + rr, tr, 1e-14, 'E continuous (re)'); close(ri, ti, 1e-14, 'E continuous (im)');
+    close(1 - rr, n * tr - k * ti, 1e-14, 'dE/dz continuous (re)'); close(-ri, n * ti + k * tr, 1e-14, 'dE/dz continuous (im)');
+    close(rr * rr + ri * ri, reflectance(n, k), 1e-14, 'R = |r|²');
+    if (k === 0) close(rr * rr + n * (tr * tr + ti * ti), 1, 1e-14, 'R + n|t|² = 1');
+    // The field just either side of the surface, at several moments.
+    for (const phi of [0, 1, 2.5]) {
+      const { E } = surfaceWave(n, k, Float64Array.of(-1e-9, 1e-9), phi);
+      close(E[0], E[1], 1e-7, `E at the surface (n = ${n})`);
+    }
+  }
+  // Inside a lossless medium, the crests are λ0/n apart: E(z + 1/n) = E(z).
+  const n = 1.5, zs = Float64Array.from({ length: 50 }, (_, i) => 0.1 + i * 0.03);
+  const a = surfaceWave(n, 0, zs, 0.7).E, b = surfaceWave(n, 0, Float64Array.from(zs, (z) => z + 1 / n), 0.7).E;
+  for (let i = 0; i < zs.length; i++) close(a[i], b[i], 1e-12, 'period λ0/n');
+  // With absorption the envelope falls by e in 1/(2πκ) wavelengths.
+  const env = surfaceWave(1.2, 0.1, Float64Array.of(1, 1 + 1 / (2 * Math.PI * 0.1)), 0).env;
+  close(env[1] / env[0], Math.exp(-1), 1e-12, 'decay length c/κω');
 });
 
 // ------------------------------------------------------------------------- pulses
@@ -322,4 +391,43 @@ test('in the anomalous region the peak exits early (v_g < 0), attenuated, with l
   close(m.energy / m0.energy, a / b, 1e-9, 'transmitted energy');
   assert(m.energy < m0.energy, 'a passive medium only absorbs');
   return `n_g = ${ng.toFixed(3)}: the peak leaves ${(-pk.t).toFixed(2)} before a vacuum pulse would arrive, at ${(pk.peak * 100).toFixed(1)}% of its height, with ${(m.energy / m0.energy * 100).toFixed(1)}% of the energy`;
+});
+
+test('a picture in space (the field at one moment at every depth) agrees with the field at one depth', () => {
+  // Below a line, where crests outrun the envelope; and a cut front through a weak absorption line.
+  const cases = [
+    [oscillatorResponse([{ w0: 2, g: 0.1, wp: 1 }]), 'gauss', { w0: 1, T: 20 }, [-60, 80]],
+    [oscillatorResponse([{ w0: 2, g: 0.2, wp: Math.sqrt(0.08) }]), 'front', { w0: 2, T: 40, tf: -24 }, [-150, 150]],
+  ];
+  const notes = [];
+  for (const [resp, shape, p, view] of cases) {
+    const g = planGrid(shape, p, view), P = new Propagator(g.N, g.dt, g.t0);
+    P.setInput(incident(shape, p, P.t), g.smooth);
+    P.setMedium(resp);
+    const t = 37.3, z0 = 2.5, dz = 0.731, M = 40, snap = P.snapshot(t, z0, dz, M);
+    let err = 0, top = 0;
+    for (let j = 0; j < M; j += 3) {
+      // field(z, tc) gives τ = t_n + tc: choose tc so that sample 0 is τ = t − z.
+      const z = z0 + j * dz, a = P.field(z, t - z - P.t0);
+      err = Math.max(err, Math.hypot(a.re[0] - snap.re[j], a.im[0] - snap.im[j]));
+      top = Math.max(top, Math.hypot(a.re[0], a.im[0]));
+    }
+    // (The picture leaves out frequencies below 1e-6 of the incident spectrum's peak amplitude.)
+    assert(err < 1e-5, `${shape}: snapshot against field(): ${err} (largest ${top})`);
+    notes.push(`${shape} ${err.toExponential(1)}`);
+  }
+  // Below the line the crests move at c/n and the envelope at c/n_g: the local frequency at the
+  // peak is the carrier, and the incident pulse in vacuum is the same function of t − z.
+  // (A long pulse, T = 80, so that its spectrum sees one n_g, and a line with almost no damping:
+  // absorption over the length of the pulse would tilt it, e^{−κωz}, and move its peak back.)
+  const resp = oscillatorResponse([{ w0: 2, g: 1e-4, wp: 1 }]), p = { w0: 1, T: 80 }, g = planGrid('gauss', p, [-300, 300]), P = new Propagator(g.N, g.dt, g.t0);
+  P.setInput(incident('gauss', p, P.t), g.smooth); P.setMedium(resp);
+  const ng = groupIndex(resp, Float64Array.of(1), 1e-5)[0], z = 40, s = P.snapshot(z * ng, 0, 0.05, 1600);
+  let jmax = 0;
+  for (let j = 0; j < 1600; j++) if (s.re[j] ** 2 + s.im[j] ** 2 > s.re[jmax] ** 2 + s.im[jmax] ** 2) jmax = j;
+  close(jmax * 0.05, z, 0.1, 'envelope peak at z = t/n_g');
+  close(s.w[jmax], 1, 0.01, 'local frequency at the peak');
+  const [vr] = P.incidentAt(10 - (-3)), E0 = incident('gauss', p, Float64Array.of(13))[0];
+  close(vr, E0, 1e-4, 'incident pulse in vacuum (3 samples a period here)');
+  return `snapshot vs field(): ${notes.join(', ')}; the envelope peak at t = ${(z * ng).toFixed(2)} is at z = ${(jmax * 0.05).toFixed(2)} (t/n_g = ${z})`;
 });
