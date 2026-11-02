@@ -110,12 +110,14 @@ const PRESETS = {
   formula: { label: 'Formula', field: true, title: 'Type the transmission t(x, y)', make: formulaField },
 };
 
-let loadToken = 0;
+let loadToken = 0, loading = 0;   // (loading: objects still being made, for __app.busy)
 async function loadPreset(id, opts = {}) {
   const token = ++loadToken, p = PRESETS[id] || PRESETS.cells;
   state.preset = PRESETS[id] ? id : 'cells';
   groups = null;
-  const made = await p.make();
+  loading++;
+  let made;
+  try { made = await p.make(); } finally { loading--; }
   if (token !== loadToken) return;
   if (p.field) { base = made; ink = new Float64Array(N * N); } else { base = null; ink = made; }
   if (opts.row !== false) state.row = C - Math.round((p.rowY || 0) / DX);
@@ -1396,6 +1398,8 @@ window.__app = {
   get side() { return side; },
   sketchX: () => sketchLayout($('#sketch').getBoundingClientRect().width),
   get partialDone() { return state.illum !== 'condenser' || partial.done; },
+  /** Work still to do before the page shows the present state: for tests to wait on, not on time. */
+  get busy() { return loading > 0 || raf !== 0 || dirty.object || dirty.pupil || dirty.image || (state.illum === 'condenser' && !partial.done); },
   get profilePeriod() { return profilePeriod; },
   orders: () => gratingOrders(),
   poreOrders: () => poreOrderList().filter((o) => o.pass).length,
