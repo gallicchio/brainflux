@@ -210,7 +210,7 @@ export function createModes(app) {
     ctx.restore();
     F.axes({ colors: c });
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    const wide = F.w > 520;
+    const wide = F.w > 480;
     ctx.fillText(sf.y0 ? (wide ? `from the side: the plane y = ${sf.y0} w₀ (y = 0 is dark for odd n)` : `side view, y = ${sf.y0} w₀`) : (wide ? 'from the side: the plane y = 0' : 'side view, y = 0'), F.left, 14);
     ctx.textAlign = 'right';
     ctx.fillText(state.side === 'real' ? (wide ? 'ticks: a plane wave\'s crests' : 'ticks: plane wave') : '', F.right, 14);
@@ -244,7 +244,7 @@ export function createModes(app) {
     ctx.restore();
     F.axes({ colors: c, yTicks: false });
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    for (let v = -top; v <= top + 1e-9; v += top > 2 ? 1 : 0.5) ctx.fillText(`${tickLabel(v)}π`, F.left - 5, F.Y(v));
+    for (let v = -top; v <= top + 1e-9; v += top > 2 ? 1 : 0.5) ctx.fillText(Math.abs(v) < 1e-9 ? '0' : `${tickLabel(v).replace(/^(−?)1$/, '$1')}π`, F.left - 5, F.Y(v));
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillText(`Gouy phase (N+1)·atan(z/z_R), N = ${N}${N > 0 ? (F.w > 480 ? '; dashed: the fundamental, N = 0' : '; dashed: N = 0') : ''}`, F.left, 14);
     ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText('z / z_R', F.right, F.bottom + 16);

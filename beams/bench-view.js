@@ -17,7 +17,7 @@ import { fmtLen, wavelengthRGB, realTable, intensityTable, signedSlider, arrow, 
 /** The first number of a line of parts in bold. */
 const bold = (parts) => parts.map((p) => (typeof p === 'string' ? p : { ...p, class: 'b' }));
 
-const MARGIN = { left: 52, right: 14, top: 26, bottom: 30 };
+const MARGIN = { left: 52, right: 14, top: 36, bottom: 30 };
 const DARK = '#07080b';
 const NBSP = '\u00a0';
 const ELEMENT_DEFAULTS = { lens: { f: 100 }, mirror: { R: 200 }, slab: { t: 20, n: 1.5 } };
@@ -484,17 +484,26 @@ export function createBench(app) {
   function drawLabels(ctx, F, Zp, c) {
     ctx.save();
     ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    // Labels from left to right, each on the lower row unless it would touch the one before it
+    // there (two lenses close together): then on the upper row.
+    const labels = [];
     for (const e of state.elements) {
       const z = e.type === 'slab' ? e.z + e.t / 2 : e.z;
-      if (z < state.vz0 || z > state.vz1) continue;
-      ctx.fillStyle = e === state.sel ? c.accent : c.ink2;
-      fillSlots(ctx, shortParts(e), Zp(z), F.top - 8);
+      if (z >= state.vz0 && z <= state.vz1) labels.push({ x: Zp(z), parts: shortParts(e), color: e === state.sel ? c.accent : c.ink2 });
     }
     const t = target();
     if (t && t.z + t.L / 2 > state.vz0 && t.z + t.L / 2 < state.vz1) {
       const m = matching();
-      ctx.fillStyle = '#c58a00';
-      fillSlots(ctx, m ? ['cavity: η = ', { v: 100 * m.eta, dec: 1, w: 5 }, '%'] : ['cavity (unstable)'], Zp(t.z + t.L / 2), F.top - 8);
+      labels.push({ x: Zp(t.z + t.L / 2), parts: m ? ['cavity: η = ', { v: 100 * m.eta, dec: 1, w: 5 }, '%'] : ['cavity (unstable)'], color: '#c58a00' });
+    }
+    labels.sort((a, b) => a.x - b.x);
+    const ends = [-Infinity, -Infinity];
+    for (const l of labels) {
+      const w = slotsWidth(ctx, l.parts), a = l.x - w / 2;
+      const r = a > ends[0] + 16 ? 0 : a > ends[1] + 16 ? 1 : 0;
+      ends[r] = l.x + w / 2;
+      ctx.fillStyle = l.color;
+      fillSlots(ctx, l.parts, l.x, F.top - 7 - 14 * r);
     }
     ctx.restore();
   }
@@ -973,8 +982,11 @@ export function createBench(app) {
     if (zs.length) {
       a = Math.min(...zs); b = Math.max(...zs);
       for (const w of ws) { a = Math.min(a, w.z); b = Math.max(b, w.z); }
-      a = Math.min(a, Math.max(state.z0, a - 0.5 * (b - a + 50)));
-      const pad = 0.12 * (b - a) + 10;
+      // Each waist with a Rayleigh range and a half either side, so that its spreading shows
+      // (but not the 5 m of a nearly parallel beam's).
+      const reach = Math.max(100, 0.75 * (b - a));
+      for (const w of ws) { const r = Math.min(1.5 * w.zR, reach); a = Math.min(a, w.z - r); b = Math.max(b, w.z + r); }
+      const pad = 0.05 * (b - a) + 10;
       a -= pad; b += pad;
     } else {
       const zR = (Math.PI * state.w0 ** 2) / lam(), span = Math.min(2000, Math.max(20, 3 * zR));

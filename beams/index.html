@@ -24,7 +24,7 @@
     <div class="view" id="view-bench">
       <div class="readout" id="bench-readout" aria-live="polite"></div>
       <div class="plot-wrap bench-wrap"><canvas id="bench" tabindex="0" aria-label="The optical bench: the beam drawn to scale along the axis, with its lenses, mirrors and slabs. Drag an element to move it, drag the background to pan, scroll or pinch to zoom."></canvas></div>
-      <div class="hint small muted" id="bench-hint" aria-live="polite"></div>
+      <div class="hint small muted" id="bench-hint"></div>
       <div class="plot-wrap gouy-wrap"><canvas id="gouy" aria-label="The Gouy phase accumulated along the bench"></canvas></div>
       <div class="table-wrap"><table class="waists" id="waists"></table></div>
     </div>
@@ -163,8 +163,8 @@
     waist $w_0=200$ µm at $z=0$.  One Rayleigh range away, at $z=\pm z_R=\pm199$ mm (the dashed
     lines), it is $\sqrt2$ times wider; far away it spreads at $\theta=\lambda/\pi w_0=1.0$ mrad
     (the dotted cone).  At $z=400$ mm a lens of $f=200$ mm catches it, 450 µm wide and still
-    spreading, and makes a new waist of 142 µm at $z=701$ mm, with $z_R'=100$ mm: a waist
-    $1/\sqrt2$ as wide has half the Rayleigh range, as $z_R\propto w_0^2$.</p>
+    spreading, and makes a new waist of 142 µm at $z=701$ mm, with $z_R'=100$ mm: a waist about
+    $1/\sqrt2$ as wide has about half the Rayleigh range, as $z_R\propto w_0^2$.</p>
     <p>Drag the lens and watch the new waist move and change size.  Drag the yellow ring down to
     make the input waist smaller: the beam spreads faster.  Ray optics would image the input
     waist, $2f$ before the lens, $2f$ after it and the same size; why the beam's waist comes
