@@ -14,12 +14,14 @@
 // Reconstruction.  Lit by a wave C, the plate passes H C = (|R|^2 + |O|^2) C + O R* C + O* R C.
 // With C = R the third term is |R|^2 O: the object's own wave, which seems to come from the
 // object (the virtual image); the fourth, O* R^2, converges to a real image in front of the
-// plate (the twin); the first goes straight on (the zero order).  We look at this light the way
-// a camera looking through the plate does: a lens focused at distance d, then the light's
-// directions (its angular spectrum, one FFT).  A point that is in focus lands on one direction,
-// x/d; everything is drawn in those direction units, so the picture keeps its scale as the
-// focus changes.  This is the Fresnel transform of digital holography, with the exact
-// (non-paraxial) phase of a lens focused on the axis.  Directions are sampled every
+// plate (the twin); the first goes straight on (the zero order).  Lit by C = R* (the reference
+// tilted the other way), it is the O* term, |R|^2 O*, that makes a real image, straight in front
+// of each point of the object.  We look at this light the way a camera held against the plate
+// does: a lens focused at distance d, then the light's directions (its angular spectrum, one
+// FFT).  A point that is in focus lands on one direction, x/d; everything is drawn in those
+// direction units, so the picture keeps its scale as the focus changes.  This is the Fresnel
+// transform of digital holography (for d < 0, the light on a screen |d| in front of the plate),
+// with the exact (non-paraxial) phase of a lens focused on the axis.  Directions are sampled every
 // lambda/(n p) radians out to +-lambda/2p, which is as fine and as wide as the plate allows: the
 // pixels cannot record fringes finer than two pixels, nor send light to larger angles.
 // (Why not propagate the plate's light by the angular spectrum, on the plate's own grid, as

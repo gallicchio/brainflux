@@ -689,12 +689,11 @@ function drawPlay() {
     ctx.font = '12px system-ui, sans-serif';
     const tw = ctx.measureText(text).width;
     if (x + tw > width - 4) x -= tw + 18;
-    let lx = Math.max(4, Math.min(width - tw - 4, x)), ly = Math.max(g.mt + 8, Math.min(height - g.mb - 8, y));
-    for (let k = 0; k < 4; k++) {
-      const hit = placed.find((b) => lx < b[0] + b[2] && b[0] < lx + tw && Math.abs(ly - b[1]) < 14);
-      if (!hit) break;
-      ly = hit[1] + (ly >= hit[1] ? 15 : -15);
-    }
+    // The nearest free place above or below, inside the frame (not on the depth scale).
+    const lx = Math.max(4, Math.min(width - tw - 4, x)), lo = g.mt + 8, hi = height - g.mb - 9;
+    const free = (yy) => !placed.some((b) => lx < b[0] + b[2] && b[0] < lx + tw && Math.abs(yy - b[1]) < 14);
+    const at = Math.max(lo, Math.min(hi, y)), tries = [0, -15, 15, -30, 30, -45, 45].map((d) => Math.max(lo, Math.min(hi, at + d)));
+    const ly = tries.find(free) ?? tries[0];
     placed.push([lx, ly, tw]);
     ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(text, lx, ly);
   };
@@ -882,7 +881,8 @@ function updateTerms(F, T) {
   const where = (w, real, virtual) => {
     const f = focusOf(w);
     if (!Number.isFinite(f.R) || Math.abs(f.R) > 1e7) return [', a parallel beam'];
-    return f.R > 0 ? [virtual, { v: f.R / MM, dec: 1, w: 5 }, ' mm behind (virtual)'] : [real, { v: -f.R / MM, dec: 1, w: 5 }, ' mm in front (real)'];
+    // (Lit by R*, the names say which is real; lit by R, the words do.)
+    return f.R > 0 ? [virtual, { v: f.R / MM, dec: 1, w: 5 }, cj ? ' mm behind' : ' mm behind (virtual)'] : [real, { v: -f.R / MM, dec: 1, w: 5 }, cj ? ' mm in front' : ' mm in front (real)'];
   };
   let zero;
   if (C.c === 0) {
@@ -1162,11 +1162,12 @@ const relightSeg = segmented([
   { value: 'conj', label: 'Its conjugate R*', title: 'The reference tilted the other way (for a point source: converging to its mirror point in front).  At the plate this is R*, the complex conjugate of the reference: it makes the real image' },
 ], state.relight, (v) => { state.relight = v; changed(); }, { label: 'Light it with' });
 $('#relight-box').append(relightSeg);
-const sameToggle = toggle('Same colour', state.sameColour, (on) => { state.sameColour = on; if (on) state.lambda2 = state.lambda; syncLambda2(); changed(); }, 'Light the hologram with the wavelength it was recorded with');
+// Another colour: off, the plate is lit with the laser it was recorded with; on, a slider sets the colour.
+const sameToggle = toggle('Another colour', !state.sameColour, (on) => { state.sameColour = !on; if (!on) state.lambda2 = state.lambda; syncLambda2(); changed(); }, 'Light the hologram with another wavelength than it was recorded with');
 const lambda2Slider = slider({ label: 'λ (nm)', min: 400, max: 700, step: 1, value: 633, title: 'The wavelength of the light that lights the hologram',
-  onInput: (v) => { state.lambda2 = v / 1000; state.sameColour = false; sameToggle.on = false; changed(); } });
+  onInput: (v) => { state.lambda2 = v / 1000; state.sameColour = false; sameToggle.on = true; changed(); } });
 $('#lambda2-box').append(el('div', { class: 'row' }, sameToggle), lambda2Slider);
-function syncLambda2() { sameToggle.on = state.sameColour; lambda2Slider.value = Math.round(lam2() * 1000); }
+function syncLambda2() { sameToggle.on = !state.sameColour; lambda2Slider.hidden = state.sameColour; lambda2Slider.value = Math.round(lam2() * 1000); }
 
 // Laser and camera.
 const lambdaSlider = slider({ label: 'laser λ (nm)', min: 400, max: 700, step: 1, value: 633, title: 'The wavelength the hologram is recorded with',
