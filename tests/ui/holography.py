@@ -326,6 +326,16 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     note = S("T.text('#recon-note')")
     check('on the real image' in note and 'tilted the other way' in S("T.text('#play-note')"), f'... and the notes say so ({note!r})')
 
+    # Relighting in another colour is one button away: it shows the colour's slider.
+    S('__app.setups.tilt()'); redraw()
+    vis = lambda: S("[...document.querySelectorAll('#lambda2-box .slider')].some((e) => e.offsetParent !== null)")
+    hidden = not vis()
+    S("T.button('Another colour')"); redraw()
+    shown, same = vis(), S('__app.state.sameColour')
+    S("T.slider('λ (nm)', 500)"); redraw()
+    check(hidden and shown and not same and abs(S('__app.terms()[1].R') - 60000 * 633 / 500) < 1,
+          f"'Another colour' shows the colour's slider; at 500 nm the image is {S('__app.terms()[1].R')/1000:.1f} mm behind (60 x 633/500 = {60*633/500:.1f})")
+
     # 8. Another colour: the image moves to z lambda/lambda2, looks smaller and moves down.
     S('__app.setups.wavelength()'); redraw()
     S("T.button('Focus on the image')"); redraw()
