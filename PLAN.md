@@ -219,3 +219,36 @@ Left for later:
   refractive index); log sliders ignore `step`.  `lib/plot.js`: a log y axis.
 - `fft2d/presets.js` finds its images relative to the page; `import.meta.url` would let other
   demos load them without the `../fft2d/` prefix.
+
+## Status, 2026-11-02
+
+After the author's first look at the beta demos (Prompt 13 in `CLAUDE_CODE_CHAT.md`), seven
+were revised for a junior's understanding and ease of use, and all thirteen audited for their
+physics (every equation, sign, number and sentence of help, the numbers measured in the
+running pages):
+
+- `dispersion/` starts from the driven oscillator: a charge on a spring and the wave meeting
+  the medium, live at the frequency you choose; Kramers–Kronig one sliver of absorption at a
+  time; the pulse drawn inside the medium, its crests at $c/n$ and its peak at $c/n_g$.
+- `interferometer/` scans both sides of equal paths (motor, spectrometer, transform).
+- `imaging/` has a live side view of the microscope, controls in light-path order, one set of
+  pupil tools.
+- `holography/` opens on one point and tells it as record, then relight, with the three beams.
+- `tomography/` ties the panels together by colour, steps one angle at a time, and points from
+  any panel to the others.
+- `beams/` has defaults that show a waist, a Rayleigh range and a refocus on the bench, and a
+  cavity whose spectrum shows its modes order by order.
+- `action/` drags one way at a time, scores your path against the true one, and offers wrong
+  paths in one click.
+
+Physics errors found and fixed in nine of the thirteen (see the log); none in `radiation/`,
+`arrays/`, `drums/`, `phasespace/` beyond wording.
+
+Left for later, besides the list above:
+
+- Still pictures for each experiment ("Every Animation has Key Frames saved as Pictures").
+- `lib/plot.js`: the y label sits at x = 12 whatever the tick labels' width.  `lib/mathml.js`:
+  no space after a function name before a number (`\cos 2\pi` reads "cos2π").  `lib/` sets
+  `touch-action: none` on every canvas, so a swipe over a plot doesn't scroll a phone's page.
+- Imaging: a hollow-cone condenser with a matching phase ring (the real phase-contrast
+  microscope).  Interferometer: dispersion in an uncompensated arm.
