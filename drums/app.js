@@ -325,13 +325,16 @@ function requestModes() {
   });
   fillModeList();
   countDirty = true;
+  // (Modes from the cache arrive before this, with no word from the worker: the note and the
+  // count button must still be brought up to date for the new shape.)
+  updateSolveNote();
 }
 
 function requestCount() {
   const key = shapeKey();
   solve(key, mask.slice(), state.n, COUNT, 0, 'count', (r) => {
     if (r.key !== shapeKey()) return;
-    counted = r; countDirty = true; drawCount();
+    counted = r; countDirty = true; drawCount(); updateSolveNote();
   });
 }
 

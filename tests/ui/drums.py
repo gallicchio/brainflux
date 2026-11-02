@@ -171,10 +171,16 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
             if name == 'wigner':
                 # The help: the whole stadium, four symmetry classes mixed, has about 14% of its
                 # spacings below 1/4, twice as many as the quarter.
+                # (The stadium's modes are in the cache by now: the count button must still say
+                # that this shape is not counted yet, not keep the quarter stadium's "counted".)
                 b.eval('__app.setShape("stadium")')
                 ok = wait_for(b, '__app.modes && __app.state.shape === "stadium"', 600)
-                b.click('#count-more')
-                ok = ok and wait_for(b, '__app.counted && __app.state.shape === "stadium"', 900)
+                btn = b.eval("(() => { const e = document.getElementById('count-more'); return [e.disabled, e.textContent]; })()")
+                check(ok and not btn[0] and btn[1].startswith('Count'), f'a new shape whose modes come from the cache can be counted (the button: "{btn[1]}", disabled {btn[0]})')
+                ok = ok and not btn[0]
+                if ok:
+                    b.click('#count-more')
+                    ok = wait_for(b, '__app.counted && __app.state.shape === "stadium"', 900)
                 b.sleep(0.5)
                 m = re.search(r'below ¼: ([0-9.]+)%', b.eval("document.getElementById('count-note').textContent"))
                 whole = float(m.group(1)) if m else None
