@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Path, action, quadrature, knotQuadrature, truePaths, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, hamiltonianGrid } from '../action/physics.js';
+import { Path, action, quadrature, knotQuadrature, truePaths, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, hamiltonianGrid, knotPhasors } from '../action/physics.js';
 import { SYSTEMS, typedSystem, parseTyped, cycloid, oscillatorOrbit } from '../action/systems.js';
 
 const sys = (id, over = {}) => {
@@ -357,4 +357,30 @@ test('phase space: H = p^2/2m + V on a grid for the oscillator', () => {
   close(Ht[0], Math.sqrt(0.75 ** 2 + 1), 1e-9, 'relativistic H');
   const ml = sys('mirage').L, Hm = hamiltonianGrid(ml, [0], [0.6]);
   close(Hm[0], -Math.sqrt(1 - 0.36), 1e-7, 'light: H = -sqrt(n^2 - p^2)');
+});
+
+test('Feynman\'s arrows over the heights of one knot add up to the Fresnel integral', () => {
+  // On the true path S(h) = S* + S''(h - h*)^2 / 2 for a knot's height h (exactly, for these
+  // Lagrangians), so the sum of e^{iS/hbar} dh is sqrt(2 pi hbar / S'') e^{i pi/4}, from the
+  // heights within a few sqrt(hbar / S'') of h*, which is the knot's own height.
+  const notes = [];
+  for (const [id, mode] of [['free', 'spline'], ['gravity', 'segments'], ['harmonic', 'spline']]) {
+    const st = start(id, { mode }), { L, path, quad } = st, k = 2, hbar = 0.05;
+    const { H } = knotDerivatives(L, path, quad, [k]), S2 = H[0][0], sigma = Math.sqrt(hbar / S2);
+    const qk = path.q[k], r = knotPhasors(L, path, quad, k, qk - 60 * sigma, qk + 60 * sigma, hbar);
+    close(r.hStar, qk, 1e-6 * (1 + Math.abs(qk)), `${id}: h* at the knot`);
+    const X = r.x[r.x.length - 1], Y = r.y[r.y.length - 1], amp = Math.hypot(X, Y), want = Math.sqrt((2 * Math.PI * hbar) / S2);
+    close(amp / want, 1, 0.02, `${id}: |sum|`);
+    close(Math.atan2(Y, X), Math.PI / 4, 0.03, `${id}: phase`);
+    // The quarter-turn zone is |h - h*| < sqrt(pi hbar / S'').
+    close((r.zone[1] - r.zone[0]) / 2, Math.sqrt((Math.PI * hbar) / S2), 0.01 * sigma + (r.h[1] - r.h[0]), `${id}: zone`);
+    notes.push(`${id}: |sum| ${(amp / want).toFixed(4)} of the Fresnel value`);
+  }
+  // Off the true path, h* is where the knot would have to be: the minimum of S over its height.
+  const st = start('gravity'), q = Float64Array.from(st.path.q);
+  q[1] += 2;
+  const p = st.path.withKnots(q), r = knotPhasors(st.L, p, st.quad, 2, -5, 15, 0.5);
+  const { g, H } = knotDerivatives(st.L, p, st.quad, [2]);
+  close(r.hStar, q[2] - g[0] / H[0][0], 1e-6, 'h* off the true path');
+  return notes.join('; ');
 });

@@ -609,6 +609,91 @@ export function stationaryKnots(system, path, { count = 600, singularStart = fal
   return { path: p, index: Number.isFinite(size) && free.length ? negativeDirections(cur.H) : 0, gradient: size };
 }
 
+// ------------------------------------------------- Feynman's sum over histories
+
+/**
+ * One slice of Feynman's sum over histories: the paths through every height h of knot k, the
+ * other knots held where they are, each with its arrow e^{iS(h)/hbar}.  (In the path integral
+ * the amplitude to go from one end to the other is an integral over the position at every
+ * intermediate time; this is the integral over one of them.)  S(h) is computed at `coarse`
+ * heights from lo to hi, cheaply since a path is linear in its knot values, and interpolated
+ * between them by cubic Hermite pieces (exact for an S quadratic in h, as it is for the free
+ * particle, a uniform field and the oscillator); the arrows are added head to tail at heights
+ * close enough that neighbours turn by at most `turn` radians.  Phases are measured from the
+ * stationary height h* (where dS/dh = 0).  Heights where S is undefined add nothing.
+ *
+ * Returns {h, S, x, y, hStar, Sstar, zone}: the heights of the arrows, their actions, the
+ * running sum (x, y), one longer than h, each arrow of length dh), h* (null if S has no
+ * stationary point inside [lo, hi]: then phases are measured from S at the knot's own height),
+ * and zone, the heights around h* within a quarter turn of it, |S - S*| < pi hbar / 2, whose
+ * arrows add up (null without h*).
+ */
+export function knotPhasors(system, path, quad, k, lo, hi, hbar, { coarse = 81, turn = 0.2, maxArrows = 40000 } = {}) {
+  const n = path.q.length, N = quad.s.length, e = new Float64Array(n);
+  e[k] = 1;
+  const base = path.sample(quad.s), B = path.withKnots(e).sample(quad.s), qk = path.q[k];
+  const hc = Float64Array.from({ length: coarse }, (_, i) => lo + ((hi - lo) * i) / (coarse - 1)), dc = (hi - lo) / (coarse - 1);
+  const Q = new Float64Array(coarse * N), V = new Float64Array(coarse * N), T = new Float64Array(coarse * N);
+  for (let i = 0; i < coarse; i++) {
+    const a = hc[i] - qk;
+    for (let j = 0; j < N; j++) { Q[i * N + j] = base.q[j] + a * B.q[j]; V[i * N + j] = base.v[j] + a * B.v[j]; T[i * N + j] = quad.s[j]; }
+  }
+  const Lall = system.L(Q, V, T), Sc = new Float64Array(coarse);
+  for (let i = 0; i < coarse; i++) {
+    let sum = 0;
+    for (let j = 0; j < N; j++) sum += quad.w[j] * Lall[i * N + j];
+    Sc[i] = Number.isFinite(sum) ? sum : NaN;
+  }
+  // Slopes for the Hermite pieces: central differences, one-sided (second order) at the ends.
+  const slope = (i) => (i === 0 ? (-3 * Sc[0] + 4 * Sc[1] - Sc[2]) / (2 * dc)
+    : i === coarse - 1 ? (3 * Sc[i] - 4 * Sc[i - 1] + Sc[i - 2]) / (2 * dc) : (Sc[i + 1] - Sc[i - 1]) / (2 * dc));
+  const D = Float64Array.from({ length: coarse }, (_, i) => slope(i));
+  const at = (x) => {
+    const u = Math.min(coarse - 1 - 1e-12, Math.max(0, (x - lo) / dc)), i = Math.floor(u), t = u - i;
+    const t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * Sc[i] + (t3 - 2 * t2 + t) * dc * D[i] + (3 * t2 - 2 * t3) * Sc[i + 1] + (t3 - t2) * dc * D[i + 1];
+  };
+  // The stationary height: where the slope of a Hermite piece, a quadratic in its parameter t,
+  // vanishes (solved exactly); the one of least S if there are several.
+  let hStar = null, Sstar = NaN;
+  for (let i = 0; i + 1 < coarse; i++) {
+    if (!(D[i] * D[i + 1] <= 0) || !Number.isFinite(Sc[i]) || !Number.isFinite(Sc[i + 1])) continue;
+    const a1 = dc * D[i], a2 = 3 * (Sc[i + 1] - Sc[i]) - dc * (2 * D[i] + D[i + 1]), a3 = 2 * (Sc[i] - Sc[i + 1]) + dc * (D[i] + D[i + 1]);
+    // a1 + 2 a2 t + 3 a3 t^2 = 0 for t in [0, 1].
+    const A = 3 * a3, Bq = 2 * a2, roots = [];
+    if (Math.abs(A) < 1e-12 * (Math.abs(Bq) + Math.abs(a1))) { if (Bq) roots.push(-a1 / Bq); }
+    else { const disc = Bq * Bq - 4 * A * a1; if (disc >= 0) { const r = Math.sqrt(disc); roots.push((-Bq - r) / (2 * A), (-Bq + r) / (2 * A)); } }
+    for (const t of roots) {
+      if (!(t >= -1e-9 && t <= 1 + 1e-9)) continue;
+      const h = hc[i] + dc * Math.min(1, Math.max(0, t)), S = at(h);
+      if (hStar === null || S < Sstar) { hStar = h; Sstar = S; }
+    }
+  }
+  const S0 = hStar === null ? at(Math.min(hi, Math.max(lo, qk))) : Sstar;
+  // As many arrows as it takes for neighbours to turn by less than `turn`.
+  let total = 0;
+  for (let i = 0; i + 1 < coarse; i++) if (Number.isFinite(Sc[i]) && Number.isFinite(Sc[i + 1])) total += Math.abs(Sc[i + 1] - Sc[i]) + 0.5 * dc * Math.abs(D[i + 1] - D[i]);
+  const M = Math.max(400, Math.min(maxArrows, Math.ceil(total / (hbar * turn))));
+  const dh = (hi - lo) / M, h = new Float64Array(M), S = new Float64Array(M), x = new Float64Array(M + 1), y = new Float64Array(M + 1);
+  for (let j = 0; j < M; j++) {
+    h[j] = lo + (j + 0.5) * dh;
+    S[j] = at(h[j]);
+    const ph = (S[j] - S0) / hbar, ok = Number.isFinite(ph);
+    x[j + 1] = x[j] + (ok ? Math.cos(ph) * dh : 0);
+    y[j + 1] = y[j] + (ok ? Math.sin(ph) * dh : 0);
+  }
+  let zone = null;
+  if (hStar !== null) {
+    const j0 = Math.min(M - 1, Math.max(0, Math.round((hStar - lo) / dh - 0.5)));
+    let a = j0, b = j0;
+    const inZone = (j) => Math.abs(S[j] - Sstar) < (Math.PI * hbar) / 2;
+    while (a > 0 && inZone(a - 1)) a--;
+    while (b < M - 1 && inZone(b + 1)) b++;
+    zone = [h[a] - dh / 2, h[b] + dh / 2];
+  }
+  return { h, S, x, y, hStar, Sstar: S0, zone };
+}
+
 // ----------------------------------------------------------- phase space
 
 /**
