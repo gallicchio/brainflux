@@ -10,10 +10,10 @@ import { $, $$, segmented, drawer, readHash, writeHash, toast } from '../lib/ui.
 const state = {
   view: 'bench',
   bench: {
-    lambda: 633, w0: 0.5, z0: 0, elements: [], sel: null, vz0: -20, vz1: 420, E: 120,
-    field: 'real', m: 0, play: true, wavefronts: false, target: false, tz: 300, bright: 0,
+    lambda: 633, w0: 0.2, z0: 0, elements: [], sel: null, vz0: -300, vz1: 1000, E: 400,
+    field: 'intensity', m: 0, play: true, wavefronts: false, target: false, tz: 300, bright: 0, lensLaw: false,
   },
-  cavity: { L: 250, R1: 500, R2: 500, rays: true, play: true },
+  cavity: { L: 250, R1: 1000, R2: 1000, rays: true, play: true },
   modes: {
     family: 'hg', m: 2, n: 1, p: 0, l: 1, alpha: Math.PI / 4, phi: Math.PI / 2, zeta: 0.5,
     cross: 'phase', side: 'real', fft: false, travel: false, play: true,
@@ -90,14 +90,17 @@ function onCavity(cfg) { setView('cavity'); cavity.set({ rays: true, play: true,
 function onModes(cfg) { setView('modes'); modes.set(cfg); }
 
 const setups = {
-  start: () => onBench({ w0: 0.5, z0: 0, elements: [{ type: 'lens', z: 100, f: 150 }], view: [-20, 420] }),
-  waist: () => onBench({ w0: 0.2, z0: 0, elements: [], view: [-600, 600], fill: 0.8 }),
+  // The opening view: a beam with its waist, Rayleigh range and divergence, and a lens that
+  // refocuses it (w0 = 200 um, zR = 199 mm; f = 200 mm two Rayleigh ranges on: 142 um, zR' = 100 mm).
+  start: () => onBench({ w0: 0.2, z0: 0, elements: [{ type: 'lens', z: 400, f: 200 }], view: [-300, 1000], select: 0, fill: 0.8 }),
+  waist: () => onBench({ w0: 0.2, z0: 0, elements: [], view: [-600, 600], fill: 0.8, wavefronts: true }),
   focus: () => onBench({ w0: 1, z0: 0, elements: [{ type: 'lens', z: 50, f: 100 }], view: [0, 250], field: 'intensity', select: 0, fill: 0.85 }),
-  gouy: () => onBench({ w0: 0.5, z0: 0, elements: [{ type: 'lens', z: 0, f: 200 }], focus: true }),
+  gouy: () => onBench({ w0: 0.5, z0: 0, elements: [{ type: 'lens', z: 0, f: 200 }], focus: true, field: 'real' }),
   telescope: () => onBench({ w0: 0.5, z0: 0, elements: [{ type: 'lens', z: 50, f: 50 }, { type: 'lens', z: 300, f: 200 }], view: [-20, 700], fill: 0.8, field: 'intensity' }),
-  imaging: () => onBench({ w0: 0.1, z0: 0, elements: [{ type: 'lens', z: 100, f: 50 }], view: [-20, 300], select: 0, field: 'intensity', fill: 0.8 }),
-  slab: () => onBench({ w0: 0.6, z0: 0, elements: [{ type: 'lens', z: 0, f: 150 }, { type: 'slab', z: 80, t: 40, n: 1.5 }], view: [-10, 250], select: 1, fill: 0.8 }),
+  imaging: () => onBench({ w0: 0.1, z0: 0, elements: [{ type: 'lens', z: 100, f: 50 }], view: [-20, 300], select: 0, field: 'intensity', fill: 0.8, lensLaw: true }),
+  slab: () => onBench({ w0: 0.6, z0: 0, elements: [{ type: 'lens', z: 0, f: 150 }, { type: 'slab', z: 80, t: 40, n: 1.5 }], view: [-10, 250], select: 1, fill: 0.8, field: 'real' }),
   stability: () => onCavity({ L: 250, R1: 1000, R2: 500 }),
+  comb: () => onCavity({ L: 250, R1: 1000, R2: 1000 }),
   rays: () => onCavity({ L: 250, R1: 400, R2: 400 }),
   confocal: () => onCavity({ L: 250, R1: 250, R2: 250 }),
   waveguide: () => {

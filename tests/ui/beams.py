@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Drive the Gaussian-beam demo like a student: every experiment, dragging a lens, the input
-waist and the stability diagram, and the physics read-outs on the way (focus size, the Gouy
-shift in the drawn crests, the Gaussian lens law, mode matching, the cavity mode, rays, the FFT
-check).  Screenshots go to build/.  SIZE=400x850 TAG=-phone for a phone-sized run."""
+"""Drive the Gaussian-beam demo like a student: the opening view's numbers, every experiment,
+dragging a lens, the input waist and the stability diagram, the hints that say what can be
+dragged, and the physics read-outs on the way (focus size, the Gouy shift in the drawn crests,
+the Gaussian lens law, mode matching, the cavity mode and its spectrum, rays, the FFT check).
+Screenshots go to build/.  SIZE=390x844 TAG=-phone for a phone-sized run."""
 import json, math, os, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
@@ -70,41 +71,62 @@ with Browser('beams/index.html', size=SIZE) as b:
     b.screenshot(f'build/beams{TAG}-start.png')
     full = SIZE[0] >= 1000
 
-    # ---------------------------------------------------------------- the bench, by hand
+    # ---------------------------------------------------------------- the opening view
+    # A 200 um waist at 0 (zR = 199 mm, theta = 1.0 mrad); a lens of 200 mm at 400 mm makes a
+    # waist of 142 um at 701 mm with zR' = 100 mm (half: the waist is 1/sqrt2 as wide).
     ws = waists(b)
-    focus0 = ws[1]['z']
-    # Drag the lens (at z = 100 of -20..420) 60 mm to the right: the focus follows it.
+    st = b.eval('[__app.state.bench.field, __app.state.bench.sel === __app.state.bench.elements[0], __app.state.bench.elements.length]')
+    check(abs(ws[0]['zR'] - 198.52) < 0.01 and abs(1000 * ws[1]['w0'] - 141.95) < 0.01 and abs(ws[1]['z'] - 700.74) < 0.01 and abs(ws[1]['zR'] - 100.0) < 0.01
+          and st == ['intensity', True, 1],
+          f'opening view: input zR = {ws[0]["zR"]:.2f} mm; the lens makes {1000 * ws[1]["w0"]:.2f} um at {ws[1]["z"]:.2f} mm, zR\' = {ws[1]["zR"]:.2f} mm; shown as {st[0]}, the lens selected')
+    text = b.eval("document.querySelector('#bench-readout').textContent + ' | ' + document.querySelector('#el-info').textContent").replace('\xa0', ' ')
+    check('198.5 mm' in text and '1.01 mrad' in text and '141.9 µm' in text and '300.74 mm after it' in text and '400.00 mm after it' in text,
+          f'opening view: the read-outs quote zR, theta, the new waist and the ray-optics image: "{text[:200]}..."')
+    # What can be dragged: the hint under the bench changes as the pointer goes over the lens and
+    # the waist's handle.
     F = b.eval('(() => { const f = __app.bench.frame; return [f.left, f.w, f.top, f.h, f.x0, f.x1]; })()')
     box = b.box('#bench')
     fx = lambda z: (F[0] + (z - F[4]) / (F[5] - F[4]) * F[1]) / box[2]
     fy = (F[2] + 0.3 * F[3]) / box[3]
-    b.drag('#bench', (fx(100), fy), (fx(160), fy), steps=10); b.sleep(0.3)
+    hy = lambda x: (F[2] + F[3] / 2 - x * b.eval('__app.state.bench.E') * F[1] / (F[5] - F[4])) / box[3]
+    hints = []
+    for where in [(fx(400), fy), (fx(0), hy(0.2)), (fx(150), 0.92 * F[3] / box[3])]:
+        x, y = b.point('#bench', where); b.mouse('mouseMoved', x, y); b.sleep(0.1)
+        hints.append(b.eval("document.querySelector('#bench-hint').textContent"))
+    check(hints[0].startswith('Lens 1: drag it') and hints[1].startswith('The input waist: drag') and hints[2].startswith('Drag a lens'),
+          f'the hint says what the pointer can do: {[h[:40] for h in hints]}')
+    # Drag the lens 60 mm to the right: the new waist moves as the Gaussian lens law says.
+    b.drag('#bench', (fx(400), fy), (fx(460), fy), steps=10); b.sleep(0.3)
     zl = b.eval('__app.state.bench.elements[0].z')
     ws = waists(b)
-    check(abs(zl - 160) < 2 and abs((ws[1]['z'] - focus0) - (zl - 100)) < 1, f'dragging the lens to z = {zl:.1f} mm moves the focus with it ({focus0:.1f} -> {ws[1]["z"]:.1f} mm)')
+    s2 = b.eval(f"import('/beams/gauss.js').then(g => g.lensLaw({zl}, {ws[0]['zR']}, 200).s2)")
+    check(abs(zl - 460) < 3 and abs(ws[1]['z'] - (zl + s2)) < 1e-6, f'dragging the lens to z = {zl:.1f} mm puts the waist at {ws[1]["z"]:.1f} mm, {s2:.1f} mm after it, as Self\'s law says')
     # Drag the input waist's handle down: a smaller waist.
     w_before = b.eval('__app.state.bench.w0')
-    hy = lambda x: (F[2] + F[3] / 2 - x * b.eval('__app.state.bench.E') * F[1] / (F[5] - F[4])) / box[3]
     b.drag('#bench', (fx(0), hy(w_before)), (fx(0), hy(w_before / 2)), steps=8); b.sleep(0.3)
     w_after = b.eval('__app.state.bench.w0')
     check(abs(w_after - w_before / 2) < 0.03 * w_before, f'dragging the handle sets the input waist ({1000 * w_before:.0f} -> {1000 * w_after:.0f} um)')
-    # Add a slab and a mirror, remove the mirror.
+    # Add a slab and a mirror, remove the mirror, then the slab with its ✕ in the list.
     n0 = b.eval('__app.state.bench.elements.length')
-    b.eval("[...document.querySelectorAll('#add-box button')].find(x => x.textContent.includes('Slab')).click()")
+    b.eval("[...document.querySelectorAll('#add-box button')].find(x => x.textContent.includes('Glass')).click()")
     b.eval("[...document.querySelectorAll('#add-box button')].find(x => x.textContent.includes('Mirror')).click()")
     n1 = b.eval('__app.state.bench.elements.length')
+    rows = b.eval("[...document.querySelectorAll('#chips .el-pick')].map(x => x.textContent)")
     b.eval("[...document.querySelectorAll('#el-editor .sign-seg button')].find(x => x.textContent === 'flat').click()"); b.sleep(0.2)
-    flat = b.eval('[__app.state.bench.sel.R, document.querySelector(".lens-plot-wrap").hidden, document.querySelector("#el-info").textContent]')
+    flat = b.eval('[__app.state.bench.sel.R, document.querySelector("details.lens-law").hidden, document.querySelector("#el-info").textContent]')
     check(flat[0] is None and flat[1], f'a flat mirror: R = infinity (JSON null), no lens-law plot; "{flat[2][:60]}"')
     b.eval("document.querySelector('#el-editor .remove').click()")
     n2 = b.eval('__app.state.bench.elements.length')
-    check(n1 == n0 + 2 and n2 == n0 + 1, f'adding a slab and a mirror, removing the mirror ({n0} -> {n1} -> {n2} elements)')
+    b.eval("[...document.querySelectorAll('#chips .el-row')].find(r => r.textContent.startsWith('Slab')).querySelector('.el-x').click()")
+    n3 = b.eval('[__app.state.bench.elements.length, __app.state.bench.elements.map(e => e.type).join()]')
+    check(n1 == n0 + 2 and n2 == n0 + 1 and n3 == [n0, 'lens'] and len(rows) == n1,
+          f'adding glass and a mirror, removing the mirror, then the glass with its ✕ ({n0} -> {n1} -> {n2} -> {n3[0]} elements; the list: {rows})')
     b.screenshot(f'build/beams{TAG}-edited.png')
     # Pan and zoom.
     v0 = b.eval('[__app.state.bench.vz0, __app.state.bench.vz1]')
-    b.drag('#bench', (fx(380), 0.92 * F[3] / box[3]), (fx(300), 0.92 * F[3] / box[3]), steps=6)
+    b.drag('#bench', (fx(800), 0.92 * F[3] / box[3]), (fx(700), 0.92 * F[3] / box[3]), steps=6)
     v1 = b.eval('[__app.state.bench.vz0, __app.state.bench.vz1]')
-    check(v1[0] > v0[0] + 10 and abs((v1[1] - v1[0]) - (v0[1] - v0[0])) < 1e-6, f'dragging the background pans ({v0[0]:.0f}..{v0[1]:.0f} -> {v1[0]:.0f}..{v1[1]:.0f} mm)')
+    check(v1[0] > v0[0] + 50 and abs((v1[1] - v1[0]) - (v0[1] - v0[0])) < 1e-6, f'dragging the background pans ({v0[0]:.0f}..{v0[1]:.0f} -> {v1[0]:.0f}..{v1[1]:.0f} mm)')
 
     # ---------------------------------------------------------------- the experiments
     for name in b.eval('Object.keys(__app.setups)'):
@@ -175,6 +197,14 @@ with Browser('beams/index.html', size=SIZE) as b:
     b.screenshot(f'build/beams{TAG}-matching.png')
 
     # ---------------------------------------------------------------- the cavity
+    # The resonances: TEM00 is (q + psi1/pi) c/2L, psi1 = arccos 0.75 = 0.230 pi, not on the comb.
+    b.eval('__app.setups.comb()'); b.sleep(0.3)
+    nums = b.eval('[...document.querySelectorAll("#cav-numbers dt, #cav-numbers dd")].map(d => d.textContent).join(" | ")').replace('\xa0', ' ')
+    g = b.eval('__app.cavity.mode.gouy')
+    lines = b.eval(f"import('/beams/cavity.js').then(c => c.modeLines({g}, 3, 0, 1).map(l => [l.N, l.nu]))")
+    check(abs(g / math.pi - 0.230053) < 1e-5 and '(q + 0.230) c/2L' in nums and '137.9 MHz' in nums and '599.6 MHz' in nums
+          and all(abs(nu - ((N + 1) * g / math.pi) % 1) < 1e-9 for N, nu in lines),
+          f'comb: psi1 = {g / math.pi:.4f} pi, TEM00 at (q + 0.230) c/2L, orders {lines} ({nums[nums.index("free"):][:90]})')
     b.eval('__app.setups.stability()'); b.sleep(0.3)
     m = b.eval("import('/beams/cavity.js').then(c => { const s = __app.state.cavity, [g1, g2] = c.gParams(s.L, s.R1, s.R2), m = __app.cavity.mode, cf = c.closedForms(s.L, g1, g2, 633e-6); return { g1, g2, w0: m.w0, cw0: cf.w0, gouy: m.gouy, cg: cf.gouy }; })")
     check(abs(m['w0'] - m['cw0']) < 1e-9 and abs(m['gouy'] - m['cg']) < 1e-9, f'stability: g1 = {m["g1"]}, g2 = {m["g2"]}; mode w0 = {1000 * m["w0"]:.1f} um and psi1 = {m["gouy"] / math.pi:.4f} pi as in the textbook')
@@ -281,10 +311,10 @@ with Browser('beams/index.html', size=SIZE) as b:
     # ---------------------------------------------------------------- read-outs that keep still
     b.eval('__app.setups.start()'); b.sleep(0.5)
     b.eval('__app.bench.select(__app.state.bench.elements[0])'); b.sleep(0.3)
-    BENCH = '#bench-readout > span, #bench-readout .fixnum, #waists th, #waists td, #chips button, #el-info > div, #el-info .fixnum, #crest-note .fixnum, #crest-note, #target-box button, .lens-plot-wrap'
+    BENCH = '#bench-readout > span, #bench-readout .fixnum, #waists th, #waists td, #chips button, #el-info > div, #el-info .fixnum, #crest-note .fixnum, #crest-note, #target-box button, details.lens-law'
     BENCH_TEXT = '#bench-readout, #waists, #chips, #el-info, #crest-note'
     still(b, 'bench: the input waist moved along the bench (signs and sizes)', BENCH, BENCH_TEXT,
-          [set_box(b, '#laser-box', 'at z (mm)', v) for v in (-12.5, 45.25, -40, 0, 88.8, -7.05, 30)])
+          [set_box(b, '#laser-box', 'waist at z (mm)', v) for v in (-12.5, 45.25, -40, 0, 88.8, -7.05, 30)])
     still(b, 'bench: the lens\'s focal length', BENCH, BENCH_TEXT,
           [set_box(b, '#el-editor', 'f (mm)', v) for v in (120, 95.5, 300, 149.99, 220, 101)])
     still(b, 'bench: the wavelength', BENCH, BENCH_TEXT,
@@ -294,9 +324,10 @@ with Browser('beams/index.html', size=SIZE) as b:
         CanvasRenderingContext2D.prototype.fillText = function (t, x, y, m) { if (this.canvas.id === 'bench') seen[t] = this.getTransform().e + x * this.getTransform().a; return f.call(this, t, x, y, m); }; })()""")
     xs = []
     for v in (70.7, 3.25, 1500, 12, 250.5):
-        set_box(b, '#view-box', 'wider ×', v)(); settle(b, '#crest-note'); b.sleep(0.3)
-        xs.append(b.eval("[__seen['drawn ×'], __seen[' wider than it is']]"))
-    check(all(x == xs[0] for x in xs) and None not in xs[0], f'bench: "drawn × … wider than it is" keeps its words in place as the stretch changes ({xs})')
+        set_box(b, '#view-box', 'drawn wider ×', v)(); settle(b, '#crest-note'); b.sleep(0.3)
+        # The long form on a wide bench, "×1290 wider" on a phone.
+        xs.append(b.eval("(__seen['drawn '] !== undefined ? [__seen['drawn '], __seen['× wider than it is']] : [__seen['×'], __seen[' wider']]).map(v => v === undefined ? null : v)"))
+    check(all(x == xs[0] for x in xs) and None not in xs[0], f'bench: "drawn … × wider than it is" keeps its words in place as the stretch changes ({xs})')
     b.eval('__app.setups.stability()'); b.sleep(0.5)
     CAV = '#cavity-readout > span, #cavity-readout .fixnum, #cav-numbers dt, #cav-numbers dd, #cav-numbers .fixnum, #ray-box button'
     still(b, 'cavity: the mirrors\' spacing (g changes sign)', CAV, '#cavity-readout, #cav-numbers',

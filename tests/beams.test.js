@@ -142,6 +142,23 @@ test('beams: the bench\'s field is the field the angular spectrum method compute
   return `max difference from the FFT, as a fraction of the peak: ${notes.join(', ')}`;
 });
 
+test('beams: a waist is real if the light passes through it, even beyond the stretch traced', () => {
+  // A lens at 100 focusing a 0.5 mm beam to a waist near 249 mm; the stretch traced ends at 200.
+  const tr = traceBench({ lambda: LAMBDA, w0: 0.5, z0: 0 }, [{ type: 'lens', z: 100, f: 150 }], -20, 200);
+  const [inp, out] = waists(tr);
+  assert(out.z > 200 && out.real, `the focus at ${out.z.toFixed(1)} mm, past the end of the stretch, is real`);
+  assert(inp.real, 'the input waist, before the lens, is real');
+  // The input waist beyond the first lens is virtual: the light meets the lens first.
+  const t2 = traceBench({ lambda: LAMBDA, w0: 0.5, z0: 150 }, [{ type: 'lens', z: 100, f: 150 }], 0, 300);
+  assert(!waists(t2)[0].real, 'an input waist behind the first lens is virtual');
+  // A diverging lens makes a virtual waist before it, and the beam after it has no real waist.
+  const t3 = traceBench({ lambda: LAMBDA, w0: 0.5, z0: 0 }, [{ type: 'lens', z: 100, f: -100 }], 0, 300);
+  const w3 = waists(t3)[1];
+  assert(w3.z < 100 && !w3.real, `a diverging lens: its waist at ${w3.z.toFixed(1)} mm, before it, is virtual`);
+  // With no element at all, the one waist is real wherever it is.
+  assert(waists(traceBench({ lambda: LAMBDA, w0: 0.5, z0: 5000 }, [], 0, 300))[0].real, 'a lone beam\'s waist is real');
+});
+
 test('beams: mode matching efficiency', () => {
   const q = { re: 12, im: 30 };
   close(coupling(q, q), 1, 1e-15, 'identical beams');
