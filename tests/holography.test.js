@@ -1,7 +1,8 @@
 import { test, assert, close } from './harness.js';
 import {
   field, pointWave, planeWave, sphericalWave, pictureWave, diffuser, record, quantize, lens, look,
-  viewImage, spectrum, images, pointDescription, planeDescription, sphereDescription, criticalDistance,
+  viewImage, spectrum, images, termWave, rayAt, islandBoxes, overlaps,
+  pointDescription, planeDescription, sphereDescription, criticalDistance,
 } from '../holography/holo.js';
 import { propagate } from '../diffraction/optics.js';
 
@@ -337,4 +338,76 @@ test('sampling: the plate records fringes down to two pixels; a point closer tha
   const row = Rq.re.filter((_, o) => o % n === 0);   // the first column, going down
   for (let j = 0; j + 2 < n; j++) close(row[j], row[j + 2], 1e-9, 'period two pixels');
   return `n p^2/lambda = ${(zc / 1000).toFixed(2)} mm`;
+});
+
+test("tilt the reference: the rings' centre moves up to z tan(theta), where the point's light arrives parallel to it", () => {
+  const z = 60000, th = 0.3 * Math.PI / 180;
+  const H = hologram(pointWave(n, p, lambda, { x: 0, y: 0, z, a: 0.3 }, field(n)), planeWave(n, p, lambda, th, field(n)));
+  // The middle column, folded about y0, matches itself best at the centre of the rings.
+  const at = (y) => { const j = Math.floor(y), t = y - j; return H[j * n + h] * (1 - t) + H[(j + 1) * n + h] * t; };
+  let m = 0; for (let j = 0; j < n; j++) m += H[j * n + h] / n;
+  let best = -Infinity, arg = 0;
+  for (let y = 40; y <= 120; y += 0.05) { let c = 0; for (let k = 1; k <= 40; k++) c += (at(y + k) - m) * (at(y - k) - m); if (c > best) { best = c; arg = y; } }
+  const y0 = (h - arg) * p, want = z * Math.tan(th);
+  close(y0, want, 0.5 * p, 'centre of the rings, um above the middle');
+  return `centred ${y0.toFixed(1)} um above the middle; z tan(theta) = ${want.toFixed(1)} um`;
+});
+
+test('islands: one point, the image and twin islands part at sin(theta) = L/2z; a picture, at B and B + W/z', () => {
+  const L = n * p, hl = L / 2, z = 60000, pt = [pointDescription({ x: 0, y: 0, z })];
+  const s0 = hl / z, at = (s) => islandBoxes(pt, planeDescription(Math.asin(s)), hl);
+  assert(overlaps(at(0.99 * s0).image, at(0.99 * s0).twin) && !overlaps(at(1.01 * s0).image, at(1.01 * s0).twin), 'one point: apart at L/2z');
+  // A point has no |O|^2 island (it does not interfere with itself): a box of no size.
+  assert(at(s0).auto.every((v) => v === 0), 'one point: no |O|^2');
+  // A picture W wide at z, lit through ground glass: each corner lights the whole plate.
+  const W = 2000, Z = 120000, c = [[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([a, b]) => pointDescription({ x: a * W / 2, y: b * W / 2, z: Z }));
+  const B = (W + L) / (2 * Z), A = W / Z, box = (s) => islandBoxes(c, planeDescription(Math.asin(s)), hl);
+  close(box(0.03).image[3] - box(0.03).image[2], 2 * B, 1e-12, 'image island 2B tall');
+  close(box(0.03).auto[3], A, 1e-12, '|O|^2 island reaches W/z');
+  assert(overlaps(box(0.99 * B).image, box(0.99 * B).twin) && !overlaps(box(1.01 * B).image, box(1.01 * B).twin), 'twin clears at B');
+  assert(overlaps(box(0.99 * (B + A)).image, box(0.99 * (B + A)).auto) && !overlaps(box(1.01 * (B + A)).image, box(1.01 * (B + A)).auto), 'haze clears at B + W/z');
+  // Points at different depths: their |O|^2 fringes do depend on where on the plate.
+  const two = [pointDescription({ x: 0, y: 0, z: 50000 }), pointDescription({ x: 0, y: 0, z: 130000 })];
+  close(islandBoxes(two, planeDescription(0.03), hl).auto[3], hl * (1 / 50000 - 1 / 130000), 1e-12, 'two depths: |O|^2 reaches L/2 |1/z1 - 1/z2|');
+  const deg = (v) => (Math.asin(v) * 180 / Math.PI).toFixed(3);
+  return `one point at 60 mm: ${deg(s0)} deg; the F (2 mm at 120 mm): twin clear at ${deg(B)} deg, haze at ${deg(B + A)} deg`;
+});
+
+test("the beams of the side view: the rays of an image meet at its focus; a plane wave's rays are parallel", () => {
+  const pt = { x: 120, y: -200, z: 60000 }, O = pointDescription(pt), R = planeDescription(Math.asin(0.02)), m = 532 / 633;
+  for (const sg of [1, -1]) {
+    const w = termWave(O, R, R, m, sg), f = images(O, R, R, m)[sg > 0 ? 'image' : 'twin'];
+    for (const r of [-640, -100, 0, 333, 640]) close(rayAt(w, r, -f.R), f.y, 1e-9, `ray from ${r} at the focus`);
+  }
+  const C = planeDescription(Math.asin(0.02));
+  for (const r of [-640, 0, 640]) close(rayAt(C, r, 50000) - r, 0.02 * 50000, 1e-9, 'plane wave: slope sin(theta)');
+});
+
+test('relit at another wavelength with a plane wave, the image is as big as before, but lambda1/lambda2 as far', () => {
+  const R = planeDescription(Math.asin(0.035)), m = 532 / 633, z = 150000;
+  const top = images(pointDescription({ x: 0, y: 2000, z }), R, R, m).image, bot = images(pointDescription({ x: 0, y: -2000, z }), R, R, m).image;
+  close(top.y - bot.y, 4000, 1e-9, 'the same size');
+  close(top.R, z / m, 1e-6, 'farther, by lambda1/lambda2');
+  close((top.uy + bot.uy) / 2, -(1 - m) * 0.035, 1e-12, 'moved towards the zero order by (1 - mu) sin(theta)');
+  return `4 mm tall either way, at ${(top.R / 1000).toFixed(1)} mm; it looks ${m.toFixed(3)} as big, and ${((1 - m) * 35).toFixed(2)} mrad lower`;
+});
+
+test('a binary zone plate has more foci: z/3 as well as z', () => {
+  const z = 60000, O = pointWave(n, p, lambda, { x: 0, y: 0, z, a: 0.3 }, field(n)), R = planeWave(n, p, lambda, 0, field(n));
+  const grey = hologram(O, R), bin = quantize(hologram(O, R), 1);
+  const at = (H, d) => view(H, null, d)[h * n + h];
+  const g = [17000, 20000, 23000].map((d) => at(grey, d)), b = [17000, 20000, 23000].map((d) => at(bin, d));
+  assert(b[1] > 5 * b[0] && b[1] > 5 * b[2], `binary: a peak at z/3 (${b.map((v) => v.toExponential(2))})`);
+  assert(b[1] > 10 * g[1], `the grey one has none there (${g[1].toExponential(2)} against ${b[1].toExponential(2)})`);
+  return `at z/3 the binary plate's peak is ${(b[1] / g[1]).toFixed(0)} times the grey one's`;
+});
+
+test('lit by the conjugate, the real image of a point is straight in front of it, at the same distance', () => {
+  for (const pt of [{ x: -300, y: 250, z: 50000 }, { x: 300, y: -200, z: 90000 }]) {
+    const src = { x: 0, y: -1500, z: 70000 };
+    for (const [R, C] of [[planeDescription(0.04), planeDescription(0.04, true)], [sphereDescription(src), sphereDescription(src, true)]]) {
+      const real = images(pointDescription(pt), R, C, 1).twin;
+      close(real.R, -pt.z, 1e-6, 'in front, at z'); close(real.x, pt.x, 1e-6, 'x'); close(real.y, pt.y, 1e-6, 'y');
+    }
+  }
 });

@@ -77,7 +77,10 @@ export function pointWave(n, p, lambda, pt, out, add = false) {
 
 /**
  * A plane wave of unit amplitude travelling at angle theta to the axis, tilted towards +y:
- * exp(ik y sin(theta)); conj gives its complex conjugate (the beam reversed).
+ * exp(ik y sin(theta)) at the plate.  conj gives its complex conjugate there, exp(-ik y sin(theta)):
+ * a beam still travelling forwards, tilted the other way.  (The reference sent backwards through
+ * the plate has the same values on it, but its light goes the other way: its real image forms
+ * behind the plate, where the object was.  Here all light goes forwards.)
  */
 export function planeWave(n, p, lambda, theta, out, conj = false) {
   const ky = ((TWO_PI / lambda) * Math.sin(theta)) * (conj ? -1 : 1), { re, im } = out, h = n / 2;
@@ -90,7 +93,8 @@ export function planeWave(n, p, lambda, theta, out, conj = false) {
 
 /**
  * The wave of a point source at (x, y, depth z), unit amplitude across the plate:
- * exp(ik(r - z)).  With conj, the conjugate: a wave converging to the mirror point in front.
+ * exp(ik(r - z)).  With conj, the conjugate: a forward wave converging to the mirror point
+ * (x, y) at z in front.
  */
 export function sphericalWave(n, p, lambda, src, out, conj = false) {
   pointWave(n, p, lambda, { x: src.x, y: src.y, z: src.z, a: 1 }, out);
@@ -300,7 +304,7 @@ export function spectrum(H, n, out = field(n)) {
 export function images(O, R, C, mu) {
   const out = {};
   for (const [name, sg] of [['image', 1], ['twin', -1]]) {
-    const c = C.c + sg * mu * (O.c - R.c), tx = C.tx + sg * mu * (O.tx - R.tx), ty = C.ty + sg * mu * (O.ty - R.ty);
+    const { c, tx, ty } = termWave(O, R, C, mu, sg);
     const Rr = c === 0 ? Infinity : 1 / c;
     // u = t sign(R).  An image at infinity (a plane wave travelling along -t) is drawn where a
     // camera focused far behind the plate sees it, at u = t.
@@ -309,6 +313,50 @@ export function images(O, R, C, mu) {
   }
   return out;
 }
+
+/**
+ * The wave of one term of the relit light, as a description {c, tx, ty} (see images()): sg = +1
+ * for the term that carries O (O R* C), -1 for the one that carries O* (O* R C).
+ */
+export function termWave(O, R, C, mu, sg) {
+  return { c: C.c + sg * mu * (O.c - R.c), tx: C.tx + sg * mu * (O.tx - R.tx), ty: C.ty + sg * mu * (O.ty - R.ty) };
+}
+
+/**
+ * The height y, at a distance z in front of the plate (z < 0: behind it), of the ray of wave w
+ * (a description as for images()) that crosses the plate at height r: the wave's local direction
+ * there is dy/dz = c r - t (paraxial), so y = r + (c r - t) z.  With z = -R this is the point the
+ * wave diverges from (or, for R < 0 and z = |R|, converges to): y = t R, for every r.
+ */
+export const rayAt = (w, r, z) => r + (w.c * r - w.ty) * z;
+
+/**
+ * The islands of a hologram's Fourier transform, as boxes of directions [x0, x1, y0, y1]
+ * (sines, the fringe frequency times the recording wavelength) for an object made of point
+ * sources (descriptions as for images(); for a picture lit through ground glass, its corners,
+ * since each of its points lights the whole plate), a reference R and a plate of half-width hl.
+ * A wave's local direction at plate point r is c r - t, so the term O R* has the directions
+ * (c_O - c_R) r - (t_O - t_R) and each island is bounded by its values at the plate's corners.
+ *   image: O R*, the image term.  twin: O* R, its mirror through the middle.
+ *   auto: |O|^2, every pair of the object's points interfering: (c_i - c_j) r - (t_i - t_j).
+ *     For points at one depth this does not depend on r: at any one point of the plate, the
+ *     light arrives from directions spread over the angle the object subtends, and no more.
+ * Returns null if there are no sources.
+ */
+export function islandBoxes(sources, R, hl) {
+  if (!sources.length) return null;
+  const corners = [[-hl, -hl], [-hl, hl], [hl, -hl], [hl, hl]];
+  const image = [Infinity, -Infinity, Infinity, -Infinity], auto = [0, 0, 0, 0];
+  const grow = (b, x, y) => { b[0] = Math.min(b[0], x); b[1] = Math.max(b[1], x); b[2] = Math.min(b[2], y); b[3] = Math.max(b[3], y); };
+  for (const O of sources) {
+    for (const [rx, ry] of corners) grow(image, (O.c - R.c) * rx - (O.tx - R.tx), (O.c - R.c) * ry - (O.ty - R.ty));
+    for (const Q of sources) for (const [rx, ry] of corners) grow(auto, (O.c - Q.c) * rx - (O.tx - Q.tx), (O.c - Q.c) * ry - (O.ty - Q.ty));
+  }
+  return { image, twin: [-image[1], -image[0], -image[3], -image[2]], auto };
+}
+
+/** Do two boxes [x0, x1, y0, y1] overlap? */
+export const overlaps = (a, b) => !!(a && b && a[0] < b[1] && b[0] < a[1] && a[2] < b[3] && b[2] < a[3]);
 
 /** The wave description used by images() for a point at (x, y, depth z). */
 export const pointDescription = (pt) => ({ c: 1 / pt.z, tx: pt.x / pt.z, ty: pt.y / pt.z });
