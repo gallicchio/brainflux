@@ -1763,13 +1763,28 @@ window.__app = {
     for (let n = 0; n < d.N; n++) if (d.t[n] >= lo && d.t[n] <= hi) m = Math.max(m, Math.hypot(d.vr[n], d.vi[n]));
     return m;
   },
+  /** The field at depth z (in the frame shown) between times lo and hi, every step-th sample:
+   *  {t, E, env} (env: the running maximum of |E| over the last period, as drawn for a front). */
+  fieldAt(z, lo = -Infinity, hi = Infinity, step = 1) {
+    const d = pulseAt(z), win = Math.max(1, Math.round((2 * Math.PI) / (state.pulse.w0 * d.P.dt))), env = causalEnvelope(d.mr, win);
+    const out = { t: [], E: [], env: [] };
+    for (let n = 0; n < d.N; n += step) if (d.t[n] >= lo && d.t[n] <= hi) { out.t.push(d.t[n]); out.E.push(d.mr[n]); out.env.push(env[n]); }
+    return out;
+  },
   acausal: () => acausalFraction(),
   sumRule: () => sumRule(),
+  rebuild: () => rebuild(),
   handles: () => handles.map((h) => ({ ...h })),
   ng: (w) => ngAt(w),
   optics: (w) => { const o = optics(resp, Float64Array.of(w)); return { n: o.n[0], k: o.k[0], R: o.R[0], er: o.er[0], ei: o.ei[0] }; },
   charge: (w = state.probe) => { const c = chargeAt(w); return { amp: c.amp, lag: c.lag * DEG, free: c.free }; },
   sliver: () => sliver(),
+  /** The sliver's share of Re χ at the frequencies ws, and its ring at the times ts. */
+  sliverShare(ws, ts = []) {
+    const sl = sliver();
+    if (!sl) return null;
+    return { re: Array.from(sliverRe(sl.a, sl.b, sl.h, Float64Array.from(ws))), t: Array.from(sliverTime(sl.a, sl.b, sl.h, Float64Array.from(ts), !state.broken)) };
+  },
   /** The picture in space at time t: the depth of the envelope's peak, its height, and where the
    *  window is. */
   snapshotPeak(t) {

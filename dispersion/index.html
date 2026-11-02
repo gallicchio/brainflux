@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dispersion and Kramers–Kronig · BrainFlux</title>
-<meta name="description" content="Build ε(ω) from resonances you drag, see the index, the absorption and the reflectance, draw one and get the other by Kramers–Kronig, and send pulses through the medium.">
+<meta name="description" content="A charge on a spring, shaken by light: why the index rises towards a resonance and falls through it, what n and κ do to a wave, why causality ties dispersion to absorption (Kramers–Kronig, one sliver at a time), and pulses at the group velocity.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../lib/style.css">
 <link rel="stylesheet" href="dispersion.css">
@@ -83,185 +83,263 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>A light wave $e^{i(kz-\omega t)}$ shakes the charges in a medium, and their response adds to
-  the field: $\varepsilon(\omega)=1+\chi(\omega)$.  Here the charges are damped oscillators,
-  $$\varepsilon(\omega)=1+\sum_j\frac{\omega_{pj}^2}{\omega_j^2-\omega^2-i\gamma_j\omega},$$
-  each with its resonance $\omega_j$, its width $\gamma_j$ and its strength $\omega_{pj}^2=f_j\omega_p^2$
-  ($\omega_j=0$ is a free electron: a Drude metal).  The wave then travels as
-  $e^{i(\tilde n\omega z/c-\omega t)}$ with $\tilde n=n+i\kappa=\sqrt{\varepsilon}$: $n$ sets its speed,
-  $\kappa$ its absorption, and $R=|(\tilde n-1)/(\tilde n+1)|^2$ is the fraction reflected at normal
-  incidence.  Drag the round handles to move a resonance or change its strength, the small ones
-  to change its width; point at a plot (or tap it) to read the numbers at one frequency.  The
-  three views: the <em>medium</em>, <em>Kramers–Kronig</em> (draw $\mathrm{Im}\,\chi$ or
-  $\mathrm{Re}\,\chi$ and get the other, and the response in time), and <em>pulses</em> sent
-  through it, computed exactly frequency by frequency.  With $c=1$, a frequency unit $\omega_u$
-  makes $1/\omega_u$ the unit of time and $c/\omega_u$ that of distance; the real materials are
-  in eV, MHz or THz, with times and distances to match.</p>
+  <p>Light shakes the charges in matter, and the shaken charges radiate too.  Here each kind of
+  charge is a mass on a spring with friction (the Lorentz model): charge $q$, mass $m$, natural
+  frequency $\omega_0$, damping rate $\gamma$, pushed by the light's field $E_0\cos\omega t$,
+  $$m\ddot x+m\gamma\dot x+m\omega_0^2x=qE_0\cos\omega t .$$
+  Once it has settled, $x=Ax_s\cos(\omega t-\delta)$: it swings $A$ times as far as a steady
+  field would pull it ($x_s=qE_0/m\omega_0^2$) and lags behind $E$ by $\delta$, with
+  $$A=\frac{\omega_0^2}{\sqrt{(\omega_0^2-\omega^2)^2+\gamma^2\omega^2}},\qquad \tan\delta=\frac{\gamma\omega}{\omega_0^2-\omega^2},$$
+  the resonance curve of the driven oscillator in mechanics.  $N$ such charges per volume make
+  the polarisation $P=Nqx=\varepsilon_0\chi E$.  In complex notation, with fields going as
+  $e^{-i\omega t}$ (as in Griffiths and Jackson),
+  $$\chi(\omega)=\frac{\omega_p^2}{\omega_0^2-\omega^2-i\gamma\omega}=\frac{\omega_p^2}{\omega_0^2}\,A\,e^{i\delta},\qquad \omega_p^2=\frac{Nq^2}{\varepsilon_0m},$$
+  so the part of the motion in step with $E$ ($A\cos\delta$) makes $\mathrm{Re}\,\chi$, and the
+  part a quarter period late ($A\sin\delta$) makes $\mathrm{Im}\,\chi>0$, the absorption.  The
+  index is $\tilde n=n+i\kappa=\sqrt{\varepsilon}=\sqrt{1+\chi}$, and a wave in the medium goes
+  as
+  $$e^{i(\tilde n\omega z/c-\omega t)}=e^{-\kappa\omega z/c}\,e^{i(n\omega z/c-\omega t)}:$$
+  its crests are $\lambda_0/n$ apart and move at $c/n$, and its amplitude falls by $1/e$ in
+  $c/\kappa\omega$.  (Griffiths writes the wave number as $k+i\kappa$; his $\kappa$ is our
+  $\kappa\omega/c$.)  A medium may have several kinds of charge, each with its own line;
+  $\omega_0=0$ is a free electron (no spring: a metal or a plasma).</p>
+  <p>The page has three views.  <b>1 · Medium</b>: $n$ and $\kappa$ (or $\varepsilon'$ and
+  $\varepsilon''$) against frequency, one charge and the light's wave at the frequency of the
+  square handle, and the reflectance.  Drag the square handle (or anywhere on the plot) to
+  change the light's frequency; drag a line's round handle sideways to move it and up or down
+  to make it stronger, and its small diamonds to make it wider.  <b>2 · Kramers–Kronig</b>:
+  draw $\mathrm{Im}\,\chi$ or $\mathrm{Re}\,\chi$ and get the other; one sliver of the
+  absorption at a time; the response in time.  <b>3 · Pulses</b>: a pulse inside the medium at
+  one moment, and what a detector at depth $z$ records, computed exactly, frequency by
+  frequency.  With $c=1$, a frequency unit $\omega_u$ makes $1/\omega_u$ the unit of time and
+  $c/\omega_u$ that of distance; the real materials are in eV, MHz or THz, with times and
+  distances to match.</p>
 
   <article class="exp" data-setup="one">
-    <h3>1. One resonance</h3>
-    <p>One line at $\omega_0=2$.  $\varepsilon''$ (orange) is the absorption line, a peak of width
-    $\gamma$.  $\varepsilon'$ (blue) rises towards the line from both sides: that is normal
-    dispersion, $dn/d\omega>0$, where light is not absorbed.  Inside the line it falls: anomalous
-    dispersion, and only where the medium absorbs.  Just above the line $\varepsilon'$ dips below
-    zero and $n$ below 1, and there the reflectance peaks (21% at $\omega=2.1$).  Drag the line
-    about, make it wider or stronger, add a second one, switch to $n$ and $\kappa$.</p>
+    <h3>1. A charge on a spring</h3>
+    <p>One line at $\omega_0=2$, $\gamma=0.2$.  The light's frequency sweeps slowly across it
+    (drag the square handle to take over).  Watch the charge and the two curves beside it, $E(t)$
+    and $x(t)$.  Far below the line the spring wins: the charge moves in step with $E$
+    ($\delta=1.5^\circ$ at $\omega=0.5$), the dipoles $qx$ point along $E$, $\chi>0$ and $n>1$.  At
+    the line the charge swings ten times as far as the static pull ($A=\omega_0/\gamma=10$) and
+    lags by a quarter period, $\delta=90^\circ$: its velocity is then in step with $E$, so the
+    field does work on it all the time, and the light is absorbed ($\kappa$ peaks, at 0.92).
+    Above the line inertia wins: the charge moves against $E$ ($\delta=167^\circ$ at $\omega=2.5$),
+    $\chi<0$ and $n<1$ (0.762 there).  That is the whole shape of $n(\omega)$: rising slowly
+    towards the line from below (normal dispersion, $dn/d\omega>0$), falling steeply through it
+    (anomalous dispersion, only where the medium absorbs), and below 1 above it, rising back
+    towards 1.</p>
   </article>
 
-  <article class="exp" data-setup="delay">
-    <h3>2. A pulse is late: the group velocity</h3>
-    <p>A pulse with its spectrum (the grey hump) well below the line, sent through $z=120$ of
-    the medium, against the same pulse through vacuum (dashed).  It arrives late by
-    $z(n_g-1)/c$, where $n_g=n+\omega\,dn/d\omega=c\,dk/d\omega$ is the group index (green):
-    $n_g=1.25$, so 30.0 late, and the peak comes at 29.8.  The crests inside travel at $c/n$
-    ($n=1.15$), faster than the pulse.  The tail of the line still absorbs a little
-    ($\kappa=0.005$): by $z=120$ the peak is down to 54%.  Drag the carrier (the vertical line)
-    towards the line: $n_g$ grows, the pulse is later, and it spreads, because its two sides see
-    different $n_g$; its front turns red (lower frequencies go faster here).</p>
-  </article>
-
-  <article class="exp" data-setup="spread">
-    <h3>3. A short pulse spreads, red first</h3>
-    <p>A 10 fs pulse at 800 nm through fused silica, in the frame moving with the pulse.  In the
-    visible and near infrared glass has normal dispersion, so red light (lower $\omega$, lower
-    $n_g$) runs ahead of blue: the pulse spreads and is <em>chirped</em>, red at its front and blue
-    at its back (the colour of the envelope is the local frequency).  Its length (r.m.s., in the
-    read-out) grows by $\sqrt2$ in 1 mm, doubles in 1.73 mm and is 5.1 times its start after
-    5 mm, just as $\sqrt{1+(z/L)^2}$ with $L=T_0^2/\beta_2=1.0$ mm says, for
-    $\beta_2=d^2k/d\omega^2=36\ \mathrm{fs^2/mm}$.  This is why femtosecond lasers need prism or
-    grating compressors.  Meanwhile the whole pulse is 7.8 ps behind light in vacuum.  Make the
-    pulse 20 fs long: $L$ grows as $T^2$, and after 5 mm it is only 1.6 times longer.</p>
-  </article>
-
-  <article class="exp" data-setup="glass">
-    <h3>4. Glass: why a prism spreads blue more</h3>
-    <p>Fused silica, as three oscillators (Malitson's fit): two resonances in the ultraviolet
-    (10.7 and 18 eV), one in the infrared (0.13 eV, at the left edge).  The visible band (the
-    rainbow strip) lies between them, where nothing absorbs and $n$ rises gently towards the
-    ultraviolet lines: $n=1.456$ in the red (656 nm), $1.463$ in the blue (486 nm).  So blue is
-    bent more.  The rise steepens towards the resonance, which is why violet is spread more than
-    red.  Tap the plot to read $n$ at any frequency.</p>
+  <article class="exp" data-setup="wave">
+    <h3>2. What $n$ and $\kappa$ do to the wave</h3>
+    <p>The light at $\omega=1.6$, below the line: $n=1.290$ and $\kappa=0.057$.  In the
+    picture on the right the wave comes in from vacuum.  Inside, its crests are $\lambda_0/n=
+    0.775\,\lambda_0$ apart (compare the two scale bars) and the amplitude falls by $1/e$ in
+    $c/\kappa\omega=2.79\,\lambda_0$ (the orange dot).  The surface reflects
+    $R=|(\tilde n-1)/(\tilde n+1)|^2=1.7\%$; the faint ripple of the dashed envelope on the left is
+    the reflected wave beating with the incoming one.  Drag $\omega$ onto the line ($\omega=2$):
+    the wave is gone within $0.17\,\lambda_0$.  Just above it ($\omega=2.1$), where $n<1$ and
+    $\kappa$ is still large, $R$ peaks at 21%.  Further up ($\omega=2.5$) the medium is
+    transparent again but $n=0.762$: the crests inside are further apart than in vacuum
+    ($1.31\,\lambda_0$) and move faster than $c$.  That breaks no law: a crest carries no
+    signal (experiments 14 and 15).</p>
   </article>
 
   <article class="exp" data-setup="metal">
-    <h3>5. A metal and its plasma frequency</h3>
-    <p>Free electrons, $\varepsilon=1-\omega_p^2/(\omega^2+i\gamma\omega)$, for sodium:
-    $\hbar\omega_p=5.9$ eV.  Below $\omega_p$, $\varepsilon'<0$, $\tilde n$ is almost purely imaginary,
-    the wave dies within a skin depth and $R$ is nearly 1: a mirror.  Above $\omega_p$ the
-    electrons cannot keep up, $\varepsilon'>0$ and the metal turns transparent.  Sodium, like the
-    other alkali metals, is transparent in the ultraviolet below about 210 nm (Wood, 1933).
-    Drag the $\omega_p$ handle; widen $\gamma$ to see the edge soften.</p>
+    <h3>3. A metal is a mirror below $\omega_p$</h3>
+    <p>Free electrons, $\varepsilon=1-\omega_p^2/(\omega^2+i\gamma\omega)$, with sodium's
+    $\hbar\omega_p=5.9$ eV.  With no spring, nothing pulls an electron back, and it moves against
+    $E$ at every frequency ($\delta=179.6^\circ$ at 3 eV): $\chi<0$ always.  Below $\omega_p$ it
+    is large enough to make $\varepsilon'<0$: then $n\approx0$ (0.008 at 3 eV) and $\kappa$ is
+    large (1.69), so no wave travels in.  The field dies within $c/\kappa\omega=39$ nm, the skin
+    depth, and $R=99.2\%$: a mirror (the reflected wave makes a standing wave outside).  Above $\omega_p$ the electrons' response is too weak to make $\varepsilon$
+    negative, and the metal turns transparent: $R=17\%$ at 6.5 eV and $3.8\%$ at 8 eV.
+    Sodium, like the other alkali metals, lets ultraviolet light through below about 210 nm
+    (Wood, 1933).  Drag $\omega$ across $\omega_p$, or drag the $\omega_p$ handle: it sets the
+    electron density, $\omega_p^2=Ne^2/\varepsilon_0m$.</p>
   </article>
 
   <article class="exp" data-setup="ionosphere">
-    <h3>6. The ionosphere reflects AM radio</h3>
-    <p>The same physics with $10^{12}$ electrons per cubic metre: $f_p=\omega_p/2\pi\approx9$ MHz
-    (frequencies here are $f$ in MHz).  AM broadcasts (0.5 to 1.7 MHz) are below $f_p$ and
-    bounce back, which is why they are heard far beyond the horizon at night.  FM (around
-    100 MHz) and satellite signals go straight through.  This is the idealised sharp surface
-    at normal incidence; the real ionosphere is gradual, and reflects each frequency where
-    $f_p$ of the local density reaches it.  At a slant it reflects frequencies up to
-    $f_p/\cos\theta$, which is how shortwave goes round the world.  Drag the $\omega_p$ handle: the
-    density, and with it $f_p$, changes through the day and with the sunspot cycle.</p>
+    <h3>4. The ionosphere reflects AM radio</h3>
+    <p>The same physics with $10^{12}$ electrons per cubic metre: $f_p=\omega_p/2\pi\approx9$
+    MHz (frequencies here are $f$ in MHz).  AM broadcasts (0.53 to 1.7 MHz) are far below $f_p$
+    and are reflected ($R=99.8\%$); at 15 MHz $R$ is down to 1.2%, and FM (around 100 MHz) and
+    satellite signals go straight through.  This is an idealised sharp surface at normal
+    incidence.  The real ionosphere thickens gradually with height, and reflects each frequency
+    where its own $f_p$ reaches it; at a slant, $\theta$ from the vertical, it reflects
+    frequencies up to $f_p/\cos\theta$, which is how shortwave goes round the world.  AM is
+    heard far away mostly at night, because by day the lower D layer absorbs it before it gets
+    that high.  Drag the $\omega_p$ handle: the density changes through the day and with the
+    sunspot cycle.</p>
+  </article>
+
+  <article class="exp" data-setup="glass">
+    <h3>5. Glass: why a prism spreads the colours</h3>
+    <p>Fused silica, as three oscillators (Malitson's fit): two resonances in the ultraviolet
+    (10.7 and 18 eV) and one in the infrared (0.13 eV, at the left edge).  The visible band
+    (the rainbow strip) lies between them, where nothing absorbs.  There the ultraviolet charges
+    move in step with $E$ ($\delta\approx0$: drag the light through the visible), so $n>1$, and
+    $n$ rises gently towards their lines: $n=1.4564$ in the red (656 nm), $1.4631$ in the blue
+    (486 nm), so blue is bent more.  The rise steepens towards the lines ($dn/d\omega$ is 0.0092
+    per eV in the red, 0.0140 at 400 nm), which is why a prism spreads the violet end of its
+    spectrum more than the red.</p>
   </article>
 
   <article class="exp" data-setup="reststrahlen">
-    <h3>7. Reststrahlen: a mirror between $\omega_\mathrm{TO}$ and $\omega_\mathrm{LO}$</h3>
-    <p>Rock salt in the infrared (frequencies in THz).  The ions vibrate against each other at
-    the transverse optical frequency $\omega_\mathrm{TO}/2\pi=4.9$ THz; the electrons respond
-    instantly at these frequencies and add the background $\varepsilon_\infty=2.34$.  Between
-    $\omega_\mathrm{TO}$ and the zero of $\varepsilon'$ at
-    $\omega_\mathrm{LO}=\omega_\mathrm{TO}\sqrt{\varepsilon(0)/\varepsilon_\infty}$, at 7.8 THz (Lyddane, Sachs
-    and Teller) $\varepsilon'<0$ and the crystal reflects almost everything: 94% at 6.2 THz.
-    Repeated reflections off such crystals filter out all but these "residual rays" (Rubens,
-    1897).  Widen $\gamma$ to 0.5 THz: damping rounds the plateau, and $R$ there falls to 75%.</p>
-  </article>
-
-  <article class="exp" data-setup="draw">
-    <h3>8. Draw the absorption, get the index</h3>
-    <p>Here $\mathrm{Im}\,\chi$ is a flat band of absorption, drawn by hand, and $\mathrm{Re}\,\chi$ is
-    what causality makes of it:
-    $$\mathrm{Re}\,\chi(\omega)=\frac1\pi\,P\!\int_{-\infty}^{\infty}\frac{\mathrm{Im}\,\chi(\omega')}{\omega'-\omega}\,d\omega'$$
-    (Kramers–Kronig), with logarithmic peaks at the sharp edges of the band.  Draw on
-    $\mathrm{Im}\,\chi$: an absorption line anywhere gives normal dispersion everywhere else.  Or
-    draw on $\mathrm{Re}\,\chi$ and see what absorption it needs (orange below zero would be gain).
-    The bottom plot is $\chi(t)$, the response to a kick at $t=0$: zero before it.  The
-    transform is done with FFTs on a grid out to 8 times the plotted range; an error of about
-    0.1% comes from that grid.</p>
-  </article>
-
-  <article class="exp" data-setup="acausal">
-    <h3>9. Break causality</h3>
-    <p>A medium that absorbs exactly as the single line does, but with $\mathrm{Re}\,\chi=0$: no
-    dispersion at all.  Its response $\chi(t)$ is odd in time: it starts responding before the
-    kick, as much as after.  Kramers–Kronig is causality written in frequency: a response that
-    vanishes for $t<0$ has real and imaginary parts that are Hilbert transforms of each other.
-    With <em>Break causality</em> on, draw on either side and watch $\chi(t)$ leak into the past;
-    turn it off and the other side is recomputed, and the past goes quiet.</p>
+    <h3>6. Reststrahlen: a mirror between $\omega_\mathrm{TO}$ and $\omega_\mathrm{LO}$</h3>
+    <p>Rock salt in the infrared (frequencies $\nu$ in THz).  The Na⁺ and Cl⁻ ions vibrate against
+    each other at the transverse optical frequency, $\nu_\mathrm{TO}=4.9$ THz; the electrons,
+    whose lines are far higher, respond at once and add the background $\varepsilon_\infty=2.34$,
+    so $\varepsilon(0)=5.90$.  Above $\omega_\mathrm{TO}$ the ions move against $E$, and so
+    strongly that $\varepsilon'<0$, up to where $\varepsilon'$ comes back through zero at
+    $\omega_\mathrm{LO}=\omega_\mathrm{TO}\sqrt{\varepsilon(0)/\varepsilon_\infty}$ (Lyddane,
+    Sachs and Teller), at 7.78 THz.  In between, like a metal below $\omega_p$, the crystal
+    reflects almost everything: 94% at 6.2 THz.  Repeated reflections off such crystals filter
+    out all but these "residual rays" (Rubens and Nichols, 1897).  Widen $\gamma$ to 0.5 THz:
+    damping rounds the plateau, and $R$ at 6.2 THz falls to 75%.</p>
   </article>
 
   <article class="exp" data-setup="sumrule">
-    <h3>10. The f-sum rule</h3>
-    <p>However a line is drawn, its area is fixed:
-    $$\int_0^\infty\omega\,\varepsilon''(\omega)\,d\omega=\frac{\pi}{2}\,\omega_p^2,\qquad \omega_p^2=\frac{Ne^2}{\varepsilon_0m}.$$
-    Drag a line's width handles: it gets lower as it gets wider and the read-out does not move.
-    Move it: still the same.  Only the strength (the number of electrons) changes it.  This is
-    Kramers–Kronig at high frequency, where every electron responds as if it were free,
-    $\chi\to-\omega_p^2/\omega^2$.</p>
+    <h3>7. The f-sum rule</h3>
+    <p>However a line is shaped, one weighted area is fixed by the number of charges alone:
+    $$\int_0^\infty\omega\,\varepsilon''(\omega)\,d\omega=\frac{\pi}{2}\,\omega_p^2,\qquad\omega_p^2=\frac{Nq^2}{\varepsilon_0m}.$$
+    The read-out shows it, $(\pi/2)\times1.000$ for this line.  Drag its diamonds to widen it:
+    it gets lower as it gets wider, and the number does not move.  Move the line: still the same
+    (the plain area $\int\varepsilon''d\omega\approx\pi\omega_p^2/2\omega_0$ does change).  Only
+    the strength, the round handle up or down, changes it.  This is Kramers–Kronig at high
+    frequency: there every charge responds as if it were free, $\chi\to-\omega_p^2/\omega^2$.</p>
+  </article>
+
+  <article class="exp" data-setup="sliver">
+    <h3>8. Kramers–Kronig, one sliver at a time</h3>
+    <p>Causality: the charges cannot respond before they are pushed.  The bottom plot is
+    $\chi(t)$, the polarisation after a short kick of $E$ at $t=0$, and it is zero before
+    (shaded).  For one line, $\chi(t)$ rings at $\omega_0$ and dies away in $2/\gamma$.  Now take
+    one sliver of the absorption, $\mathrm{Im}\,\chi$ near $\omega'$ (the teal strip; drag its
+    handle).  On its own it would ring as $\sin\omega't$ for $t<0$ as well as for $t>0$
+    (experiment 10).  To be zero before the kick it needs a partner in $\mathrm{Re}\,\chi$: the
+    dashed curve, its share, positive below $\omega'$ and negative above, falling off as
+    $1/(\omega'-\omega)$.  With it, its ring starts at the kick (dashed, below).  Add up the
+    shares of all the slivers and you have $\mathrm{Re}\,\chi$:
+    $$\mathrm{Re}\,\chi(\omega)=\frac1\pi\,P\!\int_{-\infty}^{\infty}\frac{\mathrm{Im}\,\chi(\omega')}{\omega'-\omega}\,d\omega' .$$
+    Below the line every sliver pushes $\mathrm{Re}\,\chi$ up, the more the nearer it is, so $n$
+    rises towards the line; above it they all pull it down.  Near its own sliver a share is
+    large, but there the shares of its neighbours on either side cancel it.</p>
+  </article>
+
+  <article class="exp" data-setup="draw">
+    <h3>9. Draw the absorption, get the index</h3>
+    <p>$\mathrm{Im}\,\chi$ is a flat band of absorption, drawn by hand, and $\mathrm{Re}\,\chi$ is
+    what causality makes of it: $(h/\pi)\ln|(b^2-\omega^2)/(a^2-\omega^2)|$ for a band of height
+    $h$ from $a$ to $b$, with a peak at each sharp edge.  Draw on $\mathrm{Im}\,\chi$: absorption
+    anywhere gives $d\,\mathrm{Re}\,\chi/d\omega>0$ (normal dispersion) everywhere else.  Or
+    draw on $\mathrm{Re}\,\chi$ and see what absorption it needs (orange below zero would be
+    gain).  The transforms are done with FFTs on a grid reaching 8 times past the plotted
+    range; for this band they agree with the formula to within 1% of $h$, except right at its
+    edges.</p>
+  </article>
+
+  <article class="exp" data-setup="acausal">
+    <h3>10. Break causality</h3>
+    <p>A medium that absorbs exactly as the single line does, but with
+    $\mathrm{Re}\,\chi=0$: no dispersion at all.  Its $\chi(t)$ is odd in time: it responds before
+    the kick as much as after (100%, says the read-out), and so does the sliver.  Kramers–Kronig
+    is causality written in frequency: a response that vanishes for $t<0$ has real and
+    imaginary parts that are each other's Hilbert transform.  With <em>Break causality</em> on,
+    draw on either side and watch $\chi(t)$ leak into the past; turn it off and the other side
+    is recomputed, and the past goes quiet.</p>
+  </article>
+
+  <article class="exp" data-setup="typed">
+    <h3>11. Type χ(ω): the sign of i</h3>
+    <p>$\chi(\omega)=\omega_p^2/(\omega_0^2-\omega^2-i\gamma\omega)$ typed in (as
+    <code>wp^2/(w0^2 - w^2 - i g w)</code>): causal (before the kick, $1.5\times10^{-4}$ of its size
+    after; the small leak comes from cutting its $1/\omega^2$ tail off at the end of the grid).
+    Its poles are at $\omega=-i\gamma/2\pm\sqrt{\omega_0^2-\gamma^2/4}$, in the lower half-plane,
+    as a causal response's must be when fields go as $e^{-i\omega t}$.  Change $-i$ to $+i$: the
+    poles move to the upper half-plane and $\chi(t)$ is the same ring run backwards, entirely
+    before the kick.  (With $e^{+i\omega t}$, the engineers' convention, the signs are the other
+    way round.)  Its $\mathrm{Im}\,\chi$ is negative too, as for gain; but a real amplifier, a
+    laser's inverted atoms, has $\chi\to-\chi$, still causal.  Try the others: a constant is an
+    instantaneous response, $\delta(t)$; absorption with no dispersion is not causal.  A
+    conductor, $i\sigma/\omega$ (<code>i s/w</code>), comes out not quite causal either:
+    $\chi(t)=\frac{\sigma}{2}\,\mathrm{sgn}\,t$.  The causal one is $i\sigma/(\omega+i0)$, whose real
+    part has a $\pi\sigma\,\delta(\omega)$ that no formula sampled on a grid can show; with it,
+    $\chi(t)=\sigma$ for $t>0$ and 0 before.</p>
+  </article>
+
+  <article class="exp" data-setup="delay">
+    <h3>12. A pulse is late: phase and group velocity</h3>
+    <p>A pulse below the line ($\omega_c=1$; its spectrum is the grey hump).  The middle plot is
+    the pulse inside the medium at one moment, against the same pulse in vacuum (dashed).  The
+    dot rides one crest, at the phase velocity $c/n=0.866\,c$; the triangle rides the peak of
+    the envelope, at the group velocity $c/n_g=0.800\,c$, where
+    $$n_g=n+\omega\frac{dn}{d\omega}=c\,\frac{dk}{d\omega}$$
+    (green on the top plot).  Since $n$ rises with $\omega$ here, $n_g>n$: the crests run
+    forward through the pulse, appearing at its back and vanishing at its front.  The bottom
+    plot is what a detector at $z=120$ records: the peak comes $29.8$ after light through
+    vacuum would, as $z/v_g-z/c=z(n_g-1)/c=30.0$ says.  The tail of the line still absorbs a
+    little ($\kappa=0.005$): the peak is down to 54%.  Drag the carrier towards the line:
+    $n_g$ grows, the pulse is later and spreads, its two sides seeing different $n_g$; its front
+    turns red, since here lower frequencies go faster (the colour is the local frequency).</p>
+  </article>
+
+  <article class="exp" data-setup="spread">
+    <h3>13. A short pulse spreads, red first</h3>
+    <p>A 10 fs pulse at 800 nm through 5 mm of fused silica, watched moving with the pulse.  In
+    the visible and near infrared glass has normal dispersion, so red light (lower $\omega$,
+    lower $n_g$) runs ahead of blue: the pulse spreads and is <em>chirped</em>, red at its front
+    and blue at its back.  Its r.m.s. length at the detector grows 1.416 times in 1 mm, 2.004
+    times in 1.73 mm and 5.111 times in 5 mm (set $z$), close to $\sqrt{1+(z/L)^2}$ (1.414, 2.000,
+    5.099) with $L=T_0^2/\beta_2=1.0$ mm, for $\beta_2=d^2k/d\omega^2=36\ \mathrm{fs^2/mm}$
+    ($T_0=T/2\sqrt{\ln2}$).  This is why femtosecond lasers need prism or grating compressors.
+    Meanwhile the whole pulse falls 7.79 ps behind light in vacuum ($n_g=1.467$).  Make it 20 fs
+    long: $L$ grows as $T^2$, and after 5 mm it is only 1.60 times longer.</p>
   </article>
 
   <article class="exp" data-setup="superluminal">
-    <h3>11. Faster than light? The peak exits early</h3>
-    <p>A long pulse tuned to the middle of a weak absorption line, where $dn/d\omega<0$ so steeply
-    that $n_g$ is negative ($-0.98$).  The peak of what comes out leaves the medium <em>before</em>
-    the peak of a pulse through vacuum arrives: 6.7 time units early at $z=5$, 12.9 at $z=10$
-    (the group velocity alone would say 9.9 and 19.7; the absorption reshapes the pulse too).
-    But it is mostly absorbed: by $z=10$ the peak is 18% as high (the curve is scaled up to be
-    seen).  Nothing is going faster than light: the medium absorbs the back of the pulse more
-    than its front, and the front was already there, in the smooth Gaussian, long before the
-    peak.  Make the pulse short ($T=10$): its spectrum is now as wide as the line, the pulse is
+    <h3>14. Faster than light? The peak exits early</h3>
+    <p>A long pulse tuned to the middle of a weak absorption line, where $n$ falls so steeply
+    with $\omega$ that $n_g=-0.975$: negative.  At the detector, the peak of what comes out
+    arrives <em>before</em> the peak of a pulse through vacuum: 6.7 early at $z=5$ and 12.9 at
+    $z=10$ (the group velocity alone would say 9.9 and 19.7), but much reduced: 42% as high at
+    $z=5$, 18% at $z=10$ (the curve is enlarged to be seen).  Nothing goes faster than light.
+    The charges need time (about $2/\gamma=10$) to build up the motion that cancels the wave,
+    so the front of the pulse gets through better than its back, and what comes out is a small
+    copy built from the front, which was there, in the smooth Gaussian, long before the peak.
+    Cut the front off sharply and see (15).  Make the pulse short ($T=10$): its spectrum is now as wide as the line, the pulse is
     distorted, and its peak is only 1.6 early at $z=5$.</p>
   </article>
 
   <article class="exp" data-setup="front">
-    <h3>12. ...and a front never arrives early</h3>
-    <p>The same pulse, cut off sharply in front: before the cut, 24 before its peak, there is no
-    field at all.  Now what comes out piles up just behind the front, and the front itself
-    arrives exactly when light through vacuum would: before it the field is below $10^{-9}$ of
-    the peak (the read-out; switch on <em>log |E|</em> to see it).  Information travels with
-    fronts, and fronts travel at $c$: as $\omega\to\infty$ every medium has $n\to1$.  (The cut is
-    smoothed over a couple of time steps of the computation, a small fraction of a period.)</p>
+    <h3>15. ...and a front never arrives early</h3>
+    <p>The same pulse with a sharp front: before $t_f=-24$ (24 before its peak) there is no field
+    at all.  What comes out now piles up just behind the front (its peak is at $-22.9$), and
+    the front itself arrives exactly when light through vacuum would: before it the field is
+    below $10^{-9}$ of its peak (the read-out; switch on <em>log |E|</em> to see it).
+    Information travels with fronts, and fronts travel at $c$: a front contains every
+    frequency, and as $\omega\to\infty$ every medium has $n\to1$ (the charges cannot follow).
+    (The cut is smoothed over a couple of time steps of the computation, a small fraction of a
+    period.)</p>
   </article>
 
   <article class="exp" data-setup="precursors">
-    <h3>13. Precursors</h3>
+    <h3>16. Precursors</h3>
     <p>A carrier switched on suddenly at $t=0$ into a dense medium (Brillouin's own numbers,
     1914).  The first thing to arrive, exactly at $t=z/c$, is the Sommerfeld precursor: the
-    highest frequencies, which see $n\approx1$, wiggling slower and slower.  Next comes the
-    Brillouin precursor, the lowest frequencies, a slow swing near $t=n(0)z/c$ ($n(0)=1.5$), and
-    only then does the field settle into the signal at the carrier frequency, weakened by
-    absorption: by $z=10$ it is most of the way there at $t-z/c\approx8$, well before the group
-    delay $z(n_g-1)/c=14.4$ (green), since in so dense a medium the signal does not travel at
-    the group velocity.  Move the carrier above the line, into the band where it is absorbed (at
+    highest frequencies, which see $n\approx1$, wiggling slower and slower (the period grows from
+    0.26 to 0.64 in the first three time units at $z=10$).  Next comes the Brillouin precursor,
+    the lowest frequencies, a slow swing near $t=n(0)z/c$ ($n(0)=1.5$).  Only then does the field
+    settle into the carrier, weakened by absorption to $e^{-\kappa\omega z/c}=0.125$: at $z=10$ it
+    has 80% of that by $t-z/c=7$, well before the group delay $z(n_g-1)/c=14.4$ (green), and all
+    of it by about 24.  In so dense a medium the switch-on does not travel at the group
+    velocity.  Move the carrier above the line, into the band where it is absorbed (at
     $\omega=5$, $e^{-\kappa\omega z/c}=e^{-53}$ by $z=10$), and only the precursors get through.
     Frequencies are in units of $10^{16}\ \mathrm{s^{-1}}$, so $z=10$ is 0.3 µm.</p>
   </article>
 
-  <article class="exp" data-setup="typed">
-    <h3>14. Type χ(ω): the sign of i</h3>
-    <p>$\chi(\omega)=\omega_p^2/(\omega_0^2-\omega^2-i\gamma\omega)$ typed in (as
-    <code>wp^2/(w0^2 - w^2 - i g w)</code>).  Its pole is at $\omega=-i\gamma/2\pm\ldots$, in the
-    lower half-plane, and $\chi(t)$ is causal.  Change $-i$ to $+i$: the pole moves to the upper
-    half-plane, $\chi(t)$ lives entirely in the past, and $\mathrm{Im}\,\chi<0$, which is gain.
-    (With $e^{+i\omega t}$, the engineers' convention, the signs are the other way round.)  Try
-    the others: a constant is an instantaneous response, $\delta(t)$; absorption with no
-    dispersion is not causal.  A conductor, $i\sigma/\omega$ (<code>i s/w</code>), comes out not
-    quite causal either: $\chi(t)=\frac{\sigma}{2}\,\mathrm{sgn}\,t$.  The causal one is
-    $i\sigma/(\omega+i0)$, whose real part has a $\pi\sigma\,\delta(\omega)$ that no formula
-    sampled on a grid can show; with it, $\chi(t)=\sigma$ for $t>0$ and 0 before.</p>
-  </article>
-
-  <p>Approximations: the medium is linear and its response local (no spatial dispersion); the
+  <p>Approximations: the medium is linear and its response local (no spatial dispersion); a
   pulse is a plane wave already inside the medium (no reflection at its surface); the time grid
   is periodic and wide enough that nothing wraps round.</p>
 
