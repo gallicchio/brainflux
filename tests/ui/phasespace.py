@@ -101,6 +101,19 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     check(abs(sx[0] - lo) < 1e-3 and abs(sx[4] - lo) < 1e-3 and abs(sx[2] - hi) < 1e-3 and abs(sx[1] - sx[3]) < 1e-3,
           f"squeezed: sigma_x at t = 0, pi/4, pi/2, 3pi/4, pi: {', '.join(f'{v:.4f}' for v in sx)} ({lo:.4f} and {hi:.4f} expected: period pi)")
     check(b.eval(INFO)['minW'] > -1e-6, 'squeezed: W >= 0')
+    # 10. Tilted (r = 1.2 at 30 deg): sigma_x sigma_p is 2.42, but the ellipse's area over pi,
+    # sqrt(sigma_x^2 sigma_p^2 - cov^2), is hbar/2: the moments of W itself, over a window
+    # zoomed out so that it holds the whole ellipse (the preset's would cut its tails at 2.7 sigma).
+    b.eval('__app.setups.uncertainty()'); b.eval(RESTART)
+    sxsp0 = b.eval(INFO)['sxsp']
+    b.eval("__app.go('harmonic', { init: { kind: 'squeezed', x0: 0, p0: 0, r: 1.2, theta: 30 }, zoom: 2, run: false })")
+    u = b.eval('''(() => { const g = __app.grid, W = g.W; let s = 0, x = 0, p = 0, xx = 0, pp = 0, xp = 0;
+      for (let c = 0; c < g.cols; c++) for (let r = 0; r < g.rows; r++) { const w = W[c * g.rows + r], X = g.x[c], P = g.p[r];
+        s += w; x += w * X; p += w * P; xx += w * X * X; pp += w * P * P; xp += w * X * P; }
+      x /= s; p /= s; const vx = xx / s - x * x, vp = pp / s - p * p, cv = xp / s - x * p;
+      const o = __app.sim.observables(); return { sxsp: o.sx * o.sp, det: Math.sqrt(vx * vp - cv * cv), total: s * g.cell }; })()''')
+    check(round(sxsp0, 2) == 2.42 and abs(u['sxsp'] - sxsp0) < 1e-9 and abs(u['det'] - 0.5) < 2e-3,
+          f"uncertainty: sigma_x sigma_p = {sxsp0:.4f} (help: 2.42), sqrt(sigma_x^2 sigma_p^2 - cov^2) from W = {u['det']:.4f} (hbar/2), W integrates to {u['total']:.4f}")
     # 3. |1>: W(0,0) = -1/pi hbar, and it stays.
     b.eval('__app.setups.number()'); b.eval(RUN_TO + '(2)')
     i = b.eval(INFO)

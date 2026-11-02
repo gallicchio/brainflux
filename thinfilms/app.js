@@ -344,8 +344,15 @@ function rpMinimum() {
 
 // Transmission peaks of the unpolarised T against wavelength, for the Fabry-Perot readouts:
 // the width of the peak nearest the present wavelength (refined on the exact curve) and, if its
-// neighbour is a peak like it, their spacing and the finesse, spacing / width.  The refined
-// peaks are kept (key: the curve's own inputs), so moving the wavelength costs nothing.
+// neighbours are peaks like it, the local spacing and the finesse, spacing / width.  A cavity's
+// peaks are evenly spaced in frequency (in 1/lambda), not in lambda, so the spacing is measured
+// in 1/lambda (averaged over the neighbours on both sides) and given in nm at this peak,
+// lambda^2 Delta(1/lambda): the free spectral range here.  (The gap to the next peak alone
+// would overstate it, and the finesse with it, by the ratio of the two wavelengths.)  The
+// refined peaks are kept (key: the curve's own inputs), so moving the wavelength costs nothing.
+// Null when the present wavelength is farther than a spacing from the peak, or for a lone line
+// farther than an eighth of the plot (a Bragg mirror's side lobes, seen from the middle of its
+// stop band, are not what its readout is about).
 let peakCache = { key: '', widths: new Map() };
 function finesse(key) {
   if (peakCache.key !== key) peakCache = { key, widths: new Map() };
@@ -387,14 +394,17 @@ function finesse(key) {
   peaks.forEach((p, i) => { if (Math.abs(x[p] - state.lambda) < Math.abs(x[peaks[k]] - state.lambda)) k = i; });
   const out = { ...width(peaks[k]) };
   if (!(out.fwhm < (x[m - 1] - x[0]) / 8)) return null;     // a broad hump, not a line
-  const k2 = k + 1 < peaks.length ? k + 1 : k - 1;
-  if (k2 >= 0 && k2 !== k) {
+  const gaps = [];               // |Delta(1/lambda)| to each neighbour that is a peak like this one
+  for (const k2 of [k - 1, k + 1]) {
+    if (k2 < 0 || k2 >= peaks.length) continue;
     const other = width(peaks[k2]);
-    if (other.fwhm < 2 * out.fwhm && other.fwhm > out.fwhm / 2) {
-      out.spacing = Math.abs(other.peak - out.peak);
-      out.F = out.spacing / out.fwhm;
-    }
+    if (other.fwhm < 2 * out.fwhm && other.fwhm > out.fwhm / 2) gaps.push(Math.abs(1 / other.peak - 1 / out.peak));
   }
+  if (gaps.length) {
+    out.spacing = out.peak * out.peak * (gaps.reduce((a, b) => a + b, 0) / gaps.length);
+    out.F = out.spacing / out.fwhm;
+    if (Math.abs(out.peak - state.lambda) > out.spacing) return null;
+  } else if (Math.abs(out.peak - state.lambda) > (x[m - 1] - x[0]) / 8) return null;   // a lone line, far away
   return out;
 }
 
@@ -572,7 +582,10 @@ function drawCurves(cv, data, { x0, x1, xlabel, marker, markerParts, kind }) {
   let top = 0;
   for (const q of qs) for (const p of ['s', 'p']) for (const v of data[q][p]) top = Math.max(top, v);
   const yTop = top > 0.4 || !qs.length ? 1 : niceUp(Math.max(top * 1.12, 1e-3));
-  if (log) { f.y0 = LOG_MIN; f.y1 = 0; } else { f.y0 = 0; f.y1 = yTop; }
+  // A little room above 1 and below 0, so that R = 1 (total reflection, a stop band) and T = 0
+  // (an opaque metal) are drawn clear of the frame, not hidden under it; the visible spectrum
+  // goes in the room below 0.
+  if (log) { f.y0 = LOG_MIN; f.y1 = 0.06; } else { f.y0 = -0.03 * yTop; f.y1 = 1.025 * yTop; }
   const Y = log ? (v) => f.Y(Math.log10(Math.max(v, 10 ** (LOG_MIN - 1)))) : (v) => f.Y(v);
   // Grid lines.
   ctx.strokeStyle = c.line; ctx.lineWidth = 1;
@@ -741,17 +754,17 @@ function drawFilm() {
   ctx.restore();
   ctx.strokeStyle = view === 'T' ? '#777' : '#888'; ctx.lineWidth = 3;
   roundRect(ctx, fx, fy, fw, fh, 10); ctx.stroke();
-  // A thickness scale on the right.
-  ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 1;
+  // A thickness scale on the right, headed with what it is: the selected layer's thickness.
+  ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 1;
+  ctx.fillText('d (nm)', width - 3, fy - 6);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const top = state.film.profile === 'wedge' ? state.film.dmax : state.film.hBottom;
-  let first = true;           // the unit goes on the first label
   for (const t of niceTicks(0, top, 5)) {
     const y = filmHeightOf(t);
     if (y === null || t === 0 && state.film.profile !== 'wedge') continue;
     const py = fy + y * fh;
     ctx.beginPath(); ctx.moveTo(fx + fw + 2, py); ctx.lineTo(fx + fw + 6, py); ctx.stroke();
-    ctx.fillText(first ? `${t} nm` : String(t), fx + fw + 8, py);
-    first = false;
+    ctx.fillText(String(t), fx + fw + 8, py);
   }
   if (state.film.profile === 'drain') {
     const yb = (25 / state.film.hBottom) ** 2;
@@ -830,7 +843,7 @@ function readouts() {
   if (comp.finesse) {
     const F = comp.finesse;
     items.push(['T peak at ', { v: F.peak, dec: 1, w: 6 }, ' nm (', pctPart(F.Tmax), '), ', boldPart(F.fwhm, 3, 7, ' nm'), ' wide',
-      ...(F.F ? ['; peaks every ', { v: F.spacing, dec: 1, w: 6 }, ' nm: finesse ', boldPart(F.F, 0, 4, '')] : [])]);
+      ...(F.F ? ['; peaks every ', { v: F.spacing, dec: 1, w: 6 }, ' nm here: finesse ', boldPart(F.F, 1, 5, '')] : [])]);
   }
   const sw = state.show.film ? null : comp.swatch;
   if (sw) items.push(['white light: ', { html: '<span class="sw"></span>' }, pctPart(sw.YR), ' reflected, ', { html: '<span class="sw"></span>' }, pctPart(sw.YT), ' through']);

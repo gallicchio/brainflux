@@ -359,9 +359,9 @@ test('the field: |E|^2 is normalised to the incident wave (1 in front of a non-r
   }
 });
 
-test('the page: every experiment sets up and draws without an error, in this browser', async () => {
-  // The demo in a frame of this page (same origin), so that the unit-test run in each browser
-  // also exercises the interface.
+// The demo in a frame of this page (same origin), so that the unit-test run in each browser
+// also exercises the interface.  Returns { frame, win, errors }.
+async function openPage() {
   const frame = document.createElement('iframe');
   frame.style.cssText = 'width:1200px;height:800px;border:0';
   document.body.append(frame);
@@ -372,8 +372,40 @@ test('the page: every experiment sets up and draws without an error, in this bro
   const win = frame.contentWindow;
   win.addEventListener('error', (e) => errors.push(e.message));
   win.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
-  for (let i = 0; i < 100 && !win.__app?.ready; i++) await new Promise((r) => setTimeout(r, 50));
+  // (Up to 30 s: a machine busy with other test runs can be slow to start a page.)
+  for (let i = 0; i < 600 && !win.__app?.ready; i++) await new Promise((r) => setTimeout(r, 50));
   assert(win.__app?.ready, 'the page did not start');
+  return { frame, win, errors };
+}
+
+test("the page's Fabry-Perot readout: finesse = pi sqrt(R) / (1 - R) of its mirrors, spacing lambda^2 / 2d", async () => {
+  const { frame, win, errors } = await openPage();
+  const app = win.__app, out = [];
+  for (const dAg of [40, 55]) {
+    app.setups.etalon();
+    app.state.layers[0].d = app.state.layers[2].d = dAg;
+    const F = app.compute().finesse;
+    assert(F && F.F, `${dAg} nm: no finesse`);
+    // Each mirror as the light in the gap sees it: air, then the silver, then the glass.
+    const lam = F.peak, R = rt(1, [[...MATERIALS.silver.index(lam), dAg]], [MATERIALS.bk7.index(lam)[0], 0], lam, 0, 's').R;
+    const want = (Math.PI * Math.sqrt(R)) / (1 - R);
+    close(F.F / want, 1, 0.01, `${dAg} nm of silver: finesse ${F.F} against pi sqrt(R)/(1-R) = ${want}`);
+    // The free spectral range at this peak: lambda^2 / 2d for the 2 um gap, a little less as the
+    // light reaches into the silver.  (The gap to the next peak alone is 14% more than this.)
+    const fsr = (lam * lam) / 4000;
+    assert(F.spacing < fsr && F.spacing > 0.95 * fsr, `${dAg} nm: spacing ${F.spacing} against lambda^2/2d = ${fsr}`);
+    out.push(`${dAg} nm: F = ${F.F.toFixed(2)} (formula ${want.toFixed(2)}, R = ${R.toFixed(4)}), spacing ${F.spacing.toFixed(1)} nm (λ²/2d ${fsr.toFixed(1)})`);
+  }
+  // A Bragg mirror seen from the middle of its stop band: its side lobes are not reported.
+  app.setups.bragg();
+  assert(app.compute().finesse === null, 'the Bragg mirror at 550 nm reports a side lobe');
+  frame.remove();
+  assert(!errors.length, errors.join('; '));
+  return out.join('; ');
+});
+
+test('the page: every experiment sets up and draws without an error, in this browser', async () => {
+  const { frame, win, errors } = await openPage();
   const frames = (n) => new Promise((resolve) => {
     let k = 0;
     const f = () => (++k >= n ? resolve() : win.requestAnimationFrame(f));
