@@ -1013,8 +1013,8 @@ function updateReadouts() {
   const nm = 1000 / s, resNm = (res * nm * nm) / 1000, eps = state.fts.zero;
   const alias = spec.range()[1] > sN;
   const reach = Lm < 1000 ? [{ v: Lm, dec: 3, w: 7 }, ' μm'] : [{ v: Lm / 1000, dec: 4, w: 7 }, ' mm'];
-  setGroups(ftsLines[0], two ? [[{ v: 2 * K + 1, dec: 0, w: 6 }, ' samples'], ['over Δ = ±', ...reach]]
-    : [[{ v: K + 1, dec: 0, w: 6 }, ' samples'], ['over Δ = 0 to ', ...reach]]);
+  setGroups(ftsLines[0], two ? [[{ v: 2 * K + 1, dec: 0, w: 6 }, ' samples,'], ['Δ = ±', ...reach]]
+    : [[{ v: K + 1, dec: 0, w: 6 }, ' samples,'], ['Δ = 0 to ', ...reach]]);
   // What the zero error does: nothing to a two-sided scan (its phase is taken out); a one-sided one goes wrong.
   setGroups(ftsLines[3], !eps ? [] : two ? ['zero error: phase taken out'] : ['zero error: one side goes wrong']);
   ftsLines[3].className = !two && eps ? 'warn-text' : '';
