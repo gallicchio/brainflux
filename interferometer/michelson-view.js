@@ -24,13 +24,18 @@ export const state = {
   motor: 'fwd', speed: 0.3,
   plot: 'trace', win: [997, 1012],
   axis: 'sigma', view: [GRID.s0, GRID_HI],
-  fts: { L: 50, step: 0.1, apodize: false },
+  // The spectrometer: reach Δmax (L), step δ, both sides of zero path or one, and how far its
+  // idea of zero path is from the true one (zero: the samples are at kδ + ε).
+  fts: { L: 50, step: 0.1, apodize: false, sides: 2, zero: 0 },
 };
 
 let spec = null, colour = null, version = 0, sigmaTop = 2.8, sweepDir = 1;
 let record = [];                         // the path differences the detector has seen: [[a, b], ...]
 const counter = new FringeCounter();
-const fts = { samples: null, K: 0, shown: 0, scanning: false, drawn: false, norm: 1, rec: null, recKey: '', recFull: null };
+// The spectrometer's samples: samples[j] at Δ = (j − z)δ as it counts (kδ + ε in truth), j = 0 ... n − 1
+// (z = K for a two-sided scan, 0 for one side); during a scan, those up to j = last are taken.
+const fts = { samples: null, K: 0, z: 0, n: 0, last: -1, lastF: 0, scanning: false, drawn: false, norm: 1, ref: 0.5, rec: null, recKey: '' };
+let ftsView = null;                      // the part of the scan its plot shows, zoomed by the wheel (null: all)
 const dirty = { screen: true, schem: true, spec: true, trace: true, readout: true };
 let blurFrom = null;                     // Δ at the last screen frame, if the mirror moved continuously since
 let onChange = () => {};                 // the app's hook: write the hash
@@ -153,15 +158,15 @@ export function tick(dt) {
   let busy = false;
   if (fts.scanning) {
     busy = true;
-    // The scan takes about 4 s, whatever its length.
-    const rate = fts.K / 4;
-    fts.shownF = Math.min(fts.K, (fts.shownF ?? 0) + rate * dt);
-    fts.shown = Math.floor(fts.shownF);
+    // Each side of zero path takes 3 s, whatever its length.
+    const rate = fts.K / 3;
+    fts.lastF = Math.min(fts.n - 1, fts.lastF + rate * Math.min(dt, 0.1));
+    fts.last = Math.floor(fts.lastF);
     const old = D();
-    state.df = 0; state.dc = (fts.shown * state.fts.step) / 2;
+    state.df = 0; state.dc = samplePath(fts.last) / 2;
     moved(old, true);
-    if (fts.shown >= fts.K) fts.scanning = false;
-    fts.rec = null; dirty.spec = dirty.trace = true;
+    if (fts.last >= fts.n - 1) fts.scanning = false;
+    fts.rec = null; dirty.spec = dirty.trace = dirty.readout = true;
   } else if (state.motor !== 'stop' && state.speed > 0) {
     busy = true;
     const old = D();
@@ -180,33 +185,47 @@ export function tick(dt) {
 // --------------------------------------------------------------------- the spectrometer
 
 const ftsK = () => Math.max(4, Math.min(MAX_K, Math.round(state.fts.L / state.fts.step)));
+const twoSided = () => state.fts.sides === 2;
+/** The true path difference at sample j: the spectrometer counts it as (j − z)δ, but it is ε more. */
+const samplePath = (j) => (j - fts.z) * state.fts.step + state.fts.zero;
 
 function ensureSamples() {
-  const K = ftsK();
+  const K = ftsK(), sides = state.fts.sides;
   if (fts.drawn) return;
-  if (!fts.samples || fts.K !== K || fts.samplesFor !== `${version},${state.fts.step}`) {
-    fts.K = K;
-    fts.samples = sampleInterferogram(spec, state.fts.step, K);
-    fts.samplesFor = `${version},${state.fts.step}`;
+  const key = `${version},${state.fts.step},${K},${sides},${state.fts.zero}`;
+  if (!fts.samples || fts.samplesFor !== key) {
+    if (!fts.samples || fts.K !== K || fts.z !== (sides === 2 ? K : 0)) ftsView = null;   // a new scan: see all of it
+    fts.K = K; fts.z = sides === 2 ? K : 0;
+    fts.samples = sampleInterferogram(spec, state.fts.step, K, 'auto', { sides, offset: state.fts.zero });
+    fts.n = fts.samples.length;
+    fts.samplesFor = key;
     fts.norm = 2 * spec.I0 || 1;
-    if (!fts.scanning) { fts.shown = K; fts.shownF = K; }
+    fts.ref = spec.I0;     // the level with no interference, as the instrument measures it
+    if (!fts.scanning) { fts.last = fts.n - 1; fts.lastF = fts.last; }
     fts.rec = null;
   }
 }
 
-/** The recovered spectrum from the samples shown so far, fine enough for the spectrum plot. */
+/**
+ * The spectrum recovered from the samples taken so far, fine enough for the spectrum plot: from
+ * one side, or from the part of a two-sided scan that is on both sides of zero path (none until
+ * the scan reaches zero path: then null).
+ */
 function recovered(colWidth) {
   ensureSamples();
-  const k = Math.max(1, fts.shown), step = state.fts.step;
+  const two = twoSided(), step = state.fts.step, z = fts.z;
+  const m = Math.min(fts.K, fts.last - z);       // samples beyond zero path on the side being scanned
+  if (m < 0) return null;
   const need = Math.min(fts.scanning ? 1 << 17 : 1 << 18, nextPow2(2 / (Math.max(colWidth, 1e-7) * step)));
-  const L = Math.max(nextPow2(2 * (k + 1)), need);
-  const key = `${version},${k},${L},${state.fts.apodize},${fts.drawn ? fts.drawnVersion : 0},${step}`;
+  const L = Math.max(nextPow2(2 * (m + 1)), need);
+  const key = `${version},${m},${L},${state.fts.apodize},${fts.drawn ? fts.drawnVersion : 0},${step},${two},${state.fts.zero}`;
   if (fts.rec && fts.recKey === key) return fts.rec;
-  const I = fts.samples.subarray(0, k + 1);
-  const r = recoverSpectrum(I, step, { apodize: state.fts.apodize, length: L });
+  const I = fts.samples.subarray(two ? z - m : 0, z + m + 1);
+  const r = recoverSpectrum(I, step, { apodize: state.fts.apodize, length: L, sides: two ? 2 : 1, zero: two ? m : 0,
+    ref: fts.drawn ? undefined : fts.ref, correct: !fts.drawn });
   const cum = new Float64Array(r.v.length + 1);
   for (let i = 0; i < r.v.length; i++) cum[i + 1] = cum[i] + r.v[i];
-  r.cum = cum;
+  r.cum = cum; r.m = m;
   fts.rec = r; fts.recKey = key;
   return r;
 }
@@ -214,20 +233,24 @@ function recovered(colWidth) {
 export function startScan() {
   fts.drawn = false;
   ensureSamples();
-  fts.scanning = true; fts.shown = 0; fts.shownF = 0; fts.rec = null;
+  fts.scanning = true; fts.last = 0; fts.lastF = 0; fts.rec = null;
   setMotor('stop');
   setPlot('fts');
   const old = D();
-  state.df = 0; state.dc = 0;
+  state.df = 0; state.dc = samplePath(0) / 2;
   moved(old, false);
+}
+
+/** The light that would make the drawn interferogram, on the grid of drawn spectra. */
+function drawnSpectrum() {
+  const r = recovered(GRID.ds), s = new Spectrum([], r);
+  return new Spectrum([], { s0: GRID.s0, ds: GRID.ds, v: s.gridValues() });
 }
 
 /** Stop using a drawn interferogram: the spectrum it implies becomes the light source. */
 function adoptDrawn() {
   if (!fts.drawn) return;
-  const r = recovered(GRID.ds);
-  const s = new Spectrum([], r);
-  spec = new Spectrum([], { s0: GRID.s0, ds: GRID.ds, v: s.gridValues() });
+  spec = drawnSpectrum();
   fts.drawn = false; fts.saved = null;
   state.source = 'drawn';
   showSourceControls();
@@ -311,6 +334,8 @@ function drawSchematic() {
   // Equal paths marker.
   ctx.setLineDash([3, 3]); line([[EQ, by - 10], [EQ, by + 10]], 1, 'rgba(255,255,255,0.25)'); ctx.setLineDash([]);
   label('equal paths', EQ - 1, by + 11.5, 'right', dim, 9);
+  // Which side is which: M2 nearer the beam splitter than equal paths has d < 0.
+  label('d < 0', EQ - 1, by - 12.5, 'right', dim, 9); label('d > 0', EQ + 1, by - 12.5, 'left', dim, 9);
   // M2 on its carriage, tilted by the drawn angle.
   const [mx, my] = P(m2x, by), hl = 8 * u, ca = Math.cos(tiltA), sa = Math.sin(tiltA);
   const top = [mx + sa * hl, my - ca * hl], bot = [mx - sa * hl, my + ca * hl];
@@ -333,7 +358,7 @@ function drawSchematic() {
   ctx.fillStyle = '#ffe08a'; { const [dx, dy] = P(BS, 60); ctx.beginPath(); ctx.arc(dx, dy, 0.9 * u, 0, 2 * Math.PI); ctx.fill(); }
   label('screen and detector', BS + 10, 60, 'left', text, 10);
   label('lens', BS + 8, 52, 'left', dim, 9);
-  hits = { body: [mx - 2 * u, my - 9 * u, 10 * u, 18 * u], top, knob: [kx, ky, kr + 4], P, u, ox, oy, mx, my };
+  hits = { body: [mx - 2 * u, my - 9 * u, 10 * u, 18 * u], top, knob: [kx, ky, kr + 4], P, u, ox, oy, mx, my, eq: P(EQ, by)[0] };
 }
 
 function schemPointer(e) {
@@ -485,11 +510,15 @@ function drawSpectrum() {
   }
   specDens = dens;
   // The recovered spectrum.
-  let rec = null, rtop = 0, rmin = 0;
+  let rec = null, rtop = 0, rmin = 0, waiting = false;
   if (showFts || fts.drawn) {
     let minw = Infinity;
     for (let k = 0; k < cols.P; k++) minw = Math.min(minw, cols.sb[k] - cols.sa[k]);
     const r = recovered(minw);
+    waiting = !r;
+  }
+  if (!waiting && (showFts || fts.drawn)) {
+    const r = fts.rec;
     rec = new Float64Array(cols.P);
     const unit = (k) => (state.axis === 'sigma' ? 1 : (cols.sb[k] - cols.sa[k]) / cols.wid[k]);   // dσ/dλ for density per nm
     for (let k = 0; k < cols.P; k++) {
@@ -585,9 +614,9 @@ function drawSpectrum() {
   // A legend in spectrometer mode.
   ctx.textAlign = 'left'; ctx.font = '11px system-ui, sans-serif';
   if (fts.drawn) { ctx.fillStyle = c.ink2; ctx.fillText('the spectrum that makes your interferogram', f.left + 6, f.top + 14); }
-  else if (rec) {
+  else if (rec || waiting) {
     ctx.fillStyle = c.ink2; ctx.fillText('light source', f.left + 6, f.top + 14);
-    ctx.fillStyle = c.accent; ctx.fillText('recovered from the scan', f.left + 80, f.top + 14);
+    ctx.fillStyle = c.accent; ctx.fillText(waiting ? 'recovered: once the scan reaches zero path' : 'recovered from the scan', f.left + 80, f.top + 14);
   }
   ctx.restore();
   $('#spec-fn').textContent = state.axis === 'sigma' ? 'S(σ)' : 'S(λ)';
@@ -774,22 +803,36 @@ function drawTrace() {
   setGroups($('#trace-note'), [record.length ? 'the detector\'s record; click or drag to move the mirror' : 'click or drag to move the mirror']);
 }
 
+/** The part of the scan the spectrometer's plot shows (scroll to zoom), in μm of Δ as it counts it. */
+function ftsRange() {
+  const xlo = -fts.z * state.fts.step, xhi = (fts.n - 1 - fts.z) * state.fts.step;
+  if (!ftsView) return [xlo, xhi, xlo, xhi];
+  const W = Math.min(xhi - xlo, Math.max(4 * state.fts.step, ftsView[1] - ftsView[0]));
+  const a = Math.max(xlo, Math.min(xhi - W, ftsView[0]));
+  return [a, a + W, xlo, xhi];
+}
+
 function drawFtsPlot(f, ctx, c) {
   ensureSamples();
-  const K = fts.K, step = state.fts.step, Lm = K * step, P = Math.max(1, Math.floor(f.w));
-  const [unit, uname] = pathUnit(Lm);
-  const norm = 1 / fts.norm;
+  const z = fts.z, step = state.fts.step, eps = state.fts.zero, P = Math.max(1, Math.floor(f.w));
+  // The spectrometer's axis: Δ as it counts it, kδ (the samples are truly at kδ + ε).
+  const [va, vb] = ftsRange(), [unit, uname] = pathUnit(vb - va);
+  trace.ftsUnit = unit;
+  const norm = 1 / fts.norm, xOf = (j) => f.X(((j - z) * step) / unit);
+  // The samples in view, of those taken so far.
+  const ja = Math.max(0, Math.floor(va / step) + z), jb = Math.min(fts.n - 1, Math.ceil(vb / step) + z), last = Math.min(fts.last, jb);
+  const n = jb - ja + 1;
   let ymin = 0, ymax = 1;
-  for (let k = 0; k <= fts.shown; k++) { const v = fts.samples[k] * norm; if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
-  f.x0 = 0; f.x1 = Lm / unit; f.y0 = Math.min(-0.04, ymin - 0.04); f.y1 = Math.max(1.1, ymax + 0.05);
+  for (let j = 0; j <= fts.last; j++) { const v = fts.samples[j] * norm; if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
+  f.x0 = va / unit; f.x1 = vb / unit; f.y0 = Math.min(-0.04, ymin - 0.04); f.y1 = Math.max(1.1, ymax + 0.05);
   f.clip();
   // The true interferogram, faintly, behind the samples.
   if (!fts.drawn) {
-    const key = `${version},${Lm},${P}`;
+    const key = `${version},${va},${vb},${eps},${P}`;
     if (trace.fullKey !== key) {
       trace.fullKey = key; trace.flo = new Float64Array(P); trace.fhi = new Float64Array(P);
-      const g = [0, 0];
-      for (let col = 0; col < P; col++) { minMaxOver(spec, (col * Lm) / P, ((col + 1) * Lm) / P, sigmaTop, g); trace.flo[col] = g[0]; trace.fhi[col] = g[1]; }
+      const g = [0, 0], W = vb - va;
+      for (let col = 0; col < P; col++) { minMaxOver(spec, va + eps + (col * W) / P, va + eps + ((col + 1) * W) / P, sigmaTop, g); trace.flo[col] = g[0]; trace.fhi[col] = g[1]; }
     }
     ctx.fillStyle = c.line;
     for (let k = 0; k < P; k++) {
@@ -797,42 +840,54 @@ function drawFtsPlot(f, ctx, c) {
       ctx.fillRect(f.left + k, yt - 0.5, 1, Math.max(1, yb - yt + 1));
     }
   }
-  // The reference level I(0)/2.
-  const ref = (fts.samples[0] / 2) * norm;
+  // Zero path: where the spectrometer puts it, and (if that is off) where it truly is.
+  const x0 = f.X(0);
+  ctx.strokeStyle = c.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0 + 0.5, f.top); ctx.lineTo(x0 + 0.5, f.bottom); ctx.stroke();
+  if (eps && !fts.drawn) {
+    const xt = f.X(-eps / unit);
+    ctx.strokeStyle = c.warn; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(xt + 0.5, f.top); ctx.lineTo(xt + 0.5, f.bottom); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // The level with no interference: half the signal at zero path (for a drawing, half the middle sample).
+  const ref = (fts.drawn ? fts.samples[z] / 2 : fts.ref) * norm;
   ctx.strokeStyle = c.ink3; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(ref) + 0.5); ctx.lineTo(f.right, f.Y(ref) + 0.5); ctx.stroke(); ctx.setLineDash([]);
-  // The samples.
-  const n = fts.shown;
-  if (K + 1 <= P) {
+  // The samples taken so far.
+  if (n <= P) {
     // At least a pixel per sample: a line through them, and dots when they are well apart.
-    ctx.strokeStyle = c.accent; ctx.lineWidth = K + 1 <= P / 3 ? 1 : 1.5; ctx.beginPath();
-    for (let k = 0; k <= n; k++) { const x = f.X((k * step) / unit), y = f.Y(fts.samples[k] * norm); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+    ctx.strokeStyle = c.accent; ctx.lineWidth = n <= P / 3 ? 1 : 1.5; ctx.beginPath();
+    for (let j = ja; j <= last; j++) { const x = xOf(j), y = f.Y(fts.samples[j] * norm); if (j > ja) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
     ctx.stroke();
-    if (K + 1 <= P / 3) {
+    if (n <= P / 3) {
       ctx.fillStyle = c.accent;
-      for (let k = 0; k <= n; k++) { ctx.beginPath(); ctx.arc(f.X((k * step) / unit), f.Y(fts.samples[k] * norm), K + 1 <= P / 8 ? 3 : 2, 0, 2 * Math.PI); ctx.fill(); }
+      for (let j = ja; j <= last; j++) { ctx.beginPath(); ctx.arc(xOf(j), f.Y(fts.samples[j] * norm), n <= P / 8 ? 3 : 2, 0, 2 * Math.PI); ctx.fill(); }
     }
   } else {
     ctx.fillStyle = c.accent;
-    const per = (K + 1) / P;
+    const per = n / P;
     for (let col = 0; col < P; col++) {
-      const a = Math.floor(col * per), b = Math.min(n, Math.floor((col + 1) * per));
-      if (a > n) break;
+      const a = ja + Math.floor(col * per), b = Math.min(last, ja + Math.floor((col + 1) * per));
+      if (a > last) break;
       let lo = Infinity, hi = -Infinity;
-      for (let k = a; k <= b; k++) { const v = fts.samples[k]; if (v < lo) lo = v; if (v > hi) hi = v; }
+      for (let j = a; j <= b; j++) { const v = fts.samples[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
       const yt = f.Y(hi * norm), yb = f.Y(lo * norm);
       ctx.fillRect(f.left + col, yt - 0.75, 1, Math.max(1.5, yb - yt + 1.5));
     }
   }
   if (fts.scanning) {
-    const x = f.X((n * step) / unit);
+    const x = xOf(fts.last);
     ctx.strokeStyle = c.warn; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); ctx.stroke();
   }
   ctx.restore();
-  f.axes({ xlabel: `path difference Δ (${uname})`, colors: c });
+  f.axes({ xlabel: `path difference Δ (${uname})${eps && !fts.drawn ? ', as the spectrometer counts it' : ''}`, colors: c });
   ctx.save(); ctx.fillStyle = c.ink3; ctx.font = '10px system-ui, sans-serif'; ctx.translate(11, f.top + f.h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('I / I(0)', 0, 0); ctx.restore();
-  setGroups($('#trace-note'), fts.drawn ? ['your interferogram: keep drawing'] : fts.scanning ? ['scanning...']
-    : [[{ v: K + 1, dec: 0, w: 5 }, ' samples,'], ['one every ', { v: step, dec: 3, w: 5 }, ' μm;'], 'draw on them']);
+  const xt = f.X(-eps / unit);
+  if (eps && !fts.drawn && xt >= f.left && xt <= f.right) {
+    ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.warn; ctx.textBaseline = 'top';
+    const right = xt < f.left + f.w / 2;
+    ctx.textAlign = right ? 'left' : 'right'; ctx.fillText('true zero path', xt + (right ? 4 : -4), f.top + 4); ctx.restore();
+  }
+  setGroups($('#trace-note'), fts.drawn ? [twoSided() ? 'your interferogram, mirrored: I(−Δ) = I(Δ); keep drawing' : 'your interferogram: keep drawing'] : fts.scanning ? ['scanning...']
+    : [[{ v: fts.n, dec: 0, w: 6 }, ' samples,'], ['one every ', { v: step, dec: 3, w: 5 }, ' μm;'], 'draw on them, scroll to zoom']);
 }
 
 function tracePointer(e) {
@@ -848,8 +903,10 @@ traceCanvas.addEventListener('pointerdown', (e) => {
     ensureSamples();
     if (!fts.drawn) {
       fts.saved = { spec, source: state.source };
-      fts.drawn = true; fts.scanning = false; fts.shown = fts.K;
-      fts.samples = Float64Array.from(fts.samples); fts.drawnVersion = 0;
+      fts.drawn = true; fts.scanning = false; fts.last = fts.n - 1;
+      const s = fts.samples = Float64Array.from(fts.samples), z = fts.z;
+      for (let q = 1; q <= z; q++) s[z + q] = s[z - q] = (s[z + q] + s[z - q]) / 2;   // even (it is, if the zero is right)
+      fts.drawnVersion = 0;
     }
     traceDrag = { fts: true, last: null };
     drawSamples(px, py);
@@ -870,27 +927,38 @@ traceCanvas.addEventListener('pointerup', endTrace);
 traceCanvas.addEventListener('pointercancel', endTrace);
 traceCanvas.addEventListener('wheel', (e) => {
   const f = trace.frame;
-  if (!f || state.plot !== 'trace') return;
+  if (!f) return;
   e.preventDefault();
-  const [px] = tracePointer(e), x = traceX(px);
-  const k = Math.exp(Math.sign(e.deltaY) * 0.2);
+  const [px] = tracePointer(e), k = Math.exp(Math.sign(e.deltaY) * 0.2);
+  if (state.plot === 'fts') {
+    // Zoom the spectrometer's plot (all of the scan once zoomed out that far).
+    const [a, b, lo, hi] = ftsRange(), x = f.invX(px) * (trace.ftsUnit || 1);
+    const na = x + (a - x) * k, nb = x + (b - x) * k;
+    setFtsView(nb - na >= hi - lo ? null : [na, nb]);
+    return;
+  }
+  const x = traceX(px);
   setWindow([x + (state.win[0] - x) * k, x + (state.win[1] - x) * k]);
 }, { passive: false });
 
+/** The part of the scan shown on the spectrometer's plot: [a, b] in μm, or null for all of it. */
+export function setFtsView(v) { ftsView = v; dirty.trace = true; }
+
 function drawSamples(px, py) {
-  const f = trace.frame, step = state.fts.step, [unit] = pathUnit(fts.K * step);
+  // On a two-sided scan the drawing is mirrored: the interferogram of any light is even.
+  const f = trace.frame, step = state.fts.step, unit = trace.ftsUnit || 1, z = fts.z;
   const k = Math.round((f.invX(px) * unit) / step), v = f.invY(py) * fts.norm;
   const last = traceDrag.last || { k, v };
   const a = Math.min(last.k, k), b = Math.max(last.k, k);
-  for (let j = Math.max(0, a); j <= Math.min(fts.K, b); j++) {
-    const t = b === a ? 1 : (j - last.k) / (k - last.k);
-    fts.samples[j] = last.v + (v - last.v) * t;
+  for (let q = Math.max(-z, a); q <= Math.min(fts.n - 1 - z, b); q++) {
+    const t = b === a ? 1 : (q - last.k) / (k - last.k), val = last.v + (v - last.v) * t;
+    fts.samples[z + q] = val;
+    if (z) fts.samples[z - q] = val;
   }
   traceDrag.last = { k, v };
   fts.drawnVersion = (fts.drawnVersion || 0) + 1;
   // The light source becomes the spectrum that makes this interferogram (on the grid, for the screen).
-  const r = recovered(GRID.ds), s = new Spectrum([], r);
-  spec = new Spectrum([], { s0: GRID.s0, ds: GRID.ds, v: s.gridValues() });
+  spec = drawnSpectrum();
   state.source = 'drawn';
   showSourceControls();
   specChanged();
@@ -926,8 +994,8 @@ function pathParts(x) {
   return [{ v: x / 1000, dec: 6, w: 9 }, ' mm'];
 }
 
-// The spectrometer's three lines, each a block of its own.
-const ftsLines = [0, 1, 2].map(() => el('div'));
+// The spectrometer's four lines, each a block of its own.
+const ftsLines = [0, 1, 2, 3].map(() => el('div'));
 $('#fts-readout').replaceChildren(...ftsLines);
 function updateReadouts() {
   const d = state.dc + state.df;
@@ -941,10 +1009,15 @@ function updateReadouts() {
   const V = spec.visibility(D());
   setGroups($('#screen-note'), [['Δ = ', ...pathParts(D()), ','], ['visibility ', { v: V, dec: 3, w: 5 }]]);
   // The spectrometer.
-  const K = ftsK(), step = state.fts.step, Lm = K * step, res = 1 / (2 * Lm), sN = 1 / (2 * step);
-  const nm = 1000 / s, resNm = (res * nm * nm) / 1000;
+  const K = ftsK(), step = state.fts.step, Lm = K * step, res = 1 / (2 * Lm), sN = 1 / (2 * step), two = twoSided();
+  const nm = 1000 / s, resNm = (res * nm * nm) / 1000, eps = state.fts.zero;
   const alias = spec.range()[1] > sN;
-  setGroups(ftsLines[0], [[{ v: K + 1, dec: 0, w: 5 }, ' samples'], ['to ', { html: 'Δ<sub>max</sub>' }, ' = ', ...pathParts(Lm)]]);
+  const reach = Lm < 1000 ? [{ v: Lm, dec: 3, w: 7 }, ' μm'] : [{ v: Lm / 1000, dec: 4, w: 7 }, ' mm'];
+  setGroups(ftsLines[0], two ? [[{ v: 2 * K + 1, dec: 0, w: 6 }, ' samples'], ['over Δ = ±', ...reach]]
+    : [[{ v: K + 1, dec: 0, w: 6 }, ' samples'], ['over Δ = 0 to ', ...reach]]);
+  // What the zero error does: nothing to a two-sided scan (its phase is taken out); a one-sided one goes wrong.
+  setGroups(ftsLines[3], !eps ? [] : two ? ['zero error: phase taken out'] : ['zero error: one side goes wrong']);
+  ftsLines[3].className = !two && eps ? 'warn-text' : '';
   setGroups(ftsLines[1], [['resolution ', { html: '1/(2Δ<sub>max</sub>)' }, ' = ', { v: res, dec: 5, w: 7 }, ' μm⁻¹'],
     ['(', { v: resNm, dec: 3, w: 7 }, ' nm at ', { v: nm, dec: 0, w: 4 }, ' nm)']]);
   setGroups(ftsLines[2], [['Nyquist ', { html: 'σ<sub>N</sub>' }, ' = 1/(2δ) = ', { v: sN, dec: 2, w: 5 }, ' μm⁻¹'],
@@ -956,7 +1029,7 @@ function updateReadouts() {
 
 // --------------------------------------------------------------------- controls
 
-let coarseSlider, fineSlider, tiltSlider, speedSlider, motorSeg, plotSeg, windowSlider, axisSeg, LSlider, stepSlider, apodToggle;
+let coarseSlider, fineSlider, tiltSlider, speedSlider, motorSeg, plotSeg, windowSlider, axisSeg, LSlider, stepSlider, zeroSlider, sidesSeg, apodToggle;
 const sourceButtons = {};
 let paramSliders = {};
 
@@ -991,8 +1064,8 @@ function showSourceNote() {
     mercury: '404.7, 407.8, 435.8, 546.1, 577.0 and 579.1 nm (strengths approximate)',
     gauss: p ? ['coherence length', ['λ²/Δλ = ', ...pathParts((p.lam * p.lam) / p.fwhm / 1000)]] : '',
     led: 'blue chip at 450 nm (20 nm wide) and phosphor at 565 nm (110 nm wide)',
-    lamp: 'Planck\'s law, inside the band 360 to 830 nm',
-    white: 'flat per nanometre (CIE illuminant E), inside 360 to 830 nm',
+    lamp: 'Planck\'s law from 377 to 741 nm, tapered to zero at 357 and 833 nm',
+    white: 'flat per nanometre (CIE illuminant E) from 377 to 741 nm, tapered to zero at 357 and 833 nm',
     draw: 'draw on the spectrum',
     drawn: 'your drawing (wavenumbers 1.2 to 2.8 μm⁻¹)',
   };
@@ -1038,11 +1111,23 @@ export function init(hooks) {
   $('#trace-foot').append(windowSlider,
     el('button', { type: 'button', class: 'small-btn', title: 'Fit the window to what has been recorded', onclick: () => { if (record.length) { const a = record[0][0], b = record[record.length - 1][1], m = 0.04 * (b - a) + 0.05; setWindow([a - m, b + m]); } } }, 'Fit'),
     el('button', { type: 'button', class: 'small-btn', title: 'Forget the record', onclick: () => clearRecord() }, 'Clear'));
-  LSlider = slider({ label: 'Δmax (μm)', min: 1, max: 5000, log: true, value: state.fts.L, title: 'How far the scan goes: sets the resolution',
-    onInput: (v) => { if (fts.drawn) adoptDrawn(); state.fts.L = v; fts.scanning = false; fts.samples = null; if (state.plot !== 'fts') setPlot('fts'); dirty.spec = dirty.trace = dirty.readout = true; onChange(); } });
-  stepSlider = slider({ label: 'step δ (μm)', min: 0.02, max: 2, log: true, value: state.fts.step, title: 'The distance between samples: sets the highest wavenumber',
-    onInput: (v) => { if (fts.drawn) adoptDrawn(); state.fts.step = v; fts.scanning = false; fts.samples = null; if (state.plot !== 'fts') setPlot('fts'); dirty.spec = dirty.trace = dirty.readout = true; onChange(); } });
-  $('#fts-box').append(LSlider, stepSlider);
+  // Any change to the spectrometer: a fresh set of samples (a drawing first becomes the light).
+  const ftsSet = (k, v) => {
+    if (fts.drawn) adoptDrawn();
+    state.fts[k] = v; fts.scanning = false; fts.samples = null;
+    if (state.plot !== 'fts') setPlot('fts');
+    dirty.spec = dirty.trace = dirty.readout = true; onChange();
+  };
+  LSlider = slider({ label: 'Δmax (μm)', min: 1, max: 5000, log: true, value: state.fts.L, title: 'How far the scan goes from zero path: sets the resolution', onInput: (v) => ftsSet('L', v) });
+  stepSlider = slider({ label: 'step δ (μm)', min: 0.02, max: 2, log: true, value: state.fts.step, title: 'The distance between samples: sets the highest wavenumber', onInput: (v) => ftsSet('step', v) });
+  zeroSlider = slider({ label: 'zero error ε (μm)', min: -0.5, max: 0.5, step: 0.001, value: state.fts.zero,
+    title: 'How far the sample the spectrometer takes as zero path is from the true zero path: the samples are at kδ + ε', onInput: (v) => ftsSet('zero', v) });
+  $('#fts-box').append(LSlider, stepSlider, zeroSlider);
+  sidesSeg = segmented([
+    { value: 2, label: 'Both sides', title: 'Scan from −Δmax through zero path to +Δmax, and transform both sides' },
+    { value: 1, label: 'One side', title: 'Scan from zero path to Δmax, and take the other side as its mirror image' },
+  ], state.fts.sides, (v) => ftsSet('sides', v), { label: 'Scan' });
+  $('#sides-box').append(sidesSeg);
   apodToggle = toggle('Apodize', state.fts.apodize, (on) => { state.fts.apodize = on; fts.rec = null; dirty.spec = true; onChange(); }, 'Weight the samples by a triangle, 1 at zero path to 0 at the end: no ringing, but wider lines');
   $('#apod-box').append(apodToggle);
   $('#scan').addEventListener('click', () => startScan());
@@ -1052,6 +1137,7 @@ export function init(hooks) {
 
 /** Put every control in step with the state (after a setup or the hash). */
 export function syncControls() {
+  ftsView = null;
   syncMirrorSliders();
   tiltSlider.value = state.tilt;
   speedSlider.value = state.speed;
@@ -1059,7 +1145,8 @@ export function syncControls() {
   plotSeg.value = state.plot;
   axisSeg.value = state.axis;
   windowSlider.value = +(state.win[1] - state.win[0]).toPrecision(4);
-  LSlider.value = state.fts.L; stepSlider.value = state.fts.step; apodToggle.on = state.fts.apodize;
+  LSlider.value = state.fts.L; stepSlider.value = state.fts.step; zeroSlider.value = state.fts.zero; sidesSeg.value = state.fts.sides;
+  apodToggle.on = state.fts.apodize;
   $('#trace-foot').hidden = state.plot !== 'trace';
   showSourceControls();
   Object.keys(dirty).forEach((k) => { dirty[k] = true; });
@@ -1098,7 +1185,14 @@ export function recoveredSpectrum(colWidth = 1e-3) { return recovered(colWidth);
 export function schemPoints() {
   if (!hits) return null;
   const r = schem.getBoundingClientRect();
-  return { w: r.width, h: r.height, body: [hits.body[0] + hits.body[2] / 2, hits.body[1] + hits.body[3] / 2], knob: [hits.knob[0], hits.knob[1]], top: hits.top };
+  return { w: r.width, h: r.height, body: [hits.body[0] + hits.body[2] / 2, hits.body[1] + hits.body[3] / 2], knob: [hits.knob[0], hits.knob[1]], top: hits.top,
+    mirror: hits.mx, eq: hits.eq };
+}
+
+/** For the tests: the detector trace as drawn, column by column (lowest and highest I/I(0), and whether recorded). */
+export function traceColumns() {
+  const norm = 1 / (2 * spec.I0 || 1);
+  return { win: state.win.slice(), lo: Array.from(trace.lo || [], (v) => v * norm), hi: Array.from(trace.hi || [], (v) => v * norm), has: Array.from(trace.has || []) };
 }
 
 /** For the tests: the handles of narrow lines on the spectrum plot. */

@@ -79,7 +79,8 @@
     <div class="panel">
       <div class="label">Fourier-transform spectrometer</div>
       <div id="fts-box" class="stack"></div>
-      <div class="row"><button type="button" id="scan" class="primary" title="Move the mirror from zero path to the end of the scan, recording a sample at every step">Scan</button><span id="apod-box"></span><button type="button" id="undraw" hidden title="Forget your drawing and go back to the light source's interferogram">Undo drawing</button></div>
+      <div class="row sides-row"><span class="small muted">Scan</span><span id="sides-box"></span></div>
+      <div class="row"><button type="button" id="scan" class="primary" title="Move the mirror through the scan, recording a sample at every step">Scan</button><span id="apod-box"></span><button type="button" id="undraw" hidden title="Forget your drawing and go back to the light source's interferogram">Undo drawing</button></div>
       <div class="small mono" id="fts-readout"></div>
     </div>
   </aside>
@@ -105,15 +106,17 @@
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
   <p>A Michelson interferometer splits light in two, sends the halves to two mirrors and brings
-  them back together.  If one path is longer by $\Delta$, light of wavenumber $\sigma=1/\lambda$
-  comes back with a phase difference $2\pi\sigma\Delta$, and light with the spectrum $S(\sigma)$
-  gives the detector the signal
+  them back together.  Moving the mirror M2 a distance $d$ from where the two paths are equal
+  changes the path difference by $\Delta=2d$ (the light goes there and back); $d$ and $\Delta$
+  are negative when M2 is nearer the beam splitter than that.  Light of wavenumber
+  $\sigma=1/\lambda$ comes back with a phase difference $2\pi\sigma\Delta$, and light with the
+  spectrum $S(\sigma)$ gives the detector the signal
   $$I(\Delta)=\int S(\sigma)\,[1+\cos 2\pi\sigma\Delta]\,d\sigma .$$
-  Apart from the constant, the interferogram $I(\Delta)$ is the Fourier (cosine) transform of the
-  spectrum: they are a Fourier pair, and you can change either one here.  Moving the mirror M2 by
-  $d$ changes the path difference by $\Delta=2d$ (the light goes there and back).  The screen
-  shows what you would see looking into the instrument, in true colour.  Scroll over the spectrum
-  or the interferogram to zoom; the buttons above them set their ranges.</p>
+  The cosine is even, so $I(-\Delta)=I(\Delta)$: the interferogram is the same on both sides of
+  zero path.  Apart from the constant, it is the Fourier (cosine) transform of the spectrum: they
+  are a Fourier pair, and you can change either one here.  The screen shows what you would see
+  looking into the instrument, in true colour.  Scroll over the spectrum or the interferogram to
+  zoom; the buttons above them set their ranges.</p>
 
   <article class="exp" data-setup="count">
     <h3>1. Count the fringes: the laser's wavelength</h3>
@@ -122,7 +125,9 @@
     under the drawing counts the bright fringes passing the detector (the cross).  When the mirror
     has moved 10 μm the count is 31 or 32, so $\lambda=2d/N\approx 2\times10\ \text{μm}/31.6=633$ nm.
     Counting is good to one fringe, so the longer you count, the better you know the wavelength.
-    (Press Reset to start again.)</p>
+    (Press Reset to start again.)  Rings are born at the centre while M2 moves away from equal
+    paths, on either side; while it moves towards them the rings shrink into the centre and vanish.
+    Run the motor backwards (◀) and watch them go, and the count go down.</p>
   </article>
 
   <article class="exp" data-setup="tilt">
@@ -132,9 +137,11 @@
     $\lambda/2\alpha$ apart.  Here $\alpha=150$ μrad and the screen shows 12 mm of mirror: about six
     fringes.  Drag the yellow dot at the top of M2 to tilt it more or less.  Then move M2 away from
     equal paths with the slider $d$ and watch the fringes curve into rings: light crossing the gap
-    at an angle $\theta$ travels $2d\cos\theta$, so each ring is a cone of light at one angle.  (The
-    screen adds the two effects in a simple model; in a real instrument they form in different
-    planes.)</p>
+    at an angle $\theta$ travels $2d\cos\theta$, so each ring is a cone of light at one angle.
+    They curve one way for $d&gt;0$ and the other way for $d&lt;0$ (at $d=\pm60$ μm the centre of
+    the rings is off to the right, or to the left), so the straightest fringes mark equal paths.
+    (The screen adds the two effects in a simple model; in a real instrument they form in
+    different planes.)</p>
   </article>
 
   <article class="exp" data-setup="sodium">
@@ -143,9 +150,11 @@
     fringes; where the bright fringes of one fall on the dark ones of the other the fringes fade,
     and they come back in step every
     $$\Delta=\frac{1}{\sigma_2-\sigma_1}=\frac{\lambda^2}{\Delta\lambda}=0.582\ \text{mm}$$
-    of path (0.291 mm of mirror travel).  The detector's trace records the fading as the motor runs
-    (the screen blurs while the mirror moves fast: stop the motor to see the rings).  Measure the
-    period and work out $\Delta\lambda$, as Michelson did.  The D₂ line is twice as strong as D₁, so the
+    of path (0.291 mm of mirror travel).  The motor sweeps M2 through equal paths, out to
+    $\Delta=\pm1.2$ mm, and the detector's trace records the fading, the same on both sides: the
+    fringes are clearest at zero path and fade at $\Delta=\pm0.29$ and $\pm0.87$ mm.  (The screen
+    blurs while the mirror moves fast: stop the motor to see the rings.)  Measure the period and
+    work out $\Delta\lambda$, as Michelson did.  The D₂ line is twice as strong as D₁, so the
     fringes fade only to a visibility $(2-1)/(2+1)=1/3$: drag the dot on the weaker line (the
     spectrum is zoomed in on the pair) up to the height of the other and the fringes vanish
     completely at the minima.</p>
@@ -153,23 +162,29 @@
 
   <article class="exp" data-setup="white">
     <h3>4. White light: finding zero path</h3>
-    <p>With white light the fringes appear only within about 2 μm of equal paths: every wavelength
-    makes fringes of its own spacing, and they are all in step only at $\Delta=0$.  Next to it the
-    fringes are coloured, the colours of soap films (which are also thin layers giving a path
-    difference); the zero-order fringe is white, and a few fringes away the colours have mixed back
-    into white.  On a real instrument nothing tells you where equal paths are: you find them by
-    hunting for these fringes.  The compensating plate gives both beams the same thickness of
-    glass, so that glass's dispersion doesn't shift the colours.  Try the hot filament too, and
-    change its temperature.</p>
+    <p>What the page opens with.  With white light the fringes appear only within two or three
+    micrometres of equal paths (the visibility is 1/2 at $\Delta=0.44$ μm and below 0.1 beyond
+    2.5 μm): every wavelength makes fringes of its own spacing, and they are all in step only at
+    $\Delta=0$.  M2 is tilted, so the screen shows straight fringes, and the motor sweeps it back
+    and forth through equal paths.  The detector's record is the same on both sides of the central
+    bright fringe, which is white; next to it the fringes are coloured, and a few fringes away the
+    colours have mixed back into white.  These are the interference colours that soap films show
+    too (a soap film's start from black, because one of its two reflections gains half a wave; so
+    can a beam splitter's, and then the colours are the complementary ones).  On a real instrument
+    nothing tells you where equal paths are: you find them by hunting for these fringes.  The
+    compensating plate gives both beams the same thickness of glass; without it, glass's dispersion
+    would put each colour's zero path at a different place, and the pattern would be spread out
+    and lopsided.  Try the hot filament too, and change its temperature.</p>
   </article>
 
   <article class="exp" data-setup="coherence">
     <h3>5. Coherence length</h3>
-    <p>A line of width $\Delta\lambda$ (a Gaussian).  Its fringes fade as the path difference grows,
-    because the wavelengths in the line get out of step.  The envelope of the interferogram is the
-    Fourier transform of the line's shape, here a Gaussian whose visibility falls to one half at
-    $$\Delta=\frac{2\ln 2}{\pi}\frac{\lambda^2}{\Delta\lambda}\approx0.44\frac{\lambda^2}{\Delta\lambda},$$
-    13.3 μm for 550 nm and 10 nm; $\lambda^2/\Delta\lambda=30$ μm is called the coherence length.
+    <p>A line of width $\Delta\lambda$ (a Gaussian), with the motor sweeping through equal paths.
+    Its fringes fade as the path difference grows, on either side of zero, because the wavelengths
+    in the line get out of step.  The envelope of the interferogram is the Fourier transform of the
+    line's shape, here a Gaussian whose visibility falls to one half at
+    $$\Delta=\pm\frac{2\ln 2}{\pi}\frac{\lambda^2}{\Delta\lambda}\approx\pm0.44\frac{\lambda^2}{\Delta\lambda},$$
+    ±13.3 μm for 550 nm and 10 nm; $\lambda^2/\Delta\lambda=30$ μm is called the coherence length.
     Change $\Delta\lambda$ (under Light source) and watch the envelope stretch and shrink: a ten
     times narrower line has fringes ten times further.</p>
   </article>
@@ -180,47 +195,70 @@
     110 nm wide).  At zero path its fringes are white-light fringes.  The broad phosphor band loses
     its fringes within a micrometre or two, but the narrower blue band keeps them for several
     (half visibility at 4.5 μm, against 1.3 μm for the phosphor).  So a few micrometres from zero
-    path only the blue light still interferes, and the fringes alternate between lavender (blue
-    added to the phosphor's yellow) and yellow-green (blue taken away).</p>
+    path, on either side, only the blue light still interferes, and the fringes alternate between
+    lavender (blue added to the phosphor's yellow) and yellow-green (blue taken away).</p>
   </article>
 
   <article class="exp" data-setup="draws">
     <h3>7. Draw a spectrum</h3>
     <p>Draw any spectrum on the spectrum plot (and drag a line's dot to change its strength); the
-    interferogram, recorded here from −12 to +12 μm, follows as you draw.  Two separate bands give
-    fringes that beat; a narrow band gives fringes that last; a broad one, fringes only near zero
-    path.  The width of a feature in one plot sets the extent of the other.  Switch the spectrum's
-    axis between $\sigma$ and $\lambda$: the same light, but its density per unit wavenumber and
-    per unit wavelength differ by the factor $|d\sigma/d\lambda|=1/\lambda^2$.</p>
+    interferogram, recorded here from −12 to +12 μm, follows as you draw, always the same on both
+    sides of zero.  Two separate bands give fringes that beat; a narrow band gives fringes that
+    last; a broad one, fringes only near zero path.  The width of a feature in one plot sets the
+    extent of the other.  Switch the spectrum's axis between $\sigma$ and $\lambda$: the same light,
+    but its density per unit wavenumber and per unit wavelength differ by the factor
+    $|d\sigma/d\lambda|=1/\lambda^2$.</p>
   </article>
 
   <article class="exp" data-setup="fts">
     <h3>8. Fourier-transform spectroscopy</h3>
-    <p>A Fourier-transform spectrometer records the interferogram at steps $\delta$ from zero path
-    out to $\Delta_\text{max}$ and transforms it back:
-    $$S(\sigma)\approx 2\delta\sum_{k=-K}^{K}\left[I(k\delta)-\tfrac12 I(0)\right]\cos 2\pi\sigma k\delta .$$
-    Here a mercury lamp: press Scan and watch the spectrum (blue) sharpen as the scan gets longer.
-    The ripples beside each line come from the scan's abrupt end; Apodize weights the samples down
-    to zero at the end, which removes them at the cost of wider lines.  The yellow pair, 577.0 and
-    579.1 nm, is $\Delta\sigma=0.0063$ μm⁻¹ apart: with $\Delta_\text{max}=60$ μm it is one bump.
-    Raise $\Delta_\text{max}$ to about 120 μm to see two.</p>
+    <p>A Fourier-transform spectrometer steps the mirror through the interferogram, from
+    $-\Delta_\text{max}$ through zero path to $+\Delta_\text{max}$, takes a sample every $\delta$,
+    and transforms the samples back:
+    $$S(\sigma)\approx 2\delta\sum_{k=-K}^{K}\left[I(k\delta)-\tfrac12 I(0)\right]\cos 2\pi\sigma k\delta ,\qquad K=\Delta_\text{max}/\delta .$$
+    ($\tfrac12 I(0)$ is the level with no interference.)  Here a mercury lamp: press Scan and
+    watch.  The samples on the two sides of zero path are mirror images (scroll over the
+    interferogram to zoom in on zero and see).  The spectrum (blue) is computed from the part of
+    the scan on both sides of zero, so it appears once the scan passes zero path, and sharpens as
+    the scan reaches further out.  The ripples beside each line come from the scan's abrupt ends;
+    Apodize weights the samples down to zero at the ends, which removes them at the cost of wider
+    lines.  The yellow pair, 577.0 and 579.1 nm, is $\Delta\sigma=0.0063$ μm⁻¹ apart: with
+    $\Delta_\text{max}=60$ μm it is one bump.  Raise $\Delta_\text{max}$ to about 120 μm to see two
+    (140 μm with Apodize).</p>
+  </article>
+
+  <article class="exp" data-setup="sides">
+    <h3>9. Both sides, or one?</h3>
+    <p>The two sides of zero path carry the same information, so one side would do: scan from zero
+    path out to $\Delta_\text{max}$ and take the other side as its mirror image, in half the time.
+    But that needs the first sample exactly at zero path, and nothing marks it to a fraction of a
+    wavelength.  Here the spectrometer's zero is off by $\varepsilon=0.137$ μm (the zero error,
+    under the spectrometer), a quarter of the green line's wavelength: the samples are at
+    $k\delta+\varepsilon$, not $k\delta$.  With both sides, the spectrum is right.  Now choose One
+    side and press Scan: each line comes out multiplied by $\cos(2\pi\sigma\varepsilon)$, plus a
+    wiggle, so the green one is all wiggle, and the blue and violet ones point partly down.  With
+    both sides, the shift only gives the transform a phase, $2\pi\sigma\varepsilon$ at each line,
+    which the spectrometer measures and takes out (phase correction).  That is why spectrometers
+    scan both sides of zero path, or at least a little of the second side, to measure the phase.
+    Set $\varepsilon$ to 0 and the two kinds of scan agree.</p>
   </article>
 
   <article class="exp" data-setup="resolution">
-    <h3>9. Resolution comes from the scan length</h3>
+    <h3>10. Resolution comes from the scan's reach</h3>
     <p>Two lines $\Delta\sigma$ apart only show as two when the scan covers a good part of their beat,
     whose period is $1/\Delta\sigma$: the resolution is about $1/(2\Delta_\text{max})$.  For sodium,
-    $\Delta\sigma=0.0017$ μm⁻¹ and $1/\Delta\sigma=0.58$ mm.  Press Scan and watch the single line split in two
-    when the scan passes about 0.42 mm: a little more than $1/(2\Delta\sigma)=0.29$ mm, because each line is
-    smeared into a sinc and the weaker one hides in the shoulder of the stronger.  (With Apodize
-    the lines are wider and need a longer scan.)  The resolving power
-    $\sigma/\delta\sigma=2\sigma\Delta_\text{max}$ is twice the number of wavelengths in the scan: about 4000
-    at the end, where sodium needs 1000.</p>
+    $\Delta\sigma=0.0017$ μm⁻¹ and $1/\Delta\sigma=0.58$ mm.  Press Scan: the scan runs from
+    −1.2 mm to +1.2 mm, and once it is past zero path the single line splits in two when the scan
+    passes 0.41 mm: a little more than $1/(2\Delta\sigma)=0.29$ mm, because each line is smeared
+    into a sinc and the weaker one hides in the shoulder of the stronger.  (With Apodize the lines
+    are wider and need 0.57 mm.)  The resolving power $\sigma/\delta\sigma=2\sigma\Delta_\text{max}$
+    is twice the number of wavelengths in $\Delta_\text{max}$: about 4000 at the end, where sodium
+    needs 1000.</p>
   </article>
 
   <article class="exp" data-setup="aliasing">
-    <h3>10. Aliasing comes from the step</h3>
-    <p>The samples must catch each fringe at least twice: $\delta<\lambda/2$, or $\sigma$ below the
+    <h3>11. Aliasing comes from the step</h3>
+    <p>The samples must catch each fringe at least twice: $\delta&lt;\lambda/2$, or $\sigma$ below the
     Nyquist wavenumber $\sigma_N=1/(2\delta)$.  Here $\delta=0.4$ μm, $\sigma_N=1.25$ μm⁻¹, and the laser line at
     $\sigma=1.580$ μm⁻¹ shows up at $2\sigma_N-\sigma=0.920$ μm⁻¹ (1087 nm, in the infrared): the samples
     (dots) cannot tell its fringes (grey) from a slower wave through the same points.  Lower the
@@ -228,13 +266,15 @@
   </article>
 
   <article class="exp" data-setup="drawi">
-    <h3>11. Draw an interferogram</h3>
+    <h3>12. Draw an interferogram</h3>
     <p>Draw on the spectrometer's samples, and the spectrum becomes that of the light which would
-    make your drawing.  Flatten the far half of the samples onto the dashed line (half the first
-    sample: no interference) and the line widens, since a shorter interferogram means a wider line.
-    Draw a lone spike at zero path, flat elsewhere: white light.  Draw a slow wave: infrared.  Most
-    drawings need negative power at some wavenumbers (drawn in red): no light could make them,
-    because an interferogram must be the transform of a spectrum that is nowhere negative.</p>
+    make your drawing.  What you draw on one side of zero path appears on the other side too: the
+    interferogram of any light is even.  Flatten the outer half of the samples onto the dashed line
+    (half the middle sample: no interference) and the line widens, since a shorter interferogram
+    means a wider line.  Draw a lone spike at zero path, flat elsewhere: white light.  Draw a slow
+    wave: infrared.  Most drawings need negative power at some wavenumbers (drawn in red): no light
+    could make them, because an interferogram must be the transform of a spectrum that is nowhere
+    negative.</p>
   </article>
 
   <h3>The stellar interferometer</h3>
@@ -248,7 +288,7 @@
   finer as $B$ grows.</p>
 
   <article class="exp" data-setup="star">
-    <h3>12. Measure a star</h3>
+    <h3>13. Measure a star</h3>
     <p>A star 20 mas (0.020″) across, in light of 550 nm; the baseline sweeps back and forth.  The
     stripes over the star are the fringes the interferometer projects onto the sky, $\lambda/B$
     apart: when 1.22 of them fit across the disk, the bright and dark stripes cover equal light and
@@ -262,20 +302,21 @@
   </article>
 
   <article class="exp" data-setup="betelgeuse">
-    <h3>13. Betelgeuse, December 1920</h3>
+    <h3>14. Betelgeuse, December 1920</h3>
     <p>Michelson and Pease mounted the mirrors on a 20-foot (6.1 m) beam across the 100-inch
     telescope at Mount Wilson and moved them apart until Betelgeuse's fringes disappeared, at about
     3.07 m (121 inches).  For light of 575 nm that gives $\theta=1.22\lambda/B=0.047″$: the first
     star other than the Sun to be measured.  Turn on Atmosphere: the air above the telescope delays
     the two beams differently and the fringes dance, as they did for Michelson's observers, but
     their contrast can still be judged.  They judged it by eye, in a broad band of light: set
-    $\Delta\lambda$ to 100 nm.  The middle fringe still vanishes at the same baseline (the visibility
-    changes sign there, and the wavelengths on either side cancel), but further out the dashed curve,
-    the contrast of the middle fringe over the band, is smoothed.</p>
+    $\Delta\lambda$ to 100 nm.  The middle fringe still vanishes at almost the same baseline, 3.09 m
+    instead of 3.08 m (the visibility changes sign there, and the wavelengths on either side
+    cancel), but further out the dashed curve, the contrast of the middle fringe over the band, is
+    smoothed.</p>
   </article>
 
   <article class="exp" data-setup="binary">
-    <h3>14. A binary star</h3>
+    <h3>15. A binary star</h3>
     <p>Two stars about 50 mas apart, of nearly equal brightness, like Capella.  Each makes its own
     fringes, shifted by the stars' separation $\rho$ along the baseline: the fringes fade when the
     shift is half a fringe and come back when it is a whole one.  The visibility beats with period
@@ -291,7 +332,10 @@
   screen can show and are drawn with the negative channel cut to zero.  The mercury lamp's line
   strengths are approximate; sodium's 2 : 1 is the value for a thin source.  Drawn spectra live
   between 357 and 833 nm.  The fringe counter counts a fringe each time the signal rises through
-  1.3 times its mean after falling below 0.7 times it, so it misses fringes of low visibility.
+  1.3 times its mean after falling below 0.7 times it, so it misses fringes of visibility below
+  0.3.  The spectrometer is perfect but for its zero error: no noise, and its steps exact.  Its
+  phase correction takes the phase of the two-sided sum weighted by a triangle (Mertz's method,
+  here with all of the scan): where there is light, that phase is the light's own.
   The stellar fringes are drawn inside the diffraction pattern of the inner mirrors (at the middle
   wavelength of the band), without the blurring of the image by the air.</p>
   <p class="small muted">New in 2026 for BrainFlux.
