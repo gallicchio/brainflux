@@ -156,8 +156,9 @@
     field does not stop at the surface: it reaches into the air as an evanescent wave that
     decays as $e^{-\kappa z}$, with
     $\kappa=\frac{2\pi}{\lambda}\sqrt{n_1^2\sin^2\theta-n_2^2}$.  The readout gives its decay
-    length $1/\kappa$, 147 nm at 50°: drag the angle towards $\theta_c$ and watch it reach
-    farther (224 nm at 45°).  It carries no energy away.  The readout also gives the phase
+    length $1/\kappa$, 147 nm at 50° (the plot shows $|\vec E|^2$, which falls twice as fast,
+    by $1/e$ in 74 nm): drag the angle towards $\theta_c$ and watch it reach farther (224 nm at
+    45°).  It carries no energy away.  The readout also gives the phase
     difference between the reflected s and p waves, which is 45° at 47.7° and at 55.3°: Fresnel
     cut a glass rhomb so that light inside it is reflected twice at such an angle, adding up to a
     quarter wave, which turns linear polarisation into circular.</p>
@@ -172,8 +173,8 @@
     through a barrier: for s polarisation $E$ obeys
     $E''+k_0^2\left(n^2-n_1^2\sin^2\theta\right)E=0$, the Schrödinger equation with the air gap
     as a region where the "energy" is below the "potential", and $T$ is the barrier formula
-    $T=\left[1+\frac{(k^2+\kappa^2)^2}{4k^2\kappa^2}\sinh^2\kappa d\right]^{-1}$.  Beam splitter
-    cubes and some fingerprint readers use it.</p>
+    $T=\left[1+\frac{(k^2+\kappa^2)^2}{4k^2\kappa^2}\sinh^2\kappa d\right]^{-1}$.  Some beam
+    splitters and fingerprint readers work this way.</p>
   </article>
 
   <article class="exp" data-setup="oil">
@@ -228,23 +229,30 @@
 
   <article class="exp" data-setup="etalon">
     <h3>10. A Fabry–Pérot etalon</h3>
-    <p>Two thin silver films, 2 µm apart.  Transmission peaks wherever the round trip is a whole
-    number of wavelengths, $2d\cos\theta=m\lambda$, so the peaks are spaced by
-    $\Delta\lambda\approx\lambda^2/2d$ (73 nm here near 514 nm; the plot against thickness shows
-    the same comb as the gap grows).  They are sharp because the light bounces many times: the
-    finesse, peak spacing over peak width, is about $\pi\sqrt{R}/(1-R)$ for mirrors of reflectance
-    $R$.  The readout measures it: 19.  Thicken both silver films to 55 nm and it rises to 35, but
-    the peaks drop from 41% to 16%, because silver absorbs a little at every bounce.</p>
+    <p>Two thin silver films with 2 µm of air between them.  Transmission peaks wherever the
+    round trip is a whole number of wavelengths, $2d\cos\theta=m\lambda$ (nearly: the reflection
+    from silver adds a phase of its own).  So the peaks are evenly spaced in $1/\lambda$, by
+    $1/2d$, which near a wavelength $\lambda$ is $\Delta\lambda\approx\lambda^2/2d$: 66 nm at
+    514 nm.  The readout measures 63.8 nm, as if the gap were 2.07 µm: the light reaches a little
+    way into the silver before it turns back.  (The plot against thickness shows the same comb as
+    the gap grows: a peak every half wavelength, 275 nm.)  The peaks are sharp because the light
+    bounces many times.  The finesse, peak spacing over peak width, is
+    $\mathcal F\approx\pi\sqrt{R}/(1-R)$ for mirrors of reflectance $R$; seen from inside the gap,
+    each film here reflects $R=82.6\%$ at 514 nm, so $\mathcal F\approx16.4$, and the readout
+    measures 16.4.  Thicken both silver films to 55 nm: $R=90.2\%$, and the finesse rises to 30.4,
+    but the peaks drop from 41% to 16%, because silver absorbs a little at every bounce.</p>
   </article>
 
   <article class="exp" data-setup="silver">
     <h3>11. A silver mirror</h3>
     <p>Bulk silver reflects over 90% of visible light, nearly evenly (92% at 450 nm, 96% at
     600 nm), so it looks white: the swatch is neutral.  Its free electrons follow the field and
-    re-radiate it.  Near 320 nm, close to the electrons' plasma frequency, they can no longer
-    keep up and the reflectance collapses to 12%: thin silver is transparent in the ultraviolet.
-    Against angle, $R_p$ dips to 91% at a "principal angle" of 71° but never reaches zero: a
-    metal has no true Brewster angle.  (Real silver reflects a few per cent more than this fit;
+    re-radiate it.  In the ultraviolet they can no longer keep up: at the plasma frequency the
+    dielectric constant $\varepsilon=N^2$ passes through zero, here at 324 nm (3.8 eV; the free
+    electrons alone would put it at 9 eV, but the d electrons beneath them pull it down), and the
+    reflectance collapses, to 7% at 309 nm.  Thin silver lets that ultraviolet through.  Against
+    angle, $R_p$ dips to 91% at 71° but never reaches zero: a metal has no true Brewster angle,
+    only this "pseudo-Brewster" angle.  (Real silver reflects a few per cent more than this fit;
     see below.)</p>
   </article>
 
@@ -274,7 +282,11 @@
   $k_z=\frac{2\pi}{\lambda}\sqrt{N^2-n_0^2\sin^2\theta_0}$, and the tangential $\vec E$ and
   $\vec H$ are continuous at every interface; a layer turns them into
   <math display="block"><msub><mrow><mo>(</mo><mtable><mtr><mtd><mi>E</mi></mtd></mtr><mtr><mtd><mi>H</mi></mtd></mtr></mtable><mo>)</mo></mrow><mtext>front</mtext></msub><mo>=</mo><mrow><mo>(</mo><mtable><mtr><mtd><mi>cos</mi><mo>&#x2061;</mo><mi>δ</mi></mtd><mtd><mo>−</mo><mfrac><mi>i</mi><mi>η</mi></mfrac><mi>sin</mi><mo>&#x2061;</mo><mi>δ</mi></mtd></mtr><mtr><mtd><mo>−</mo><mi>i</mi><mi>η</mi><mi>sin</mi><mo>&#x2061;</mo><mi>δ</mi></mtd><mtd><mi>cos</mi><mo>&#x2061;</mo><mi>δ</mi></mtd></mtr></mtable><mo>)</mo></mrow><msub><mrow><mo>(</mo><mtable><mtr><mtd><mi>E</mi></mtd></mtr><mtr><mtd><mi>H</mi></mtd></mtr></mtable><mo>)</mo></mrow><mtext>back</mtext></msub></math>
-  with $\delta=k_zd$ and $\eta=N\cos\theta$ (s) or $N/\cos\theta$ (p).  Indices are complex,
+  with $\delta=k_zd$, the phase a wave picks up crossing the layer, and $\eta=N\cos\theta$ (s) or
+  $N/\cos\theta$ (p), the layer's ratio $H/E$ of tangential fields for a wave going forward (in
+  units of vacuum's, $1/377\ \Omega$).  Then $r=(\eta_0-Y)/(\eta_0+Y)$, where $Y=H/E$ at the front
+  of the stack.  The signs of $i$ are those of waves $e^{i(k_zz-\omega t)}$; books that write
+  $e^{i(\omega t-k_zz)}$ (Macleod's, for one) have $+i$ and $N=n-i\kappa$.  Indices are complex,
   $N=n+i\kappa$, so metals and evanescent waves need nothing special.  Every number is exact for
   ideal flat layers and plane waves; the materials are the approximations.</p>
   <p>Materials: water (Daimon and Masumura 2007), fused silica (Malitson 1965), BK7 (Schott),
