@@ -72,6 +72,8 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     o = b.eval('[__app.optics(1.6), __app.optics(2.0), __app.optics(2.5)]')
     check(o[0]['n'] > 1 and o[2]['n'] < 1 and o[1]['k'] > 10 * o[0]['k'],
           f"in step below the line n = {o[0]['n']:.3f} > 1; against E above it n = {o[2]['n']:.3f} < 1; a quarter period late on it κ = {o[1]['k']:.2f}")
+    km = b.eval('(() => { let best = [0, 0]; for (let w = 1.8; w < 2.3; w += 0.0005) { const k = __app.optics(w).k; if (k > best[1]) best = [w, k]; } return best; })()')
+    check(abs(km[0] - 2.04) < 0.005 and abs(km[1] - 0.99) < 0.005, f"κ is largest just above the line, {km[1]:.3f} at ω = {km[0]:.3f}, where n has fallen (the help says 0.99 at 2.04)")
     # Dragging the light's handle takes over from the sweep.
     hs = b.eval('__app.handles()'); pr = next(h for h in hs if h['type'] == 'probe')
     box = b.box('#resp'); wa = b.eval('__app.state.probe')
@@ -157,7 +159,9 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     run(b, 'metal')
     lo, hi = b.eval('[__app.optics(3).R, __app.optics(8).R]')
     c = b.eval('__app.charge(3)')
-    check(lo > 0.98 and hi < 0.05 and c['free'] and c['lag'] > 179, f"sodium: R = {lo:.3f} at 3 eV (visible), {hi:.3f} at 8 eV (ultraviolet); the free electron lags E by {c['lag']:.1f}°")
+    cg = b.eval('__app.charge(0.02)')
+    check(lo > 0.98 and hi < 0.05 and c['free'] and c['lag'] > 179 and abs(cg['lag'] - 135) < 1e-6,
+          f"sodium: R = {lo:.3f} at 3 eV (visible), {hi:.3f} at 8 eV (ultraviolet); the free electron lags E by {c['lag']:.1f}° (by {cg['lag']:.1f}° at ω = γ)")
     run(b, 'glass')
     o = b.eval('[__app.optics(1.8892).n, __app.optics(2.5506).n]')
     check(abs(o[0] - 1.4564) < 2e-4 and abs(o[1] - 1.4632) < 2e-4, f"fused silica: n(656 nm) = {o[0]:.4f}, n(486 nm) = {o[1]:.4f} (Malitson 1.4564, 1.4632)")
@@ -264,7 +268,7 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     b.eval("__app.state.oscs.push({ w0: 3.1, g: 0.3, wp: 0.7 }); __app.setView('medium')")
     b.eval("document.querySelector('#osc-chips button').click()")  # any change writes the hash
     press(b, '#resp', 0.3)
-    b.wait("location.hash.includes('o=') && location.hash.includes('w=')", timeout=20)
+    b.wait("location.hash.includes('3.1_0.3_0.7') && location.hash.includes('v=medium') && location.hash.includes('w=' + __app.state.probe.toPrecision(4).replace(/0+$/, '').replace(/[.]$/, ''))", timeout=20)
     h = b.eval('location.hash')
     wbefore = b.eval('__app.state.probe')
     b.eval('location.reload()'); b.wait('window.__app && __app.ready', timeout=60)

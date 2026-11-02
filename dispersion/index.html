@@ -123,7 +123,8 @@
     ($\delta=1.5^\circ$ at $\omega=0.5$), the dipoles $qx$ point along $E$, $\chi>0$ and $n>1$.  At
     the line the charge swings ten times as far as the static pull ($A=\omega_0/\gamma=10$) and
     lags by a quarter period, $\delta=90^\circ$: its velocity is then in step with $E$, so the
-    field does work on it all the time, and the light is absorbed ($\kappa$ peaks, at 0.92).
+    field does work on it all the time, and the light is absorbed ($\kappa=0.92$ there; it is
+    largest, 0.99, just above, at $\omega=2.04$, where $n$ has fallen).
     Above the line inertia wins: the charge moves against $E$ ($\delta=167^\circ$ at $\omega=2.5$),
     $\chi<0$ and $n<1$ (0.762 there).  That is the whole shape of $n(\omega)$: rising slowly
     towards the line from below (normal dispersion, $dn/d\omega>0$), falling steeply through it
@@ -149,8 +150,9 @@
   <article class="exp" data-setup="metal">
     <h3>3. A metal is a mirror below $\omega_p$</h3>
     <p>Free electrons, $\varepsilon=1-\omega_p^2/(\omega^2+i\gamma\omega)$, with sodium's
-    $\hbar\omega_p=5.9$ eV.  With no spring, nothing pulls an electron back, and it moves against
-    $E$ at every frequency ($\delta=179.6^\circ$ at 3 eV): $\chi<0$ always.  Below $\omega_p$ it
+    $\hbar\omega_p=5.9$ eV.  With no spring, nothing pulls an electron back, and at every
+    frequency well above $\gamma$ it moves against $E$ ($\delta=179.6^\circ$ at 3 eV; $135^\circ$
+    at $\omega=\gamma$, where friction matters): $\chi'<0$ always.  Below $\omega_p$ it
     is large enough to make $\varepsilon'<0$: then $n\approx0$ (0.008 at 3 eV) and $\kappa$ is
     large (1.69), so no wave travels in.  The field dies within $c/\kappa\omega=39$ nm, the skin
     depth, and $R=99.2\%$: a mirror (the reflected wave makes a standing wave outside).  Above $\omega_p$ the electrons' response is too weak to make $\varepsilon$
@@ -232,7 +234,8 @@
     <h3>9. Draw the absorption, get the index</h3>
     <p>$\mathrm{Im}\,\chi$ is a flat band of absorption, drawn by hand, and $\mathrm{Re}\,\chi$ is
     what causality makes of it: $(h/\pi)\ln|(b^2-\omega^2)/(a^2-\omega^2)|$ for a band of height
-    $h$ from $a$ to $b$, with a peak at each sharp edge.  Draw on $\mathrm{Im}\,\chi$: absorption
+    $h$ from $a$ to $b$, with a spike at each sharp edge, up at the lower one and down at the
+    upper.  Draw on $\mathrm{Im}\,\chi$: absorption
     anywhere gives $d\,\mathrm{Re}\,\chi/d\omega>0$ (normal dispersion) everywhere else.  Or
     draw on $\mathrm{Re}\,\chi$ and see what absorption it needs (orange below zero would be
     gain).  The transforms are done with FFTs on a grid reaching 8 times past the plotted
@@ -305,7 +308,7 @@
     arrives <em>before</em> the peak of a pulse through vacuum: 6.7 early at $z=5$ and 12.9 at
     $z=10$ (the group velocity alone would say 9.9 and 19.7), but much reduced: 42% as high at
     $z=5$, 18% at $z=10$ (the curve is enlarged to be seen).  Nothing goes faster than light.
-    The charges need time (about $2/\gamma=10$) to build up the motion that cancels the wave,
+    The charges need time (about $2/\gamma=10$) to build up the motion that absorbs the wave,
     so the front of the pulse gets through better than its back, and what comes out is a small
     copy built from the front, which was there, in the smooth Gaussian, long before the peak.
     Cut the front off sharply and see (15).  Make the pulse short ($T=10$): its spectrum is now as wide as the line, the pulse is

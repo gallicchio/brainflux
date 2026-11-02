@@ -589,7 +589,8 @@ function drawKK() {
   const fIm = setupKKFrame('#kkim'), fRe = setupKKFrame('#kkre'), sl = sliver();
   const { ws, re, im } = kkCurves(fIm.f);
   kkRange = kkFrozen || autorange([re, im], [0], skipColumns(ws.length));
-  for (const [{ ctx, f }, data, color, name] of [[fIm, im, colors.im, 'Im χ: the absorption (draw on it)'], [fRe, re, colors.re, 'Re χ: the dispersion (draw on it)']]) {
+  const narrow = fIm.f.w < 580;
+  for (const [{ ctx, f }, data, color, name] of [[fIm, im, colors.im, narrow ? 'Im χ, absorption: draw' : 'Im χ: the absorption (draw on it)'], [fRe, re, colors.re, narrow ? 'Re χ, dispersion: draw' : 'Re χ: the dispersion (draw on it)']]) {
     [f.y0, f.y1] = kkRange;
     f.clip();
     drawBands(ctx, f);
@@ -616,11 +617,11 @@ function drawKK() {
     if (data === im && sl) { const x = f.X(sl.w); topHandle(ctx, f, x, 'one sliver: drag', colors.sliver, [1, 4]); kkSliverX = x; }
     f.axes({ xlabel: U().w, colors });
     const items = [{ label: name, color }];
-    if (data === re && sl && !state.broken) items.push({ label: 'the sliver’s share', color: colors.sliver, dash: [5, 3], width: 2 });
+    if (data === re && sl && !state.broken) items.push({ label: narrow ? 'sliver’s share' : 'the sliver’s share', color: colors.sliver, dash: [5, 3], width: 2 });
     legend(ctx, f, items, f.left + 4, 4);
     if (state.broken) {
       ctx.save(); ctx.fillStyle = colors.warn; ctx.font = '600 12px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-      ctx.fillText('causality broken: the other side does not follow', f.right - 4, 6); ctx.restore();
+      ctx.fillText(narrow ? 'causality broken' : 'causality broken: the other side does not follow', f.right - 4, narrow ? f.top + 4 : 6); ctx.restore();
     }
   }
   drawChiT(sl);
@@ -669,8 +670,9 @@ function drawChiT(sl) {
   ctx.save(); ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = colors.ink3; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText('before the kick', (f.left + f.X(0)) / 2, f.top + 22);
   ctx.restore();
-  const items = [{ label: 'χ(t): the response to a kick of E at t = 0', color: colors.accent }];
-  if (share) items.push({ label: state.broken ? 'the sliver alone' : 'the sliver’s share', color: colors.sliver, dash: [5, 3], width: 2 });
+  const narrow = f.w < 580;
+  const items = [{ label: narrow ? 'χ(t), after a kick at t = 0' : 'χ(t): the response to a kick of E at t = 0', color: colors.accent }];
+  if (share) items.push({ label: state.broken ? (narrow ? 'sliver' : 'the sliver alone') : (narrow ? 'sliver' : 'the sliver’s share'), color: colors.sliver, dash: [5, 3], width: 2 });
   legend(ctx, f, items, f.left + 4, 4);
   cache.acausal = acausalFraction();
 }
