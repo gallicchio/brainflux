@@ -63,7 +63,7 @@ details.panel[open] summary { margin-bottom: 6px; }
 /* Room for two or three lines, so that what is below keeps its place as the wording changes. */
 #verdict { min-height: 2.9em; }
 #fringe-note { min-height: 2.9em; }
-#ref-note { min-height: 1.45em; }
+#ref-note { min-height: 2.9em; }
 #verdict .bad { color: var(--warn); }
 #verdict .good { color: var(--good); }
 .warn { color: var(--warn); }
