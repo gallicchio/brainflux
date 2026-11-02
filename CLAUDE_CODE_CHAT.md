@@ -781,3 +781,160 @@ it to disorder in a crystal.
 
 Committed the brick photo, its help text, the licence entry, the plan and this log.  The push
 failed again from this session (`Permission denied (publickey)`), so it is yours to push.
+
+## Prompt 13
+
+> These demos are good, but could be improved, especially the ones marked "beta" that you made.
+> Go through these and check that the physics is all correct and that it makes sense to a
+> Junior physics major. In particular, the "Dispersion and Kramers-Kronig" was not intuitive.
+> The "Interferometers and coherence" was good, but should show scanning the Michelson on both
+> sides of equal path length (even though the information is the same). The "Abbe and phase
+> contrast" was hard to use. The Holography was not intuitive. The Tomography was good, but
+> could be made more intuitive to use. The "Gaussian beams and laser cavities" was good, but was
+> hard to use, with some default parameters that might be better chosen. "The principle of
+> least action" was also hard to use.
+
+### Response 13 (2026-11-02)
+
+Nine agents, each in its own worktree: one for each of the seven you named, with your note
+verbatim, a physics audit of every equation, number and sentence, and the instruction to use
+the page as a student would (driving it in Chromium and looking at the screenshots); and two
+that audited the other six beta demos without redesigning them.  I merged them one by one,
+checked their physics claims by hand, looked at each demo myself, and fixed what I found at
+the merges.
+
+**Dispersion and Kramers–Kronig** now starts from what a junior already knows, the driven,
+damped oscillator.
+- It opens on the medium with the light's frequency sweeping slowly across one line, and two
+  live pictures at that frequency: a charge on a spring with its lag behind E (in step below the
+  line, so $n>1$; a quarter period late on it, so E does work and the light is absorbed; against
+  E above it, so $n<1$), and the wave meeting the medium (its wavelength $\lambda_0/n$ inside,
+  the $1/e$ point of its decay, the reflected standing wave outside).
+- Kramers–Kronig: drag one sliver of absorption and see its share of $\mathrm{Re}\,\chi$ (+ below
+  it, − above it, falling as $1/(\omega'-\omega)$) and its ring in $\chi(t)$, which starts at the
+  kick only together with that share.  "Break causality" makes it ring before the kick.
+- Pulses: a picture of the pulse inside the medium at one moment, a dot riding a crest at $c/n$
+  and a triangle riding the peak at $c/n_g$, above the detector's record.
+- Physics fixed: the help said $\varepsilon'$ rises towards the line from both sides (above it,
+  it rises away from the line, back to 1); that the area of $\varepsilon''$ is fixed (it is
+  $\int\omega\varepsilon''\,d\omega$); that a typed $\chi$ with $+i\gamma\omega$ in place of
+  $-i\gamma\omega$ is gain (it is the ring run backwards in time, acausal; a real amplifier, with
+  inverted atoms, is $-\chi$ and still causal); the ionosphere's angle was never said to be from
+  the vertical; the carrier and the resonance were both $\omega_0$.
+
+**Interferometers and coherence.**  The Michelson now scans both sides of equal paths.  The
+mirror goes to negative $d$ (the schematic marks $d<0$ and $d>0$), the motor sweeps through
+zero, the spectrometer samples $-\Delta_\mathrm{max}\ldots+\Delta_\mathrm{max}$ and transforms
+both sides (with Mertz phase correction), and the page opens on white light sweeping through
+zero path with both sides of its interferogram drawn.  A new experiment, "Both sides, or
+one?": the sides carry the same information, $I(-\Delta)=I(\Delta)$; but with the zero off by
+$\lambda/4$ a one-sided scan turns a green line into a wiggle, while two sides stay right.
+The spectrometer had only scanned $0\ldots\Delta_\mathrm{max}$, although its own formula summed
+both sides, and took its mean level from the first sample; ten quoted numbers were re-measured
+and corrected (white-light fringes visible to 2.45 μm, the sodium split at 0.41 mm, Betelgeuse
+on a 6.1 m beam as in 1920...).
+
+**Imaging: Abbe and phase contrast.**  The hard part was that nothing showed the microscope.
+- A live sketch of it from the side now sits over the three pictures: light, object,
+  objective, Fourier plane (the back focal plane, drawn as a strip with its aperture, stop, dot
+  or knife), tube lens, image.  The light that goes straight through is drawn converging to a
+  point in the Fourier plane, each diffraction order as a ray as bright as its share; grating
+  orders are numbered, and red where the pupil blocks them.
+- The controls are numbered 1 to 4 in the order the light meets them, and the two overlapping
+  sets of Fourier-plane tools became one: four presets that name the technique (Open: bright
+  field; Stop: dark field; Phase dot: phase contrast; Knife edge: schlieren), and brushes
+  Block / Pass / −90° / +90°.
+- Physics: the signs in the code were right, the explanation of Zernike's dot was not.  With
+  waves $e^{i(kz-\omega t)}$ (so $\varphi>0$ is a delay) and the zero order times $e^{i\alpha}$,
+  $I\approx 1+2\varphi\sin\alpha$: the −90° dot (an advance) makes thick parts dark, positive
+  phase contrast.  The help had the bar target's 1 μm group "a grey block" in coherent light (it
+  keeps 44% contrast), the Siemens star with 36 spokes (18), and an oblique-light comparison
+  that left the light tilted.
+
+**Holography** now tells the story in two steps.
+- It opens on one point 60 mm behind the plate and a reference at 1°: the hologram is an
+  off-centre zone plate, which is a lens.
+- ① Record (side view): the object's light $O$ and the reference $R$ meet on the plate, which
+  keeps only $|O+R|^2$.  ② Relight: $R$ alone, and the three beams the plate sends on, each in
+  its colour with its terms beside it: the zero order straight on, the image $|R|^2O$ (dashed
+  rays back to where the object was: virtual), and the twin $R^2O^*$ converging in front of
+  the plate (real).  Click there to focus the camera; "Looking through it" is a camera held
+  against the plate, with rings where each image lands.
+- The window, cutting and colour tools are folded away for the experiments that use them.
+- Physics: relighting with "the conjugate" was described as a reversed beam making real images
+  in front of the plate.  A truly reversed beam makes its real image where the object was; what
+  the demo does (and now says) is light the plate from behind with the reference tilted the
+  other way.  Relit in green, the picture is not 0.84 times smaller: it is as big, 633/532
+  times as far away, and so looks 0.84 times as big.
+
+**Tomography.**  One colour per thing pointed at, in every panel: cyan for the angle just
+measured (the detector, its sinogram row, its slice of Fourier space, its smear in both
+back-projections); magenta for a sinogram row you point at (the scanner turns there); yellow for
+a point you point at in the object (its sinusoid, its ray, where its shadow falls).  A Step
+button and the → key measure one angle at a time, and a new "Disks" object (one centred, two
+not) opens the first experiments: a straight band and two sinusoids.  Physics: the ramp
+filter's transform is $|k|/2\pi$ with this demo's normalisation, not $|k|$; the circle in
+Fourier space is $\pi/(R\Delta\theta)$, not $\pi/\Delta\theta$; the sinogram rows were drawn
+half a row off their angles.
+
+**Gaussian beams and laser cavities.**  New defaults:
+- Bench: a 200 μm waist ($z_R=199$ mm, so it spreads visibly) and a 200 mm lens two Rayleigh
+  ranges on, which makes a 142 μm waist 301 mm after the lens (ray optics would say 400 mm;
+  the help says why).  Each waist labelled $w_0$, $z_R$, $\theta$, its Rayleigh range dashed and
+  its far-field cone dotted; Intensity shown first; the "drawn 144× wider" paragraph is one line.
+- Cavity: $R_1=R_2=1$ m at $L=250$ mm.  With $R=2L$ the one-way Gouy phase was $\pi/3$ and the
+  orders $N$ and $N+3$ fell on top of each other.  The spectrum is now drawn in absolute
+  frequency above $q_0\,c/2L$, with the plain comb in grey, so it is plain why TEM₀₀ sits
+  $\psi_1/\pi$ off it.
+- The optics are a list with a ✕ on each row, the input waist a large yellow ring, and a hint
+  line says what the pointer can drag where it is.
+- Physics: a real focus just past the view was called virtual; and the help said the
+  exaggerated wavelength was needed for the Gouy shift (only the curvature needs it).
+
+**The principle of least action.**  Driving it showed what made it hard: a vertical drag with
+a 4 px wobble also moved the knot in time, a press anywhere grabbed the nearest knot, and the
+record of S rescaled every frame.
+- A drag now moves one way only, decided by its first 5 px (Shift for both), with a guide line
+  and a "where" or "when" label; only a knot within 16 px is grabbed.
+- A score table compares your path with the true one: S, $\int\frac12 m\dot x^2\,dt$ and
+  $-\int V\,dt$, ΔS and a verdict.  The record of S is full size beside the path, holds its
+  range during a drag, and shows the true S as a labelled line.
+- "Try a wrong path": Bend ↑, Bend ↓, Straight line, Rush then dawdle (the same places at the
+  wrong times); each animates, so the record shows a ramp.  "Back to the true path" is the
+  main button.
+- Phase space, energy and Feynman's arrows share one panel in tabs; the phasor dial became the
+  sum over every height of one knot, a Cornu spiral, with a band on the path of width
+  $\sqrt{\pi\hbar/S''}$ where the arrows add up.
+- Physics: for typed Lagrangians, typed potentials and light, second derivatives taken with a
+  1e-5 step put noise into the shooting equal to its landing tolerance, so 12 of 82 true paths
+  were missed and the damped oscillator was called a saddle before its conjugate point.
+  "Roll downhill" crawled at a saddle (knots bunching in time); it now rolls them up and down
+  only.  Experiment 2 said lowering the top knot saves kinetic energy; measured, it costs some.
+
+**The audit of the other six.**
+- Maxwell 2D: the 0.5λ guide holds two modes, not one ($V=1.76>\pi/2$); the dashed V of
+  Cherenkov light is its wavefronts at 47.8° to the path, the light goes at 42.2°
+  ($\cos\theta=1/n\beta$); "total" internal reflection leaked 5.4% of a 1λ beam through the
+  part of its angular spread below the critical angle (the set-up now hits at 55°, and a meter
+  shows the 0.2% left); at β = 0.9 there are no waves ahead of the source to crowd.
+- Thin films: the Fabry–Pérot finesse divided the gap to the next peak in λ by the width, but
+  the peaks are evenly spaced in $1/\lambda$, not λ (16.4 now, against $\pi\sqrt R/(1-R)=16.43$);
+  silver's UV dip is at 309 nm, 7%; the 71° angle is the pseudo-Brewster angle, not the
+  principal angle (73.9°).
+- Radiation, antenna arrays, drums, phase space: no physics errors.  Clarity fixes, a power
+  chart's labels that ran off the canvas, and in drums a "Count 200 modes" button that stayed
+  disabled after switching shapes.
+
+**Shared code.**  `lib/plot.js` put an x label too wide for a small right margin off the canvas;
+it now goes inside the frame (no opening view hit it; a unit test keeps it so).  The beams
+cavity test drew random cavities and sometimes asked rays just outside the stable range to walk
+off faster than physics lets them; it is seeded now and asks only where the eigenvalue says
+they can.  Thumbnails and the landing-page cards are remade from the new openings.
+
+**Tests.**  The unit tests pass in Chromium (315, up from 293); the scripted run of every demo is in progress.
+
+**Still to do.**  Still pictures for each experiment (the old "key frames" rule; no demo has
+them yet); a hollow-cone condenser with a phase ring in the imaging demo (the physics module
+supports it; it would add controls); dispersion in an uncompensated Michelson arm; the
+interferometer's Betelgeuse range is not kept in the address.  Still marked beta until you
+have tried them again.
