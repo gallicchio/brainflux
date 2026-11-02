@@ -377,8 +377,9 @@ function notes() {
   for (let k = 0; k < tr.nt; k++) { let n = 0; for (let a = 0; a < pos.length; a++) n += tr.up[a * tr.nt + k]; if (n >= 2) up++; }
   const total = grid.samples + grid.dropped;
   const lines = [
-    ['Longest baseline ', ...lenParts(hi), ' = ', ...wavesParts(hi / S.lambda), ': λ/B = ', ...angleParts(S.lambda / hi)],
-    ['Shortest ', ...lenParts(lo), ': nothing larger than about λ/B = ', ...angleParts(S.lambda / lo), ' is seen'],
+    // (No line breaks either side of an "=": a wrapped line keeps the equation whole.)
+    ['Longest baseline ', ...lenParts(hi), ' = ', ...wavesParts(hi / S.lambda), ': λ/B = ', ...angleParts(S.lambda / hi)],
+    ['Shortest ', ...lenParts(lo), ': nothing larger than about λ/B = ', ...angleParts(S.lambda / lo), ' is seen'],
     S.hours > 0 ? ['Two or more dishes see the source (above 10°) for ', { v: (S.hours * (up - (up ? 1 : 0))) / Math.max(1, tr.nt - 1), dec: 1, w: 4 }, ' of the ', { v: S.hours, dec: 1, w: 4 }, ' hours']
       : [up ? 'The source is up' : 'The source is below the horizon'],
   ];
