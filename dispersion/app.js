@@ -583,10 +583,11 @@ function sliver() {
   return { w: wq, a: wq - d / 2, b: wq + d / 2, h: Number.isFinite(h) ? h : 0 };
 }
 
-let kkFrames = {}, kkRange = null, kkFrozen = null;
+let kkFrames = {}, kkRange = null, kkFrozen = null, kkSliverX = null;
 
 function drawKK() {
   const fIm = setupKKFrame('#kkim'), fRe = setupKKFrame('#kkre'), sl = sliver();
+  kkSliverX = null;
   const { ws, re, im } = kkCurves(fIm.f);
   kkRange = kkFrozen || autorange([re, im], [0], skipColumns(ws.length));
   const narrow = fIm.f.w < 580;
@@ -626,8 +627,6 @@ function drawKK() {
   }
   drawChiT(sl);
 }
-let kkSliverX = null;
-
 function setupKKFrame(sel) {
   const cv = $(sel), { ctx, width, height } = fitCanvas(cv);
   ctx.clearRect(0, 0, width, height);
@@ -1011,7 +1010,7 @@ function fillEnvelope(ctx, f, cols, X, em, wloc, scale, vmax, Y, colour) {
 function snapWindow(t = anim.t) {
   const P = state.pulse, L = P.z, ng = cache.ng0;
   if (P.frame === 'group' && P.shape === 'gauss' && ng > 0.3) {
-    const len = P.T / ng, st = traceCache?.ms?.stretch ?? 1, W = Math.max(10 * len * Math.sqrt(Math.max(1, st)), 12 * (2 * Math.PI) / P.w0);
+    const len = P.T / ng, st = trace().ms.stretch ?? 1, W = Math.max(10 * len * Math.sqrt(Math.max(1, st)), 12 * (2 * Math.PI) / P.w0);
     const zc = t < 0 ? t : Math.min(t / ng, L);
     return { moving: true, z0: zc - W / 2, z1: zc + W / 2, W };
   }
@@ -1304,7 +1303,7 @@ function kick() { if (!raf) raf = requestAnimationFrame(loop); }
 /** Move the clocks on by dt seconds of the page's time (the tests call this through __app.step). */
 function advance(dt) {
   if (state.view === 'medium') {
-    anim.phase += (2 * Math.PI * dt) / PERIOD;
+    anim.phase = (anim.phase + (2 * Math.PI * dt) / PERIOD) % (2 * Math.PI);
     if (state.sweep) sweepStep(dt);
   }
   if (state.view === 'pulse' && state.playing) {
@@ -1371,7 +1370,7 @@ for (const [id, m] of Object.entries(MEDIA)) {
     loadMedium(id);
     // The pulse keeps its place relative to the plotted range of frequencies.
     const k = state.wmax / w0, P = state.pulse;
-    if (k !== 1) { P.w0 *= k; P.T /= k; P.tf /= k; P.z /= k; syncPulseSliders(); }
+    if (k !== 1) { P.w0 *= k; P.T /= k; P.tf /= k; P.z /= k; zRangeBase /= k; syncPulseSliders(); }
     rebuild();
     if (state.view === 'pulse') fitView();
   } }, m.label);
