@@ -1,7 +1,7 @@
 import { test, assert, close } from './harness.js';
 import { Yee2D, PointSource, BeamSource, MovingSource, Probe, FluxLine, FlowField, OMEGA, numericalK } from '../maxwell2d/fdtd.js';
 import { Scene, SHAPES } from '../maxwell2d/scene.js';
-import { reflectance, snell, layerTransmission, cavityFrequency, cavityFrequencyYee, cherenkovAngle, ringdown, fresnelR, brewsterAngle, beamAverage } from '../maxwell2d/theory.js';
+import { reflectance, snell, layerTransmission, cavityFrequency, cavityFrequencyYee, cherenkovAngle, ringdown, fresnelR, brewsterAngle, beamAverage, rayThroughPolygon, minimumDeviation } from '../maxwell2d/theory.js';
 
 const deg = Math.PI / 180;
 
@@ -363,6 +363,34 @@ test('Cherenkov: a source faster than c/n in glass trails a cone with cos(theta)
     notes.push(`|Ez| 1.4 λ behind, at y = 0.5..3: β = 0.6 [${slow.map((v) => v.toExponential(1)).join(' ')}], β = 0.9 [${fast.map((v) => v.toExponential(1)).join(' ')}]`);
   }
   return notes.join('; ');
+});
+
+test('a ray through the prism: Snell at both faces, the least deviation 2 asin(n sin(A/2)) - A, total reflection inside', () => {
+  // The equilateral Prism shape (centred on its centroid); its left face's inward normal points
+  // at -30°, so a ray at phi = i - 30° meets it at incidence i.
+  const A = 60 * deg, pts = SHAPES.prism.build(7, 1.5)[0].pts, notes = [];
+  const through = (n, i) => {
+    const phi = i - 30 * deg, d = [Math.cos(phi), Math.sin(phi)];
+    const r = rayThroughPolygon(pts, n, -10 * d[0], -10 * d[1], d[0], d[1]);
+    return { r, dev: Math.acos(d[0] * r.dir[0] + d[1] * r.dir[1]) };
+  };
+  for (const i of [30, 38, 48.59, 55].map((v) => v * deg)) {
+    const n = 1.5, { r, dev } = through(n, i);
+    const want = i + Math.asin(n * Math.sin(A - Math.asin(Math.sin(i) / n))) - A;
+    assert(r.hits.length === 2 && !r.inside, `n = ${n}, i = ${i / deg}°: in and out (${r.hits.length} faces)`);
+    close(r.hits[0].theta1, i, 1e-9, 'incidence');
+    close(r.hits[0].theta2, Math.asin(Math.sin(i) / n), 1e-9, 'refraction at the first face');
+    close(dev, want, 1e-9, `deviation at i = ${(i / deg).toFixed(1)}°`);
+    notes.push(`i = ${(i / deg).toFixed(1)}°: turned ${(dev / deg).toFixed(2)}°`);
+  }
+  // The least deviation, at the symmetric passage sin i = n sin(A/2).
+  const { dev } = through(1.5, Math.asin(1.5 * Math.sin(A / 2)));
+  close(dev, minimumDeviation(1.5, A), 1e-9, 'minimum deviation');
+  close(minimumDeviation(1.5, A) / deg, 37.18, 0.01, 'minimum deviation (degrees)');
+  // n = 2.5: inside, the ray meets the second face beyond the critical angle and is reflected.
+  const { r } = through(2.5, 38 * deg);
+  assert(Number.isNaN(r.hits[1].theta2) && r.hits[1].theta1 > Math.asin(1 / 2.5), `n = 2.5: totally reflected at the second face (${r.hits[1].theta1 / deg}°)`);
+  return `${notes.join(', ')}; least ${(minimumDeviation(1.5, A) / deg).toFixed(2)}°`;
 });
 
 // ------------------------------------------------------------------ analysis and materials

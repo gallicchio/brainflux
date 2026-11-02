@@ -69,11 +69,15 @@
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
   <p>Maxwell's equations, solved on a grid of cells in the plane, with everything uniform along
-  $z$, out of the picture.  In TM the electric field points out of the picture, and the picture
-  shows $E_z$: red positive, blue negative.  In TE it is $H_z$, and $\vec E$ lies in the plane.
-  Lengths are in vacuum wavelengths $\lambda$ of the source, time is in its periods, and
-  $c=1$.  Around the picture is a layer that absorbs whatever reaches it, so the waves leave as
-  if into open space.</p>
+  $z$, out of the picture.  Light then comes in two separate polarisations, named for the field
+  that lies flat in the picture, transverse to $z$.  In TM ($\vec H$ in the plane) the electric
+  field points out of the picture, and the picture shows $E_z$: red positive, blue negative.  In
+  TE ($\vec E$ in the plane) it shows $H_z$.  The colours are compressed, so that weak waves show
+  beside strong ones: point at the picture to read the field there, under it.  Lengths are in
+  vacuum wavelengths $\lambda$ of the source, time is in its periods, and $c=1$.  Around the
+  picture is a layer that absorbs whatever reaches it, so the waves leave as if into open
+  space.  The page opens on a beam through a glass prism: the dashed line is the ray that
+  Snell's law gives at its two faces, and the notes under the picture give the angles.</p>
   <p>Drag on the picture to paint with the material chosen under <em>Paint</em> (the eraser
   takes it off).  Drag the source, or the tip of its arrow to aim it.  A meter (a green line)
   measures the power crossing it, in the direction of its little arrow, as a share of the
@@ -83,7 +87,9 @@
     <h3>1. Circular waves</h3>
     <p>A wire along $z$ carrying an oscillating current sends out circular waves, one $\lambda$
     apart.  Drag it around.  The amplitude falls off as $1/\sqrt r$: in two dimensions the
-    energy spreads over a circle, whose length grows as $r$.  Choose <em>Pulse</em> and press
+    energy spreads over a circle, whose length grows as $r$.  (The compressed colours hide it:
+    pause, and point at a crest $1\lambda$ from the wire and one $4\lambda$ from it; the second is
+    about half as high.)  Choose <em>Pulse</em> and press
     <em>Fire</em> for a single ring.  Paint some glass in the way: inside it the waves are
     shorter, $\lambda/n$, and slower.</p>
   </article>
@@ -100,18 +106,22 @@
 
   <article class="exp" data-setup="tir">
     <h3>3. Total internal reflection</h3>
-    <p>Now the beam is inside the glass and meets the surface at $50^\circ$, beyond the critical
-    angle $\sin\theta_c=1/n$ ($41.8^\circ$).  All of it is reflected, yet the field reaches a
-    little way out: the evanescent wave, which runs along the surface and falls off as
-    $e^{-\kappa y}$ with $\kappa=\frac{2\pi}{\lambda}\sqrt{n^2\sin^2\theta-1}$, by $1/e$ in
-    $0.28\lambda$ here.  It carries no energy away.  Switch to <em>Intensity</em> to see it.  Aim
-    the beam closer to the normal than $41.8^\circ$ and light escapes.</p>
+    <p>Now the beam is inside the glass and meets the surface at $55^\circ$, beyond the critical
+    angle $\sin\theta_c=1/n$ ($41.8^\circ$).  It is reflected: meter A, above the surface, catches
+    only 0.2% of it.  (A beam is a spread of directions, here about $\pm5^\circ$, and that 0.2%
+    comes from the few nearer the normal than $41.8^\circ$.  Narrow the beam and its spread
+    widens: at a width of $0.6\lambda$, 6% gets out.)  Yet the field reaches a little way out: the
+    evanescent wave, which runs along the surface and falls off as $e^{-\kappa y}$ with
+    $\kappa=\frac{2\pi}{\lambda}\sqrt{n^2\sin^2\theta-1}$, by $1/e$ in $0.22\lambda$ here (the notes
+    give both numbers for the beam as it is).  It
+    carries no energy away from the surface.  Switch to <em>Intensity</em> to see it.  Aim the
+    beam closer to the normal than $41.8^\circ$ and light escapes.</p>
   </article>
 
   <article class="exp" data-setup="ftir">
     <h3>4. Frustrated total internal reflection</h3>
-    <p>Two blocks of glass with a gap of $0.3\lambda$ between them.  The beam meets the gap
-    beyond the critical angle, so one surface alone would reflect all of it; but the evanescent
+    <p>Two blocks of glass with a gap of $0.3\lambda$ between them.  The beam meets the gap at
+    $50^\circ$, beyond the critical angle, so one surface alone would reflect nearly all of it; but the evanescent
     wave reaches across the gap and starts a beam on the other side.  Meter A reads the power
     that gets through, 32%; meter B, most of the rest, reflected.  Widen the gap and the
     transmission falls off nearly exponentially, as $e^{-2\kappa d}$, from 84% at $0.1\lambda$
@@ -134,9 +144,11 @@
 
   <article class="exp" data-setup="guide">
     <h3>6. A waveguide and a bend</h3>
-    <p>A strip of glass half a wavelength wide guides light by total internal reflection.  A
-    guide this narrow holds a single pattern across it, a mode, with a tail outside it in the
-    vacuum.  A beam is sent into its end: meter A finds 84% of it in the guide.  Round a bend
+    <p>A strip of glass half a wavelength wide guides light by total internal reflection.  The
+    light can only travel along it in a few patterns across it, its modes; this one has two (the
+    notes count them), one with a single hump in the middle and one that changes sign there.  A
+    beam is sent straight into the middle of its end, so it starts only the first, which has a
+    tail outside the glass, in the vacuum: meter A finds 84% of the beam in the guide.  Round a bend
     of radius $2.5\lambda$, meter B finds 75% (wait for it: the light takes about 40 periods to
     get there).  Tighten the bend (the shape's radius): the tail on the outside of the bend
     would have to go faster than light in vacuum to keep up, and it is shed.  At $1\lambda$
@@ -152,7 +164,10 @@
     on makes some higher frequencies, above cutoff, which crawl through; then meter A falls
     below 0.01%.  Widen the channel past $0.5\lambda$: about 40% gets through.  Switch to TE:
     now $\vec E$ points across the channel, can be the same all the way across, and passes at
-    any width (17% at $0.4\lambda$; most of the rest is reflected at the entrance).</p>
+    any width (17% at $0.4\lambda$; most of the rest is reflected at the entrance).  (Waveguide
+    books name the modes by the direction the wave travels along the guide instead: to them the
+    TM wave here is the TE<sub>1</sub> mode, whose $\vec E$ is across its travel, and the TE wave
+    is the TEM mode, both fields across it.)</p>
   </article>
 
   <article class="exp" data-setup="lens">
@@ -212,12 +227,15 @@
 
   <article class="exp" data-setup="cherenkov">
     <h3>14. Cherenkov radiation</h3>
-    <p>A source moving through glass at $\beta=0.9$, faster than light travels in glass,
-    $c/n=0.67$.  The waves it leaves behind cannot keep up and pile up on a cone, like the bow
-    wave of a boat, and the light goes out at $\cos\theta=1/n\beta$ to the motion
-    ($42.2^\circ$, dashed).  Slow it below $\beta=1/n$ and the cone is gone.  Switch the
-    moving source to <em>Oscillating</em> for the Doppler effect: the waves crowd together ahead
-    of it and spread out behind.</p>
+    <p>A wire carrying a steady current, moving through glass at $\beta=0.9$: faster than light
+    travels in glass, $c/n=0.67$.  The waves it leaves behind cannot keep up and pile up on a V,
+    like the bow wave of a boat (a cone, for a charge in three dimensions).  In a time $t$ the
+    source goes $\beta ct$ and its waves $ct/n$, so the V's wings are at $\sin\alpha=1/n\beta$
+    to the path ($47.8^\circ$, dashed), and the light leaves across them, at $\cos\theta=1/n\beta$
+    to the motion ($42.2^\circ$, arrows).  Slow it below $\beta=1/n$ and the V is gone.  Then,
+    at $\beta=0.5$ say, switch the moving source to <em>Oscillating</em> for the Doppler effect:
+    the waves crowd together ahead of it and spread out behind.  (Faster than $c/n$, it outruns
+    its own waves, and there is nothing ahead of it at all.)</p>
   </article>
 
   <h3>How it is computed</h3>
@@ -230,8 +248,8 @@
   within 2% of Fresnel's value ($r=0.203$ for $0.200$).  The metal is a perfect conductor,
   placed to within half a cell.  The absorber is a lossy material matched to vacuum: it
   reflects 0.02% and lets $e^{-12}$ of the power through a wavelength of it.  The layer around
-  the picture is a convolutional perfectly matched layer, 16 cells thick, which reflects
-  $10^{-5}$ of a wave at normal incidence.  Beams are Gaussian, injected along a line by the
+  the picture is a convolutional perfectly matched layer, 16 cells thick, whose echo of a wave
+  arriving head-on has $10^{-5}$ of its amplitude.  Beams are Gaussian, injected along a line by the
   total-field / scattered-field method.  The meters measure the flow of energy exactly as the
   scheme conserves it, so their readings add up, and a beam's power is reckoned the same
   way.</p>

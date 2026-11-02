@@ -53,6 +53,9 @@ def desktop(b):
     check(b.eval('__app.sim.t') > 0, f"it opens running (t = {b.eval('__app.sim.t'):.2f} periods)")
     b.eval('__app.state.running = false; __app.run(10)'); b.sleep(0.3)
     b.screenshot('build/mx-start.png')
+    # The prism it opens on: the central ray by Snell's law, in the notes.
+    note = b.eval("document.querySelector('#notes').textContent")
+    check('38.0°' in note and '39.3°' in note and '37.2°' in note, f'the prism: the central ray meets it at 38.0° and is turned 39.3° (least 37.2°): "{note[:120]}"')
 
     # Painting: a stroke of glass across empty space.
     b.eval("__app.setups.circles(); __app.state.running = false")
@@ -102,8 +105,12 @@ def desktop(b):
     setup(b, 'snell', 4)
     check('refracted at 19.5°' in notes() and '5.78%' in notes(), 'Snell: 19.5°, Fresnel 5.78% in the notes')
 
-    setup(b, 'tir', 4)
-    check('0.28 λ' in notes() and '41.8°' in notes(), 'TIR: critical angle 41.8°, decay length 0.28 λ')
+    setup(b, 'tir', 25)
+    A = meters(b)[0]
+    check('0.22 λ' in notes() and '41.8°' in notes() and '0.24%' in notes() and 0.0015 < A < 0.003,
+          f'TIR at 55°: critical angle 41.8°, decay length 0.22 λ; meter A above the surface {100 * A:.3f}% (this beam\'s spread of angles: 0.24%)')
+    b.eval("__app.state.src.width = 0.6; __app.build(); __app.restart(); __app.state.running = false"); b.eval('__app.run(30)')
+    check(0.055 < meters(b)[0] < 0.075, f'TIR with a beam 0.6 λ wide: {100 * meters(b)[0]:.2f}% gets out')
 
     setup(b, 'ftir', 30)
     A, B = meters(b)
@@ -123,6 +130,7 @@ def desktop(b):
     setup(b, 'guide', 40)
     A, B = meters(b)
     check(0.82 < A < 0.86 and 0.72 < B < 0.78, f'waveguide: {A:.3f} in the guide, {B:.3f} round a bend of 2.5 λ')
+    check(' 2 guided modes' in notes(), 'a core 0.5 λ wide of n = 1.5 holds two modes, as the help says (V = 1.76 > π/2)')
     shape_param(b, 1); b.eval('__app.restart(); __app.state.running = false'); b.eval('__app.run(40)')
     check(0.37 < meters(b)[1] < 0.43, f'a bend of 1 λ: {meters(b)[1]:.3f}')
 
@@ -163,7 +171,12 @@ def desktop(b):
     check(bool(fit) and bool(fit['bound']) and abs(fit['f'] - 0.9995) < 5e-4, f"closed cavity: {fit and {k: fit[k] for k in ('f', 'bound')}}")
 
     setup(b, 'cherenkov', 12)
-    check('θ = 42.2°' in notes(), 'Cherenkov: the cone angle 42.2° in the notes')
+    check('θ = 42.2°' in notes() and '47.8°' in notes(), 'Cherenkov: the light at 42.2° to the motion, the wavefronts\' V at 47.8° to the path, in the notes')
+    # The crests 1 and 4 wavelengths from a wire: the amplitude falls as 1/sqrt(r).
+    setup(b, 'circles', 1)
+    r = b.eval("""(() => { const s = __app.sim, x = __app.state.src.x; s.trackIntensity(true, 1, true); __app.run(14);
+      const a = (dx, dy) => Math.sqrt(2 * s.sample(x + dx, dy, s.intensity)); return a(0, 1) / a(0, 4); })()""")
+    check(abs(r - 2) < 0.05, f'circular waves: the amplitude 1 λ from the wire is {r:.3f} times that 4 λ away (1/√r: 2)')
 
     # The address keeps the set-up: reload the page from it.
     def reload(h):
