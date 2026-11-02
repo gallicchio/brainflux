@@ -1,16 +1,23 @@
 // Holography: record the interference of an object wave and a reference wave on a camera, then
 // light the recording to bring the object back.  The physics is in holo.js; this is the page.
 // Lengths are kept in micrometres and angles in radians; the controls show mm, nm and degrees.
+//
+// The page follows the two steps: 1, Record (a side view of the object's light and the
+// reference meeting on the plate, the object from the front, and the hologram they make), and
+// 2, Relight (a side view of the reference lighting the developed plate and the three beams that
+// leave it, the three terms that make them, and what a camera held against the plate sees).
 
 import {
   field, pointWave, planeWave, sphericalWave, pictureWave, diffuser, record, quantize, lens, look,
-  viewImage, spectrum, images, pointDescription, planeDescription, sphereDescription, criticalDistance,
+  viewImage, spectrum, images, termWave, rayAt, islandBoxes, overlaps,
+  pointDescription, planeDescription, sphereDescription,
 } from './holo.js';
 import { fft2Centered } from '../lib/fft.js';
 import { colorize } from '../lib/complexcolor.js';
 import { paint, stroke as paintStroke, mask as maskOut } from '../fft2d/tools.js';
 import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, setSlots } from '../lib/ui.js';
 import { fitCanvas, themeColors, niceTicks, tickLabel, fillSlots } from '../lib/plot.js';
+import { texToMathML, renderMath } from '../lib/mathml.js';
 
 const N = 256, HN = N / 2;
 const MM = 1000, DEG = Math.PI / 180;
@@ -20,20 +27,16 @@ const MM = 1000, DEG = Math.PI / 180;
 const DEFAULTS = () => ({
   lambda: 0.633, pitch: 5,
   object: 'points',
-  points: [
-    { x: -450, y: 250, z: 60000, b: 1 },
-    { x: 350, y: -300, z: 90000, b: 1 },
-    { x: 50, y: 500, z: 130000, b: 1 },
-  ],
-  sel: 1,
+  points: [{ x: 0, y: 0, z: 60000, b: 1 }],
+  sel: 0,
   picture: 'F', picZ: 150000, picSize: 5000, diffuser: true,
-  ref: 'plane', theta: 2.3 * DEG, refSrc: { x: 0, y: -1500, z: 60000 },
+  ref: 'plane', theta: 1 * DEG, refSrc: { x: 0, y: -1500, z: 60000 },
   ratio: 0.3, bits: 0,
   relight: 'ref', sameColour: true, lambda2: 0.633,
-  focus: 90000,
+  focus: 60000,
   window: false, win: { x: 0, y: 0, r: 200 },
-  tool: 'window', brush: 16,
-  zoomH: 2, zoomS: 1, zoomR: 4, brightS: 0, brightR: 0,
+  tools: false, tool: 'window', brush: 16,
+  zoomH: 1, zoomS: 1, zoomR: 1, brightS: 0, brightR: 0,
   sweepFocus: false, sweepWindow: false,
   cut: '',             // how the plate is covered: '', 'half', 'piece,cx,cy,r', or 'custom' (erased by hand)
 });
@@ -43,6 +46,7 @@ const plateL = () => N * state.pitch;
 const sinMax = () => state.lambda / (2 * state.pitch);
 const dU = () => state.lambda / (N * state.pitch);             // one display pixel, radians
 const lam2 = () => (state.sameColour ? state.lambda : state.lambda2);
+const conj = () => state.relight === 'conj';
 
 // ---------------------------------------------------------------------------- pictures
 
@@ -152,13 +156,15 @@ function objectWave() {
   for (let o = 0; o < N * N; o++) { O.re[o] *= g; O.im[o] *= g; }
 }
 
-function referenceWave(lam, out, conj = false) {
-  if (state.ref === 'plane') planeWave(N, state.pitch, lam, state.theta, out, conj);
-  else sphericalWave(N, state.pitch, lam, state.refSrc, out, conj);
+function referenceWave(lam, out, cj = false) {
+  if (state.ref === 'plane') planeWave(N, state.pitch, lam, state.theta, out, cj);
+  else sphericalWave(N, state.pitch, lam, state.refSrc, out, cj);
 }
 
 /** Paraxial descriptions of the waves, for images() and the islands. */
-const refDesc = (conj = false) => (state.ref === 'plane' ? planeDescription(state.theta, conj) : sphereDescription(state.refSrc, conj));
+const refDesc = (cj = false) => (state.ref === 'plane' ? planeDescription(state.theta, cj) : sphereDescription(state.refSrc, cj));
+const lightDesc = () => refDesc(conj());
+const mu = () => lam2() / state.lambda;
 const objectPoints = () => (state.object === 'points' ? state.points : [{ x: 0, y: 0, z: state.picZ }]);
 
 function compute() {
@@ -182,7 +188,7 @@ function compute() {
     stale.holo = stale.spec = true;
   }
   const kC = [state.relight, state.ref, state.theta, state.refSrc.x, state.refSrc.y, state.refSrc.z, l2, p].join('|');
-  if (kC !== keys.C) { referenceWave(l2, W.C, state.relight === 'conj'); keys.C = kC; }
+  if (kC !== keys.C) { referenceWave(l2, W.C, conj()); keys.C = kC; }
   const kL = [state.focus, l2, p].join();
   if (kL !== keys.L) { lens(N, p, l2, state.focus, W.L); keys.L = kL; }
   if (keys.CL !== kC + kL) {
@@ -202,53 +208,71 @@ function compute() {
 }
 
 /**
- * The islands of the hologram's transform, as boxes of directions [x0, x1, y0, y1] (sines):
- * the image term O R*, its twin O* R (the image's mirror through the middle) and the object
- * interfering with itself, |O|^2, round the middle.  A wave's local direction at plate point r
- * is c r - t (holo.js), so each island is bounded by its values at the plate's corners: for
- * points, and for the corners of a picture seen through ground glass (each of its points lights
- * the whole plate).  A picture without a diffuser sends its light more or less straight on; its
- * spread is measured from the transform of O.
+ * The islands of the hologram's transform (holo.js: islandBoxes), as boxes of directions
+ * [x0, x1, y0, y1] (sines): for points, and for the corners of a picture seen through ground
+ * glass (each of its points lights the whole plate).  A picture without a diffuser sends its
+ * light more or less straight on; its spread is measured from the transform of O.
  */
 function findIslands() {
-  const hl = plateL() / 2, R = refDesc(), corners = [[-hl, -hl], [-hl, hl], [hl, -hl], [hl, hl]];
-  const box = () => [Infinity, -Infinity, Infinity, -Infinity];
-  const grow = (b, x, y) => { b[0] = Math.min(b[0], x); b[1] = Math.max(b[1], x); b[2] = Math.min(b[2], y); b[3] = Math.max(b[3], y); };
-  let img = box(), auto = [0, 0, 0, 0], sources = null;
+  const hl = plateL() / 2, R = refDesc();
+  let sources = null;
   if (state.object === 'points') sources = state.points.filter((pt) => pt.b > 0).map(pointDescription);
   else if (state.diffuser) {
     const s = state.picSize / 2;
     sources = [[-s, -s], [-s, s], [s, -s], [s, s]].map(([x, y]) => pointDescription({ x, y, z: state.picZ }));
   }
   if (sources) {
-    for (const O of sources) {
-      for (const [rx, ry] of corners) grow(img, (O.c - R.c) * rx - (O.tx - R.tx), (O.c - R.c) * ry - (O.ty - R.ty));
-      // |O|^2: each pair interferes, with directions (c_i - c_j) r - (t_i - t_j).
-      for (const Q of sources) for (const [rx, ry] of corners) grow(auto, (O.c - Q.c) * rx - (O.tx - Q.tx), (O.c - Q.c) * ry - (O.ty - Q.ty));
-    }
-  } else {
-    // The box of directions holding all but 1% of the object's light, then moved by the
-    // reference's directions across the plate (c_R r - t_R).
-    const { OR, O } = W;
-    OR.re.set(O.re); OR.im.set(O.im);
-    fft2Centered(OR.re, OR.im, N, N);
-    const px = new Float64Array(N), py = new Float64Array(N);
-    let tot = 0;
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const v = OR.re[j * N + i] ** 2 + OR.im[j * N + i] ** 2; px[i] += v; py[j] += v; tot += v; }
-    const range = (arr) => { let a = 0, lo = 0, hi = N - 1; for (let i = 0; i < N; i++) { a += arr[i]; if (a < 0.005 * tot) lo = i + 1; if (a < 0.995 * tot) hi = i + 1; } return [lo, hi]; };
-    const [i0, i1] = range(px), [j0, j1] = range(py), u = dU();
-    const o = [(i0 - HN) * u, (i1 - HN) * u, (HN - j1) * u, (HN - j0) * u];
-    const rx = [-R.c * hl - R.tx, R.c * hl - R.tx], ry = [-R.c * hl - R.ty, R.c * hl - R.ty];
-    img = [o[0] - Math.max(...rx), o[1] - Math.min(...rx), o[2] - Math.max(...ry), o[3] - Math.min(...ry)];
-    const wx = o[1] - o[0], wy = o[3] - o[2];
-    auto = [-wx, wx, -wy, wy];
+    const b = islandBoxes(sources, R, hl);
+    islands.image = b?.image ?? null; islands.twin = b?.twin ?? null; islands.auto = b?.auto ?? null;
+    return;
   }
-  if (!Number.isFinite(img[0])) { islands.image = islands.twin = islands.auto = null; return; }
+  // The box of directions holding all but 1% of the object's light, then moved by the
+  // reference's directions across the plate (c_R r - t_R).
+  const { OR, O } = W;
+  OR.re.set(O.re); OR.im.set(O.im);
+  fft2Centered(OR.re, OR.im, N, N);
+  const px = new Float64Array(N), py = new Float64Array(N);
+  let tot = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const v = OR.re[j * N + i] ** 2 + OR.im[j * N + i] ** 2; px[i] += v; py[j] += v; tot += v; }
+  const range = (arr) => { let a = 0, lo = 0, hi = N - 1; for (let i = 0; i < N; i++) { a += arr[i]; if (a < 0.005 * tot) lo = i + 1; if (a < 0.995 * tot) hi = i + 1; } return [lo, hi]; };
+  const [i0, i1] = range(px), [j0, j1] = range(py), u = dU();
+  const o = [(i0 - HN) * u, (i1 - HN) * u, (HN - j1) * u, (HN - j0) * u];
+  const rx = [-R.c * hl - R.tx, R.c * hl - R.tx], ry = [-R.c * hl - R.ty, R.c * hl - R.ty];
+  const img = [o[0] - Math.max(...rx), o[1] - Math.min(...rx), o[2] - Math.max(...ry), o[3] - Math.min(...ry)];
+  const wx = o[1] - o[0], wy = o[3] - o[2];
   islands.image = img;
   islands.twin = [-img[1], -img[0], -img[3], -img[2]];
-  islands.auto = auto;
+  islands.auto = [-wx, wx, -wy, wy];
 }
-const overlaps = (a, b) => a && b && a[0] < b[1] && b[0] < a[1] && a[2] < b[3] && b[2] < a[3];
+
+// ------------------------------------------------------------------- the terms, by name
+
+/**
+ * The three beams of the relit light.  Lit by the reference, the term with O is the image and
+ * the one with O* the twin; lit by the conjugate, the O* term is the real image to look at and
+ * the O term a virtual one.  Each: its name, its colour key, its formula (TeX) and, for the
+ * point pt, its wave (a description for rayAt and images()).
+ */
+function terms(pt) {
+  const O = pointDescription(pt), R = refDesc(), C = lightDesc(), m = mu(), cj = conj();
+  const r = cj ? 'R^*' : 'R';
+  return [
+    { key: 'zero', name: 'zero order', tex: `(|R|^2+|O|^2)\\,${r}`, wave: C },
+    { key: 'img', name: cj ? 'virtual image' : 'image', tex: cj ? 'R^{*2}O' : '|R|^2O', wave: termWave(O, R, C, m, 1), sg: 1 },
+    { key: 'twin', name: cj ? 'real image' : 'twin', tex: cj ? '|R|^2O^*' : 'R^2O^*', wave: termWave(O, R, C, m, -1), sg: -1 },
+  ];
+}
+/** The point whose image the page talks about: the selected point, or the picture's middle. */
+const focusPoint = () => (state.object === 'points' ? (state.points[state.sel] || state.points[0]) : objectPoints()[0]);
+/** Where a wave {c, tx, ty} focuses: {R, x, y} (R > 0 behind the plate, < 0 in front). */
+const focusOf = (w) => (w.c === 0 ? { R: Infinity, x: NaN, y: NaN } : { R: 1 / w.c, x: w.tx / w.c, y: w.ty / w.c });
+
+// The colours of the three beams: on the black canvases, and (from the page's CSS) on the panels.
+const ON_BLACK = { zero: '#c9cad0', img: '#7ad694', twin: '#cfa6f5' };
+function termColors() {
+  const cs = getComputedStyle(document.documentElement), g = (n, f) => cs.getPropertyValue(n).trim() || f;
+  return { zero: g('--zero', '#7d7e86'), img: g('--img', '#1f7a3a'), twin: g('--twin', '#8a3fc0') };
+}
 
 // ---------------------------------------------------------------------------- drawing
 
@@ -261,7 +285,12 @@ function changed() { schedule(); clearTimeout(hashTimer); hashTimer = setTimeout
 let t0 = performance.now();
 function frame(now) {
   raf = 0;
-  const t = (now - t0) / 1000;
+  advance((now - t0) / 1000);
+  render();
+  if (state.sweepFocus || (state.sweepWindow && state.window)) schedule();
+}
+/** Move what sweeps (the focus, the window) to where it is t seconds into its sweep. */
+function advance(t) {
   if (state.sweepFocus) {
     const [a, b] = sweepRange();
     state.focus = a + (b - a) * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 8));
@@ -274,17 +303,16 @@ function frame(now) {
     winY.value = +(state.win.y / MM).toFixed(3);
     stale.holo = true;
   }
-  render();
-  if (state.sweepFocus || (state.sweepWindow && state.window)) schedule();
 }
 /** Recompute what has changed, and redraw the panes that need it. */
 function render() {
   compute();
+  fitScene();
   if (stale.holo) drawHolo();
   if (stale.spec) drawSpec();
   if (stale.recon) drawRecon();
   stale.holo = stale.spec = stale.recon = false;
-  drawSide(); drawFront(); updateNotes();
+  drawRecord(); drawPlay(); drawFront(); updateNotes();
 }
 
 /** An approximate colour for a wavelength in micrometres (after Dan Bruton), as in diffraction/. */
@@ -317,15 +345,18 @@ function blit(cv, zoom, smooth) {
 /** Canvas position (CSS pixels) of the plate pixel coordinate (fi, fj), under a zoom. */
 const toCanvas = (fi, fj, zoom, w) => [((fi - HN) * zoom / N + 0.5) * w, ((fj - HN) * zoom / N + 0.5) * w];
 
-function scaleBar(ctx, w, h, pxPerUnit, unit, maxFrac = 0.28) {
+function scaleBar(ctx, w, h, pxPerUnit, unit, maxFrac = 0.28, extra = 0) {
   const target = (w * maxFrac) / pxPerUnit, p10 = 10 ** Math.floor(Math.log10(target));
   const len = [5, 2, 1].map((m) => m * p10).find((v) => v <= target) || p10;
-  const px = len * pxPerUnit;
+  const px = len * pxPerUnit, text = `${tickLabel(len)} ${unit}`;
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(6, h - 31, Math.max(px, ctx.measureText(text).width) + 8 + extra, 25);
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fillRect(10, h - 12, px, 3);
-  ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText(`${tickLabel(len)} ${unit}`, 10, h - 17);
+  ctx.fillText(text, 10, h - 17);
+  return len;
 }
 
 function drawHolo() {
@@ -381,23 +412,33 @@ function drawSpec() {
   if (islands.image) {
     const mid = (b) => [(b[0] + b[1]) / 2, (b[2] + b[3]) / 2];
     const ci = mid(islands.image), ct = mid(islands.twin);
+    // Labelled once they are apart (in line, all three are in the middle).
     if (Math.hypot(ci[0] - ct[0], ci[1] - ct[1]) / dU() > 30) {
-      for (const [d, text] of [[ci, 'image'], [ct, 'twin'], [[0, 0], 'zero order']]) {
+      const placed = [];
+      for (const [d, text, key] of [[[0, 0], 'zero order', 'zero'], [ci, 'image', 'img'], [ct, 'twin', 'twin']]) {
         const [x, y] = dirToCanvas(d[0], d[1], z, width);
-        if (x > 0 && y > 0 && x < width && y < height) label(ctx, x, y, text, width, height);
+        if (x > 0 && y > 0 && x < width && y < height) label(ctx, x, y, text, width, height, ON_BLACK[key], placed);
       }
     }
   }
   scaleBar(ctx, width, height, (z * width) / N / (dU() * 1000), 'mrad');
 }
 
-function label(ctx, x, y, text, w, h) {
+/** A label in a dark box, centred on (x, y), moved down past any box already placed. */
+function label(ctx, x, y, text, w, h, color = 'rgba(255,255,255,0.92)', placed = []) {
   ctx.font = '12px system-ui, sans-serif';
   const tw = ctx.measureText(text).width + 8;
-  const lx = Math.max(2, Math.min(w - tw - 2, x - tw / 2)), ly = Math.max(2, Math.min(h - 18, y - 9));
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  const lx = Math.max(2, Math.min(w - tw - 2, x - tw / 2));
+  let ly = Math.max(2, Math.min(h - 36, y - 9));
+  for (let k = 0; k < 4; k++) {
+    const hit = placed.find((b) => lx < b[0] + b[2] && b[0] < lx + tw && ly < b[1] + 17 && b[1] < ly + 17);
+    if (!hit) break;
+    ly = hit[1] + 19;
+  }
+  placed.push([lx, ly, tw]);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(lx, ly, tw, 17);
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillStyle = color;
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillText(text, lx + 4, ly + 9);
 }
@@ -419,122 +460,177 @@ function drawRecon() {
     d[4 * o + 2] = 255 * (rgb[2] * c * (1 - w) + w); d[4 * o + 3] = 255;
   }
   const { ctx, width, height } = blit($('#recon'), z, true);
-  // Labels where the zero order and the twin land, unless they are on the image.  A wave of
-  // tilt t (holo.js) is drawn at t sign(d), and the camera's directions repeat every N bins.
-  const sg = state.focus < 0 ? -1 : 1, u = dU(), period = N * (lam2() / state.lambda);
-  const wrap = (v) => v - period * Math.round(v / period);
-  const pts = objectPoints(), mean = (f) => pts.reduce((a, q) => a + f(q), 0) / pts.length;
-  const O = { c: mean((q) => 1 / q.z), tx: mean((q) => q.x / q.z), ty: mean((q) => q.y / q.z) };
-  const C = refDesc(state.relight === 'conj'), im = images(O, refDesc(), C, lam2() / state.lambda);
-  const at = (t) => [wrap((sg * t.tx) / u), wrap((sg * t.ty) / u)];
-  // Lit by the conjugate, the real image (the twin term) is the one to look at, and the other
-  // term is the virtual image.
-  const conj = state.relight === 'conj', image = at(tiltOf(conj ? im.twin : im.image));
-  const other = conj ? ['virtual image', at(tiltOf(im.image))] : ['twin', at(tiltOf(im.twin))];
-  for (const [text, [x, y]] of [['zero order', at(C)], other]) {
-    if (Math.hypot(x - image[0], y - image[1]) < 28) continue;
-    const [cx, cy] = toCanvas(HN + x + 0.5, HN - y + 0.5, z, width);
-    if (cx > 0 && cy > 0 && cx < width && cy < height) label(ctx, cx, cy, text, width, height);
+  // Labels where the three beams land.  A wave of tilt t (holo.js) is drawn at t sign(d), and
+  // the camera's directions repeat every N bins.  Each label sits just above its light.
+  const sg = state.focus < 0 ? -1 : 1, u = dU(), period = N * mu();
+  const wrap = (q) => q - period * Math.round(q / period);
+  const at = (w) => [wrap((sg * w.tx) / u), wrap((sg * w.ty) / u)];
+  // Beams that land together share a label (in line, all three do).  A picture's image is
+  // labelled above its top edge, so as not to hide it.
+  const groups = [], ext = state.object === 'picture' ? ((state.picSize / 2 / state.picZ) * mu() / u) * (z * width) / N : 0;
+  for (const T of terms(focusPoint())) {
+    const [x, y] = at(T.wave), [cx, cy] = toCanvas(HN + x + 0.5, HN - y + 0.5, z, width);
+    if (!(cx > 0 && cy > 0 && cx < width && cy < height)) continue;
+    const g = groups.find((q) => Math.hypot(q.cx - cx, q.cy - cy) < 14);
+    if (g) g.T.push(T); else groups.push({ cx, cy, T: [T] });
   }
-  scaleBar(ctx, width, height, (z * width) / N / (u * 1000), 'mrad');
-}
-/** The tilt t of an image's wave (images() reports its position; t = position / R). */
-function tiltOf(img) {
-  if (!Number.isFinite(img.R)) return { tx: img.ux, ty: img.uy };
-  return { tx: img.x / img.R, ty: img.y / img.R };
-}
-
-// ------------------------------------------------------------------- the side and front
-
-let scene = { back: 150000, front: 40000, ymax: 1000 };
-function fitScene() {
-  const L = plateL();
-  let back = 0, front = 0, ymax = 0.62 * L;
-  for (const pt of objectPoints()) { back = Math.max(back, pt.z); ymax = Math.max(ymax, Math.abs(pt.y) * 1.15); }
-  if (state.object === 'picture') ymax = Math.max(ymax, (state.picSize / 2) * 1.1);
-  if (state.ref === 'point') { back = Math.max(back, state.refSrc.z); ymax = Math.max(ymax, Math.abs(state.refSrc.y) * 1.12); }
-  if (state.focus > 0) back = Math.max(back, state.focus); else front = Math.max(front, -state.focus);
-  for (const im of imageList()) {
-    for (const q of [im.image, im.twin]) {
-      if (!Number.isFinite(q.R) || Math.abs(q.R) > 2.5 * back) continue;
-      if (q.R > 0) back = Math.max(back, q.R); else front = Math.max(front, -q.R);
+  const placed = [];
+  for (const { cx, cy, T } of groups) {
+    const imageLike = T.some((t) => t.key !== 'zero');
+    // A thin ring round where an image lands (a point in focus is a speck at the whole view).
+    if (imageLike && !ext) {
+      ctx.strokeStyle = ON_BLACK[T.find((t) => t.key !== 'zero').key]; ctx.globalAlpha = 0.75; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, 7, 0, 2 * Math.PI); ctx.stroke(); ctx.globalAlpha = 1;
     }
+    const text = T.length === 1 ? T[0].name : T.length === 2 ? `${T[0].name} and ${T[1].name}` : `${T[0].name}, ${T[1].name} and ${T[2].name}, together`;
+    label(ctx, cx, cy - (imageLike ? Math.max(18, ext + 12) : 0), text, width, height, T.length === 1 ? ON_BLACK[T[0].key] : 'rgba(255,255,255,0.92)', placed);
   }
-  back *= 1.1;
-  scene = { back, front: Math.max(front * 1.12, 0.3 * back), ymax: ymax * 1.08 };
-}
-function imageList() {
-  const C = refDesc(state.relight === 'conj'), R = refDesc(), mu = lam2() / state.lambda;
-  return objectPoints().map((pt) => images(pointDescription(pt), R, C, mu));
+  const len = scaleBar(ctx, width, height, (z * width) / N / (u * 1000), 'mrad', 0.28, 128);
+  // What that angle is at the focus: x = angle times |d|.
+  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  const x0 = 14 + ctx.measureText(`${tickLabel(len)} mrad`).width;
+  fillSlots(ctx, ['= ', { v: (len / 1000) * Math.abs(state.focus) / MM, dec: 2, w: 5 }, ' mm at the focus'], x0, height - 17);
 }
 
-function sideGeom(width, height) {
-  const ml = 12, mr = 12, mt = 16, mb = 22;
-  const sx = (width - ml - mr) / (scene.back + scene.front), sy = (height / 2 - mt) / scene.ymax;
-  const yMid = mt + (height - mt - mb) / 2;
+// ------------------------------------------------------------------- the side views
+//
+// Both side views share one picture of the bench: depth across (behind the plate to the left,
+// in front to the right) and height up, the heights stretched so that the plate can be seen.
+
+let scene = { back: 66000, front: 66000, rec: [-800, 800], play: [-800, 800] };
+function fitScene() {
+  const L = plateL(), pts = objectPoints();
+  let back = 0, front = 0;
+  const base = [-0.62 * L, 0.62 * L];
+  const grow = (b, y) => { b[0] = Math.min(b[0], y); b[1] = Math.max(b[1], y); };
+  for (const pt of pts) { back = Math.max(back, pt.z); grow(base, pt.y * 1.12); }
+  if (state.object === 'picture') { grow(base, state.picSize * 0.56); grow(base, -state.picSize * 0.56); }
+  if (state.ref === 'point') { back = Math.max(back, state.refSrc.z); grow(base, state.refSrc.y * 1.12); }
+  if (state.focus > 0) back = Math.max(back, state.focus); else front = Math.max(front, -state.focus);
+  if (state.ref === 'plane') { const t = Math.sin(state.theta) * 0.3 * back; grow(base, -0.5 * L - t); grow(base, 0.5 * L + t); }
+  // Where the images form, and the light's mirror point (a conjugate point source).
+  const marks = [];
+  for (const pt of pts) for (const T of terms(pt).slice(1)) marks.push(focusOf(T.wave));
+  const C = lightDesc();
+  if (C.c < 0) marks.push(focusOf(C));
+  const far = 3 * Math.max(back, 1000);
+  for (const q of marks) {
+    if (!Number.isFinite(q.R) || Math.abs(q.R) > far) continue;
+    if (q.R > 0) back = Math.max(back, q.R); else front = Math.max(front, -q.R);
+  }
+  back *= 1.1; front = Math.max(front * 1.2, 0.35 * back);
+  // The Record view fits the object, the plate and the reference; the Relight view also the
+  // images, as long as the plate stays at least a fifth of its height (an image far off to the
+  // side is left out of the frame, and its beam leaves the picture).
+  const more = [base[0], base[1]];
+  for (const q of marks) if (Number.isFinite(q.R) && Math.abs(q.R) <= far) grow(more, q.y * 1.1);
+  const pad = (b) => { const m = 0.04 * (b[1] - b[0]); return [b[0] - m, b[1] + m]; };
+  scene = { back, front, rec: pad(base), play: pad(L / (more[1] - more[0]) >= 0.2 ? more : base) };
+}
+
+function sideGeom(width, height, view = 'rec') {
+  const ml = 10, mr = 10, mt = 18, mb = 20, [ylo, yhi] = scene[view];
+  const sx = (width - ml - mr) / (scene.back + scene.front), sy = (height - mt - mb) / (yhi - ylo);
   return {
-    X: (zs) => ml + (zs + scene.back) * sx, Y: (y) => yMid - y * sy * ((height - mt - mb) / (height - 2 * mt)),
-    iX: (px) => (px - ml) / sx - scene.back, iY: (py) => (yMid - py) / (sy * ((height - mt - mb) / (height - 2 * mt))),
-    sx, sy: sy * ((height - mt - mb) / (height - 2 * mt)), ml, mr, mt, mb, yMid,
+    X: (zs) => ml + (zs + scene.back) * sx, Y: (y) => mt + (yhi - y) * sy,
+    iX: (px) => (px - ml) / sx - scene.back, iY: (py) => yhi - (py - mt) / sy,
+    sx, sy, ml, mr, mt, mb, width, height,
   };
 }
 
-function drawSide() {
-  const cv = $('#side'), { ctx, width, height } = fitCanvas(cv), c = themeColors(), g = sideGeom(width, height);
-  ctx.clearRect(0, 0, width, height);
-  const L = plateL(), laser = wavelengthRGB(state.lambda), light2 = wavelengthRGB(lam2());
-  // The axis and the depth scale.
+/** The axis, the depth scale along the bottom, the captions along the top. */
+function drawBench(ctx, g, c, left) {
+  const { width, height } = g;
   ctx.strokeStyle = c.line; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.moveTo(g.X(-scene.back), g.Y(0)); ctx.lineTo(g.X(scene.front), g.Y(0)); ctx.stroke();
   ctx.setLineDash([]);
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink3; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   for (const v of niceTicks(-scene.back / MM, scene.front / MM, Math.max(3, Math.round(width / 90)))) {
     const x = g.X(v * MM);
-    ctx.strokeStyle = c.ink3; ctx.beginPath(); ctx.moveTo(x, height - g.mb + 2); ctx.lineTo(x, height - g.mb + 6); ctx.stroke();
-    ctx.fillText(v === 0 ? 'plate' : `${tickLabel(Math.abs(v))} mm`, x, height - g.mb + 7);
+    if (x < 14 || x > width - 14) continue;
+    ctx.strokeStyle = c.ink3; ctx.beginPath(); ctx.moveTo(x, height - g.mb + 1); ctx.lineTo(x, height - g.mb + 5); ctx.stroke();
+    ctx.fillText(v === 0 ? 'plate' : `${tickLabel(Math.abs(v))} mm`, x, height - g.mb + 6);
   }
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('behind the plate (object side)', 6, 3);
+  ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.fillStyle = c.ink3;
+  ctx.fillText(left, 6, 3);
+  ctx.fillText('in front', g.X(0) + 8, 3);
+  // How much the heights are stretched: the scales of height and depth, in a slot of its own.
   ctx.textAlign = 'right';
-  ctx.fillText('in front (viewer)', width - 6, 3);
-  const plateX = g.X(0), top = g.Y(L / 2), bot = g.Y(-L / 2);
+  fillSlots(ctx, [{ v: g.sy / g.sx, dec: 0, w: 3 }, '× taller than to scale'], width - 6, 3);
+}
+
+/** The plate, and the window in it. */
+function drawPlate(ctx, g, c) {
+  const L = plateL(), x = g.X(0);
+  ctx.fillStyle = c.ink2; ctx.fillRect(x - 2, g.Y(L / 2), 4, g.Y(-L / 2) - g.Y(L / 2));
+  if (state.window) {
+    ctx.fillStyle = 'rgb(80,170,240)';
+    ctx.fillRect(x - 3, g.Y(state.win.y + state.win.r), 6, g.Y(state.win.y - state.win.r) - g.Y(state.win.y + state.win.r));
+  }
+}
+
+/**
+ * The light of a wave w (a description) arriving at the plate from behind: arrows along its rays
+ * for a plane wave or a converging one, a star and a fan for a point source.
+ */
+function drawIncoming(ctx, g, w, rgb, tag) {
+  const L = plateL(), plateX = g.X(0);
+  ctx.strokeStyle = cssRGB(rgb, 0.95); ctx.fillStyle = cssRGB(rgb, 0.95); ctx.lineWidth = 1.3;
+  let lx, ly;
+  if (w.c > 0) {
+    const s = focusOf(w), sx = g.X(-s.R), sy = g.Y(s.y);
+    ctx.fillStyle = cssRGB(rgb, 0.12);
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(plateX, g.Y(L / 2)); ctx.lineTo(plateX, g.Y(-L / 2)); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = cssRGB(rgb, 0.95);
+    star(ctx, sx, sy, 6);
+    lx = sx + 8; ly = sy - 8;
+  } else {
+    // Arrows a quarter of the way back along four rays (or to the edge of the view).
+    const reach = Math.min(0.3 * scene.back, 150 / g.sx);
+    for (let k = 0; k < 4; k++) {
+      const r = -L / 2 + ((k + 0.5) / 4) * L;
+      const y0 = rayAt(w, r, -reach);
+      arrow(ctx, g.X(-reach), g.Y(y0), plateX - 3, g.Y(r));
+    }
+    lx = g.X(-reach) - 5; ly = g.Y(rayAt(w, 0, -reach));
+  }
+  ctx.font = 'italic 14px Georgia, "Times New Roman", serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = cssRGB(rgb, 1);
+  if (w.c > 0) ctx.textAlign = 'left';
+  ctx.fillText(tag, lx, Math.max(g.mt + 6, Math.min(g.height - g.mb - 6, ly)));
+}
+
+function drawRecord() {
+  const cv = $('#rec'), { ctx, width, height } = fitCanvas(cv), c = themeColors(), g = sideGeom(width, height);
+  ctx.clearRect(0, 0, width, height);
+  const L = plateL(), laser = wavelengthRGB(state.lambda), plateX = g.X(0), top = g.Y(L / 2), bot = g.Y(-L / 2);
+  drawBench(ctx, g, c, 'behind the plate');
   // The object's light reaching the plate.
   const cone = (zs, y0, y1, alpha) => {
     ctx.fillStyle = cssRGB(laser, alpha);
     ctx.beginPath(); ctx.moveTo(g.X(zs), g.Y(y0)); ctx.lineTo(plateX, top); ctx.lineTo(plateX, bot); ctx.lineTo(g.X(zs), g.Y(y1)); ctx.closePath(); ctx.fill();
   };
+  let oAt;
   if (state.object === 'points') {
-    for (const pt of state.points) cone(-pt.z, pt.y, pt.y, 0.10 * pt.b);
+    state.points.forEach((pt) => cone(-pt.z, pt.y, pt.y, 0.12 * pt.b));
+    const pt = focusPoint(); oAt = [-pt.z * 0.45, pt.y * 0.55];
   } else {
     const s = state.picSize / 2;
-    if (state.diffuser) cone(-state.picZ, s, -s, 0.12);
+    if (state.diffuser) cone(-state.picZ, s, -s, 0.14);
     else {
-      ctx.fillStyle = cssRGB(laser, 0.1);
+      ctx.fillStyle = cssRGB(laser, 0.12);
       ctx.fillRect(g.X(-state.picZ), g.Y(Math.min(s, L / 2)), plateX - g.X(-state.picZ), g.Y(-Math.min(s, L / 2)) - g.Y(Math.min(s, L / 2)));
     }
+    oAt = [-state.picZ * 0.45, 0];
   }
-  // The reference beam.
-  ctx.strokeStyle = cssRGB(laser, 0.9); ctx.fillStyle = cssRGB(laser, 0.9); ctx.lineWidth = 1.3;
-  if (state.ref === 'plane') {
-    const dx = Math.cos(state.theta) * g.sx, dy = -Math.sin(state.theta) * g.sy, len = Math.hypot(dx, dy);
-    const ux = dx / len, uy = dy / len, reach = Math.min(0.28 * (plateX - g.ml), 150);
-    for (let k = 0; k < 4; k++) {
-      const y = -L / 2 + ((k + 0.5) / 4) * L, ex = plateX - 2, ey = g.Y(y);
-      arrow(ctx, ex - reach * ux, ey - reach * uy, ex, ey);
-    }
-  } else {
-    const sx = g.X(-state.refSrc.z), sy = g.Y(state.refSrc.y);
-    ctx.globalAlpha = 0.5;
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(plateX, top); ctx.moveTo(sx, sy); ctx.lineTo(plateX, bot); ctx.stroke();
-    ctx.globalAlpha = 1;
-    star(ctx, sx, sy, 6);
-  }
-  // The plate, and the window in it.
-  ctx.fillStyle = c.ink2; ctx.fillRect(plateX - 2, top, 4, bot - top);
-  if (state.window) {
-    ctx.fillStyle = 'rgb(80,170,240)';
-    ctx.fillRect(plateX - 3, g.Y(state.win.y + state.win.r), 6, g.Y(state.win.y - state.win.r) - g.Y(state.win.y + state.win.r));
-  }
+  ctx.font = 'italic 14px Georgia, "Times New Roman", serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillStyle = cssRGB(laser, 1);
+  ctx.fillText('O', g.X(oAt[0]), g.Y(oAt[1]) - 4);
+  drawIncoming(ctx, g, refDesc(), laser, 'R');
+  drawPlate(ctx, g, c);
+  // What the plate records.
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('records |O + R|²', plateX + 8, Math.max(g.mt + 8, top - 2));
   // The object.
   if (state.object === 'points') {
     state.points.forEach((pt, k) => {
@@ -547,33 +643,112 @@ function drawSide() {
     const x = g.X(-state.picZ);
     ctx.fillStyle = c.ink; ctx.fillRect(x - 2, g.Y(state.picSize / 2), 4, g.Y(-state.picSize / 2) - g.Y(state.picSize / 2));
   }
-  // Where the images form (when lit): solid the one this light is meant to make (the virtual
-  // image, or with the conjugate beam the real one), dashed the other.
-  ctx.lineWidth = 1.5; ctx.strokeStyle = cssRGB(light2, 1);
-  const conj = state.relight === 'conj';
-  for (const im of imageList()) {
-    for (const [q, dash] of [[im.image, conj ? [3, 3] : []], [im.twin, conj ? [] : [3, 3]]]) {
-      if (!Number.isFinite(q.R)) continue;
-      const x = g.X(-q.R), y = g.Y(q.y);
-      if (x < g.ml || x > width - g.mr || y < g.mt || y > height - g.mb) continue;
-      ctx.setLineDash(dash); ctx.beginPath(); ctx.arc(x, y, 6.5, 0, 2 * Math.PI); ctx.stroke();
-    }
-  }
-  ctx.setLineDash([]);
-  // The camera (an eye) and its focus.
-  const ey = g.Y(state.window ? state.win.y : 0), ex = Math.min(width - 22, plateX + Math.max(40, 0.55 * (width - plateX)));
-  eye(ctx, ex, ey, c.ink2);
-  const fx = g.X(-state.focus);
-  ctx.strokeStyle = c.accent; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
-  ctx.beginPath(); ctx.moveTo(fx, g.mt + 4); ctx.lineTo(fx, height - g.mb); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = c.accent; ctx.beginPath(); ctx.arc(fx, height - g.mb, 5, 0, 2 * Math.PI); ctx.fill();
-  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  ctx.fillText('focus', fx, g.mt + 16);
 }
 
-function arrow(ctx, x0, y0, x1, y1) {
+function drawPlay() {
+  const cv = $('#play'), { ctx, width, height } = fitCanvas(cv), c = themeColors(), g = sideGeom(width, height, 'play'), tc = termColors();
+  ctx.clearRect(0, 0, width, height);
+  const L = plateL(), light = wavelengthRGB(lam2()), plateX = g.X(0);
+  drawBench(ctx, g, c, 'behind the plate');
+  const pt = focusPoint(), T = terms(pt), right = scene.front;
+  // The beams in front of the plate, between the rays through its two edges: the light's colour
+  // inside, the term's colour along the edges.  Behind the plate, dashed, the rays of a virtual
+  // image traced back to where they seem to come from.
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, g.mt - 4, width, height - g.mt - g.mb + 8); ctx.clip();
+  const ends = [];
+  for (const t of T) {
+    const w = t.wave, f = focusOf(w), col = tc[t.key];
+    const y = (r, z) => g.Y(rayAt(w, r, z));
+    ctx.fillStyle = cssRGB(light, 0.07);
+    ctx.beginPath(); ctx.moveTo(plateX, y(-L / 2, 0)); ctx.lineTo(g.X(right), y(-L / 2, right)); ctx.lineTo(g.X(right), y(L / 2, right)); ctx.lineTo(plateX, y(L / 2, 0)); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+    for (const r of [-L / 2, L / 2]) { ctx.beginPath(); ctx.moveTo(plateX, y(r, 0)); ctx.lineTo(g.X(right), y(r, right)); ctx.stroke(); }
+    if (t.key !== 'zero' && f.R > 0 && f.R < 4 * scene.back) {
+      ctx.setLineDash([4, 3]);
+      for (const r of [-L / 2, L / 2]) { ctx.beginPath(); ctx.moveTo(plateX, y(r, 0)); ctx.lineTo(g.X(-f.R), g.Y(f.y)); ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+    ends.push([t, y(0, right)]);
+  }
+  // The middle ray of each beam, with its direction: three beams, three directions.
+  for (const [t] of ends) {
+    const w = t.wave, zEnd = right * 0.97, x1 = g.X(zEnd), y1 = g.Y(rayAt(w, 0, zEnd));
+    ctx.strokeStyle = tc[t.key]; ctx.fillStyle = tc[t.key]; ctx.lineWidth = 2;
+    arrow(ctx, plateX + 2, g.Y(rayAt(w, 0, 0)), x1, y1, 8);
+  }
+  ctx.restore();
+  // The light that lights it, arriving from behind.
+  drawIncoming(ctx, g, lightDesc(), light, conj() ? 'R*' : 'R');
+  drawPlate(ctx, g, c);
+  // Where each point's image and twin form: a ring, dashed for a virtual image, solid for a real
+  // one, and the names by the selected point's.
+  const placed = [];
+  const name = (text, x, y, col) => {
+    ctx.font = '12px system-ui, sans-serif';
+    const tw = ctx.measureText(text).width;
+    if (x + tw > width - 4) x -= tw + 18;
+    // The nearest free place above or below, inside the frame (not on the depth scale).
+    const lx = Math.max(4, Math.min(width - tw - 4, x)), lo = g.mt + 8, hi = height - g.mb - 9;
+    const free = (yy) => !placed.some((b) => lx < b[0] + b[2] && b[0] < lx + tw && Math.abs(yy - b[1]) < 14);
+    const at = Math.max(lo, Math.min(hi, y)), tries = [0, -15, 15, -30, 30, -45, 45].map((d) => Math.max(lo, Math.min(hi, at + d)));
+    const ly = tries.find(free) ?? tries[0];
+    placed.push([lx, ly, tw]);
+    ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(text, lx, ly);
+  };
+  const inside = (x, y) => x > g.ml && x < width - g.mr && y > g.mt && y < height - g.mb;
+  if (state.object === 'picture') {
+    // The picture's image: a bar from the image of its top to that of its bottom.
+    const s = state.picSize / 2, ends2 = [s, -s].map((yy) => terms({ x: 0, y: yy, z: state.picZ }));
+    ctx.save(); ctx.beginPath(); ctx.rect(0, g.mt, width, height - g.mt - g.mb); ctx.clip();
+    for (const k of [1, 2]) {
+      const a = focusOf(ends2[0][k].wave), b = focusOf(ends2[1][k].wave);
+      if (!Number.isFinite(a.R)) continue;
+      ctx.strokeStyle = tc[T[k].key]; ctx.lineWidth = 3; ctx.setLineDash(a.R > 0 ? [4, 3] : []);
+      ctx.beginPath(); ctx.moveTo(g.X(-a.R), g.Y(a.y)); ctx.lineTo(g.X(-b.R), g.Y(b.y)); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.restore();
+  } else {
+    state.points.forEach((q, i) => {
+      for (const t of terms(q).slice(1)) {
+        const f = focusOf(t.wave);
+        if (!Number.isFinite(f.R)) continue;
+        const x = g.X(-f.R), y = g.Y(f.y);
+        if (!inside(x, y)) continue;
+        ctx.strokeStyle = tc[t.key]; ctx.lineWidth = i === state.sel ? 2 : 1.3; ctx.setLineDash(f.R > 0 ? [3, 2.5] : []);
+        ctx.beginPath(); ctx.arc(x, y, i === state.sel ? 6 : 4.5, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+      }
+    });
+  }
+  for (const t of T.slice(1)) {
+    const f = focusOf(t.wave), x = g.X(-f.R), y = g.Y(f.y);
+    if (Number.isFinite(f.R) && inside(x, y)) name(t.name, x + 9, y - 11, tc[t.key]);
+  }
+  // The zero order's name at the right end of its beam; a name whose point is out of the frame
+  // goes there too.
+  for (const [t, ey] of ends) {
+    const f = focusOf(t.wave), x = g.X(-f.R), y = g.Y(f.y);
+    if (t.key !== 'zero' && Number.isFinite(f.R) && inside(x, y)) continue;
+    ctx.font = '12px system-ui, sans-serif';
+    name(t.name, width - g.mr - ctx.measureText(t.name).width - 2, ey - 9, tc[t.key]);
+  }
+  // The camera against the plate, and where it is focused.
+  const eyY = g.Y(state.window ? state.win.y : 0);
+  ctx.fillStyle = c.panel; ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.ellipse(plateX + 15, eyY, 11, 7.5, 0, 0, 2 * Math.PI); ctx.fill(); ctx.globalAlpha = 1;
+  eye(ctx, plateX + 15, eyY, c.ink2);
+  const fx = g.X(-state.focus);
+  ctx.strokeStyle = c.accent; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.moveTo(fx, g.mt + 14); ctx.lineTo(fx, height - g.mb); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = c.accent; ctx.beginPath(); ctx.arc(fx, height - g.mb, 4.5, 0, 2 * Math.PI); ctx.fill();
+  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText('focus', Math.max(20, Math.min(width - 20, fx)), g.mt + 13);
+}
+
+function arrow(ctx, x0, y0, x1, y1, s = 6) {
   ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-  const a = Math.atan2(y1 - y0, x1 - x0), s = 6;
+  const a = Math.atan2(y1 - y0, x1 - x0);
   ctx.beginPath(); ctx.moveTo(x1, y1);
   ctx.lineTo(x1 - s * Math.cos(a - 0.4), y1 - s * Math.sin(a - 0.4));
   ctx.lineTo(x1 - s * Math.cos(a + 0.4), y1 - s * Math.sin(a + 0.4)); ctx.closePath(); ctx.fill();
@@ -583,10 +758,11 @@ function star(ctx, x, y, r) {
   for (let k = 0; k < 10; k++) { const a = (k * Math.PI) / 5 - Math.PI / 2, q = k % 2 ? r * 0.45 : r; ctx.lineTo(x + q * Math.cos(a), y + q * Math.sin(a)); }
   ctx.closePath(); ctx.fill();
 }
+/** An eye looking back towards the plate (to the left). */
 function eye(ctx, x, y, color) {
   ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(x - 11, y); ctx.quadraticCurveTo(x, y - 9, x + 11, y); ctx.quadraticCurveTo(x, y + 9, x - 11, y); ctx.stroke();
-  ctx.beginPath(); ctx.arc(x - 3, y, 3.2, 0, 2 * Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - 10, y); ctx.quadraticCurveTo(x, y - 8, x + 10, y); ctx.quadraticCurveTo(x, y + 8, x - 10, y); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x - 3, y, 3, 0, 2 * Math.PI); ctx.fill();
 }
 
 function frontGeom(width, height) {
@@ -611,7 +787,7 @@ function drawFront() {
       const B = rasterize(state.picture, N), tc = thumb.getContext('2d'), img = tc.createImageData(96, 96), rgb = wavelengthRGB(state.lambda);
       for (let j = 0; j < 96; j++) for (let i = 0; i < 96; i++) {
         const v = B[Math.floor(((j + 0.5) * N) / 96) * N + Math.floor(((i + 0.5) * N) / 96)], o = 4 * (j * 96 + i);
-        for (let c = 0; c < 3; c++) img.data[o + c] = 255 * Math.min(1, v * (0.25 + rgb[c]));
+        for (let k = 0; k < 3; k++) img.data[o + k] = 255 * Math.min(1, v * (0.25 + rgb[k]));
         img.data[o + 3] = 255;
       }
       tc.putImageData(img, 0, 0); thumbKey = key;
@@ -651,25 +827,33 @@ function drawFront() {
 
 // ------------------------------------------------------------------------ notes, verdict
 
+const mathHTML = (tex) => ({ html: texToMathML(tex) });
+
 // Each number in the notes has a slot of its own, a fixed number of characters wide with fixed
 // decimals, so that nothing in a note moves as the numbers change (setSlots).
 function updateNotes() {
-  const p = state.pitch, L = plateL(), sMax = sinMax();
-  setSlots($('#holo-note'), [`${N}² pixels of `, { v: p, dec: 1, w: 4 }, ' µm']);
-  setSlots($('#spec-note'), ['to ±', { v: sMax * 1000, dec: 0, w: 3 }, ' mrad']);
-  const d = state.focus;
-  // (Whole millimetres: the heading has little room, and the focus slider shows the rest.)
-  setSlots($('#recon-note'), ['focus ', { v: Math.abs(d) / MM, dec: 0, w: 3 }, ` mm ${d >= 0 ? 'behind' : 'in front'}`]);
-  setSlots($('#side-note'), ['plate ', { v: L / MM, dec: 2, w: 4 }, ` mm across; drag the points, the focus line${state.ref === 'point' ? ', the reference source' : ''}`]);
-  let ref;
+  const p = state.pitch, sMax = sinMax();
+  setSlots($('#holo-note'), ['|O + R|², recorded on pixels ', { v: p, dec: 1, w: 4 }, ' µm apart']);
+  setSlots($('#spec-note'), ['fringes by spacing and direction, to ±', { v: sMax * 1000, dec: 0, w: 3 }, ' mrad']);
+  const d = state.focus, F = focusPoint(), T = terms(F);
+  // Which image the camera is on, if any (within the depth of focus of the plate).
+  const sharp = T.slice(1).filter((t) => { const f = focusOf(t.wave); return Number.isFinite(f.R) && Math.abs(1 / f.R - 1 / d) * plateL() < 2 * dU(); });
+  const on = sharp.length ? `, on the ${sharp.map((t) => t.name).join(' and the ')}` : '';
+  const cjWords = state.ref === 'plane' ? ' (R tilted the other way)' : ' (converging to the mirror point)';
+  setSlots($('#play-note'), ['lit by ', mathHTML(conj() ? 'R^*' : 'R'), conj() ? cjWords : ' alone', ', the plate sends on three beams; click to focus there']);
+  setSlots($('#recon-note'), ['focus: ', { v: Math.abs(d) / MM, dec: 1, w: 5 }, ` mm ${d >= 0 ? 'behind' : 'in front'}${on}`]);
+  // The fringes, under the hologram.
+  let fr;
   if (state.ref === 'plane') {
     const s = Math.sin(state.theta);
-    ref = s > 1e-9 ? ['Fringes every ', { v: state.lambda / s, dec: 1, w: 5 }, '\u00a0µm = ', { v: state.lambda / s / p, dec: 2, w: 5 }, '\u00a0pixels (at least 2).']
-      : ['In line: the reference runs along the axis (Gabor).'];
+    fr = s > 1e-9 ? ['Light arriving straight on makes fringes λ/sin θ = ', { v: state.lambda / s, dec: 1, w: 5 }, ' µm apart with the reference: ', { v: state.lambda / s / p, dec: 2, w: 5 }, ' pixels (the camera needs at least 2).']
+      : ['In line: no tilt, so the fringes are the rings of the point’s light meeting the reference head on.'];
   } else {
-    ref = ['From ', { v: Math.hypot(state.refSrc.x, state.refSrc.y) / state.refSrc.z * 1000, dec: 1, w: 5 }, '\u00a0mrad off the axis, ', { v: state.refSrc.z / MM, dec: 1, w: 5 }, '\u00a0mm away.'];
+    fr = ['The reference comes from ', { v: Math.hypot(state.refSrc.x, state.refSrc.y) / state.refSrc.z * 1000, dec: 1, w: 5 }, ' mrad off the axis, ', { v: state.refSrc.z / MM, dec: 1, w: 5 }, ' mm away.'];
   }
-  setSlots($('#ref-note'), ref);
+  setSlots($('#fringe-note'), fr);
+  setSlots($('#ref-note'), state.ref === 'plane' ? ['0°: in line (Gabor, 1948); tilted: off axis (Leith and Upatnieks, 1962).'] : ['A point source: the reference diverges from it.']);
+  updateTerms(F, T);
   // The verdict on the islands.
   const v = $('#verdict');
   const I = islands;
@@ -687,42 +871,108 @@ function updateNotes() {
   v.replaceChildren(el('span', { class: cls }, text));
 }
 
+/** The three terms of the relit light, beside the Relight view: what each is and where it goes. */
+function updateTerms(F, T) {
+  const box = $('#terms'), cj = conj();
+  const which = state.object === 'points' && state.points.length > 1 ? [` (point ${state.sel + 1})`] : [];
+  const head = ['Lit by ', mathHTML(cj ? 'R^*' : 'R'), ...(state.sameColour ? [] : [' at ', { v: lam2() * 1000, dec: 0, w: 3 }, ' nm']),
+    ', the plate passes on ', mathHTML(cj ? 'HR^*' : 'HR'), ...which, ':'];
+  const C = T[0].wave;
+  const where = (w, real, virtual) => {
+    const f = focusOf(w);
+    if (!Number.isFinite(f.R) || Math.abs(f.R) > 1e7) return [', a parallel beam'];
+    // (Lit by R*, the names say which is real; lit by R, the words do.)
+    return f.R > 0 ? [virtual, { v: f.R / MM, dec: 1, w: 5 }, cj ? ' mm behind' : ' mm behind (virtual)'] : [real, { v: -f.R / MM, dec: 1, w: 5 }, cj ? ' mm in front' : ' mm in front (real)'];
+  };
+  let zero;
+  if (C.c === 0) {
+    const a = Math.asin(Math.max(-1, Math.min(1, -C.ty))) / DEG;
+    zero = Math.abs(a) < 1e-6 ? [': straight on, along the axis'] : [': straight on, ', { v: Math.abs(a), dec: 2, w: 4 }, `° ${a > 0 ? 'up' : 'down'}`];
+  } else zero = where(C, ': straight on, converging ', ': straight on, as if from ');
+  const rows = [
+    ['zero', T[0], zero],
+    ['img', T[1], where(T[1].wave, cj ? ': converging ' : ', the object’s own wave: converging ', cj ? ': as if from ' : ', the object’s own wave: as if from ')],
+    ['twin', T[2], where(T[2].wave, cj ? ', the conjugate wave: converging ' : ', its conjugate: converging ', cj ? ', the conjugate wave: as if from ' : ', its conjugate: as if from ')],
+  ];
+  const key = [cj, state.sameColour, rows.map((r) => r[1].name).join()].join('|');
+  if (box._key !== key) {
+    box._key = key;
+    box.replaceChildren(el('div', { class: 'head' }), ...rows.map(([k]) => el('div', { class: `term ${k}` })));
+  }
+  setSlots(box.children[0], head);
+  rows.forEach(([, t, words], i) => setSlots(box.children[i + 1], [{ html: `<b>${t.name}</b>` }, ' = ', mathHTML(t.tex), ...words]));
+}
+
 // ------------------------------------------------------------------------- interaction
 
 function canvasPoint(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top, r.width, r.height]; }
 let sceneDrag = null;
+const clampY = (y) => Math.max(-20000, Math.min(20000, y));
 
-const sideCanvas = $('#side');
-sideCanvas.addEventListener('pointerdown', (e) => {
-  const [x, y, w, h] = canvasPoint(sideCanvas, e), g = sideGeom(w, h);
+// The Record view: drag the points (depth and height), the picture (depth), a point reference.
+const recCanvas = $('#rec');
+recCanvas.addEventListener('pointerdown', (e) => {
+  const [x, y, w, h] = canvasPoint(recCanvas, e), g = sideGeom(w, h);
   const hits = [];
   if (state.object === 'points') state.points.forEach((pt, k) => hits.push([Math.hypot(x - g.X(-pt.z), y - g.Y(pt.y)), { kind: 'point', k }]));
   else hits.push([Math.abs(x - g.X(-state.picZ)) + (Math.abs(y - g.Y(0)) < g.sy * state.picSize / 2 + 6 ? 0 : 99), { kind: 'picture' }]);
   if (state.ref === 'point') hits.push([Math.hypot(x - g.X(-state.refSrc.z), y - g.Y(state.refSrc.y)), { kind: 'ref' }]);
-  hits.push([Math.abs(x - g.X(-state.focus)) + 2, { kind: 'focus' }]);
   hits.sort((a, b) => a[0] - b[0]);
-  if (!hits.length || hits[0][0] > 14) return;
-  sceneDrag = { view: 'side', ...hits[0][1] };
+  if (!hits.length || hits[0][0] > 16) return;
+  sceneDrag = { view: 'rec', geom: g, ...hits[0][1] };
   if (sceneDrag.kind === 'point') { state.sel = sceneDrag.k; syncPoint(); }
-  if (sceneDrag.kind === 'focus') { state.sweepFocus = false; sweepFocusToggle.on = false; }
-  sideCanvas.setPointerCapture(e.pointerId);
-  sideCanvas.style.cursor = 'grabbing';
+  recCanvas.setPointerCapture(e.pointerId);
+  recCanvas.style.cursor = 'grabbing';
   e.preventDefault();
 });
-sideCanvas.addEventListener('pointermove', (e) => {
-  if (!sceneDrag || sceneDrag.view !== 'side') return;
-  const [x, y, w, h] = canvasPoint(sideCanvas, e), g = sideGeom(w, h);
+recCanvas.addEventListener('pointermove', (e) => {
+  if (!sceneDrag || sceneDrag.view !== 'rec') return;
+  const [x, y] = canvasPoint(recCanvas, e), g = sceneDrag.geom;   // keep the scale while dragging
   const depth = Math.min(1e6, Math.max(5000, -g.iX(x))), yy = clampY(g.iY(y));
   if (sceneDrag.kind === 'point') { const pt = state.points[sceneDrag.k]; pt.z = depth; pt.y = yy; syncPoint(); }
   else if (sceneDrag.kind === 'picture') { state.picZ = depth; picZSlider.value = +(depth / MM).toFixed(2); }
   else if (sceneDrag.kind === 'ref') { state.refSrc.z = depth; state.refSrc.y = yy; syncRef(); }
-  else if (sceneDrag.kind === 'focus') { setFocus(-g.iX(x)); }
   changed();
 });
-const endSceneDrag = () => { if (sceneDrag) { sceneDrag = null; sideCanvas.style.cursor = ''; frontCanvas.style.cursor = ''; fitScene(); schedule(); } };
-sideCanvas.addEventListener('pointerup', endSceneDrag);
-sideCanvas.addEventListener('pointercancel', endSceneDrag);
-const clampY = (y) => Math.max(-20000, Math.min(20000, y));
+const endSceneDrag = () => { if (sceneDrag) { sceneDrag = null; recCanvas.style.cursor = ''; frontCanvas.style.cursor = ''; schedule(); } };
+recCanvas.addEventListener('pointerup', endSceneDrag);
+recCanvas.addEventListener('pointercancel', endSceneDrag);
+
+// The Relight view: press anywhere to focus the camera at that depth, and drag to refocus; near
+// an image or a twin, it snaps to it.
+const playCanvas = $('#play');
+let playDrag = null;
+function focusAt(x, y, g, snap) {
+  if (snap) {
+    let best = null;
+    (state.object === 'points' ? state.points : objectPoints()).forEach((q, k) => {
+      for (const t of terms(q).slice(1)) {
+        const f = focusOf(t.wave);
+        if (!Number.isFinite(f.R)) continue;
+        const dd = Math.hypot(x - g.X(-f.R), y - g.Y(f.y));
+        if (dd < 12 && (!best || dd < best.dd)) best = { dd, k, R: f.R };
+      }
+    });
+    if (best) { if (state.object === 'points' && state.sel !== best.k) { state.sel = best.k; syncPoint(); } setFocus(best.R); return; }
+  }
+  setFocus(-g.iX(x));
+}
+playCanvas.addEventListener('pointerdown', (e) => {
+  const [x, y, w, h] = canvasPoint(playCanvas, e), g = sideGeom(w, h, 'play');
+  state.sweepFocus = false; sweepFocusToggle.on = false;
+  playDrag = { geom: g };
+  focusAt(x, y, g, true);
+  playCanvas.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+playCanvas.addEventListener('pointermove', (e) => {
+  if (!playDrag) return;
+  const [x, y] = canvasPoint(playCanvas, e);
+  focusAt(x, y, playDrag.geom, true);
+});
+const endPlay = () => { playDrag = null; };
+playCanvas.addEventListener('pointerup', endPlay);
+playCanvas.addEventListener('pointercancel', endPlay);
 
 const frontCanvas = $('#front');
 frontCanvas.addEventListener('pointerdown', (e) => {
@@ -749,7 +999,7 @@ frontCanvas.addEventListener('pointermove', (e) => {
 frontCanvas.addEventListener('pointerup', endSceneDrag);
 frontCanvas.addEventListener('pointercancel', endSceneDrag);
 
-// The hologram: move the window, erase, or keep a square piece.
+// The hologram: with its tools open, move the window, erase, or keep a square piece.
 const holoCanvas = $('#holo');
 let holoDrag = null, pieceDrag = null;
 function platePixel(e) {
@@ -758,6 +1008,7 @@ function platePixel(e) {
   return { fi, fj, i: Math.max(0, Math.min(N - 1, Math.floor(fi))), j: Math.max(0, Math.min(N - 1, Math.floor(fj))) };
 }
 holoCanvas.addEventListener('pointerdown', (e) => {
+  if (!state.tools) return;
   holoCanvas.setPointerCapture(e.pointerId);
   const q = platePixel(e);
   holoDrag = { tool: state.tool, last: q };
@@ -824,15 +1075,15 @@ function restoreCut(desc) {
 const objectSeg = segmented([
   { value: 'points', label: 'Points', title: 'A few bright points at different depths' },
   { value: 'picture', label: 'Picture', title: 'A flat transparency, lit from behind' },
-], state.object, (v) => { state.object = v; showObject(); fitScene(); changed(); }, { label: 'Object' });
+], state.object, (v) => { state.object = v; if (v === 'picture') loadPicture(state.picture); showObject(); changed(); }, { label: 'Object' });
 $('#object-box').append(objectSeg);
 
 const pointTabs = el('div', { class: 'point-tabs', role: 'group', 'aria-label': 'Which point' });
-const ptX = slider({ label: 'x (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Sideways position of the selected point', onInput: (v) => { selPt().x = v * MM; changed(); } });
-const ptY = slider({ label: 'y (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Height of the selected point (the reference beam tilts in y)', onInput: (v) => { selPt().y = v * MM; changed(); } });
-const ptZ = slider({ label: 'depth (mm)', min: 5, max: 500, log: true, value: 90, title: 'Distance of the selected point behind the plate', onInput: (v) => { selPt().z = Math.max(1000, v * MM); changed(); } });
+const ptZ = slider({ label: 'depth (mm)', min: 5, max: 500, log: true, value: 60, title: 'Distance of the selected point behind the plate', onInput: (v) => { selPt().z = Math.max(1000, v * MM); changed(); } });
+const ptY = slider({ label: 'height (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Height of the selected point (the reference beam tilts up and down)', onInput: (v) => { selPt().y = v * MM; changed(); } });
+const ptX = slider({ label: 'across (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Sideways position of the selected point', onInput: (v) => { selPt().x = v * MM; changed(); } });
 const ptB = slider({ label: 'brightness', min: 0, max: 1, step: 0.01, value: 1, title: 'Brightness of the selected point, relative to the others', onInput: (v) => { selPt().b = v; changed(); } });
-$('#points-box').append(pointTabs, ptX, ptY, ptZ, ptB);
+$('#points-box').append(pointTabs, ptZ, ptY, ptX, ptB);
 const selPt = () => state.points[state.sel] || state.points[0];
 function buildTabs() {
   pointTabs.replaceChildren(el('span', { class: 'small muted' }, 'Point'));
@@ -843,17 +1094,19 @@ function buildTabs() {
 function addPoint() {
   const L = plateL(), k = state.points.length;
   state.points.push({ x: ((k * 0.37) % 1 - 0.5) * L * 0.8, y: ((k * 0.61) % 1 - 0.5) * L * 0.8, z: 70000 + 15000 * k, b: 1 });
-  state.sel = state.points.length - 1; syncPoint(); fitScene(); changed();
+  state.sel = state.points.length - 1; syncPoint(); changed();
 }
 function removePoint() {
   state.points.splice(state.sel, 1); state.sel = Math.min(state.sel, state.points.length - 1);
-  syncPoint(); fitScene(); changed();
+  syncPoint(); changed();
 }
 function syncPoint() {
   buildTabs();
   const pt = selPt();
   if (!pt) return;
   ptX.value = +(pt.x / MM).toFixed(3); ptY.value = +(pt.y / MM).toFixed(3); ptZ.value = +(pt.z / MM).toFixed(2); ptB.value = pt.b;
+  // A lone point has no one to be brighter than.
+  ptB.hidden = state.points.length < 2;
 }
 
 const pictureButtons = {};
@@ -862,9 +1115,9 @@ for (const [id, P] of Object.entries(PICTURES)) {
   const b = el('button', { type: 'button', title: P.title, 'aria-pressed': 'false', onclick: () => { state.picture = id; loadPicture(id); syncPicture(); changed(); } }, P.label);
   pictureButtons[id] = b; pictureGrid.append(b);
 }
-const picZSlider = slider({ label: 'distance (mm)', min: 10, max: 600, log: true, value: 150, title: 'How far behind the plate the picture is', onInput: (v) => { state.picZ = v * MM; fitScene(); changed(); } });
-const picSizeSlider = slider({ label: 'size (mm)', min: 0.2, max: 20, log: true, value: 5, title: 'The width of the picture', onInput: (v) => { state.picSize = v * MM; fitScene(); changed(); } });
-const diffuserToggle = toggle('Diffuser', state.diffuser, (on) => { state.diffuser = on; changed(); }, 'Light the picture through ground glass: every point of it sends light to the whole plate');
+const picZSlider = slider({ label: 'depth (mm)', min: 10, max: 600, log: true, value: 150, title: 'How far behind the plate the picture is', onInput: (v) => { state.picZ = v * MM; changed(); } });
+const picSizeSlider = slider({ label: 'size (mm)', min: 0.2, max: 20, log: true, value: 5, title: 'The width of the picture', onInput: (v) => { state.picSize = v * MM; changed(); } });
+const diffuserToggle = toggle('Ground glass', state.diffuser, (on) => { state.diffuser = on; changed(); }, 'Light the picture through ground glass: every point of it sends light to the whole plate');
 $('#picture-box').append(pictureGrid, picZSlider, picSizeSlider, el('div', { class: 'row' }, diffuserToggle));
 function syncPicture() {
   for (const [id, b] of Object.entries(pictureButtons)) b.setAttribute('aria-pressed', String(id === state.picture));
@@ -881,13 +1134,13 @@ function showObject() {
 const refSeg = segmented([
   { value: 'plane', label: 'Plane wave', title: 'A collimated beam at an angle' },
   { value: 'point', label: 'Point source', title: 'A diverging beam from a point behind the plate' },
-], state.ref, (v) => { state.ref = v; showRef(); fitScene(); changed(); }, { label: 'Reference' });
+], state.ref, (v) => { state.ref = v; showRef(); changed(); }, { label: 'Reference' });
 $('#ref-box').append(refSeg);
-const thetaSlider = slider({ label: 'angle (°)', min: 0, max: 3.6, step: 0.01, value: 2.3, title: 'The angle of the reference beam to the axis (0: in line, as Gabor did; tilted: off axis, as Leith and Upatnieks did)',
+const thetaSlider = slider({ label: 'angle (°)', min: 0, max: 3.6, step: 0.01, value: 1, title: 'The angle of the reference beam to the axis, tilted up (0: in line, as Gabor did; tilted: off axis, as Leith and Upatnieks did)',
   onInput: (v) => { state.theta = Math.min(v * DEG, thetaMax()); if (v * DEG > thetaMax()) thetaSlider.value = +(thetaMax() / DEG).toFixed(3); changed(); } });
-const refX = slider({ label: 'x (mm)', min: -3, max: 3, step: 0.001, value: 0, onInput: (v) => { state.refSrc.x = v * MM; changed(); } });
-const refY = slider({ label: 'y (mm)', min: -3, max: 3, step: 0.001, value: -1.5, onInput: (v) => { state.refSrc.y = v * MM; changed(); } });
-const refZ = slider({ label: 'depth (mm)', min: 5, max: 500, log: true, value: 60, onInput: (v) => { state.refSrc.z = Math.max(1000, v * MM); fitScene(); changed(); } });
+const refX = slider({ label: 'across (mm)', min: -3, max: 3, step: 0.001, value: 0, onInput: (v) => { state.refSrc.x = v * MM; changed(); } });
+const refY = slider({ label: 'height (mm)', min: -3, max: 3, step: 0.001, value: -1.5, onInput: (v) => { state.refSrc.y = v * MM; changed(); } });
+const refZ = slider({ label: 'depth (mm)', min: 5, max: 500, log: true, value: 60, onInput: (v) => { state.refSrc.z = Math.max(1000, v * MM); changed(); } });
 $('#ref-options').append(thetaSlider, refX, refY, refZ);
 /** The steepest reference whose fringes the pixels can record: a period of two pixels. */
 const thetaMax = () => Math.asin(Math.min(1, sinMax()));
@@ -905,21 +1158,22 @@ function syncRef() {
 
 // Relighting.
 const relightSeg = segmented([
-  { value: 'ref', label: 'The reference', title: 'The same beam that recorded it' },
-  { value: 'conj', label: 'Its conjugate', title: 'The reference beam reversed (complex conjugated): it makes the real image' },
-], state.relight, (v) => { state.relight = v; fitScene(); changed(); }, { label: 'Light it with' });
+  { value: 'ref', label: 'The reference R', title: 'The same beam that recorded it' },
+  { value: 'conj', label: 'Its conjugate R*', title: 'The reference tilted the other way (for a point source: converging to its mirror point in front).  At the plate this is R*, the complex conjugate of the reference: it makes the real image' },
+], state.relight, (v) => { state.relight = v; changed(); }, { label: 'Light it with' });
 $('#relight-box').append(relightSeg);
-const sameToggle = toggle('Same colour', state.sameColour, (on) => { state.sameColour = on; if (on) state.lambda2 = state.lambda; syncLambda2(); fitScene(); changed(); }, 'Light the hologram with the wavelength it was recorded with');
+// Another colour: off, the plate is lit with the laser it was recorded with; on, a slider sets the colour.
+const sameToggle = toggle('Another colour', !state.sameColour, (on) => { state.sameColour = !on; if (!on) state.lambda2 = state.lambda; syncLambda2(); changed(); }, 'Light the hologram with another wavelength than it was recorded with');
 const lambda2Slider = slider({ label: 'λ (nm)', min: 400, max: 700, step: 1, value: 633, title: 'The wavelength of the light that lights the hologram',
-  onInput: (v) => { state.lambda2 = v / 1000; state.sameColour = false; sameToggle.on = false; fitScene(); changed(); } });
+  onInput: (v) => { state.lambda2 = v / 1000; state.sameColour = false; sameToggle.on = true; changed(); } });
 $('#lambda2-box').append(el('div', { class: 'row' }, sameToggle), lambda2Slider);
-function syncLambda2() { sameToggle.on = state.sameColour; lambda2Slider.value = Math.round(lam2() * 1000); }
+function syncLambda2() { sameToggle.on = !state.sameColour; lambda2Slider.hidden = state.sameColour; lambda2Slider.value = Math.round(lam2() * 1000); }
 
 // Laser and camera.
 const lambdaSlider = slider({ label: 'laser λ (nm)', min: 400, max: 700, step: 1, value: 633, title: 'The wavelength the hologram is recorded with',
-  onInput: (v) => { state.lambda = v / 1000; syncRef(); syncLambda2(); fitScene(); changed(); } });
+  onInput: (v) => { state.lambda = v / 1000; syncRef(); syncLambda2(); changed(); } });
 const pitchSlider = slider({ label: 'pixel (µm)', min: 2, max: 20, step: 0.1, value: 5, title: 'The pixel pitch of the camera',
-  onInput: (v) => { state.pitch = v; syncRef(); syncWindow(); fitScene(); stale.holo = true; changed(); } });
+  onInput: (v) => { state.pitch = v; syncRef(); syncWindow(); stale.holo = true; changed(); } });
 const ratioSlider = slider({ label: 'object/ref.', min: 0.03, max: 3, log: true, value: 0.3, title: 'The amplitude of the object light at the plate (r.m.s.) relative to the reference beam',
   onInput: (v) => { state.ratio = v; changed(); } });
 const bitsToggle = toggle('Round the grey levels', state.bits > 0, (on) => { state.bits = on ? bitsSlider.value : 0; bitsSlider.hidden = !on; changed(); }, 'Record only a few grey levels, as a cheap camera (or a printer) would');
@@ -930,7 +1184,9 @@ function syncCamera() {
   bitsToggle.on = state.bits > 0; bitsSlider.hidden = !(state.bits > 0); if (state.bits > 0) bitsSlider.value = state.bits;
 }
 
-// The hologram's tools.
+// The hologram's tools, folded away until wanted.
+const toolsPanel = $('#tools-panel');
+toolsPanel.addEventListener('toggle', () => { state.tools = toolsPanel.open; holoCanvas.style.cursor = state.tools ? 'crosshair' : ''; });
 const toolSeg = segmented([
   { value: 'window', label: 'Move window', title: 'Look through a small part of the plate: drag the window around' },
   { value: 'erase', label: 'Erase', title: 'Cover parts of the plate' },
@@ -940,16 +1196,16 @@ $('#tool-box').append(toolSeg);
 const windowToggle = toggle('Window on', state.window, (on) => { state.window = on; if (!on) { state.sweepWindow = false; sweepWindowToggle.on = false; } stale.holo = true; changed(); }, 'Look through a round window in the plate instead of the whole plate');
 const windowSlider = slider({ label: 'width (mm)', min: 0.05, max: 1.28, step: 0.01, value: 0.4, title: 'The diameter of the window',
   onInput: (v) => { state.win.r = (v * MM) / 2; state.window = true; windowToggle.on = true; stale.holo = true; changed(); } });
-const winX = slider({ label: 'x (mm)', min: -0.64, max: 0.64, step: 0.001, value: 0, title: 'Where the window is on the plate, sideways',
+const winX = slider({ label: 'across (mm)', min: -0.64, max: 0.64, step: 0.001, value: 0, title: 'Where the window is on the plate, sideways',
   onInput: (v) => { state.win.x = v * MM; state.window = true; windowToggle.on = true; stale.holo = true; changed(); } });
-const winY = slider({ label: 'y (mm)', min: -0.64, max: 0.64, step: 0.001, value: 0, title: 'Where the window is on the plate, up and down',
+const winY = slider({ label: 'height (mm)', min: -0.64, max: 0.64, step: 0.001, value: 0, title: 'Where the window is on the plate, up and down',
   onInput: (v) => { state.win.y = v * MM; state.window = true; windowToggle.on = true; state.sweepWindow = false; sweepWindowToggle.on = false; stale.holo = true; changed(); } });
 const sweepWindowToggle = toggle('Sweep', false, (on) => { state.sweepWindow = on; if (on) { state.window = true; windowToggle.on = true; t0 = performance.now(); } changed(); }, 'Move the window up and down the plate');
 const brushSlider = slider({ label: 'brush (px)', min: 2, max: 80, step: 1, value: 16, onInput: (v) => { state.brush = Math.round(v); } });
 const uncoverButton = () => el('button', { type: 'button', title: 'Take every cover off the plate', onclick: uncover }, 'Uncover all');
 const toolOptions = {
-  window: el('div', { class: 'stack' }, el('div', { class: 'row' }, windowToggle, sweepWindowToggle), windowSlider, winX, winY),
-  erase: el('div', { class: 'stack' }, brushSlider, el('div', { class: 'row' }, uncoverButton())),
+  window: el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Drag on the hologram to move the window.'), el('div', { class: 'row' }, windowToggle, sweepWindowToggle), windowSlider, winX, winY),
+  erase: el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Drag on the hologram to cover it.'), brushSlider, el('div', { class: 'row' }, uncoverButton())),
   piece: el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Drag out a square from its centre.'),
     el('div', { class: 'row' }, el('button', { type: 'button', title: 'Cover the left half of the plate', onclick: coverHalf }, 'Cover half'), uncoverButton())),
 };
@@ -958,7 +1214,7 @@ function showTool() { toolSeg.value = state.tool; $('#tool-options').replaceChil
 const zoomSelect = (id, zs, key) => {
   const s = $(id);
   for (const z of zs) s.append(el('option', { value: z }, z === 1 ? 'Whole' : `${z}× zoom`));
-  s.addEventListener('change', () => { state[key] = +s.value; stale.holo = stale.spec = stale.recon = true; schedule(); });
+  s.addEventListener('change', () => { state[key] = +s.value; stale.holo = stale.spec = stale.recon = true; changed(); });
   return s;
 };
 const zoomHolo = zoomSelect('#zoom-holo', [1, 2, 4, 8], 'zoomH');
@@ -971,11 +1227,10 @@ const reconBright = slider({ label: 'Brightness', min: -2, max: 3, step: 0.01, v
 $('#recon-bright').append(reconBright);
 
 // The focus: behind the plate (virtual images) is positive, in front (real images) negative.
-const focusSlider = slider({ label: 'focus (mm)', min: -300, max: 300, step: 0.1, value: 90, title: 'Where the camera is focused: behind the plate (+, virtual images) or in front of it (−, real images)',
+const focusSlider = slider({ label: 'focus (mm)', min: -300, max: 300, step: 0.1, value: 60, title: 'Where the camera is focused: behind the plate (+, virtual images) or in front of it (−, real images, where a screen would catch them)',
   onInput: (v) => { state.sweepFocus = false; sweepFocusToggle.on = false; setFocus(v * MM, false); } });
 $('#focus-box').append(focusSlider);
 const sweepFocusToggle = toggle('Sweep', false, (on) => { state.sweepFocus = on; t0 = performance.now(); changed(); }, 'Sweep the focus back and forth through the object');
-$('#sweep-box').append(sweepFocusToggle);
 function setFocus(d, updateSlider = true) {
   if (Math.abs(d) < 1000) d = d < 0 ? -1000 : 1000;
   state.focus = Math.max(-1e6, Math.min(1e6, d));
@@ -983,27 +1238,27 @@ function setFocus(d, updateSlider = true) {
   changed();
 }
 function sweepRange() {
-  const zs = imageList().map((im) => im.image.R).filter((R) => Number.isFinite(R) && R > 0);
-  if (!zs.length) return [0.7 * Math.abs(state.focus), 1.3 * Math.abs(state.focus)];
-  return [0.8 * Math.min(...zs), 1.2 * Math.max(...zs)];
+  const zs = objectPoints().map((pt) => focusOf(terms(pt)[conj() ? 2 : 1].wave).R).filter((R) => Number.isFinite(R) && Math.abs(R) > 0);
+  if (!zs.length) return [0.7 * state.focus, 1.3 * state.focus];
+  const sg = Math.sign(zs[0]), a = zs.map(Math.abs);
+  return [sg * 0.8 * Math.min(...a), sg * 1.2 * Math.max(...a)];
 }
 const jumpImage = el('button', { type: 'button', title: 'Focus on the image (of the selected point)', onclick: () => jump('image') }, 'Focus on the image');
 const jumpTwin = el('button', { type: 'button', title: 'Focus on the twin image (of the selected point)', onclick: () => jump('twin') }, 'on the twin');
-$('#jump-box').append(jumpImage, jumpTwin);
+$('#jump-box').append(jumpImage, jumpTwin, sweepFocusToggle);
 function jump(which) {
-  const pts = objectPoints(), pt = state.object === 'points' ? selPt() : pts[0];
-  // Lit by the conjugate beam, the image to look at is the real one, made by the twin term.
-  const term = state.relight === 'conj' ? (which === 'image' ? 'twin' : 'image') : which;
-  const im = images(pointDescription(pt), refDesc(), refDesc(state.relight === 'conj'), lam2() / state.lambda)[term];
+  // Lit by the conjugate beam, the image to look at is the real one, made by the O* term.
+  const T = terms(focusPoint()), t = (which === 'image') !== conj() ? T[1] : T[2], f = focusOf(t.wave);
   state.sweepFocus = false; sweepFocusToggle.on = false;
-  if (!Number.isFinite(im.R) || Math.abs(im.R) > 1e6) { setFocus(1e6); return; }
-  setFocus(im.R); fitScene();
+  if (!Number.isFinite(f.R) || Math.abs(f.R) > 1e6) { setFocus(1e6); return; }
+  setFocus(f.R);
 }
 
 function syncControls() {
   showObject(); syncPoint(); syncPicture(); showRef(); syncRef();
   relightSeg.value = state.relight; syncLambda2(); syncCamera(); showTool();
   syncWindow(); brushSlider.value = state.brush; sweepFocusToggle.on = state.sweepFocus;
+  toolsPanel.open = state.tools; holoCanvas.style.cursor = state.tools ? 'crosshair' : '';
   zoomHolo.value = state.zoomH; zoomSpec.value = state.zoomS; zoomRecon.value = state.zoomR;
   specBright.value = state.brightS; reconBright.value = state.brightR;
   focusSlider.value = +(state.focus / MM).toFixed(2);
@@ -1059,6 +1314,7 @@ function readState(h) {
   if (typeof h.cut === 'string') s.cut = h.cut;
   if (h.zoom) { const [a, b, c] = nums(h.zoom); if ([1, 2, 4, 8].includes(a)) s.zoomH = a; if ([1, 2, 4].includes(b)) s.zoomS = b; if ([1, 2, 4].includes(c)) s.zoomR = c; }
   if (h.win) { const [x, y, r] = nums(h.win); if ([x, y, r].every(Number.isFinite) && r > 0) { s.window = true; s.win = { x: x * MM, y: y * MM, r: r * MM }; } }
+  if (s.window || s.cut) s.tools = true;
   return s;
 }
 
@@ -1066,37 +1322,40 @@ function readState(h) {
 
 function apply(s) {
   state = { ...DEFAULTS(), ...s };
+  if (state.window || state.cut || state.tool !== 'window') state.tools = s.tools ?? true;
   restoreCut(state.cut); maskVersion++;
-  syncControls(); fitScene(); t0 = performance.now();
+  syncControls(); t0 = performance.now();
   stale.holo = stale.spec = stale.recon = true;
   changed();
 }
 const P = (x, y, z, b = 1) => ({ x: x * MM, y: y * MM, z: z * MM, b });
 const PLANE = (deg) => ({ ref: 'plane', theta: deg * DEG });
 const setups = {
-  zone: () => apply({ points: [P(0, 0, 30)], sel: 0, ...PLANE(0), focus: 30000, zoomH: 1, zoomS: 1, zoomR: 4 }),
-  gabor: () => apply({ points: [P(-0.25, 0.2, 80), P(0.25, 0.2, 80), P(0, -0.25, 80)], sel: 0, ...PLANE(0), focus: 80000, zoomH: 1, zoomR: 4 }),
-  offaxis: () => apply({ object: 'picture', picture: 'F', picZ: 120000, picSize: 2000, diffuser: true, ...PLANE(0.4), ratio: 0.5, focus: 120000, zoomR: 1 }),
-  islands: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), ratio: 0.6, focus: 150000, zoomR: 1 }),
+  zone: () => apply({ points: [P(0, 0, 60)], sel: 0, ...PLANE(0), focus: 60000, zoomS: 2 }),
+  tilt: () => apply({ zoomS: 2 }),
+  offaxis: () => apply({ object: 'picture', picture: 'F', picZ: 120000, picSize: 2000, diffuser: true, ...PLANE(0.4), ratio: 0.5, focus: 120000, zoomR: 2 }),
+  depth: () => apply({ points: [P(-0.3, 0.2, 50), P(0.25, -0.05, 80), P(0, -0.25, 130)], sel: 1, ...PLANE(1.3), focus: 80000, sweepFocus: true, zoomR: 2 }),
+  parallax: () => apply({ points: [P(0, 0, 40), P(0, 0, 60), P(0, 0, 100)], sel: 1, ...PLANE(2.3), window: true, win: { x: 0, y: 0, r: 150 }, sweepWindow: true, focus: 60000, zoomR: 4 }),
   cut: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), focus: 150000, tool: 'piece', zoomR: 2 }),
-  parallax: () => apply({ points: [P(0, 0, 40), P(0, 0, 60), P(0, 0, 100)], sel: 1, ...PLANE(2.3), window: true, win: { x: 0, y: 0, r: 150 }, sweepWindow: true, focus: 60000, zoomH: 1, zoomR: 4 }),
-  depth: () => apply({ points: [P(-0.4, 0.3, 40), P(0.35, -0.1, 70), P(0, -0.45, 120)], sel: 1, ...PLANE(2.1), focus: 70000, sweepFocus: true, zoomR: 4 }),
+  conjugate: () => apply({ points: [P(-0.3, 0.25, 50), P(0.3, -0.2, 90)], sel: 0, ...PLANE(2.3), relight: 'conj', focus: -50000, zoomR: 2 }),
   wavelength: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), sameColour: false, lambda2: 0.532, focus: 150000, zoomR: 2 }),
-  conjugate: () => apply({ points: [P(-0.3, 0.25, 50), P(0.3, -0.2, 90)], sel: 0, ...PLANE(2.3), relight: 'conj', focus: -50000, zoomR: 4 }),
-  binary: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), bits: 1, focus: 150000, zoomH: 4, zoomR: 1 }),
+  binary: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 4000, diffuser: true, ...PLANE(2), bits: 1, focus: 150000, zoomH: 4 }),
   portrait: () => apply({ object: 'picture', picture: 'fourier', picZ: 150000, picSize: 5000, diffuser: true, ...PLANE(2), focus: 150000, zoomR: 2 }),
-  fourier: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 3000, diffuser: true, ref: 'point', refSrc: { x: 0, y: -5000, z: 150000 }, focus: 150000, zoomR: 1 }),
-  steep: () => apply({ ...PLANE(90), focus: 90000, zoomR: 1 }),
+  fourier: () => apply({ object: 'picture', picture: 'F', picZ: 150000, picSize: 3000, diffuser: true, ref: 'point', refSrc: { x: 0, y: -5000, z: 150000 }, focus: 150000 }),
+  steep: () => apply({ ...PLANE(90), focus: 60000 }),
 };
+// Names from before the page was rearranged (links to them keep working).
+const aliases = { gabor: 'zone', islands: 'offaxis' };
 drawer($('#help'), $('#help-button'), setups);
+renderMath($('.stage'));
 
 // ------------------------------------------------------------------------------- start
 
 function fromHash() {
-  const hash = readHash();
-  if (setups[hash.setup]) setups[hash.setup]();
+  const hash = readHash(), name = aliases[hash.setup] || hash.setup;
+  if (setups[name]) setups[name]();
   else if (Object.keys(hash).length) apply(readState(hash));
-  else apply({ sweepFocus: true });   // the opening view: the focus sweeps through the points
+  else setups.tilt();   // the opening view: one point, the reference tilted, the camera on the image
 }
 fromHash();
 // A link to another set-up on this page (#setup=...) is followed without a reload.  (The page's
@@ -1106,10 +1365,20 @@ window.addEventListener('hashchange', fromHash);
 // For the tests (tools/cdp.py) and for curious students with the console open.
 const fraction = (cv, x, y) => { const r = cv.getBoundingClientRect(); return [x / r.width, y / r.height]; };
 window.__app = {
-  get state() { return state; }, setups, W, islands, apply, setFocus, uncover, coverHalf, maskChanged, compute,
-  /** Where point k is drawn, as fractions of the side and front canvases (for dragging it). */
-  sidePoint(k) { const r = sideCanvas.getBoundingClientRect(), g = sideGeom(r.width, r.height), pt = state.points[k]; return fraction(sideCanvas, g.X(-pt.z), g.Y(pt.y)); },
+  get state() { return state; }, setups, aliases, W, islands, apply, setFocus, uncover, coverHalf, maskChanged, compute,
+  /** Where point k is drawn, as fractions of the Record and front canvases (for dragging it). */
+  sidePoint(k) { const r = recCanvas.getBoundingClientRect(), g = sideGeom(r.width, r.height), pt = state.points[k]; return fraction(recCanvas, g.X(-pt.z), g.Y(pt.y)); },
   frontPoint(k) { const r = frontCanvas.getBoundingClientRect(), g = frontGeom(r.width, r.height), pt = state.points[k]; return fraction(frontCanvas, g.X(pt.x), g.Y(pt.y)); },
+  /** Where the selected point's image (which = 1) or twin (2) is drawn in the Relight view, as fractions. */
+  playMark(which) { const r = playCanvas.getBoundingClientRect(), g = sideGeom(r.width, r.height, 'play'), f = focusOf(terms(focusPoint())[which].wave); return fraction(playCanvas, g.X(-f.R), g.Y(f.y)); },
+  /** Where the three beams land in the view, in display pixels (zero order, image term, twin term). */
+  marks() {
+    const sg = state.focus < 0 ? -1 : 1, u = dU(), period = N * mu(), wrap = (q) => q - period * Math.round(q / period);
+    return terms(focusPoint()).map((t) => ({ name: t.name, i: HN + wrap((sg * t.wave.tx) / u), j: HN - wrap((sg * t.wave.ty) / u) }));
+  },
+  terms: () => terms(focusPoint()).map((t) => ({ name: t.name, ...focusOf(t.wave) })),
+  /** Move the sweeps to t seconds and draw that frame (for the tests: no waiting on the clock). */
+  advance(t) { advance(t); render(); },
   /** Recompute and redraw what has changed, now, as a frame does; returns the time it took (ms). */
   redraw() { const t = performance.now(); render(); return performance.now() - t; },
   verdict: () => $('#verdict').textContent,

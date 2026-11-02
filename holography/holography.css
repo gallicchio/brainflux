@@ -1,35 +1,68 @@
+/* The colours that tie each of the three beams to its label in every view. */
+:root { --zero: #7d7e86; --img: #1f7a3a; --twin: #8a3fc0; }
+@media (prefers-color-scheme: dark) { :root { --zero: #a3a4ab; --img: #7ad694; --twin: #c79bf2; } }
+
 .holo {
   display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px;
   padding: 12px; max-width: 1560px; margin: 0 auto; align-items: start;
 }
-.stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.scene { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; min-width: 0; }
-.views { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; min-width: 0; }
-.pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.pane-head { display: flex; align-items: center; gap: 8px; min-height: 28px; }
-.pane-head h2 { font-size: 15px; margin: 0; white-space: nowrap; }
+/* The story on a grid of three columns: the two side views (record above, relight below) take
+   two of them, with the front view and the three terms beside them; the hologram, its transform
+   and the view through it take one each. */
+.stage {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; min-width: 0;
+  grid-template-areas: "rec rec front" "play play terms" "holo spec recon";
+}
+#pane-rec { grid-area: rec; } #pane-front { grid-area: front; } #pane-play { grid-area: play; }
+#pane-terms { grid-area: terms; } #pane-holo { grid-area: holo; } #pane-spec { grid-area: spec; }
+#pane-recon { grid-area: recon; }
+.pane { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pane-head { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.pane-head h2 { font-size: 15px; margin: 0; white-space: nowrap; display: flex; align-items: center; }
 .pane-head .note { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pane-head select { font-size: 13px; padding: 2px 4px; min-height: 26px; flex: 0 0 auto; }
-.pane-foot { display: flex; flex-direction: column; gap: 6px; }
-.side-wrap { height: 210px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.front-wrap { width: 210px; height: 210px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.side-wrap canvas, .front-wrap canvas { width: 100%; height: 100%; cursor: grab; }
+.pane-head select { font-size: 13px; padding: 2px 4px; min-height: 26px; flex: 0 0 auto; margin-left: auto; }
+.pane-sub { min-height: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane-foot { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.step {
+  display: inline-flex; align-items: center; justify-content: center; width: 1.4em; height: 1.4em;
+  border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700;
+  margin-right: 6px; flex: 0 0 auto;
+}
+.side-wrap { height: 150px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.front-wrap { height: 150px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.side-wrap canvas, .front-wrap canvas { width: 100%; height: 100%; }
+#rec, #front { cursor: grab; }
+#play { cursor: crosshair; }
 .sq { width: 100%; aspect-ratio: 1; background: #000; border-radius: var(--radius); overflow: hidden; }
 .sq canvas { width: 100%; height: 100%; }
-#holo { cursor: crosshair; }
-.focus-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .pane-foot .slider { grid-template-columns: minmax(4.6em, auto) 1fr 4.6em; }
+
+/* The three terms of the relit light, each with its colour, its formula and where it goes. */
+#pane-terms { align-self: stretch; padding-top: 30px; }
+.terms {
+  min-height: 150px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 6px 10px; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
+}
+.terms .head { color: var(--ink-2); }
+.terms .term { border-left: 4px solid var(--c); padding-left: 8px; line-height: 1.3; }
+.terms .term b { color: var(--c); }
+.terms .zero { --c: var(--zero); } .terms .img { --c: var(--img); } .terms .twin { --c: var(--twin); }
+
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .controls .slider { grid-template-columns: minmax(5.6em, auto) 1fr 4.8em; }
+.step-head { display: flex; align-items: center; font-weight: 600; font-size: 14px; color: var(--ink-2); margin: 2px 0 -4px; }
 details.panel summary { cursor: pointer; }
 details.panel[open] summary { margin-bottom: 6px; }
+#tools-panel summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+#tools-panel[open] summary { margin-bottom: 6px; }
 .point-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .point-tabs button { min-width: 32px; padding: 2px 8px; }
 .button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
+/* Room for two or three lines, so that what is below keeps its place as the wording changes. */
 #verdict { min-height: 2.9em; }
-/* Room for two lines, so that the panels below keep their places as the wording changes. */
+#fringe-note { min-height: 2.9em; }
 #ref-note { min-height: 2.9em; }
 #verdict .bad { color: var(--warn); }
 #verdict .good { color: var(--good); }
@@ -39,17 +72,21 @@ details.panel[open] summary { margin-bottom: 6px; }
 @media (max-width: 1250px) {
   .holo { grid-template-columns: minmax(0, 1fr) 270px; }
 }
-/* Narrower: the controls go under the stage, as a grid of panels, and the views keep their row. */
+/* Narrower: the controls go under the stage, as a grid of panels. */
 @media (max-width: 1100px) {
   .holo { grid-template-columns: minmax(0, 1fr); }
   .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); align-items: start; }
+  .step-head { margin: 0; grid-column: 1 / -1; }
+  /* The three terms under the Relight view, across, where they have room. */
+  .stage { grid-template-areas: "rec rec rec" "play play play" "front terms terms" "holo spec recon"; }
+  .pane-sub { white-space: normal; min-height: 2.9em; }
+  #pane-terms { padding-top: 0; }
+  .terms { min-height: 0; }
 }
-@media (max-width: 860px) {
-  .views { grid-template-columns: minmax(0, 1fr); }
-  .views .pane { width: 100%; max-width: 560px; margin: 0 auto; }
-}
-@media (max-width: 640px) {
-  .scene { grid-template-columns: minmax(0, 1fr); }
-  .front-wrap { width: 100%; height: auto; aspect-ratio: 1; max-width: 260px; margin: 0 auto; }
-  .side-wrap { height: 180px; }
+/* A phone: one column, in the order of the story. */
+@media (max-width: 760px) {
+  .stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rec" "front" "holo" "play" "terms" "recon" "spec"; }
+  .front-wrap { width: 100%; max-width: 300px; height: 160px; margin: 0 auto; }
+  .side-wrap { height: 160px; }
+  .pane-head .note { white-space: normal; }
 }
