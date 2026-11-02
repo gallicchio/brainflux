@@ -85,7 +85,9 @@ export function slabModeCount(n1, n2, w) { return n1 > n2 ? Math.floor(2 * w * M
 /**
  * Between parallel metal plates a distance w apart, TM light (E along the plates) has modes
  * sin(m pi y / w) with cutoff width m/2; below cutoff the field decays as exp(-kappa x),
- * kappa = sqrt((pi/w)^2 - (2 pi)^2).  Returns kappa (0 above cutoff).
+ * kappa = sqrt((pi/w)^2 - (2 pi)^2).  Returns kappa (0 above cutoff).  (Waveguide books name
+ * modes by the direction of travel, x here: to them these are the TE_m modes, E being across
+ * it, and TE light's mode with E straight across the gap is the TEM mode, which has no cutoff.)
  */
 export function metalGuideDecay(w, n = 1) {
   const q = (Math.PI / w) ** 2 - (2 * Math.PI * n) ** 2;
@@ -102,8 +104,51 @@ export function cavityFrequencyYee(a, b, m, n, dx, dt) {
   return Math.asin((dt / dx) * s) / (Math.PI * dt);
 }
 
-/** Cherenkov angle of the radiation to the velocity: cos(theta) = 1/(n beta); NaN below threshold. */
+/** Cherenkov angle of the radiation to the velocity: cos(theta) = 1/(n beta); NaN below threshold.
+ *  The wavefronts make the complementary angle alpha with the path, sin(alpha) = 1/(n beta). */
 export function cherenkovAngle(n, beta) { const c = 1 / (n * beta); return c <= 1 ? Math.acos(c) : NaN; }
+
+/**
+ * A ray through a polygon of index n in vacuum (geometrical optics): from (x, y) along (dx, dy),
+ * refracted by Snell's law at every face it meets, or totally reflected where Snell's law has no
+ * answer, until it leaves or has met `max` faces.  Returns { pts, hits, dir, inside }: the
+ * points where it met a face (after the start), and for each { inside (it came from the glass),
+ * theta1 (incidence), theta2 (refraction, NaN if totally reflected) }, its last direction, and
+ * whether it ended inside.
+ */
+export function rayThroughPolygon(poly, n, x, y, dx, dy, max = 8) {
+  const m = Math.hypot(dx, dy), pts = [[x, y]], hits = [];
+  dx /= m; dy /= m;
+  let inside = false;
+  for (let q = 0; q < max; q++) {
+    let best = Infinity, nx = 0, ny = 0;
+    for (let a = 0; a < poly.length; a++) {
+      const [x0, y0] = poly[a], [x1, y1] = poly[(a + 1) % poly.length];
+      const ex = x1 - x0, ey = y1 - y0, den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-12) continue;
+      const t = ((x0 - x) * ey - (y0 - y) * ex) / den, s = ((x0 - x) * dy - (y0 - y) * dx) / den;
+      if (t > 1e-9 && s >= 0 && s <= 1 && t < best) { best = t; const L = Math.hypot(ex, ey); nx = ey / L; ny = -ex / L; }
+    }
+    if (!Number.isFinite(best)) break;
+    x += best * dx; y += best * dy; pts.push([x, y]);
+    let c = -(dx * nx + dy * ny);              // cos of the angle of incidence, the normal facing the ray
+    if (c < 0) { nx = -nx; ny = -ny; c = -c; }
+    const r = inside ? n : 1 / n, k = 1 - r * r * (1 - c * c), theta1 = Math.acos(Math.min(1, c));
+    if (k < 0) {
+      dx += 2 * c * nx; dy += 2 * c * ny;
+      hits.push({ inside, theta1, theta2: NaN });
+    } else {
+      const ct = Math.sqrt(k);
+      dx = r * dx + (r * c - ct) * nx; dy = r * dy + (r * c - ct) * ny;
+      hits.push({ inside, theta1, theta2: Math.acos(Math.min(1, ct)) });
+      inside = !inside;
+    }
+  }
+  return { pts, hits, dir: [dx, dy], inside };
+}
+
+/** The least deviation of a ray by a prism of apex angle A and index n (in vacuum). */
+export const minimumDeviation = (n, A) => (n * Math.sin(A / 2) <= 1 ? 2 * Math.asin(n * Math.sin(A / 2)) - A : NaN);
 
 /** Thick-lens focal length (from the lens's centre) of a symmetric biconvex lens. */
 export function lensFocal(n, R, thickness) {

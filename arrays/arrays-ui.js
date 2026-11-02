@@ -381,7 +381,7 @@ function readouts() {
     for (const e of A.els) { const a = Math.atan2(e.x - fx, e.y - fy) - ax, w = Math.atan2(Math.sin(a), Math.cos(a)); lo = Math.min(lo, w); hi = Math.max(hi, w); }
     const s = Math.sin(Math.min(Math.PI / 2, hi)) + Math.sin(Math.min(Math.PI / 2, -lo));
     add('Focus', [{ v: r, dec: 2, w: 5 }, '\u00a0λ from the middle of the array']);
-    if (s > 0.02) add('Spot', ['dark about λ/(sin α₁ + sin α₂) = ', { v: 1 / s, dec: 2, w: 4 }, '\u00a0λ to either side']);
+    if (s > 0.02) add('Spot', ['dark about λ/(sin α₁ + sin α₂)\u00a0=\u00a0', { v: 1 / s, dec: 2, w: 4 }, '\u00a0λ to either side']);
     add('Far field', ['no single beam: the waves meet at the focus and spread out again']);
   } else if (info.omni) add('Beam', ['none: the same power within 3 dB in every direction']);
   else {
@@ -393,9 +393,10 @@ function readouts() {
     else if (info.sll > -0.5) add('Highest sidelobe', [...dB(info.sll), ' at ', ...deg(info.sllAngle), `: as strong as the beam${grating ? ' (a grating lobe)' : ''}`], 'warn');
     else add('Highest sidelobe', [...dB(info.sll), ' at ', ...deg(info.sllAngle)]);
   }
-  if (D > 0 && A.phaseMode !== 'focus') add('Directivity', [{ v: 10 * Math.log10(D), dec: 1, w: 4 }, '\u00a0dBi (D = ', { v: D, dec: 1, w: 5 }, ')']);
+  // (No line breaks either side of an "=": a wrapped line keeps the equation whole.)
+  if (D > 0 && A.phaseMode !== 'focus') add('Directivity', [{ v: 10 * Math.log10(D), dec: 1, w: 4 }, '\u00a0dBi (D\u00a0=\u00a0', { v: D, dec: 1, w: 5 }, ')']);
   const Dsz = extent(A.els);
-  add('Elements', [{ v: A.els.length, dec: 0, w: 2 }, ', across D = ', { v: Dsz, dec: 1, w: 4 }, '\u00a0λ; far field beyond 2D²/λ = ', { v: 2 * Dsz * Dsz, dec: 1, w: 6 }, '\u00a0λ']);
+  add('Elements', [{ v: A.els.length, dec: 0, w: 2 }, ', across D\u00a0=\u00a0', { v: Dsz, dec: 1, w: 4 }, '\u00a0λ; far field beyond 2D²/λ\u00a0=\u00a0', { v: 2 * Dsz * Dsz, dec: 1, w: 6 }, '\u00a0λ']);
   // The rows are made again only when the quantities shown change; otherwise only their numbers.
   const key = rows.map(([k, , cls]) => `${k}|${cls}`).join(';');
   if (box._rows !== key) {

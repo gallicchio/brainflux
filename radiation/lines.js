@@ -100,8 +100,10 @@ let BUF = new Float64Array(6000);
 /**
  * The field lines of the charge at time t, in the plane z = 0.
  *   lw: an LW (lw.js) on a Trajectory; part: 'total' or 'velocity' (the 1/R² part alone)
- *   count: lines leaving the charge, equally spaced in angle in its rest frame (so that, as in
- *          three dimensions, the density of lines shows the strength of the field)
+ *   count: lines leaving the charge, equally spaced in angle in its rest frame (the Coulomb
+ *          lines there, Lorentz-contracted along v).  The lines show the field's direction
+ *          exactly; their spacing is only a rough guide to its strength, as this is a slice
+ *          through a three-dimensional field (in the plane, lines spread as 1/r, the field as 1/r²)
  *   box: [xmin, xmax, ymin, ymax], the region to trace in
  *   opts: tol, hmax, maxLength, maxPoints (per line), angle0 (offset of the first line),
  *         maxEvaluations (of the field, for all the lines: when the field is very busy, the

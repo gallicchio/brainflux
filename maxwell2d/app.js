@@ -243,7 +243,8 @@ function drawFlow(ctx, X, Y, s) {
 function dashed(ctx, x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
 
 /** What the analytic theory predicts, drawn over the picture: refraction at the surface, the
- *  Cherenkov cone, the directions of the double slit's fringes, the lens's focus. */
+ *  ray through the prism, the Cherenkov cone and its light, the directions of the double slit's
+ *  fringes, the lens's focus. */
 function drawPhysics(ctx, X, Y, s) {
   ctx.save();
   ctx.setLineDash([6, 5]); ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -254,9 +255,26 @@ function drawPhysics(ctx, X, Y, s) {
     dashed(ctx, X(hit[0]), Y(hit[1]), X(hit[0] + L * refl[0]), Y(hit[1] + L * refl[1]));
     if (trans) dashed(ctx, X(hit[0]), Y(hit[1]), X(hit[0] + L * trans[0]), Y(hit[1] + L * trans[1]));
   }
+  if (pred.prism) {
+    // The central ray through the prism, and on out of it.
+    const { pts, dir, inside } = pred.prism, [xe, ye] = pts[pts.length - 1];
+    ctx.beginPath(); ctx.moveTo(X(pts[0][0]), Y(pts[0][1]));
+    for (const [px, py] of pts) ctx.lineTo(X(px), Y(py));
+    if (!inside) ctx.lineTo(X(xe + 12 * dir[0]), Y(ye + 12 * dir[1]));
+    ctx.stroke();
+  }
   if (pred.cone) {
-    const { x, y, ang, alpha } = pred.cone, L = 12;
-    for (const sg of [1, -1]) dashed(ctx, X(x), Y(y), X(x - L * Math.cos(ang + sg * alpha)), Y(y - L * Math.sin(ang + sg * alpha)));
+    // The wavefronts pile up on the two wings of a V (dashed), at alpha to the path; the light
+    // leaves at right angles to them, at theta = 90° - alpha to the motion (the arrows).
+    const { x, y, ang, alpha } = pred.cone, L = 12, theta = Math.PI / 2 - alpha;
+    for (const sg of [1, -1]) {
+      const bx = -Math.cos(ang + sg * alpha), by = -Math.sin(ang + sg * alpha);
+      dashed(ctx, X(x), Y(y), X(x + L * bx), Y(y + L * by));
+      ctx.save(); ctx.setLineDash([]); ctx.lineWidth = 1.6;
+      const px = x + 2.5 * bx, py = y + 2.5 * by, a = ang - sg * theta;
+      arrow(ctx, X(px), Y(py), X(px + 1.4 * Math.cos(a)), Y(py + 1.4 * Math.sin(a)), 8);
+      ctx.restore();
+    }
   }
   if (pred.fringes) {
     const { x, y, angles } = pred.fringes, L = 12;
@@ -423,6 +441,12 @@ function predictions() {
       out.ray = { hit, refl, trans, th1, th2, n1, n2 };
     }
   }
+  if (src.type === 'beam' && state.shape === 'prism' && !bgFn && scene.materialAt(src.x, src.y).n === 1) {
+    // The beam's central ray, by Snell's law at each face of the prism.
+    const d0 = [Math.cos(src.angle * deg), Math.sin(src.angle * deg)];
+    const r = theory.rayThroughPolygon(scene.shapeOps[0].pts, state.n, src.x, src.y, ...d0, 6);
+    if (r.hits.length) out.prism = { ...r, d0 };
+  }
   if (src.type === 'moving') {
     const [x, y] = source ? source.position(sim.t) : [src.x, src.y];
     const n = scene.materialAt(x, y).n;
@@ -535,8 +559,21 @@ function physicsNotes() {
       out.push(fres);
       if (n2 > n1) out.push(`Brewster's angle ${ang(theory.brewsterAngle(n1, n2))}`);
     } else {
-      out.push(`beyond the critical angle ${ang(theory.criticalAngle(n1, n2))}: total internal reflection; the evanescent field falls by 1/e in <b>${val(theory.evanescentDepth(n1, n2, th1), 2, 4)} λ</b>`);
+      let tir = `beyond the critical angle ${ang(theory.criticalAngle(n1, n2))}: total internal reflection; the evanescent field falls by 1/e in <b>${val(theory.evanescentDepth(n1, n2, th1), 2, 4)} λ</b>`;
+      // A beam is a spread of angles, and those nearer the normal than the critical angle escape.
+      if (src.type === 'beam') tir += `; this beam's spread of angles lets ${pct(theory.beamAverage((t) => 1 - theory.reflectance(n1, n2, t, state.mode), th1, n1, src.width))} out`;
+      out.push(tir);
     }
+  }
+  if (pred.prism) {
+    const { hits, dir, d0, inside } = pred.prism, tir = hits.some((h) => !Number.isFinite(h.theta2));
+    let note = `prism (apex 60°, n = ${val(state.n, 2, 4)}): the central ray meets the first face at ${ang(hits[0].theta1)}`;
+    if (tir) note += '; inside, it is totally reflected (dashed)';
+    else if (!inside && hits.length >= 2) {
+      const dev = Math.acos(Math.max(-1, Math.min(1, d0[0] * dir[0] + d0[1] * dir[1]))), least = theory.minimumDeviation(state.n, Math.PI / 3);
+      note += `; Snell's law at both faces turns it by <b>${ang(dev)}</b> (dashed)${Number.isFinite(least) ? `, and no ray is turned less than ${ang(least)}` : ''}`;
+    }
+    out.push(note);
   }
   if (state.shape === 'gap' && src.type === 'beam') {
     const n = state.n, th = Math.abs(90 - Math.abs(src.angle)) * deg;
@@ -548,11 +585,11 @@ function physicsNotes() {
     if (state.mode === 'TE') out.push('TE: the plates guide a wave with E across the gap at any width (no cutoff)');
     else if (w < 0.5) {
       const k = theory.metalGuideDecay(w);
-      out.push(`TM needs a width over λ/2: at ${val(w, 2, 4)} λ the field decays as e<sup>−κx</sup>, κ = <b>${val(k, 2, 5)}</b>/λ, by ${slot(Math.exp(-4 * k).toExponential(1), 7)} over the 4 λ guide`);
+      out.push(`TM needs a width over λ/2: at ${val(w, 2, 4)} λ the field decays as e<sup>−κx</sup>, κ = <b>${val(k, 2, 5)}</b>/λ, its amplitude by a factor ${slot(Math.exp(-4 * k).toExponential(1), 7)} over the 4 λ guide`);
     } else out.push(`width ${val(w, 2, 4)} λ: over the cutoff λ/2, ${slot(Math.floor(2 * w), 2)} TM mode${Math.floor(2 * w) > 1 ? 's' : ''} can travel`);
   }
   if ((state.shape === 'crystal' || state.shape === 'pcbend') && src) out.push(`lattice a = ${val(state.p)} λ: a/λ = <b>${val(state.p)}</b> (rods of n = ${val(state.n, 2, 4)}, radius a/5)`);
-  if (pred.cone) out.push(`nβ = ${val(pred.cone.n * src.beta)} > 1: Cherenkov cone at <b>θ = ${ang(theory.cherenkovAngle(pred.cone.n, src.beta))}</b> to the motion, cos θ = 1/nβ (dashed)`);
+  if (pred.cone) out.push(`nβ = ${val(pred.cone.n * src.beta)} > 1: the wavefronts pile up on a V (dashed) at ${ang(pred.cone.alpha)} to the path, sin α = 1/nβ; the Cherenkov light leaves across it at <b>θ = ${ang(theory.cherenkovAngle(pred.cone.n, src.beta))}</b> to the motion, cos θ = 1/nβ (arrows)`);
   else if (src.type === 'moving' && source) {
     const [x, y] = source.position(sim.t), n = scene.materialAt(x, y).n;
     out.push(`nβ = ${val(n * src.beta)} < 1: slower than light in this medium, no cone`);
@@ -850,7 +887,7 @@ const polSeg = segmented([
   { value: 'TM', label: 'TM: Ez', title: 'E along z, out of the picture (s polarisation)' },
   { value: 'TE', label: 'TE: Hz', title: 'H along z, E in the picture (p polarisation: has a Brewster angle)' },
 ], state.mode, (v) => { state.mode = v; build(); hashSoon(); kick(); }, { label: 'Polarisation' });
-const flowToggle = toggle('Energy flow', state.flow, (on) => { state.flow = on; makeMonitors(); hashSoon(); kick(); }, 'Arrows: the Poynting vector E × H averaged over a period');
+const flowToggle = toggle('Energy flow', state.flow, (on) => { state.flow = on; makeMonitors(); hashSoon(); kick(); }, 'Arrows: the Poynting vector E × H averaged over a period (their length grows as the square root of its size, so that weak flows show)');
 const probeToggle = toggle('Probe', !!state.probe, (on) => { state.probe = on ? { x: 0, y: 0 } : null; makeMonitors(); layout(); hashSoon(); kick(); }, 'The field at a point against time (and Q, when it rings down)');
 const meterButton = el('button', { type: 'button', title: 'A line that measures the power crossing it (drag its ends)', onclick: () => {
   if (state.meters.length >= 2) state.meters.length = 0;
@@ -994,7 +1031,9 @@ function syncControls() {
 const setups = {
   circles: () => go({ src: { type: 'point', x: -2, y: 0 } }),
   snell: () => go({ W: 14, H: 10, ppw: 30, shape: 'surface', src: aimed(-60, 4, 0, 0, { width: 1.2 }) }),
-  tir: () => go({ W: 14, H: 10, ppw: 30, shape: 'surface', src: aimed(40, 5, 0, 0, { width: 1 }) }),
+  // 55° from the normal, 13° beyond the critical angle, so that little of the beam's spread of
+  // angles (±5° for this width) gets out; meter A, above the surface, counts what does.
+  tir: () => go({ W: 14, H: 10, ppw: 30, shape: 'surface', src: aimed(35, 4.7, 0, 0, { width: 1.2 }), meters: [across(0, 1.5, 90, 6.8)] }),
   // The reflected beam leaves the gap at -40°; the transmitted one goes on at 40° above it.
   ftir: () => go({ W: 14, H: 11, ppw: 30, shape: 'gap', p: 0.3, src: aimed(40, 5, 0, -0.15, { width: 1.2 }),
     meters: [across(0, 1.4, 90, 6.4), across(3.5 * Math.cos(40 * deg), -0.15 - 3.5 * Math.sin(40 * deg), -40, 2.5)] }),

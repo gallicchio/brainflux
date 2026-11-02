@@ -180,6 +180,11 @@ def far_field(b):
     p8, e8 = peaks[8]; p4, e4 = peaks[4]
     print(f'      far: peak |E_acc| {p8:.3f} at 8 units ({p8 / e8:.1f} times |E_vel| {e8:.4f}); {p4:.3f} at 4 ({p4 / e4:.1f} times {e4:.4f})')
     check(1.8 < p4 / p8 < 2.2 and 3.8 < e4 / e8 < 4.2, f'the radiation field falls as 1/R ({p4 / p8:.2f}x from 8 to 4 units), Coulomb\'s as 1/R² ({e4 / e8:.2f}x)')
+    # Thomson's estimate, as the help gives it: the smooth stop's largest deceleration is
+    # a = 1.5 v/tau = 1.5 (0.5 c)/0.1 s, and E_acc = a/(c^2 R) straight above it.
+    c = b.eval('__app.state.c'); thomson = 1.5 * 0.5 * c / 0.1 / (c * c * 8)
+    check(abs(p8 / thomson - 1) < 0.03 and abs(p8 - 0.118) < 0.0015 and abs(e8 - 1 / 64) < 2e-4,
+          f'8 units above the stop: peak |E_acc| {p8:.4f} (Thomson: a/c²R = {thomson:.4f}; the help: 0.118), |E_vel| {e8:.5f} (1/8² = 0.01563)')
 
 def typed(b):
     b.eval("__app.startMotion('typed')"); run_for(b, 0.5)
