@@ -88,7 +88,7 @@
   whichever point of the object it came from.  So each point of that plane is one direction, a spatial frequency
   $f_x=\sin\theta/\lambda$, and the plane holds the object's Fourier transform $T(f)$.  The
   light that goes straight through, the <em>zero order</em>, is focused to the middle.  The
-  lens's aperture is a circle there, of radius $\mathrm{NA}/\lambda$ (the numerical aperture
+  lens's aperture is a circle there, of radius $\mathrm{NA}/\lambda$ in frequency (the numerical aperture
   $\mathrm{NA}=n\sin\theta_\text{max}$, with $n$ the index between the lens and the object):
   light outside it never reaches the image.  The tube lens transforms back:
   $$E(x,y)=\mathcal{F}^{-1}\left[P(f)\,T(f)\right],\qquad I=|E|^2,$$
@@ -108,7 +108,7 @@
     and numbered: white ones get through the aperture, red ones are blocked; the sketch shows
     the same).  At NA 0.35 only the zero order gets through, and the image is an even grey:
     $I=0.250$ everywhere, the square of the grating's average transmission, ½.  The light is
-    all there; the grating is not.  Slide the NA past $\lambda/d=0.43$: the $\pm1$ orders come
+    all there; the grating is not.  Slide the NA (panel 3) past $\lambda/d=0.43$: the $\pm1$ orders come
     in and the grating appears, as a sinusoid of period $d$.  Past $3\lambda/d=1.29$ the
     $\pm3$ orders come in too (equal bars and gaps have no even orders) and the bars get
     sharper edges.  This is Abbe's rule (1873): with the light along the axis, a period shows
@@ -129,7 +129,7 @@
     <h3>3. Oblique light doubles the resolution</h3>
     <p>A finer grating, $d=0.8~\mu\mathrm{m}$: its first orders, at
     $\sin\theta=\lambda/d=0.69$, are outside an NA 0.4 aperture, and light along the axis
-    shows nothing (set the tilt to 0 to see).  Here the light comes in tilted, at
+    shows nothing (set the tilt in panel 1 to 0 to see).  Here the light comes in tilted, at
     $\sin\theta=0.35$: every direction leaving the object tilts with it, so the whole pattern
     in the Fourier plane slides over.  The zero order moves to one side of the aperture and
     the $+1$ order to the other, both inside, and the two make fringes of period $d$.  Drag in
@@ -232,8 +232,8 @@
     $e^{-ikx}$ order and leaves
     $$I\approx\left|1+\tfrac{i\epsilon}{2}e^{ikx}\right|^2\approx1-\epsilon\sin kx=1+\frac1k\frac{\partial\varphi}{\partial x}:$$
     where the phase rises towards the kept side (to the right, with the knife at 0°) the image
-    is brighter, where it falls darker.  The cells look lit from one side, in relief (Hoffman's modulation contrast
-    microscope, 1975, refines this for living cells).  Turn the knife's angle and the light
+    is brighter, where it falls darker.  The cells look lit from one side, in relief
+    (Hoffman's modulation contrast microscope, 1975, refines this for living cells).  Turn the knife's angle and the light
     swings round.  With the <em>Condenser</em> on, the knife also cuts the image of the light
     source, as in the schlieren cameras that photograph shock waves and hot air.</p>
   </article>
@@ -250,7 +250,8 @@
     <h3>12. Coherent or incoherent light</h3>
     <p>The bar target in coherent light at NA 0.5.  Periods finer than
     $\lambda/\mathrm{NA}=1.1~\mu\mathrm{m}$ should vanish, and from the 0.79 µm group on they
-    do: grey blocks, with 5% of the bars' contrast left.  The 1 µm group, just past the limit,
+    do: grey blocks (the 0.79 and 0.63 µm groups keep 5% and 4% of their bars' contrast).  The
+    1 µm group, just past the limit,
     keeps 44%: three bars are not an endless grating, and some of their spread of directions
     gets into the aperture.  Edges ring.  Beside a single straight edge the light overshoots
     by 19% (try <em>Edge</em>: $I$ peaks at 1.190); between close bars the ripples add, and

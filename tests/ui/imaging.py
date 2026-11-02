@@ -281,7 +281,7 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     setup(b, 'coherence')
     coh, g = b.eval('__app.stats().max'), b.eval(BAR_GROUPS)
     check(near(coh, 1.664, 3), f'bar target, coherent: I peaks at {coh:.4f}')
-    check(near(g[3], 0.44, 2) and g[4] < 0.055 and g[5] < 0.055,
+    check(near(g[3], 0.44, 2) and near(100 * g[4], 5, 0) and near(100 * g[5], 4, 0),
           f'coherent: the 1 um group keeps {100 * g[3]:.0f}% of its contrast, the 0.79 and 0.63 um groups {100 * g[4]:.1f}% and {100 * g[5]:.1f}%')
     put(b, illum='incoherent', fpView='otf')
     inc, g = b.eval('__app.stats().max'), b.eval(BAR_GROUPS)
@@ -298,7 +298,7 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     put(b, illum='condenser', condNA=0.25)
     part = b.eval('__app.stats().max')
     check(1.0 < part < edge, f'partially coherent (condenser NA 0.25): the edge overshoots less, to {part:.3f}')
-    quoted(b, 'coherence', '0.79', '5%', '44%', '19%', '1.190', '1.664', '0.55', '16.5%', '11.8%', '0.997', '1.27', '0.73')
+    quoted(b, 'coherence', '0.79', '5% and 4%', '44%', '19%', '1.190', '1.664', '0.55', '16.5%', '11.8%', '0.997', '1.27', '0.73')
 
     # 13. The Siemens star: resolved outside r = 18 lambda / (2 pi NA) only; defocus reverses contrast.
     setup(b, 'star')
