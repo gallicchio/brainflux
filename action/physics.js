@@ -233,12 +233,14 @@ export function energy(system, q, v, s) {
 
 /**
  * The Euler-Lagrange acceleration q'' = (L_q - L_vs - L_vq v) / L_vv, by central differences,
- * unless the system gives its own.
+ * unless the system gives its own.  The second and mixed derivatives take steps of 1e-4 (about
+ * the fourth root of the rounding error, the best for a second difference): with 1e-5 their
+ * rounding error was 1e-6 of L, enough to make the shooting miss true paths that exist.
  */
 export function acceleration(system, q, v, s) {
   if (system.accel) return system.accel(q, v, s);
   const n = q.length, L = system.L;
-  const dq = step(q), dv = step(v), ds = step(s);
+  const dq = step(q, EPS2), dv = step(v, EPS2), ds = step(s, EPS2);
   const add = (arr, d, sgn) => { const o = new Float64Array(n); for (let i = 0; i < n; i++) o[i] = arr[i] + sgn * d[i]; return o; };
   const qp = add(q, dq, 1), qm = add(q, dq, -1), vp = add(v, dv, 1), vm = add(v, dv, -1), sp = add(s, ds, 1), sm = add(s, ds, -1);
   const L0 = L(q, v, s);
@@ -344,10 +346,14 @@ export function truePaths(system, s0, q0, s1, q1, { vmax = 20, scan = 241, steps
     }
   }
   const out = [];
+  // A root must land: a sign change across a jump (where the trajectories fly off) bisects to
+  // the jump and misses by its size.  The tolerance is far above the rounding of a numerical
+  // acceleration, which a tolerance of 1e-6 was not.
+  const tol = 1e-5 * (1 + Math.abs(q0) + Math.abs(q1));
   for (const r of roots.slice(0, 3 * max)) {
     const tr = shootAll(system, s0, s1, q0, [r], steps, true);
     const q = Float64Array.from(tr.qs, (a) => a[0]), v = Float64Array.from(tr.vs, (a) => a[0]);
-    if (Math.abs(q[q.length - 1] - q1) > 1e-6 * (1 + Math.abs(q1))) continue;
+    if (!(Math.abs(q[q.length - 1] - q1) <= tol)) continue;
     const s = Float64Array.from(q, (_, j) => s0 + ((s1 - s0) * j) / steps);
     // The action along it, by Simpson's rule on the RK4 samples (steps is even).
     const L = system.L(q, v, s), h = (s1 - s0) / steps;
@@ -428,7 +434,10 @@ export function closedOrbits(system, s0, q0, s1, { qrange = [-4, 4], scan = 241,
  */
 export function morseIndex(system, s, q, v) {
   const n = s.length - 1, s0 = s[0], s1 = s[n];
-  const d = 1e-6 * (1 + Math.abs(v[0]));
+  // Far enough apart that the difference stands well clear of the rounding in a numerical
+  // Euler-Lagrange acceleration (a separation of 2e-6 gave the damped oscillator a conjugate
+  // point it does not have), close enough to stay linear.
+  const d = 1e-4 * (1 + Math.abs(v[0]));
   const pair = shootAll(system, s0, s1, q[0], [v[0] - d, v[0] + d], n, true);
   let zeros = 0, prev = 0;
   for (let j = 1; j < n; j++) {

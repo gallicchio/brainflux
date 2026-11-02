@@ -147,15 +147,22 @@ export const SYSTEMS = [
 export function typedSystem(kind, expr, params, m = 1) {
   const env = (q, v, s) => ({ x: q, v, t: s, m, ...params });
   if (kind === 'V') {
+    const V = (q, s) => expr.evaluate(env(q, q, s), q.length).re;
     return {
       L: (q, v, s) => {
-        const V = expr.evaluate(env(q, v, s), q.length).re;
-        const out = new Float64Array(q.length);
-        for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - V[i];
+        const Vq = V(q, s), out = new Float64Array(q.length);
+        for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - Vq[i];
         return out;
+      },
+      // Newton: m x'' = -dV/dx, by a central difference of V alone.
+      accel: (q, v, s) => {
+        const n = q.length, h = Float64Array.from(q, (x) => 1e-5 * (1 + Math.abs(x)));
+        const a = V(Float64Array.from(q, (x, i) => x + h[i]), s), b = V(Float64Array.from(q, (x, i) => x - h[i]), s);
+        return Float64Array.from({ length: n }, (_, i) => -(a[i] - b[i]) / (2 * h[i] * m));
       },
       p: (q, v) => Float64Array.from(v, (u) => m * u),
       vOfP: (q, p) => Float64Array.from(p, (x) => x / m),
+      kinetic: (q, v) => Float64Array.from(v, (u) => 0.5 * m * u * u),
     };
   }
   return { L: (q, v, s) => expr.evaluate(env(q, v, s), q.length).re };

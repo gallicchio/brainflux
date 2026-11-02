@@ -312,6 +312,27 @@ test('a typed Lagrangian: exp(gamma t)(v^2/2 - x^2/2) is a damped oscillator', (
   assert(worst < 1e-5, `worst ${worst}`);
 });
 
+test('typed Lagrangians: the true path is found and classified, even near a conjugate point', () => {
+  // With L differenced numerically, rounding once made the shooting miss the damped oscillator's
+  // path at T = 3 and the oscillator typed as V = x^2/2 for T near pi, and gave the damped one
+  // a conjugate point it does not have (index 1 at T = 3).
+  const gamma = 0.3, w = Math.sqrt(1 - gamma * gamma / 4), tc = Math.PI / w;
+  const damped = typedSystem('L', parseTyped('L', 'exp(gamma t) (v^2/2 - x^2/2)'), { gamma });
+  for (const T of [3, 3.3, 6]) {
+    const tp = truePaths(damped, 0, 1, T, 0, { vmax: 10 });
+    assert(tp.length === 1, `damped, T=${T}: ${tp.length} paths`);
+    close(tp[0].v0, -gamma / 2 - w * Math.cos(w * T) / Math.sin(w * T), 1e-6, `damped, T=${T}: v0`);
+    assert(tp[0].index === (T < tc ? 0 : 1), `damped, T=${T}: index ${tp[0].index} (conjugate point at ${tc.toFixed(4)})`);
+  }
+  const typedOsc = typedSystem('V', parseTyped('V', 'x^2/2'), {}, 1), osc = sys('harmonic');
+  for (const T of [2.9, 3, 3.25, 3.5]) {
+    const tp = truePaths(typedOsc, 0, 1, T, 0.5, { vmax: 20 });
+    assert(tp.length === 1, `typed x^2/2, T=${T}: ${tp.length} paths`);
+    close(tp[0].S, osc.d.exact(osc.params, 0, 1, T, 0.5), 1e-6 * (1 + Math.abs(tp[0].S)), `typed x^2/2, T=${T}`);
+    assert(tp[0].index === Math.floor(T / Math.PI), `typed x^2/2, T=${T}: index ${tp[0].index}`);
+  }
+});
+
 test('the knot gradient points downhill', () => {
   const { L } = sys('gravity');
   const quad = quadrature(0, 2, 400);
