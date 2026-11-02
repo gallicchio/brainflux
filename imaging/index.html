@@ -19,6 +19,9 @@
 
 <main class="imaging">
   <section class="stage">
+    <div class="sketch-box">
+      <canvas id="sketch" aria-label="The microscope from the side: the light, the object, the objective lens, its Fourier plane with the aperture and any filter, the tube lens and the image, with the light that goes straight through (the zero order) and the light the object diffracts"></canvas>
+    </div>
     <div class="trio">
       <div class="side" id="side-obj">
         <div class="side-head"><h2>Object</h2><span class="small muted" id="obj-sub">t = a e<sup>iφ</sup></span><span class="spacer"></span><div id="obj-view"></div></div>
@@ -30,7 +33,7 @@
       </div>
       <div class="side" id="side-fp">
         <div class="side-head"><h2>Fourier plane</h2><span class="spacer"></span><div id="fp-view" class="row"></div></div>
-        <div class="sq"><canvas id="fourier" aria-label="The Fourier plane: the light from the object, sorted by direction, with the pupil drawn over it. Paint on the pupil, or drag the light with the Tilt tool."></canvas></div>
+        <div class="sq"><canvas id="fourier" aria-label="The Fourier plane, the objective's back focal plane: the light from the object sorted by direction, with the pupil drawn over it. Paint on the pupil, or drag the light with the Tilt tool."></canvas></div>
         <div class="foot">
           <div class="tools" id="fp-tools"></div>
           <div class="readout small mono" id="fp-read">&nbsp;</div>
@@ -52,24 +55,24 @@
   </section>
 
   <aside class="controls">
-    <div class="panel">
-      <div class="label">Object</div>
+    <div class="panel" id="p-light">
+      <div class="label"><span class="step">1</span>Light</div>
+      <div id="illum" class="stack"></div>
+    </div>
+    <div class="panel" id="p-object">
+      <div class="label"><span class="step">2</span>Object</div>
       <div id="presets" class="button-grid"></div>
       <div id="preset-params" class="stack"></div>
       <div id="enc-box" class="stack"></div>
     </div>
-    <div class="panel">
-      <div class="label">Objective</div>
+    <div class="panel" id="p-objective">
+      <div class="label"><span class="step">3</span>Objective lens</div>
       <div id="objective" class="stack"></div>
       <div id="limit" class="small"></div>
     </div>
-    <div class="panel">
-      <div class="label">In the Fourier plane</div>
+    <div class="panel" id="p-filter">
+      <div class="label"><span class="step">4</span>Fourier plane: what to put in it</div>
       <div id="filter" class="stack"></div>
-    </div>
-    <div class="panel">
-      <div class="label">Illumination</div>
-      <div id="illum" class="stack"></div>
     </div>
   </aside>
 </main>
