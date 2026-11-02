@@ -931,7 +931,11 @@ cavity test drew random cavities and sometimes asked rays just outside the stabl
 off faster than physics lets them; it is seeded now and asks only where the eigenvalue says
 they can.  Thumbnails and the landing-page cards are remade from the new openings.
 
-**Tests.**  The unit tests pass in Chromium (315, up from 293); the scripted run of every demo is in progress.
+**Tests.**  `tools/test_all.sh` passes: 315 unit tests in Chromium (293 before), and the
+scripted run of all 19 demos, which now checks every number the revised help texts quote.
+(Firefox isn't installed in this session, so the second unit-test run was skipped.)  The UI
+tests of the revised demos step their simulations through `__app` instead of waiting on the
+clock, so they pass on a loaded machine.
 
 **Still to do.**  Still pictures for each experiment (the old "key frames" rule; no demo has
 them yet); a hollow-cone condenser with a phase ring in the imaging demo (the physics module
