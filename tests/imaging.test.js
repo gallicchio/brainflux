@@ -1,6 +1,6 @@
 import { test, assert, close } from './harness.js';
 import { spectrum, pupil, shifted, coherentField, coherentImage, intensity, otf, intensitySpectrum, incoherentImage,
-  sourcePoints, PartialImage, stats, throughput, pxPerNA } from '../imaging/optics.js';
+  sourcePoints, PartialImage, stats, throughput, pxPerNA, sideView } from '../imaging/optics.js';
 import { grating, snapPeriod, encode, twoPoints, edge, siemensStar, barTarget, cells, diatom } from '../imaging/objects.js';
 
 const sumSq = (A) => { let s = 0; for (let o = 0; o < A.re.length; o++) s += A.re[o] ** 2 + A.im[o] ** 2; return s; };
@@ -266,4 +266,22 @@ test('tilting the light shifts the spectrum: the zero order moves to s', () => {
   // and the image of clear glass is still uniform (a tilted plane wave), I = 1.
   const I = intensity(coherentField(T, pupil(n, { cut: 8 }), n, 3, 5));
   assert(Math.abs(stats(I).max - 1) < 1e-12 && Math.abs(stats(I).min - 1) < 1e-12, 'uniform');
+});
+
+test('the side view: a grating sends its light into its orders only, which the pupil passes or blocks', () => {
+  const n = 64, m = 8, t = encode(grating(n, m, 'bars'), 'amplitude', 1, 0), T = spectrum(t.re, t.im, n);
+  const P = pupil(n, { cut: 12, stop: 0 });
+  const v = sideView(T, P, n, 0);
+  let sum = v.zero.w, off = 0;
+  for (let b = -n / 2; b < n / 2; b++) { sum += v.w[b + n / 2]; if (b % m) off += v.w[b + n / 2]; }
+  close(sum, 1, 1e-12, 'all the light is in some direction');
+  assert(off < 1e-20, `light between the orders ${off}`);
+  close(v.zero.w, T.re[(n / 2) * n + n / 2] ** 2 / sumSq(t), 1e-12, 'the zero order apart');
+  close(v.w[n / 2 + m], (T.re[(n / 2) * n + n / 2 + m] ** 2 + T.im[(n / 2) * n + n / 2 + m] ** 2) / sumSq(t), 1e-12, 'the first order');
+  assert(v.zero.amp === 0 && v.amp[n / 2 + m] === 1 && v.amp[n / 2 - m] === 1 && v.amp[n / 2 + 2 * m] === 0, 'stop on the zero order, first orders in, second out');
+  // Tilted light, cut along the tilt (to the left): the zero order lands at b = 5, and the +1
+  // order, at u = -5 + 8, lands on the other side, at b = -3.
+  const Ts = shifted(T, n, -5, 0), w = sideView(Ts, P, n, Math.PI, -5, 0);
+  assert(w.zero.b === 5 && w.w[n / 2 - 3] > 0.05 && w.w[n / 2 + 13] > 0.05 && w.w[n / 2 + 5] < 1e-20, `zero at ${w.zero.b}`);
+  return `orders at multiples of ${m}; the rest ${off.toExponential(1)}`;
 });

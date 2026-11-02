@@ -220,6 +220,46 @@ export class PartialImage {
   run() { while (!this.step(64)); return this.image; }
 }
 
+/**
+ * The light seen from the side, for the sketch of the microscope: a cut through the Fourier
+ * plane along the line through f = 0 in the direction (cos a, sin a), in steps of one frequency
+ * pixel.  Bin b is the direction sin θ = b / k along that line (k: frequency pixels per unit NA).
+ *   w[b + n/2]      the share of the light (of sum |Ts|^2) going that way: every frequency whose
+ *                   component along the line rounds to b, whatever its component across it,
+ *                   less the zero order, which is counted apart
+ *   amp, phase      the pupil where the line crosses bin b (nearest pixel)
+ *   zero            { b, w, amp, phase }: the zero order, at the pixel (sx, sy) where the
+ *                   illumination lands, its share of the light, and the pupil there
+ * Ts is the spectrum as lit (tilted by (sx, sy)), P the pupil.
+ */
+export function sideView(Ts, P, n, a = 0, sx = 0, sy = 0) {
+  const c = n / 2, ca = Math.cos(a), sa = Math.sin(a);
+  const w = new Float64Array(n), amp = new Float64Array(n), phase = new Float64Array(n);
+  let total = 0;
+  for (let j = 0; j < n; j++) {
+    const v = c - j;
+    for (let i = 0; i < n; i++) {
+      const o = j * n + i, p = Ts.re[o] * Ts.re[o] + Ts.im[o] * Ts.im[o];
+      total += p;
+      const b = Math.round((i - c) * ca + v * sa);
+      if (b >= -c && b < c) w[b + c] += p;
+    }
+  }
+  const wrap = (x) => ((x % n) + n) % n;
+  const at = (i, j) => wrap(Math.round(j)) * n + wrap(Math.round(i));
+  for (let b = -c; b < c; b++) {
+    const o = at(c + b * ca, c - b * sa);
+    amp[b + c] = Math.hypot(P.re[o], P.im[o]);
+    phase[b + c] = Math.atan2(P.im[o], P.re[o]);
+  }
+  const oz = at(c + sx, c - sy), pz = Ts.re[oz] * Ts.re[oz] + Ts.im[oz] * Ts.im[oz];
+  const bz = Math.round(sx * ca + sy * sa);
+  if (bz >= -c && bz < c) w[bz + c] = Math.max(0, w[bz + c] - pz);
+  const norm = total > 0 ? 1 / total : 0;
+  for (let b = 0; b < n; b++) w[b] *= norm;
+  return { w, amp, phase, zero: { b: bz, w: pz * norm, amp: Math.hypot(P.re[oz], P.im[oz]), phase: Math.atan2(P.im[oz], P.re[oz]) } };
+}
+
 /** Minimum, maximum, mean and the contrast (max - min) / (max + min) of an image (or part). */
 export function stats(I, from = 0, to = I.length) {
   let lo = Infinity, hi = -Infinity, s = 0;
