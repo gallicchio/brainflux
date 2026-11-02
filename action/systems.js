@@ -106,7 +106,7 @@ export const SYSTEMS = [
   },
   {
     id: 'brachistochrone', label: 'Brachistochrone', flip: true, singularStart: true, lockStart: true,
-    s: 'x', q: 'depth', s0: 0, s1: Math.PI, q0: 0, q1: 2, qrange: [-0.4, 3], knots: 8, vmax: 50,
+    s: 'x', q: 'y', qlabel: 'depth y', s0: 0, s1: Math.PI, q0: 0, q1: 2, qrange: [-0.4, 3], knots: 8, vmax: 50,
     params: { g: { value: 1, min: 0.2, max: 5 } },
     formula: 'L = \\frac{\\sqrt{1+y\'^2}}{\\sqrt{2gy}}',
     make: ({ g }) => ({

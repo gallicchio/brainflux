@@ -762,7 +762,7 @@ function drawPath() {
     if ((focused && state.sel === k) || k === pk) { ctx.strokeStyle = k === pk ? c.good : c.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 12, 0, 2 * Math.PI); ctx.stroke(); }
   }
   ctx.restore();
-  f.axes({ xlabel: d.vertical ? d.q : d.s, ylabel: d.vertical ? d.s : d.q });
+  f.axes({ xlabel: d.vertical ? d.q : d.s, ylabel: d.vertical ? d.s : d.qlabel || d.q });
   const under = $('#path-key .under');
   if (under) under.textContent = state.onTrue && current && ref && Math.abs(current.S - ref.S) < 1e-3 * (1 + Math.abs(ref.S)) ? ' (under yours)' : '';
 }
@@ -1135,7 +1135,7 @@ function drawPhase(ctx, width, height, c) {
     if (Number.isFinite(ph)) { ctx.strokeStyle = c.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(f.X(h.q), f.Y(ph), 5, 0, 2 * Math.PI); ctx.stroke(); }
   }
   ctx.restore();
-  f.axes({ xlabel: d.q, ylabel: 'p' });
+  f.axes({ xlabel: d.qlabel || d.q, ylabel: 'p' });
 }
 
 function drawEnergy(ctx, width, height, c) {
