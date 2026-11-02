@@ -382,5 +382,13 @@ test('Feynman\'s arrows over the heights of one knot add up to the Fresnel integ
   const p = st.path.withKnots(q), r = knotPhasors(st.L, p, st.quad, 2, -5, 15, 0.5);
   const { g, H } = knotDerivatives(st.L, p, st.quad, [2]);
   close(r.hStar, q[2] - g[0] / H[0][0], 1e-6, 'h* off the true path');
+  // The twin's middle event, moved sideways between two at rest 2.5 apart in time: S(h) =
+  // -2 sqrt(2.5^2 - h^2) - 5, undefined beyond the light cone; the quarter-turn zone is where
+  // 2 (2.5 - sqrt(6.25 - h^2)) < pi hbar / 2.
+  const tw = sys('twin'), ts = [0, 2.5, 5, 7.5, 10], pt = new Path(0, 10, [0, 0, 0, 0, 0], 'segments', { s: ts });
+  const rt = knotPhasors(tw.L, pt, knotQuadrature(ts), 2, -7, 7, 1);
+  close(rt.hStar, 0, 1e-9, 'twin: h*');
+  close(rt.zone[1], Math.sqrt(6.25 - (2.5 - Math.PI / 4) ** 2), 0.04, 'twin: zone');
+  assert(rt.x.every(Number.isFinite) && rt.y.every(Number.isFinite), 'twin: heights beyond the light cone add nothing');
   return notes.join('; ');
 });

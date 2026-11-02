@@ -279,6 +279,7 @@ function setKey() {
  */
 function setSystem(d, { knots, T, params, ends = 'fixed' } = {}) {
   setRolling(false);
+  stopMorph();
   state.sys = d;
   for (const [id, b] of Object.entries(sysButtons)) b.setAttribute('aria-pressed', String(id === d.id));
   state.params = Object.fromEntries(Object.entries(d.params).map(([k, v]) => [k, v.value]));
@@ -383,6 +384,7 @@ $('#knot-box').append(knotSlider);
 function setKnotCount(n) {
   if (n === state.knots.length) return;
   setRolling(false);
+  stopMorph();
   if (state.onTrue && ref) {
     state.knots = new Float64Array(n);
     snapTo(ref);
@@ -423,39 +425,64 @@ function setEnds(v) {
   go(d.id, { ends: v, T, knots, mode: state.mode, params: { ...state.params }, keepShow: true, view: v === 'periodic' ? 'phase' : state.view });
 }
 
-/** A change made by a button: the path leaves the true path, the record gets a tagged point. */
-function changed(tag) {
+/**
+ * A change made by a button, shown as it happens: the knots move from where they are to
+ * (knots, times) over a dozen frames, every frame a point in the record (the first one tagged),
+ * so you see the path bend and its action climb.  after: what to do once there.
+ */
+let morph = null;
+const MORPH_FRAMES = 12;
+function morphTo(knots, times, tag, after = null) {
+  setRolling(false);
   state.onTrue = false;
-  evaluate(); record(tag); regrid(); draw();
+  morph = { q0: Float64Array.from(state.knots), s0: Float64Array.from(state.times), q1: Float64Array.from(knots), s1: Float64Array.from(times), frame: 0, tag, after };
+  requestAnimationFrame(morphStep);
 }
+function morphStep() {
+  const m = morph;
+  if (!m) return;
+  m.frame++;
+  const u = Math.min(1, m.frame / MORPH_FRAMES), e = 0.5 - 0.5 * Math.cos(Math.PI * u);
+  state.knots = Float64Array.from(m.q0, (a, i) => a + (m.q1[i] - a) * e);
+  state.times = Float64Array.from(m.s0, (a, i) => a + (m.s1[i] - a) * e);
+  if (u >= 1) { state.knots = m.q1; state.times = m.s1; morph = null; m.after?.(); }
+  evaluate(); record(m.frame === 1 ? m.tag : null);
+  if (!morph) regrid();
+  draw();
+  if (morph) requestAnimationFrame(morphStep);
+}
+/** Stop a change half-way (a knot was grabbed). */
+function stopMorph() { morph = null; }
 
 function straight() {
-  setRolling(false);
   const n = state.knots.length;
-  state.knots = Float64Array.from(state.times, (s) => state.q0 + ((state.q1 - state.q0) * (s - state.s0)) / (state.s1 - state.s0));
-  if (periodic()) state.knots.fill(state.q0);
-  state.knots[n - 1] = state.q1;
-  changed('straight');
+  const q = Float64Array.from(state.times, (s) => state.q0 + ((state.q1 - state.q0) * (s - state.s0)) / (state.s1 - state.s0));
+  if (periodic()) q.fill(state.q0);
+  q[n - 1] = state.q1;
+  morphTo(q, state.times, 'straight');
 }
 $('#straight').addEventListener('click', straight);
 
-function backToTrue() {
+/** Put the path back on the true path t (by default the one it was on), moving there. */
+function backToTrue(t = ref || truths[0]) {
   setRolling(false);
-  if (periodic() && state.sys.family && !truths.length) return;
-  const t = ref || truths[0];
-  if (!t) return;
+  if (!t || (periodic() && state.sys.family && !truths.length)) return;
+  // Where snapTo would put it: worked out, then the path moved there.
+  const q = state.knots, s = state.times, q0 = state.q0, q1 = state.q1;
   snapTo(t);
-  evaluate(); record('true'); draw();
+  const target = [state.knots, state.times];
+  state.knots = q; state.times = s; state.q0 = q0; state.q1 = q1;
+  if (periodic()) { state.q0 = state.q1 = target[0][0]; }
+  morphTo(target[0], target[1], 'true', () => { state.onTrue = true; ref = t; showTruthList(); });
 }
-$('#reset').addEventListener('click', backToTrue);
+$('#reset').addEventListener('click', () => backToTrue());
 
 /** Bend the path by half a sine wave (a whole one for a loop): sign +1 up the screen (or right). */
 function bend(sign) {
-  setRolling(false);
   const d = state.sys, [qlo, qhi] = d.qrange, a = 0.12 * (qhi - qlo) * sign * (d.flip ? -1 : 1), T = state.s1 - state.s0;
-  const k = periodic() ? 2 : 1;
-  state.knots = Float64Array.from(state.knots, (q, i) => q + a * Math.sin((k * Math.PI * (state.times[i] - state.s0)) / T));
-  changed(sign > 0 ? (d.vertical ? 'bend →' : 'bend ↑') : (d.vertical ? 'bend ←' : 'bend ↓'));
+  const k = periodic() ? 2 : 1, base = morph ? morph.q1 : state.knots, times = morph ? morph.s1 : state.times;
+  const q = Float64Array.from(base, (x, i) => x + a * Math.sin((k * Math.PI * (times[i] - state.s0)) / T));
+  morphTo(q, times, sign > 0 ? (d.vertical ? 'bend →' : 'bend ↑') : (d.vertical ? 'bend ←' : 'bend ↓'));
 }
 $('#bend-up').addEventListener('click', () => bend(1));
 $('#bend-down').addEventListener('click', () => bend(-1));
@@ -465,13 +492,11 @@ $('#bend-down').addEventListener('click', () => bend(-1));
  * places, so the path passes the same places at the wrong times.  (c π/T < 1 keeps the order.)
  */
 function rush() {
-  setRolling(false);
-  const T = state.s1 - state.s0, c = 0.12 * T, n = state.times.length, g = gap();
-  const t = Float64Array.from(state.times, (s) => s - c * Math.sin((Math.PI * (s - state.s0)) / T));
+  const T = state.s1 - state.s0, c = 0.12 * T, n = state.times.length, g = gap(), from = morph ? morph.s1 : state.times;
+  const t = Float64Array.from(from, (s) => s - c * Math.sin((Math.PI * (s - state.s0)) / T));
   t[0] = state.s0; t[n - 1] = state.s1;
   for (let k = 1; k < n - 1; k++) t[k] = clamp(t[k], t[k - 1] + g, state.s1 - (n - 1 - k) * g);
-  state.times = t;
-  changed('rush');
+  morphTo(morph ? morph.q1 : state.knots, t, 'rush');
 }
 $('#rush').addEventListener('click', rush);
 
@@ -481,7 +506,7 @@ function setRolling(on) {
   const was = state.rolling;
   state.rolling = on;
   rollButton.setAttribute('aria-pressed', String(on));
-  if (on && !was) { rollFrames = 0; rollLog = []; record('roll'); requestAnimationFrame(roll); }
+  if (on && !was) { stopMorph(); rollFrames = 0; rollLog = []; record('roll'); requestAnimationFrame(roll); }
 }
 
 /**
@@ -613,7 +638,7 @@ function showTruthList() {
   truths.forEach((t, i) => {
     const kind = t.closed ? 'closed orbit' : t.index === 0 ? 'a minimum' : `a saddle, index ${t.index}`;
     const way = t.closed && !t.family && truths.length > 1 && Math.abs(t.v0) > 1e-9 ? (t.v0 > 0 ? ', moving up first' : ', moving down first') : '';
-    box.append(el('button', { type: 'button', class: 'path', title: 'Put your path on this true path', onclick: () => { setRolling(false); snapTo(t); evaluate(); record('true'); showTruthList(); draw(); } },
+    box.append(el('button', { type: 'button', class: 'path', title: 'Put your path on this true path', onclick: () => backToTrue(t) },
       el('span', { class: 'swatch', style: { borderColor: truthColor(i) } }),
       `${actionWord()} ${fmt(t.S, 5)} (${kind}${way})`, t === ref ? el('span', { class: 'mark' }, ' ◂ yours') : null));
   });
@@ -951,14 +976,14 @@ function drawRecord() {
   }
   // Where a button changed the path: a faint line and its name.
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  let lastX = -Infinity;
+  let lastRight = -Infinity;
   shown.forEach((h, i) => {
     if (!h.tag || h.tag === 'start') return;
     const x = f.X(i);
     ctx.strokeStyle = c.line; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, f.top); ctx.lineTo(Math.round(x) + 0.5, f.bottom); ctx.stroke();
-    const tw = ctx.measureText(h.tag).width;
-    if (x - lastX > tw + 8) { ctx.fillStyle = c.ink3; ctx.fillText(h.tag, clamp(x, f.left + tw / 2 + 3, f.right - tw / 2 - 3), f.top + 2); lastX = x; }
+    const tw = ctx.measureText(h.tag).width, cx = clamp(x, f.left + tw / 2 + 3, f.right - tw / 2 - 3);
+    if (cx - tw / 2 > lastRight + 6) { ctx.fillStyle = c.ink3; ctx.fillText(h.tag, cx, f.top + 2); lastRight = cx + tw / 2; }
   });
   // Your paths.
   ctx.strokeStyle = c.accent; ctx.lineWidth = 1.8;
@@ -1299,6 +1324,7 @@ pathCanvas.addEventListener('pointerdown', (e) => {
   if (k < 0) return;
   const n = state.knots.length, end = k === 0 || k === n - 1;
   const [s, q] = fromPx(px, py);
+  stopMorph();
   dragging = { k, ds: state.times[k] - s, dq: state.knots[k] - q, x0: px, y0: py, axis: end ? 'place' : null, end };
   state.sel = k;
   hover = null;
@@ -1388,6 +1414,7 @@ pathCanvas.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'r' || e.key === 'R') { e.preventDefault(); backToTrue(); return; }
+  stopMorph();
   const dir = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
   if (!dir || !frame) return;
   e.preventDefault();
@@ -1459,7 +1486,7 @@ window.__app = {
   rollToEnd(max = 3000) { setRolling(true); for (let i = 0; i < max && rollStep(); i++); setRolling(false); draw(); return rollFrames; },
   get truths() { return truths; }, get ref() { return ref; }, get current() { return current; }, get history() { return history; },
   get frame() { return frame; }, get hover() { return hover; }, get phasor() { return phasor; }, get ranges() { return ranges; },
-  get idle() { return !frameDue && !truthPending && !dragging && !state.rolling; },
+  get idle() { return !frameDue && !truthPending && !dragging && !state.rolling && !morph; },
   toPx: (s, q) => toPx(s, q),
   ready: true,
 };

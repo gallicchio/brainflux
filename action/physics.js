@@ -644,9 +644,18 @@ export function knotPhasors(system, path, quad, k, lo, hi, hbar, { coarse = 81, 
     for (let j = 0; j < N; j++) sum += quad.w[j] * Lall[i * N + j];
     Sc[i] = Number.isFinite(sum) ? sum : NaN;
   }
-  // Slopes for the Hermite pieces: central differences, one-sided (second order) at the ends.
-  const slope = (i) => (i === 0 ? (-3 * Sc[0] + 4 * Sc[1] - Sc[2]) / (2 * dc)
-    : i === coarse - 1 ? (3 * Sc[i] - 4 * Sc[i - 1] + Sc[i - 2]) / (2 * dc) : (Sc[i + 1] - Sc[i - 1]) / (2 * dc));
+  // Slopes for the Hermite pieces: central differences, one-sided (second order) at the ends
+  // and beside heights where S is undefined (the twin's light cone, say).
+  const ok = (i) => i >= 0 && i < coarse && Number.isFinite(Sc[i]);
+  const slope = (i) => {
+    if (!ok(i)) return NaN;
+    if (ok(i - 1) && ok(i + 1)) return (Sc[i + 1] - Sc[i - 1]) / (2 * dc);
+    if (ok(i + 1) && ok(i + 2)) return (-3 * Sc[i] + 4 * Sc[i + 1] - Sc[i + 2]) / (2 * dc);
+    if (ok(i - 1) && ok(i - 2)) return (3 * Sc[i] - 4 * Sc[i - 1] + Sc[i - 2]) / (2 * dc);
+    if (ok(i + 1)) return (Sc[i + 1] - Sc[i]) / dc;
+    if (ok(i - 1)) return (Sc[i] - Sc[i - 1]) / dc;
+    return 0;
+  };
   const D = Float64Array.from({ length: coarse }, (_, i) => slope(i));
   const at = (x) => {
     const u = Math.min(coarse - 1 - 1e-12, Math.max(0, (x - lo) / dc)), i = Math.floor(u), t = u - i;
@@ -672,8 +681,8 @@ export function knotPhasors(system, path, quad, k, lo, hi, hbar, { coarse = 81, 
   const S0 = hStar === null ? at(Math.min(hi, Math.max(lo, qk))) : Sstar;
   // As many arrows as it takes for neighbours to turn by less than `turn`.
   let total = 0;
-  for (let i = 0; i + 1 < coarse; i++) if (Number.isFinite(Sc[i]) && Number.isFinite(Sc[i + 1])) total += Math.abs(Sc[i + 1] - Sc[i]) + 0.5 * dc * Math.abs(D[i + 1] - D[i]);
-  const M = Math.max(400, Math.min(maxArrows, Math.ceil(total / (hbar * turn))));
+  for (let i = 0; i + 1 < coarse; i++) if (ok(i) && ok(i + 1)) total += Math.abs(Sc[i + 1] - Sc[i]) + 0.5 * dc * Math.abs(D[i + 1] - D[i]);
+  const M = Math.max(400, Math.min(maxArrows, Math.ceil(total / (hbar * turn)) || 0));
   const dh = (hi - lo) / M, h = new Float64Array(M), S = new Float64Array(M), x = new Float64Array(M + 1), y = new Float64Array(M + 1);
   for (let j = 0; j < M; j++) {
     h[j] = lo + (j + 0.5) * dh;
