@@ -68,186 +68,256 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>Between two events, $(t_1,x_1)$ and $(t_2,x_2)$, a particle could move along any path
-  $x(t)$.  Each path has an <em>action</em>
-  $$S[x]=\int_{t_1}^{t_2}L(x,\dot x,t)\,dt,\qquad L=T-V,$$
-  and the path the particle actually takes makes $S$ stationary: every small change of the path
-  changes $S$ only at second order.  The condition is the Euler-Lagrange equation
-  $\frac{d}{dt}\frac{\partial L}{\partial\dot x}=\frac{\partial L}{\partial x}$, which for $L=\tfrac12
-  m\dot x^2-V$ is Newton's $m\ddot x=-V'(x)$.</p>
-  <p><strong>Drawing a path.</strong>  The path runs through <em>knots</em>, and each knot is an
-  event: a place and a time.  Drag a knot up or down to change where the particle is; drag it
-  sideways to change <em>when</em> it gets there, sooner or later.  The knots keep their order in
-  time, and the two end events keep their times (their places can move).  Press anywhere: the
-  nearest knot follows the pointer; hold Shift to move it in one direction only.  From the
-  keyboard, click the plot, choose a knot with <kbd>[</kbd> and <kbd>]</kbd> and move it with
-  the arrow keys.</p>
-  <p><strong>Setting the velocity.</strong>  The velocity is the slope of the path,
-  $\dot x=dx/dt$.  Point at the path and its tangent shows, with the velocity there; while you
-  drag a knot, the velocities just before and after it show.  To make the particle faster
-  between two knots, make the path between them steeper: move the later knot further, or
-  sooner.</p>
-  <p>Every experiment starts on the true path (dashed), so whatever you do shows what it
-  costs.  <em>Back to true path</em> returns to it; <em>Bend it</em> and <em>Straight line</em>
-  start you somewhere else.  Every change is added to the chart at the bottom left, so you can
-  see yourself going up or down.  A few knots can only approximate a curved true path, so the
-  path through them may have a little more action than the true one: the readout's $\Delta S$
-  says how much.  Sliding knots along the path can win a little of that back, but where the
-  true path is a minimum nothing gets below it.</p>
+  <p>Between two events, a start $(t_1,x_1)$ and an end <span class="nobr">$(t_2,x_2)$,</span> a particle could go along
+  any path <span class="nobr">$x(t)$.</span>  Every path has an <em>action</em>, the kinetic energy less the potential
+  energy added up along the way:
+  $$S[x]=\int_{t_1}^{t_2}L(x,\dot x,t)\,dt,\qquad L=\tfrac12 m\dot x^2-V(x).$$
+  The path the particle really takes makes $S$ <em>stationary</em>: change it a little, any
+  way you like, and $S$ changes only at second order.  That is the Euler-Lagrange equation,
+  <span class="nobr">$\frac{d}{dt}\frac{\partial L}{\partial\dot x}=\frac{\partial L}{\partial x}$,</span> which for this
+  $L$ is Newton's <span class="nobr">$m\ddot x=-dV/dx$.</span>  Here you draw the paths and see their action.</p>
+  <p><strong>Drawing a path.</strong>  The path runs through <em>knots</em> (○), and each knot
+  is an event: a place and a time.  Drag a knot up or down to change where the particle is
+  then; drag it sideways to change <em>when</em> it gets there.  A drag moves the knot one way
+  only, whichever way you start (hold Shift to move it both ways at once).  The end points (□)
+  keep their times; drag one up or down to change where the trip starts or ends, and the true
+  path follows.  The velocity is the slope: point at the path to read it, and while you drag a
+  knot the velocities just before and after it show.  From the keyboard: click the plot,
+  choose a knot with <kbd>[</kbd> and <kbd>]</kbd>, move it with the arrow keys, and press
+  <kbd>R</kbd> to go back to the true path.</p>
+  <p><strong>Reading it.</strong>  The table at the top compares your path with the true one:
+  the action <span class="nobr">$S$,</span> its kinetic part $\int\tfrac12 m\dot x^2\,dt$ and its potential part
+  <span class="nobr">$-\int V\,dt$,</span> and <span class="nobr">$\Delta S$,</span> yours less the true path's.  Beside the path, every change you
+  make adds a point to the record of <span class="nobr">$S$,</span> newest at the right, with the true path's $S$ dashed:
+  you see yourself going up, and coming back down.  The buttons under <em>Try a wrong
+  path</em> make the obvious wrong ones (<em>Rush, then dawdle</em> passes the same places at
+  the wrong times), and <em>Back to the true path</em> returns.  Under the path, choose what
+  else to see: the path in phase space, its energy, or Feynman's arrows.</p>
+  <p>Every experiment starts on the true path (dashed, under yours until you move it), so
+  whatever you do shows what it costs.  A few knots can only approximate a curved true path,
+  so the best path through them may have a little more action than the true one; the table
+  says when that is all the difference is.</p>
 
   <article class="exp" data-setup="find">
     <h3>1. Try to beat the straight line</h3>
-    <p>A free particle must get from $x=0$ to $x=4$ in 2 seconds.  It starts on the true path,
-    a straight line at constant speed, with $S=m(\Delta x)^2/2T=4$.  Try to beat it.  A detour
-    up or down costs action.  Drag a knot sideways: the particle reaches it early and must
-    dawdle afterwards, or the other way round, and fast-then-slow always costs more than
-    steady, because the kinetic energy goes as $v^2$.  Slide a knot along the line itself,
-    though, and hardly anything changes: it is the same path, through a different point of
-    it.</p>
+    <p>A free particle <span class="nobr">($V=0$, <span class="nobr">$m=1$)</span></span> must get from $x=0$ to $x=4$ in $T=2$ s.  The true path
+    is a straight line at constant speed, with <span class="nobr">$S=m(\Delta x)^2/2T=4$.</span>  Try to beat it.  Drag
+    the middle knot up from $x=2$ to <span class="nobr">$x=3$:</span> <span class="nobr">$S=8.13$.</span>  Drag it sideways instead, from $t=1$ to
+    <span class="nobr">$t=1.3$,</span> so the particle gets there late and must hurry afterwards: <span class="nobr">$S=8.08$.</span>
+    <em>Rush, then dawdle</em> gives 4.32.  Nothing gets below 4, because with $V=0$ the
+    action is <span class="nobr">$\tfrac12 m\int\dot x^2dt$,</span> and the average of $\dot x^2$ is never less than the
+    square of the average of <span class="nobr">$\dot x$,</span> which is fixed at <span class="nobr">$\Delta x/T$:</span> equal only at constant
+    speed.  Hold Shift and slide the knot along the line itself: $S$ hardly changes (it is 4.000
+    while the knot is on the line), as the path is the same line through a different point
+    of it.</p>
   </article>
 
   <article class="exp" data-setup="throw">
     <h3>2. Throw and catch</h3>
-    <p>A ball thrown up and caught at the same height two seconds later, on its parabola
-    $x=\tfrac12 gt(T-t)$, with $S=-mg^2T^3/24$.  The readout splits $S$ into $\int T\,dt$ and
-    $-\int V\,dt$.  Drag the top knot higher: you gain potential energy (lowering $S$) but pay
-    more in kinetic energy.  Lower: you save kinetic energy but lose more potential energy.
-    The parabola is the best compromise.</p>
+    <p>A ball thrown straight up and caught where it was thrown, $T=2$ s later, follows
+    <span class="nobr">$x=\tfrac12 gt(T-t)$,</span> with $S=-mg^2T^3/24=-33.333$ <span class="nobr">($m=1$, <span class="nobr">$g=10$,</span> <span class="nobr">$V=mgx$)</span></span>.  The table
+    splits it: $\int\tfrac12 m\dot x^2dt=33.333$ and <span class="nobr">$-\int V\,dt=-66.667$.</span>  Press
+    <em>Bend ↑</em>: the ball goes higher, and spends longer high up, so $-\int V\,dt$ falls
+    to <span class="nobr">$-85.04$,</span> which lowers <span class="nobr">$S$;</span> but it must move faster, and $\int\tfrac12 m\dot x^2dt$
+    rises to 54.27.  <span class="nobr">$S=-30.77$:</span> higher than the true path.  Go back and press
+    <em>Bend ↓</em>: now the kinetic part falls to 17.52, but the potential part rises to
+    <span class="nobr">$-48.29$,</span> and again <span class="nobr">$S=-30.77$.</span>  The potential part changed by <span class="nobr">$\mp18.38$,</span> and the kinetic
+    part by the same $\pm18.38$ plus 2.56 both times: the first-order changes cancel, and what
+    is left is second order, the same either way.  That is what stationary means.
+    <em>Straight line</em> keeps the ball on the ground: <span class="nobr">$S=0$.</span></p>
   </article>
 
   <article class="exp" data-setup="hints">
     <h3>3. Which way is downhill?</h3>
-    <p>The path starts bent this time.  The arrows show which way each knot should move to
-    lower the action fastest, up or down and sooner or later, the longest where the action is
-    steepest.  Follow them, or press <em>Roll downhill</em> and let every knot slide at once,
-    in place and in time: the path settles onto the true one.  The arrows are the
-    Euler-Lagrange equation:
-    $\delta S=\int\left(\frac{\partial L}{\partial x}-\frac{d}{dt}\frac{\partial L}{\partial\dot x}\right)\delta x\,dt$,
-    and where the bracket vanishes, no small change helps.  (Sideways, the slope of $S$ is the
-    jump in energy at the knot: see the next experiment.)</p>
+    <p>This time the path starts bent (<em>Bend ↓</em>, 7 knots, <span class="nobr">$S=-30.775$)</span>.  The arrows
+    show which way each knot should go to lower $S$ fastest, up or down and sooner or later.
+    Follow them by hand, or press <em>Roll downhill</em>: every knot slides up or down by its
+    own slope, and the roll stops, after 253 steps, on the true path again, <span class="nobr">$S=-33.333$.</span>  The arrows'
+    up-down part is the Euler-Lagrange equation itself:
+    $$\delta S=\int\left(\frac{\partial L}{\partial x}-\frac{d}{dt}\frac{\partial L}{\partial\dot x}\right)\delta x\,dt,$$
+    so a knot's slope is the bracket averaged around the knot, and where the bracket is zero
+    everywhere no small change helps.  Their sideways part, <span class="nobr">$\partial S/\partial t_k$,</span> is the
+    next experiment.  (<em>Roll downhill</em> leaves the knots' times alone: the path settles
+    on the true path through knots at the times they have.)</p>
   </article>
 
   <article class="exp" data-setup="energy">
     <h3>4. Only the true path conserves energy</h3>
-    <p>The panel at the bottom right plots the energy $E=\dot x\,\partial L/\partial\dot x-L$
-    along your path.  On the true path it is flat; drag a knot and it wanders.  Now choose
-    <em>Straight segments</em> and drag a knot sideways: the energy jumps at that knot, and the
-    slope of $S$ in the knot's time is exactly the jump, $\partial S/\partial t_k=E_{\text{after}}-E_{\text{before}}$
-    (with $V$ averaged over each segment).  So asking $S$ to be stationary as the knots move in
-    time is asking the energy not to jump: energy conservation, which the action principle
-    gives whenever $L$ does not depend on $t$ (Noether's theorem).</p>
+    <p>The view under the path plots the energy
+    $E=\dot x\,\partial L/\partial\dot x-L=\tfrac12 m\dot x^2+V$ along your path.  On the true
+    path it is flat, $E=50$ (the ball's $\tfrac12 m(gT/2)^2$ as it leaves the hand).  Drag a
+    knot and it wanders.  Now choose <em>Straight segments</em>: each segment has its own
+    constant speed and its own energy (with $V$ averaged along it), and the best segments
+    through these 6 knots all have <span class="nobr">$E=48.0$.</span>  Drag a knot sideways: the energies of the
+    segments on either side part, and the slope of $S$ with the knot's time is exactly the
+    jump,
+    $$\frac{\partial S}{\partial t_k}=E_{\text{after}}-E_{\text{before}},$$
+    because a segment of duration $h$ has <span class="nobr">$S=m\Delta x^2/2h-hV$,</span> and <span class="nobr">$\partial S/\partial h=-E$.</span>
+    So asking $S$ to be stationary as knots move in time is asking the energy not to jump:
+    energy conservation, which the action principle gives whenever $L$ does not depend on $t$
+    (Noether's theorem).</p>
   </article>
 
   <article class="exp" data-setup="phase">
     <h3>5. Phase space</h3>
-    <p>The middle panel draws your path in phase space, $(x,p)$ with
-    $p=\partial L/\partial\dot x$, over the contours of the Hamiltonian $H(x,p)$.  The true path
-    runs along one contour.  Drag a knot and yours crosses them: every crossing is energy gained
-    or lost with no force to supply it.  With its two ends at different places, the true path
-    covers only an arc of its contour.</p>
+    <p>A harmonic oscillator, <span class="nobr">$L=\tfrac12 m\dot x^2-\tfrac12 m\omega^2x^2$,</span> from $x=1$ to
+    $x=0.5$ in <span class="nobr">$T=2$:</span> <span class="nobr">$S=\frac{m\omega}{2\sin\omega T}\left[(x_1^2+x_2^2)\cos\omega T-2x_1x_2\right]=-0.8359$.</span>
+    The view draws your path in phase space, $(x,p)$ with <span class="nobr">$p=\partial L/\partial\dot x=m\dot x$,</span>
+    over the contours of <span class="nobr">$H=p^2/2m+\tfrac12 m\omega^2x^2$,</span> which are ellipses.  The true path
+    runs along one of them, and with its two ends at different places it covers only an arc.
+    Drag a knot and yours crosses the contours: its energy changes, though nothing acts to
+    change it.</p>
   </article>
 
   <article class="exp" data-setup="orbit">
     <h3>6. A closed orbit</h3>
-    <p>To close up in phase space a path must end where it began, $x(T)=x(0)$, with the same
-    momentum, after a whole period.  Choose <em>Periodic</em>: the first and last knots become
-    one point (drag either), and the path a loop, smooth across its ends.  Leaving that point
-    free, the action principle itself closes the loop: $\partial S/\partial x(0)=p(T)-p(0)$,
-    which vanishes on a true orbit.</p>
-    <p>Here a pendulum.  Its period grows with the swing, from $2\pi$ for small ones, so a trip
-    of $T=8$ picks the swing that takes 8, and the true orbit runs once round its contour, with
-    $S=\oint p\,d\theta-ET$, the area of the loop less $ET$.  Drag the start point: the true
-    orbit through it is the same loop, with the same action.  Shorter than $2\pi$, no swing
-    fits; longer than $4\pi$, one going round twice fits too.  A closed orbit is a saddle point
-    of $S$.  <em>Bend it</em> and $S$ rises, but nudge the start point and <em>Roll
-    downhill</em> carries the whole loop up to the top: balanced upside down, $\theta=\pi$, the
-    pendulum has the least action of all, $S=-T$.</p>
-    <p>For the harmonic oscillator every swing takes $2\pi/\omega$: there <em>Periodic</em>
-    fixes $T$ at one period, and every amplitude is a true orbit, all with $S=0$.  <em>Bend
-    it</em> and the loop grows, with $S$ unchanged.</p>
+    <p>To be a loop in phase space a path must end where it began, <span class="nobr">$x(T)=x(0)$,</span> with the same
+    momentum.  Choose <em>Periodic</em> (for the oscillator and the pendulum): the first and
+    last knots become one point (■, drag either), and the path is smooth across its ends.  Why
+    that is the true orbit's own condition: with the shared end $a=x(0)=x(T)$ free to move,
+    <span class="nobr">$\partial S/\partial a=p(T)-p(0)$,</span> so a path that is stationary in $a$ too has
+    <span class="nobr">$p(T)=p(0)$,</span> and closes up.</p>
+    <p>Here a pendulum, $L=\tfrac12\dot\theta^2+\cos\theta$ <span class="nobr">($m=g=\ell=1$)</span>, with <span class="nobr">$T=8$.</span>  A
+    swing takes longer the bigger it is, from $2\pi$ for small ones, so $T=8$ picks the swing
+    that takes 8: amplitude 1.86 rad (107°), energy <span class="nobr">$E=\tfrac12\dot\theta^2-\cos\theta=0.288$.</span>
+    The true orbit goes once round its contour, with
+    <span class="nobr">$S=\oint p\,d\theta-ET=6.689$.</span>  Two orbits pass through the start, moving up first or down
+    first.  Drag the start point to $\theta=0.3$ and go back to the true path: the orbit
+    through it is the same loop, started elsewhere, with the same <span class="nobr">$S$.</span>  Shorter than <span class="nobr">$2\pi$,</span> no
+    swing fits; longer than <span class="nobr">$4\pi$,</span> a swing of half the period, made twice, fits too.</p>
+    <p>A closed orbit is a saddle of <span class="nobr">$S$.</span>  <em>Bend ↑</em> and $S$ rises, to 8.358; but drag
+    the start point a little and press <em>Roll downhill</em>, and the whole loop climbs to
+    the top: balanced upside down, <span class="nobr">$\theta=\pi$,</span> the pendulum has the least action of all,
+    <span class="nobr">$S=-T=-8$,</span> since $L=\tfrac12\dot\theta^2+\cos\theta$ is never below <span class="nobr">$-1$.</span></p>
+    <p>For the harmonic oscillator every swing takes <span class="nobr">$2\pi/\omega$:</span> there <em>Periodic</em>
+    fixes $T$ at one period, every amplitude is a true orbit, and every one has
+    <span class="nobr">$S=\tfrac12 m[x\dot x]_0^T=0$.</span>  <em>Bend ↑</em> and the loop grows, with $S$ still 0.000.</p>
   </article>
 
   <article class="exp" data-setup="saddle">
     <h3>7. When the action is not least</h3>
-    <p>A harmonic oscillator, but now the trip takes $T=4$, longer than half a period ($\pi$).
-    The path starts on the true path, which still makes $S$ stationary, but as a saddle.  Drag
-    a single knot: $S$ goes up, as at a minimum.  Now press <em>Bend it</em>, which moves every
-    knot at once along half a sine wave: $S$ goes down, below the true path's, and
-    <em>Roll downhill</em> runs away.  Lower $T$ below $\pi$ and bending raises $S$ again.  The
-    point $t=\pi$, where every path from the start refocuses, is a <em>conjugate point</em>.
-    "Least action" is really "stationary action".</p>
+    <p>The oscillator again, but now the trip takes <span class="nobr">$T=4$,</span> longer than half a period
+    <span class="nobr">($\pi/\omega=\pi$)</span>.  The true path still makes $S$ stationary, <span class="nobr">$S=1.2005$,</span> but as a
+    saddle.  Drag the third knot up by 0.5: <span class="nobr">$S=1.659$,</span> up, as at a minimum.  Now press
+    <em>Bend ↑</em>, which moves every knot at once along half a sine wave: <span class="nobr">$S=1.002$,</span>
+    <em>below</em> the true path's; <em>Bend ↓</em> the same.  <em>Roll downhill</em> from
+    there runs away: the bend grows until the path hits the edge of the plot, <span class="nobr">$S=-9.47$.</span>
+    Why: for a change $\delta x=a\sin(\pi t/T)$ the action changes by
+    $$\delta^2S=\frac m2\int_0^T\left(\delta\dot x^2-\omega^2\delta x^2\right)dt=\frac{ma^2T}{4}\left[\left(\frac\pi T\right)^2-\omega^2\right],$$
+    negative once <span class="nobr">$T>\pi/\omega$.</span>  Set $T=3$ and bending raises $S$ again (from $-7.923$ to
+    <span class="nobr">$-7.885$)</span>.  At $t=\pi/\omega$ every true path leaving $x_1$ arrives at <span class="nobr">$-x_1$,</span> whatever its
+    speed: a <em>conjugate point</em>.  Past the first one the action is no longer least, only
+    stationary; the number of conjugate points, the Morse index, counts the independent
+    directions in which $S$ goes down.</p>
   </article>
 
   <article class="exp" data-setup="pendulum">
     <h3>8. More than one true path</h3>
-    <p>A pendulum, from $\theta=0$ to $\theta=1$ in 8 seconds.  Several motions do it: swinging
-    once, twice, the other way first.  Each is a true path, a stationary point of $S$, listed
-    under <em>Show</em> with its action and its Morse index (how many independent directions
-    lower $S$).  The path starts on the one of least action; click another to put your path on
-    it.  On a saddle, some changes (try <em>Bend it</em>, both ways) lower $S$.</p>
+    <p>A pendulum from $\theta=0$ to $\theta=1$ in 8 seconds.  Five motions do it, each a true
+    path, listed under the plots with its action and Morse index:</p>
+    <ul>
+      <li>$S=-1.924$, a minimum: rising slowly almost to the top (3.03 rad, 174°), and back
+      down to 1;</li>
+      <li>$S=1.899$, also a minimum: the other way first, almost to the top on that side
+      <span class="nobr">($-2.95$)</span>, and back up through 0 to 1;</li>
+      <li>$S=5.115$, a saddle (index 1): the other way first to <span class="nobr">$-2.09$,</span> across to <span class="nobr">$2.09$,</span> and
+      back down to 1;</li>
+      <li>$S=8.051$ (index 1) and $S=8.057$ (index 2): up, down to the other side and back up
+      to 1, swinging to $\pm1.35$ and to <span class="nobr">$\pm1.12$.</span></li>
+    </ul>
+    <p>The path starts on the one of least action, where <em>Bend ↑</em> and <em>Bend ↓</em>
+    both raise $S$ (to 0.07 and <span class="nobr">$-0.15$)</span>.  Click the third in the list: on that saddle,
+    <em>Bend ↑</em> lowers <span class="nobr">$S$,</span> from 5.116 to 5.081.</p>
   </article>
 
   <article class="exp" data-setup="twin">
     <h3>9. The twin paradox</h3>
-    <p>Time runs up, space across; the end points are two events at the same place, 10 years
-    apart, and the world line starts as the twin who stays home.  It is drawn in straight legs,
-    the traveller at constant speed on each.  A free particle's action is $-mc^2\tau$, where
-    $\tau$ is the time its own clock shows.  Drag an event sideways and the traveller goes away
-    and back: $\tau$ falls, $S$ rises.  The stay-at-home has the least action and so the
-    longest $\tau$.  Drag an event up or down to change when the traveller is there.  A leg
-    tilted more than 45° from the vertical (outside the light cone) would be faster than light,
-    and gets no action at all.</p>
+    <p>Time runs up and space across, in years and light-years <span class="nobr">($c=1$)</span>.  The end points are two
+    events at the same place, 10 years apart, and the world line starts as the twin who stays
+    home, drawn in straight legs.  A free particle's action is
+    $$S=-mc^2\int\sqrt{1-\dot x^2/c^2}\,dt=-mc^2\tau,$$
+    where $\tau$ is the time its own clock shows.  Drag the middle event sideways to <span class="nobr">$x=1.5$:</span>
+    the traveller goes out and back at <span class="nobr">$0.6c$,</span> each leg taking 2.5 years by the home clock and
+    2 by the traveller's, so $\tau=9$ and <span class="nobr">$S=-9$,</span> more than the stay-at-home's <span class="nobr">$-10$.</span>  The
+    straight world line has the least action, and so the most proper time.  Drag an event up
+    or down to change when the traveller is there.  Past $x=2.5$ the legs would be faster than
+    light: no proper time, no action.</p>
   </article>
 
   <article class="exp" data-setup="light">
     <h3>10. Fermat's principle</h3>
-    <p>Light from one point to another takes the path of least optical length $\int n\,ds$.
-    Here air is above and glass ($n=1.5$) below, and the true ray bends at the surface.  Here
-    $x$ plays the part of time: a knot is a point the ray passes through, and dragging it
-    sideways moves it across (the knots stay in order, so the ray runs left to right).  In the
-    phase-space panel the conserved quantity is $-n\cos\phi$, $\phi$ measured from the
-    surface: that is Snell's law, $n_1\sin\theta_1=n_2\sin\theta_2$.  Try the mirage too.</p>
+    <p>Light from one point to another takes the path of least optical length <span class="nobr">$\int n\,ds$,</span>
+    which is $c$ times its travel time.  Here air <span class="nobr">($n_1=1$)</span> is above and glass <span class="nobr">($n_2=1.5$)</span>
+    below, and $x$ plays the part of time: a knot is a point the ray passes through.  The true
+    ray has optical length 13.955 (9 knots draw it to 13.964); the straight line, 14.577.  It
+    meets the surface at $\theta_1=69.0°$ from the normal and leaves at <span class="nobr">$\theta_2=38.5°$:</span>
+    <span class="nobr">$n_1\sin\theta_1=0.934=n_2\sin\theta_2$,</span> Snell's law.  Why: $L=n(y)\sqrt{1+y'^2}$ does not
+    depend on <span class="nobr">$x$,</span> so its "energy" $H=y'\,\partial L/\partial y'-L=-n/\sqrt{1+y'^2}=-n\sin\theta$
+    is conserved along the ray (see it flat in the <em>Energy</em> view).  Then try
+    <em>Light: mirage</em>, <span class="nobr">$n=1+0.05y$,</span> the air thinner low down, as over a hot road: the true
+    ray between two points at $y=0$ dips to $y=-0.65$ (optical length 9.893, against 10.000
+    straight).  Light from the sky reaches you from below, and the road looks wet.</p>
   </article>
 
   <article class="exp" data-setup="brach">
     <h3>11. The brachistochrone</h3>
     <p>A bead slides without friction from rest at the top left to the bottom right, and the
-    "action" is the time it takes.  The curve starts as the fastest, a cycloid, $\pi\sqrt{a/g}$
-    here.  Press <em>Straight line</em>: the incline is shorter but slower; diving steeply at
-    first gains speed early.  As for light, $x$ plays the part of time; the start stays put.</p>
+    "action" is the time it takes, $\int ds/v$ with <span class="nobr">$v=\sqrt{2gy}$,</span> $y$ measured down.  The
+    fastest curve is a cycloid, <span class="nobr">$x=a(\phi-\sin\phi)$,</span> <span class="nobr">$y=a(1-\cos\phi)$:</span> here <span class="nobr">$a=1$,</span> <span class="nobr">$g=1$,</span>
+    and it takes $\pi\sqrt{a/g}=3.1416$ (8 knots draw it to 3.156).  Press <em>Straight
+    line</em>: the incline is shorter but slower, 3.724.  <em>Bend ↑</em> (shallower): 3.223;
+    <em>Bend ↓</em> (deeper): 3.209.  Diving steeply at first gains speed early.  As for light,
+    $x$ plays the part of time, and the start stays put.</p>
   </article>
 
   <article class="exp" data-setup="segments">
     <h3>12. Straight segments</h3>
     <p>Feynman's way of thinking, and E. F. Taylor's way of teaching: a path of straight
-    segments, the particle moving at constant speed along each.  The path starts as the best
-    one through these knots, a little above the true action; add knots (the <em>Knots</em>
-    slider) and it comes down to it.</p>
+    segments, at constant speed along each.  Here the throw again, through 4 knots.  The path
+    starts as the best one through them: its knots lie exactly on the parabola, every segment
+    has the same energy (44.44, in the <em>Energy</em> view), and <span class="nobr">$S=-29.630$,</span> above the true
+    $-33.333$ by <span class="nobr">$g^2Th^2/24=3.704$,</span> where $h=T/3$ is a segment's duration.  Add knots with the
+    <em>Knots</em> slider and it comes down as <span class="nobr">$h^2$:</span> 5 knots give <span class="nobr">$-31.250$,</span> 9 give <span class="nobr">$-32.813$,</span>
+    16 give <span class="nobr">$-33.185$.</span></p>
   </article>
 
   <article class="exp" data-setup="feynman">
-    <h3>13. Feynman's phasors</h3>
-    <p>In quantum mechanics every path contributes, with weight $e^{iS/\hbar}$.  The little
-    clock beside the chart shows that arrow for your path.  Drag a knot a little: on the true
-    path the arrow barely turns, because $S$ is stationary there, so nearby paths add up in
-    step.  Bend the path a few times and drag again: now the arrow spins, and nearby paths
-    cancel.  Make $\hbar$ smaller and only paths ever closer to the true one survive: the
-    classical limit.</p>
+    <h3>13. Feynman's arrows</h3>
+    <p>In quantum mechanics every path contributes to the amplitude to get from one event to
+    the other, each with an arrow <span class="nobr">$e^{iS/\hbar}$:</span> length 1, turned by <span class="nobr">$S/\hbar$.</span>  The view
+    takes one knot (ringed: click a knot to choose it) and lets it be at every height while
+    the others stay put.  Each height is a path; the view adds their arrows head to tail.
+    (This is one of the integrals in the path integral: over the position at one time.)  Near
+    the height where $S$ is stationary the arrows point the same way and add up: the green part
+    of the spiral, and the green band on the path plot.  Away from it $S$ changes quickly, the
+    arrows spin round, curl up into the ends of the spiral, and cancel.  How near is near: for
+    the throw's middle knot $S\approx S^*+\tfrac12S''(h-h^*)^2$ with <span class="nobr">$S''=8.27$,</span> so the arrows
+    within a quarter turn lie within $\sqrt{\pi\hbar/S''}$ of the true height: 0.62 at
+    <span class="nobr">$\hbar=1$,</span> 0.20 at <span class="nobr">$\hbar=0.1$,</span> 0.06 at <span class="nobr">$\hbar=0.01$.</span>  Make $\hbar$ smaller and only paths
+    ever nearer the true one count: the classical limit.  Drag the knot away and your path's
+    arrow (blue) moves into a curl, where its neighbours cancel it.</p>
   </article>
 
   <article class="exp" data-setup="damped">
     <h3>14. Friction from a Lagrangian</h3>
     <p>$L=e^{\gamma t}(\tfrac12\dot x^2-\tfrac12x^2)$ looks like a curiosity, but its
-    Euler-Lagrange equation is $\ddot x+\gamma\dot x+x=0$: a damped oscillator.  Here the energy
-    (bottom right) is not conserved, because $L$ depends on $t$.</p>
+    Euler-Lagrange equation, <span class="nobr">$\frac{d}{dt}\left(e^{\gamma t}\dot x\right)=-e^{\gamma t}x$,</span> is
+    <span class="nobr">$\ddot x+\gamma\dot x+x=0$:</span> a damped oscillator <span class="nobr">($\gamma=0.3$ here)</span>.  The <em>Energy</em>
+    view plots <span class="nobr">$E=\dot x\,\partial L/\partial\dot x-L=e^{\gamma t}(\tfrac12\dot x^2+\tfrac12x^2)$,</span>
+    which wobbles even on the true path, because $L$ depends on <span class="nobr">$t$:</span> it is $e^{\gamma t}$
+    times the mechanical energy <span class="nobr">$\tfrac12\dot x^2+\tfrac12x^2$,</span> which decays.  Over this trip
+    <span class="nobr">($T=6$)</span> the true path is a saddle, index 1: the damped oscillator's first conjugate point
+    is at <span class="nobr">$t=\pi/\omega_d=3.18$,</span> with <span class="nobr">$\omega_d=\sqrt{1-\gamma^2/4}$.</span></p>
   </article>
 
   <article class="exp" data-setup="typed">
     <h3>15. Your own potential</h3>
-    <p>Type any $V(x,t)$: a double well $\tfrac14x^4-x^2$ to start with.  The true paths are found
-    numerically (by shooting: trying every starting speed and keeping those that arrive), and
-    the path starts on the one of least action.  A potential that depends on $t$ does not
-    conserve energy.</p>
+    <p>Type any <span class="nobr">$V(x,t)$:</span> a double well, <span class="nobr">$\tfrac14x^4-x^2$,</span> to start with, from $x=-1$ to $x=1$
+    in <span class="nobr">$T=3$.</span>  The true paths are found numerically, by shooting: trying every starting speed
+    and keeping those that arrive.  There are six: $S=1.368$ (a minimum, straight over the
+    hump), 4.360 twice (index 1: back out to $x=-2.17$ first, or past the end to $2.17$ and
+    back), 11.02 and 30.40 (index 2) and 67.92 (index 3).  The path starts on the one of
+    least action.  A potential that depends on $t$ does not conserve energy.</p>
   </article>
 
   <p class="small muted">New in 2026 for BrainFlux.  Source:

@@ -39,7 +39,7 @@ export const SYSTEMS = [
       // x(t) = q0 + (q1 - q0) t/T + g t (T - t)/2: S = m (q1-q0)^2/2T - m g (q0+q1) T/2 - m g^2 T^3/24.
       return (m * (q1 - q0) ** 2) / (2 * T) - (m * g * (q0 + q1) * T) / 2 - (m * g * g * T ** 3) / 24;
     },
-    blurb: 'A ball thrown up and caught two seconds later.  The parabola balances kinetic energy (spent getting high) against potential energy (earned while up there).',
+    blurb: 'A ball thrown up and caught two seconds later.  Going higher would lower −∫V dt but raise ∫½mẋ² dt more; the parabola is the balance.',
   },
   {
     id: 'harmonic', label: 'Harmonic oscillator',

@@ -1482,6 +1482,8 @@ else if (!fromHash(hash)) go('gravity');
 
 window.__app = {
   state, setups, setSystem, setRolling, rollStep, snapTo, bend, rush, straight, backToTrue, path, downhill, moveKnotTo, setView,
+  /** Move knot k to (s, q) as a drag would, and show it. */
+  move(k, s, q) { stopMorph(); setRolling(false); moveKnotTo(k, s, q); refresh(true); },
   /** Roll downhill to the end, at once (for tests: no waiting on animation frames). */
   rollToEnd(max = 3000) { setRolling(true); for (let i = 0; i < max && rollStep(); i++); setRolling(false); draw(); return rollFrames; },
   get truths() { return truths; }, get ref() { return ref; }, get current() { return current; }, get history() { return history; },
