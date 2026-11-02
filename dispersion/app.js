@@ -329,10 +329,10 @@ function drawResponse() {
     : [{ label: 'n', color: colors.re }, { label: 'κ (absorption)', color: colors.im }];
   if (ng) items.push({ label: 'n_g = c dk/dω', color: colors.ng, dash: [5, 3], width: 1.5 });
   legend(ctx, f, items, f.left + 4, 1);
-  if (state.yRange) {
-    ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = colors.ink3; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillText('zoomed (double-click for automatic)', f.right, 6); ctx.restore();
-  }
+  ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = colors.ink3; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  if (state.yRange) ctx.fillText('zoomed (double-click for automatic)', f.right, 6);
+  else if (state.source === 'osc' && state.oscs.length && width > 760) ctx.fillText('● drag a line about (up: stronger) · ◇ its width', f.right, 6);
+  ctx.restore();
 }
 
 function drawHandles(ctx, f) {
@@ -428,6 +428,14 @@ respCanvas.addEventListener('wheel', (e) => {
   dirty();
 }, { passive: false });
 respCanvas.addEventListener('dblclick', () => { state.yRange = null; dirty(); });
+// The arrow keys move the light's frequency (or the carrier), a little, or ten times as far with shift.
+respCanvas.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  const d = (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 0.05 : 0.005) * state.wmax;
+  if (state.view === 'medium') { stopSweep(); setProbe(state.probe + d); }
+  else if (state.view === 'pulse') { state.pulse.w0 = clamp(state.pulse.w0 + d, 0.02 * state.wmax, state.wmax); syncPulseSliders(); pulseChanged(); }
+});
 
 function hoverCursor(px, py) {
   const near = handles.some((h) => Math.hypot(h.x - px, h.y - py) < h.r);
@@ -947,9 +955,10 @@ function drawPulse() {
   ctx.restore();
   f.axes({ xlabel: state.pulse.frame === 'group' ? `${U().t} − z/v_g (moving with the pulse)` : `${U().t} − z/c (after light through vacuum would arrive)`, colors, yTicks: log, ylabel: log ? 'log₁₀ |E|' : '' });
   const zz = zSlot();
+  const narrow = width < 640;
   const items = [{ title: ['At the detector, z = ', { v: z * U().zS, dec: zz.dec, w: zz.w }, U().zu ? ' ' + U().zu : ''] },
-    { label: log ? 'log₁₀ |E|' : scale !== 1 ? ['E, enlarged ', { text: fmt(scale), w: 4 }, '×'] : 'E', color: colors.ink, width: 1.5 },
-    { label: 'the same pulse in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
+    { label: log ? 'log₁₀ |E|' : scale !== 1 ? [narrow ? 'E ×' : 'E, enlarged ', { text: fmt(scale), w: 4 }, narrow ? '' : '×'] : 'E', color: colors.ink, width: 1.5 },
+    { label: narrow ? 'vacuum' : 'the same pulse in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
   legendParts(ctx, f, items);
   if (absorbed && z > 0) {
     ctx.save(); ctx.font = '13px system-ui, sans-serif'; ctx.fillStyle = colors.warn; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
@@ -1116,8 +1125,9 @@ function drawSnapshot() {
   }
   ctx.restore();
   f.axes({ xlabel: win.moving ? `${U().z}: the picture moves with the pulse` : `${U().z}, depth in the medium`, colors, yTicks: false });
-  const items = [{ title: 'Inside, at one moment' }, { label: 'E', color: colors.ink, width: 1.5 }, { label: 'in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
-  if (sh === 'gauss') items.push({ label: 'a crest: c/n', color: colors.charge, mark: true }, { label: 'the peak: c/n_g', color: colors.ng, mark: true });
+  const narrow = width < 640;
+  const items = [{ title: 'Inside, at one moment' }, ...(narrow ? [] : [{ label: 'E', color: colors.ink, width: 1.5 }]), { label: narrow ? 'vacuum' : 'in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
+  if (sh === 'gauss') items.push({ label: narrow ? 'crest' : 'a crest: c/n', color: colors.charge, mark: true }, { label: narrow ? 'peak' : 'the peak: c/n_g', color: colors.ng, mark: true });
   legend(ctx, f, items, f.left + 4, 4);
 }
 
@@ -1173,8 +1183,9 @@ function fitView() {
   dirty(); scheduleHash();
 }
 
-/** Back to the start of the pulse's run. */
-function restartRun() { ensurePropagator(); anim.t = pulseRun()[0]; anim.hold = 0; anim.crest = null; }
+/** Back to the pulse's run, a quarter of the way in (so that a new set-up opens with the pulse in
+ *  the picture; the repeats start from the beginning, the pulse coming in). */
+function restartRun() { ensurePropagator(); const [t0, t1] = pulseRun(); anim.t = t0 + 0.25 * (t1 - t0); anim.hold = 0; anim.crest = null; }
 
 // ---------------------------------------------------------------------- read-outs
 
