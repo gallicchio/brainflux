@@ -839,7 +839,7 @@ function drawSketch() {
   // The aperture's edge and what is in the plane.
   const yNA = Y(Ys * Math.min(state.NA, smax));
   slots(['NA ', { v: state.NA, dec: 2, w: 4 }], xF + sw / 2 + 4, Math.max(top + 4, yNA - 7));
-  const what = state.filter === 'stop' ? ['stop'] : state.filter === 'dot' ? ['phase dot ', { v: state.dotPhase, dec: 0, w: 4, plus: '+' }, '°']
+  const what = state.filter === 'stop' ? ['stop'] : state.filter === 'dot' ? [narrow ? 'dot ' : 'phase dot ', { v: state.dotPhase, dec: 0, w: 4, plus: '+' }, '°']
     : state.filter === 'knife' ? ['knife edge'] : [];
   if (paintLayer.used) what.push(what.length ? ' + paint' : 'paint');
   if (what.length) slots(what, xF + sw / 2 + 4, Math.min(bottom - 4, Y(-Ys * Math.min(state.NA, smax)) + 8));
