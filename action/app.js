@@ -589,11 +589,12 @@ $('#view-tabs').append(viewSeg);
 const hbarSlider = slider({ label: '<math><mi>ħ</mi></math>', labelHTML: true, min: 0.01, max: 10, log: true, value: state.hbar,
   title: "Planck's constant, in the units of the action", onInput: (v) => { state.hbar = v; hashSoon(); draw(); } });
 hbarSlider.classList.add('hbar');
-$('.view-head').append(hbarSlider);
+$('#view-foot').append(hbarSlider);
 function setView(v) {
   state.view = v;
   viewSeg.value = v;
   hbarSlider.hidden = v !== 'phasor';
+  $('#view-foot').hidden = v !== 'phasor';
   setCaption();
   hashSoon();
   draw();
@@ -604,16 +605,17 @@ function setCaption() {
   const d = state.sys, x = d.q, dot = d.q === 'θ' ? 'θ̇' : d.s === 'x' ? `${d.q}′` : `${d.q}̇`;
   const text = {
     phase: timeDependent()
-      ? `Your path in phase space, (${x}, p) with p = ∂L/∂${dot}.  L depends on ${d.s}, so there is no conserved energy to draw contours of.`
-      : `Your path in phase space, (${x}, p) with p = ∂L/∂${dot}, over contours of the energy H(${x}, p).  The true path keeps to one contour${periodic() ? ', and a closed orbit is a loop' : ''}; a wrong one crosses them.`,
+      ? `The path in phase space, (${x}, p), p = ∂L/∂${dot}.  L depends on ${d.s}: no conserved energy, so no contours.`
+      : `The path in phase space, (${x}, p), p = ∂L/∂${dot}, over contours of the energy.  The true path keeps to one${periodic() ? ' (a loop, if closed)' : ''}; a wrong one crosses them.`,
     energy: timeDependent()
-      ? `E = ${dot} ∂L/∂${dot} − L along your path.  L depends on ${d.s}, so E is not conserved even on the true path.`
-      : `E = ${dot} ∂L/∂${dot} − L along your path: constant on the true path (L has no ${d.s} in it, so energy is conserved); a wrong path's wanders.`,
-    phasor: `Every height of the ringed knot makes a path, and each path an arrow ${texToMathML('e^{iS/\\hbar}')}, here added head to tail.  Near the height where S is stationary the arrows point the same way and add up (green, and the green band on the path plot); away from it they curl up and cancel.  Your path is the blue dot.`,
+      ? `E = ${dot} ∂L/∂${dot} − L along the path.  L depends on ${d.s}, so E changes even on the true path.`
+      : `E = ${dot} ∂L/∂${dot} − L along the path: constant on the true path (L has no ${d.s} in it); a wrong one's wanders.`,
+    phasor: `Each height of the ringed knot makes a path with an arrow ${texToMathML('e^{iS/\\hbar}')}, added here head to tail.  Near the stationary height they line up and add (green: the band on the path plot); elsewhere they curl up and cancel.  Yours: the blue dot.`,
   }[state.view];
   $('#view-cap').innerHTML = text;
 }
 hbarSlider.hidden = state.view !== 'phasor';
+$('#view-foot').hidden = state.view !== 'phasor';
 
 function truthWord(t) {
   if (t?.closed) return 'true orbit';
@@ -1012,11 +1014,17 @@ function drawRecord() {
     ctx.fillStyle = c.accent; ctx.textAlign = 'left';
     fillSlots(ctx, parts, lx, ly);
   }
-  if (history.length < 3) {
+  if (history.length < 2) {
+    // A hint while the record is empty, in lines that fit.
     ctx.fillStyle = c.ink3; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    const words = `Drag a knot, or try a wrong path: every change you make adds a point here, its ${actionWord() === 'S =' ? 'action' : actionWord()}.`.split(' ');
+    const lines = [''];
+    for (const w of words) {
+      const next = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${w}` : w;
+      if (ctx.measureText(next).width > f.w - 20 && lines[lines.length - 1]) lines.push(w); else lines[lines.length - 1] = next;
+    }
     const y = t && f.Y(t.S) > f.top + f.h / 2 ? f.top + f.h * 0.25 : f.top + f.h * 0.75;
-    ctx.fillText('Drag a knot, or try a wrong path:', f.left + f.w / 2, y - 8);
-    ctx.fillText(`every change adds a point here, its ${actionWord() === 'S =' ? 'action' : actionWord()}.`, f.left + f.w / 2, y + 9);
+    lines.forEach((l, i) => ctx.fillText(l, f.left + f.w / 2, y + 16 * (i - (lines.length - 1) / 2)));
   }
   ctx.restore();
   f.axes({ xlabel: 'each change you make adds a point →', xTicks: false, ylabel: actionWord() === 'S =' ? 'S' : actionWord() });
@@ -1185,8 +1193,8 @@ function drawPhasor(ctx, width, height, c) {
   const { x, y, h, zone, k, lo, hi } = phasor, M = h.length;
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (let j = 0; j <= M; j++) { x0 = Math.min(x0, x[j]); x1 = Math.max(x1, x[j]); y0 = Math.min(y0, y[j]); y1 = Math.max(y1, y[j]); }
-  const m = 14, sc = Math.min((width - 2 * m) / (x1 - x0 || 1), (height - 2 * m - 16) / (y1 - y0 || 1));
-  const cx = width / 2 - (sc * (x0 + x1)) / 2, cy = (height - 16) / 2 + (sc * (y0 + y1)) / 2;
+  const m = 12, sc = Math.min((width - 2 * m) / (x1 - x0 || 1), (height - 2 * m) / (y1 - y0 || 1));
+  const cx = width / 2 - (sc * (x0 + x1)) / 2, cy = height / 2 + (sc * (y0 + y1)) / 2;
   const X = (u) => cx + sc * u, Y = (v) => cy - sc * v;
   // The chain, thinned to about a pixel per point; the part that adds up in green.
   const inZone = (j) => zone && h[Math.min(M - 1, j)] >= zone[0] && h[Math.min(M - 1, j)] <= zone[1];
@@ -1212,9 +1220,6 @@ function drawPhasor(ctx, width, height, c) {
   const j = clamp(Math.round(((state.knots[k] - lo) / (hi - lo)) * M), 0, M);
   ctx.fillStyle = c.accent; ctx.strokeStyle = c.panel; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(X(x[j]), Y(y[j]), 5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
-  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = c.ink3;
-  ctx.fillText(`the paths through every height of knot ${k} (ringed), from ${fmt(lo, 3)} to ${fmt(hi, 3)}`, 8, height - 6);
 }
 
 // The score: your path and the true path, side by side, every number in a slot of fixed width
@@ -1446,7 +1451,7 @@ function go(id, { knots, show = {}, mode = 'spline', T, params, ends = 'fixed', 
   state.mode = mode; modeSeg.value = mode;
   if (!keepShow) setShow(show);
   if (hbar) { state.hbar = hbar; hbarSlider.value = hbar; }
-  state.view = view; viewSeg.value = view; hbarSlider.hidden = view !== 'phasor';
+  state.view = view; viewSeg.value = view; hbarSlider.hidden = $('#view-foot').hidden = view !== 'phasor';
   setSystem(byId(id), { knots, T, params, ends });
   setCaption();
   then?.();
