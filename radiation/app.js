@@ -464,7 +464,8 @@ function drawPower() {
   const x1 = 54, n1 = x1 + w1 + 5 + wn, oneLine = n1 + 24 + w2 + 5 + wn < width - 6;
   const x2 = oneLine ? n1 + 24 : x1, y2 = oneLine ? 16 : 31, n2 = x2 + w2 + 5 + wn;
   canvasLabels.power = [x1, n1, x2, n2, y2];
-  const f = new Frame(ctx, width, height, { left: 50, right: 12, top: oneLine ? 26 : 40, bottom: 30 });
+  // (A bottom margin of 32 or more puts the axis label under the tick labels, where it fits.)
+  const f = new Frame(ctx, width, height, { left: 50, right: 12, top: oneLine ? 26 : 40, bottom: 34 });
   const t1 = traj.tEnd, t0 = t1 - WINDOW;
   let top = 0;
   for (const [t, P, L] of powerLog) if (t >= t0) top = Math.max(top, P, L);
@@ -486,7 +487,7 @@ function drawPower() {
   line(2, col.ink3, [5, 4]);
   line(1, col.accent, []);
   ctx.restore();
-  f.axes({ xlabel: 't − now (s)', yTicks: powerTop > 0 });
+  f.axes({ xlabel: 't − now (s)', ylabel: 'radiated power', yTicks: powerTop > 0 });
   ctx.textBaseline = 'alphabetic';
   const put = (lab, x, n, y, v, color) => {
     ctx.fillStyle = color; ctx.font = FONT; ctx.textAlign = 'left'; ctx.fillText(lab, x, y);
