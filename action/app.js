@@ -1489,6 +1489,7 @@ window.__app = {
   get truths() { return truths; }, get ref() { return ref; }, get current() { return current; }, get history() { return history; },
   get frame() { return frame; }, get hover() { return hover; }, get phasor() { return phasor; }, get ranges() { return ranges; },
   get idle() { return !frameDue && !truthPending && !dragging && !state.rolling && !morph; },
+  get truthPending() { return truthPending; },
   toPx: (s, q) => toPx(s, q),
   ready: true,
 };
