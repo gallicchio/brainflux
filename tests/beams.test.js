@@ -183,11 +183,19 @@ test('beams: mode matching efficiency', () => {
 });
 
 test('cavity: stable iff 0 <= g1 g2 <= 1, and then the mode reproduces itself', () => {
-  let stable = 0, unstable = 0;
+  let stable = 0, unstable = 0, slow = 0;
+  // The same cavities every run (mulberry32), so a failure can be repeated.
+  let seed = 20261102;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
   for (let k = 0; k < 400; k++) {
     // g1, g2 spread over [-1.8, 1.8] (some mirrors flat), lengths 20 to 1000 mm.
-    const L = 20 + 980 * Math.random();
-    const pick = (i) => ((k + i) % 13 === 0 ? Infinity : L / (1 - (3.6 * Math.random() - 1.8)));
+    const L = 20 + 980 * random();
+    const pick = (i) => ((k + i) % 13 === 0 ? Infinity : L / (1 - (3.6 * random() - 1.8)));
     const R1 = pick(0), R2 = pick(5);
     const [g1, g2] = gParams(L, R1, R2), p = g1 * g2;
     const [A, , , D] = roundTrip(L, R1, R2);
@@ -210,11 +218,16 @@ test('cavity: stable iff 0 <= g1 g2 <= 1, and then the mode reproduces itself', 
     } else if (p < -1e-6 || p > 1 + 1e-6) {
       unstable++;
       assert(!isStable(g1, g2) && !mode, `unstable: g1 g2 = ${p}`);
+      // A ray grows by the larger eigenvalue of the round trip, |m| + sqrt(m^2 - 1) with
+      // m = 2 g1 g2 - 1, each time round.  Just outside the stable range that is barely more
+      // than 1 (1.003 at g1 g2 = -2e-6), too slow to leave a box of 1e6 in 2000 round trips.
+      const m = Math.abs(2 * p - 1), grow = Math.log(m + Math.sqrt(m * m - 1));
+      if (2000 * grow < 2 * Math.log(1e6)) { slow++; continue; }
       const r = bounce(L, R1, R2, 1, 0.001, 2000, 1e6);
-      assert(r.lost > 0, `unstable rays walk off (g1g2 = ${p.toFixed(3)})`);
+      assert(r.lost > 0, `unstable rays walk off (g1g2 = ${p.toFixed(6)})`);
     }
   }
-  return `${stable} stable, ${unstable} unstable cavities`;
+  return `${stable} stable, ${unstable} unstable cavities (${slow} too near the edge to walk off in 2000 round trips)`;
 });
 
 test('cavity: the mode against the textbook formulas; the confocal spectrum', () => {
