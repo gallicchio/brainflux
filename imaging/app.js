@@ -98,11 +98,11 @@ const PRESETS = {
     make: () => grating(N, snapPeriod(state.d, N, DX).m, state.profile) },
   diatom: { label: 'Diatom', enc: 'amplitude', absorb: 0.7, title: 'A silica shell pierced by a lattice of pores, the classic test of a microscope objective',
     make: () => diatom(N, DX, state.spacing) },
-  bars: { label: 'Bar target', enc: 'amplitude', rowY: 8.5, title: 'Groups of three bars, periods from 2 µm down to 0.4 µm',
+  bars: { label: 'Bars', enc: 'amplitude', rowY: 8.5, title: 'A bar target: groups of three bars, periods from 2 µm down to 0.4 µm',
     make: () => { const b = barTarget(N, DX); groups = b.groups; return b.g; } },
-  star: { label: 'Siemens star', enc: 'amplitude', rowY: 2.5, title: '18 dark spokes (and 18 clear) whose period shrinks towards the centre',
+  star: { label: 'Star', enc: 'amplitude', rowY: 2.5, title: 'A Siemens star: 18 dark spokes (and 18 clear) whose period shrinks towards the centre',
     make: () => siemensStar(N, DX, SPOKES) },
-  points: { label: 'Two points', field: true, title: 'Two pinholes: Rayleigh’s criterion',
+  points: { label: 'Pinholes', field: true, title: 'Two pinholes: Rayleigh’s criterion',
     make: () => twoPoints(N, Math.max(1, Math.round(state.sep / DX)), state.pphase * deg) },
   letters: { label: 'Letters', enc: 'phase', phi0: 0.5, title: 'Letters written in phase only', make: letters },
   portrait: { label: 'Fourier', enc: 'amplitude', title: 'Joseph Fourier (engraving, public domain): as ink, or written in phase', make: portrait },
@@ -617,7 +617,9 @@ function profileReference() {
   if ((state.filter === 'dot' || state.filter === 'open') && !state.z && !sx && !sy && state.illum === 'coherent' && !paintLayer.used) {
     const a = state.filter === 'dot' ? state.dotAmp : 1, al = state.filter === 'dot' ? state.dotPhase * deg : 0;
     for (let i = 0; i < N; i++) v[i] = a * a + 2 * a * Math.sin(al) * v[i];
-    return { v, label: state.filter === 'dot' ? 'small-phase formula a² + 2a sin α (φ − ⟨φ⟩)' : 'small-phase formula: 1', axis: 'left' };
+    const sign = Math.sin(al) > 0 ? '+' : '−', mag = Math.abs(2 * a * Math.sin(al));
+    const formula = state.filter !== 'dot' ? '1' : `${a === 1 ? '1' : fmt(a * a, 3)} ${sign} ${mag === 2 ? '2' : fmt(mag, 3)}(φ − ⟨φ⟩)`;
+    return { v, label: `small-phase formula I ≈ ${formula}`, axis: 'left' };
   }
   return { v, label: 'phase φ − ⟨φ⟩ (rad, right)', axis: 'right' };
 }
@@ -826,7 +828,7 @@ function drawSketch() {
     ctx.strokeStyle = col.ink3; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.moveTo(m - l, yt); ctx.lineTo(m - 7, yt); ctx.moveTo(m + 7, yt); ctx.lineTo(m + l, yt);
     ctx.moveTo(m - l, yt - 3); ctx.lineTo(m - l, yt + 3); ctx.moveTo(m + l, yt - 3); ctx.lineTo(m + l, yt + 3); ctx.stroke();
-    ctx.font = `italic ${font}px system-ui, sans-serif`; text('f', m, yt, 'center', col.ink3); ctx.font = `${font}px system-ui, sans-serif`;
+    ctx.font = `italic ${font}px system-ui, sans-serif`; text('F', m, yt, 'center', col.ink3); ctx.font = `${font}px system-ui, sans-serif`;
   }
   // The aperture's edge and what is in the plane.
   const yNA = Y(Ys * Math.min(state.NA, smax));
@@ -934,7 +936,11 @@ function readouts() {
   const c = cutoff();
   const rayleigh = state.illum === 'incoherent';
   const lim = ['Finest period in the image:', [{ html: `<b>${c.name} =</b> ` }, { v: 1 / c.f, dec: 3, w: 6, class: 'b' }, { html: `<b> µm</b>${rayleigh ? ';' : ''}` }]];
-  if (state.illum === 'coherent') lim.push(...(sx || sy ? ['with the light straight; tilted, down to', ['λ/(NA + sin θ) = ', n3(state.lambda / (state.NA + state.tiltNA), 6), ' µm'], 'across the tilt'] : ['(light along the axis)']));
+  if (state.illum === 'coherent') {
+    if (!(sx || sy)) lim.push('(light along the axis)');
+    else if (state.tiltNA <= state.NA) lim.push('with the light straight; tilted, down to', ['λ/(NA + sin θ) = ', n3(state.lambda / (state.NA + state.tiltNA), 6), ' µm'], 'across the tilt');
+    else lim.push('with the light straight; tilted past the NA, the zero order misses the aperture (dark field)');
+  }
   if (rayleigh) lim.push('two points resolved at', ['0.61λ/NA = ', n3((0.61 * state.lambda) / state.NA, 6), ' µm'], '(Rayleigh)');
   show('#limit', lim);
 }
@@ -952,18 +958,19 @@ function notes() {
     incoherent: 'Each point of the object shines on its own (fluorescence): intensities add.',
   }[state.illum];
   $('#illum-note').textContent = ill;
-  const a = state.dotPhase, phase = isPhaseObject();
+  const a = state.dotPhase, phase = isPhaseObject(), zeroIn = state.illum === 'incoherent' || !side || side.zero.amp > 1e-6;
   const dotWord = a === -90 ? 'advances the zero order a quarter period (−90°)' : a === 90 ? 'delays the zero order a quarter period (+90°)'
     : `shifts the zero order’s phase by ${a > 0 ? '+' : a < 0 ? '−' : ''}${Math.abs(a)}°`;
   const fil = {
-    open: 'Just the aperture: directions up to sin θ = NA reach the image.' + (phase ? ' A transparent object barely shows: |e^{iφ}|² = 1.' : ''),
+    open: !zeroIn ? 'Just the aperture, but the tilted light’s zero order lands outside it: only diffracted light makes the image (dark field).'
+      : 'Just the aperture: directions up to sin θ = NA reach the image.' + (phase ? ' A transparent object barely shows: |e<sup>iφ</sup>|² = 1.' : ''),
     stop: 'A disk blocks the zero order, the light that went straight through: only diffracted light makes the image.',
     dot: `The dot ${dotWord}: ` + (a === -90 ? 'parts that delay the light look dark, I ≈ 1 − 2(φ − ⟨φ⟩) (positive phase contrast).'
       : a === 90 ? 'parts that delay the light look bright, I ≈ 1 + 2(φ − ⟨φ⟩) (negative phase contrast).'
         : 'for a weak phase, I ≈ a² + 2a sin α (φ − ⟨φ⟩).'),
     knife: 'The edge blocks one side of the plane but keeps the zero order: slopes of the phase become brightness, as if lit from the side.',
   }[state.filter];
-  $('#filter-note').textContent = fil;
+  $('#filter-note').innerHTML = fil;
 }
 
 // ------------------------------------------------------------------------------ pointers
@@ -1321,7 +1328,7 @@ async function configure(cfg) {
 }
 
 const setups = {
-  abbe: () => configure({ preset: 'grating', d: 1.28, NA: 0.35, filter: 'open', zoom: 2 }),
+  abbe: () => configure({ preset: 'grating', d: 1.28, NA: 0.35, filter: 'open', zoom: 2, exposure: 'fixed' }),
   zero: () => configure({ preset: 'grating', d: 1.28, NA: 0.6, filter: 'stop', stopNA: 0.02, zoom: 2 }),
   oblique: () => configure({ preset: 'grating', d: 0.8, NA: 0.4, filter: 'open', tiltNA: 0.35, tiltDir: 180, zoom: 2, fpTool: 'tilt' }),
   diatom: () => configure({ preset: 'diatom', NA: 0.65, filter: 'open', zoom: 2, xzoom: 2 }),
@@ -1364,6 +1371,7 @@ window.__app = {
   state, setups, configure, loadPreset, setIllum, changed, help,
   get t() { return t; }, get T() { return T; }, get P() { return P; }, get I() { return I; }, get ink() { return ink; },
   get side() { return side; },
+  sketchX: () => sketchLayout($('#sketch').getBoundingClientRect().width),
   get partialDone() { return state.illum !== 'condenser' || partial.done; },
   get profilePeriod() { return profilePeriod; },
   orders: () => gratingOrders(),
