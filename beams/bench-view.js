@@ -168,7 +168,7 @@ export function createBench(app) {
     field.aRef = Math.sqrt(Math.min(Imax / 2.5, Ilow / 0.43) / (1 + 0.5 * m)) * 10 ** (-state.bright / 2);
     if (mode === 'real') field.table = realTable(0.5 * field.aRef);
     else if (mode === 'intensity') field.table = intensityTable(wavelengthRGB(state.lambda), field.aRef * field.aRef);
-    else if (mode === 'phase') colorize(re, im, field.img.data, 0.5 * field.aRef, 'complex');
+    else if (mode === 'phase') colorize(re, im, field.img.data, field.aRef, 'complex');
     return field;
   }
 
@@ -221,7 +221,7 @@ export function createBench(app) {
     state.elements.forEach((e) => {
       if (e.type !== 'slab') return;
       const a = Zp(e.z), b = Zp(e.z + e.t);
-      ctx.fillStyle = 'rgba(120,170,255,0.13)'; ctx.fillRect(a, F.top, b - a, F.h);
+      ctx.fillStyle = 'rgba(120,170,255,0.08)'; ctx.fillRect(a, F.top, b - a, F.h);
       ctx.strokeStyle = e === state.sel ? c.accent : 'rgba(160,200,255,0.7)'; ctx.lineWidth = e === state.sel ? 2 : 1;
       ctx.beginPath(); ctx.moveTo(a, F.top); ctx.lineTo(a, F.bottom); ctx.moveTo(b, F.top); ctx.lineTo(b, F.bottom); ctx.stroke();
     });
@@ -590,7 +590,7 @@ export function createBench(app) {
       const seg = w.seg;
       const name = i === 0 ? 'input beam' : seg.n !== 1 ? `in glass (n = ${fmt(seg.n, 3)})` : `after ${seg.after ? elementName(seg.after).toLowerCase() : '?'}`;
       const real = w.real;
-      const note = !real ? 'virtual (the light never reaches it)' : w.z < state.vz0 || w.z > state.vz1 ? 'off this view' : '';
+      const note = !real ? 'virtual: never reached' : w.z < state.vz0 || w.z > state.vz1 ? 'off this view' : '';
       const td = (parts) => { const e = el('td'); setSlots(e, parts); return e; };
       rows.push(el('tr', { class: real ? '' : 'virtual' },
         td(seg.n !== 1 && i > 0 ? ['in glass (n = ', { v: seg.n, dec: 3, w: 5 }, ')'] : [name]),

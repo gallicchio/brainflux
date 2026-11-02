@@ -325,7 +325,8 @@ with Browser('beams/index.html', size=SIZE) as b:
     xs = []
     for v in (70.7, 3.25, 1500, 12, 250.5):
         set_box(b, '#view-box', 'drawn wider ×', v)(); settle(b, '#crest-note'); b.sleep(0.3)
-        xs.append(b.eval("[__seen['drawn '], __seen['× wider than it is']].map(v => v === undefined ? null : v)"))
+        # The long form on a wide bench, "×1290 wider" on a phone.
+        xs.append(b.eval("(__seen['drawn '] !== undefined ? [__seen['drawn '], __seen['× wider than it is']] : [__seen['×'], __seen[' wider']]).map(v => v === undefined ? null : v)"))
     check(all(x == xs[0] for x in xs) and None not in xs[0], f'bench: "drawn … × wider than it is" keeps its words in place as the stretch changes ({xs})')
     b.eval('__app.setups.stability()'); b.sleep(0.5)
     CAV = '#cavity-readout > span, #cavity-readout .fixnum, #cav-numbers dt, #cav-numbers dd, #cav-numbers .fixnum, #ray-box button'

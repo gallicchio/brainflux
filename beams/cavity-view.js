@@ -167,8 +167,9 @@ export function createCavity(app) {
     ctx.fillText(um ? 'x (µm)' : 'x (mm)', 0, 0);
     ctx.restore();
     ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'left'; fillSlots(ctx, ['mirror 1: R₁ = ', ...lenParts(state.R1, 7)], F.left, 15);
-    ctx.textAlign = 'right'; fillSlots(ctx, ['mirror 2: R₂ = ', ...lenParts(state.R2, 7), '  (drag it)'], F.right, 15);
+    const wide = F.w > 440;
+    ctx.textAlign = 'left'; fillSlots(ctx, [wide ? 'mirror 1: R₁ = ' : 'R₁ = ', ...lenParts(state.R1, 6, { mm: 1 })], F.left, 15);
+    ctx.textAlign = 'right'; fillSlots(ctx, [wide ? 'mirror 2: R₂ = ' : 'R₂ = ', ...lenParts(state.R2, 6, { mm: 1 }), wide ? '  (drag it)' : ' (drag)'], F.right, 15);
   }
 
   // ------------------------------------------------------------------- the stability diagram
@@ -209,11 +210,11 @@ export function createCavity(app) {
     ctx.stroke(); ctx.setLineDash([]);
     // Landmarks.
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2;
-    const marks = [[1, 1, 'planar', 'right', 'top'], [0, 0, 'confocal', 'left', 'top'], [-1, -1, 'concentric', 'left', 'top'], [1, 0, 'hemispherical', 'left', 'top']];
+    const marks = [[1, 1, 'planar', 'left', 'bottom'], [0, 0, 'confocal', 'left', 'top'], [-1, -1, 'concentric', 'left', 'top'], [1, 0, 'hemispherical', 'left', 'top']];
     for (const [a, b, name, align, base] of marks) {
       ctx.beginPath(); ctx.arc(F.X(a), F.Y(b), 3.5, 0, 2 * Math.PI); ctx.fill();
       ctx.textAlign = align; ctx.textBaseline = base;
-      ctx.fillText(name, F.X(a) + (align === 'left' ? 5 : -5), F.Y(b) + 4);
+      ctx.fillText(name, F.X(a) + (align === 'left' ? 5 : -5), F.Y(b) + (base === 'top' ? 4 : -4));
     }
     ctx.fillStyle = c.good; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
     ctx.fillText('g₁g₂ = 1', F.X(G) - 4, F.Y(1 / G) - 4);
@@ -246,11 +247,11 @@ export function createCavity(app) {
     const { ctx, width, height } = fitCanvas(spec);
     const c = themeColors();
     ctx.clearRect(0, 0, width, height);
-    const F = new Frame(ctx, width, height, { left: 52, right: 14, top: 24, bottom: 34 });
+    const F = new Frame(ctx, width, height, { left: 52, right: 24, top: 24, bottom: 34 });
     F.x0 = -0.04; F.x1 = 2.04; F.y0 = 0; F.y1 = 1.2;
     const FSR = fsr(state.L), q0 = q0Now();
     ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(F.w > 560 ? 'Resonant frequencies of the modes of order N (N + 1 modes each)' : 'Resonances, by order N', F.left, 15);
+    ctx.fillText(F.w > 560 ? 'Resonant frequencies of the modes of order N (N + 1 modes each)' : 'Resonances', F.left, 15);
     F.clip();
     // The plain comb q c/2L, without the Gouy phase.
     ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
@@ -285,15 +286,14 @@ export function createCavity(app) {
     spectrumAxes(ctx, F, c, FSR, q0);
     // A legend of colours.
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '12px system-ui, sans-serif';
-    let x = F.right - 7 * 28;
-    if (x > F.left + 300 || F.w < 560) {
-      ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.fillText('N =', x - 6, 11); ctx.textAlign = 'left';
-      for (let N = 0; N <= 6; N++) {
-        ctx.fillStyle = N === 0 ? c.accent : N_COLORS[N];
-        ctx.fillRect(x, 6, 4, 11);
-        ctx.fillStyle = c.ink2; ctx.fillText(`${N}`, x + 8, 11);
-        x += 28;
-      }
+    const step = F.w > 560 ? 28 : 22;
+    let x = F.right - 7 * step;
+    ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.fillText('N =', x - 6, 11); ctx.textAlign = 'left';
+    for (let N = 0; N <= 6; N++) {
+      ctx.fillStyle = N === 0 ? c.accent : N_COLORS[N];
+      ctx.fillRect(x, 6, 4, 11);
+      ctx.fillStyle = c.ink2; ctx.fillText(`${N}`, x + 8, 11);
+      x += step;
     }
   }
   /** The longitudinal index of the plot's left edge: the comb just below c/lambda. */
@@ -303,7 +303,8 @@ export function createCavity(app) {
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (let q = 0; q <= 2; q++) ctx.fillText(q ? `q₀ + ${q}` : 'q₀', F.X(q), F.bottom + 5);
     for (const v of [0.5, 1.5]) ctx.fillText(tickLabel(v), F.X(v), F.bottom + 5);
-    fillSlots(ctx, ['ν in units of c/2L = ', ...freqParts(FSR), ', above q₀ c/2L, q₀ = ', { v: q0, dec: 0, w: 7 }], F.left + F.w / 2, F.bottom + 19);
+    fillSlots(ctx, F.w > 480 ? ['ν in units of c/2L = ', ...freqParts(FSR), ', above q₀ c/2L, q₀ = ', { v: q0, dec: 0, w: 7 }]
+      : ['ν / (c/2L), q₀ = ', { v: q0, dec: 0, w: 7 }], F.left + F.w / 2, F.bottom + 19);
   }
 
   // ------------------------------------------------------------------- rays in phase space
