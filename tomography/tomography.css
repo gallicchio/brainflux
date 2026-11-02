@@ -24,6 +24,8 @@
 #scanner { cursor: crosshair; }
 #scanner.brush { cursor: cell; }
 #sinogram, #bp, #fbp, #kspace, #extra { cursor: crosshair; }
+/* Fourier space and the sixth panel take no drags: on a phone, a swipe over them scrolls the page. */
+#kspace, #extra { touch-action: pan-y pinch-zoom; }
 .sq.drop { outline: 3px dashed var(--accent); outline-offset: -3px; }
 .readout {
   color: var(--ink-2); min-height: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

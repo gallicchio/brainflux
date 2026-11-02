@@ -266,6 +266,12 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
     b.screenshot('build/tomo-point-sinogram.png')
     b.mouse('mouseMoved', 2, 2); frames(b)
     check(b.eval('__app.hardwareIndex') == 179 and colour(b, '#scanner', MAGENTA) < 5, 'moving off the sinogram turns the scanner back')
+    # Fourier space: the slice through the place pointed at, here in the direction 60 degrees.
+    x, y = b.point('#kspace', (0.5 + 0.3 * 0.5, 0.5 - 0.3 * 0.866))
+    b.mouse('mouseMoved', x, y); frames(b)
+    hk = b.eval('[__app.hardwareIndex, document.querySelector("#sino-readout").textContent]')
+    check(hk[0] == 60 and colour(b, '#sinogram', MAGENTA) > 40 and colour(b, '#scanner', MAGENTA) > 40, f'pointing at Fourier space in the direction 60° picks the slice at angle {hk[0]}: its row and its projection in magenta ({hk[1]!r})')
+    b.mouse('mouseMoved', 2, 2); frames(b)
     b.click('#sinogram', (0.55, 0.4)); b.mouse('mouseMoved', 2, 2); frames(b)
     pick = b.eval('__app.state.pick')
     check(pick is not None and 0 <= pick['j'] < 180 and b.eval('__app.hardwareIndex') == pick['j'], f'clicking the sinogram pins a ray ({pick})')

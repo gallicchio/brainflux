@@ -432,8 +432,9 @@ function quantile(arr, q) {
   return vals[Math.min(vals.length - 1, Math.floor(q * vals.length))];
 }
 
-// The ray of the sinogram pointed at (under the pointer, else the one clicked), or null.
-const shownRay = () => { const r = hover.sinogram || state.pick; return r && r.j < sc.nA ? r : null; };
+// The ray of the sinogram pointed at (under the pointer, else the one clicked), or the slice of
+// Fourier space pointed at (an angle, with s null), or null.
+const shownRay = () => { const r = hover.sinogram || hover.slice || state.pick; return r && r.j < sc.nA ? r : null; };
 // The angle measured last.
 const lastIndex = () => (sc.count ? (state.next - 1 + sc.nA) % sc.nA : 0);
 // The angle just measured, while a scan goes on (paused or stepping too): cyan in every panel.
@@ -483,7 +484,7 @@ function drawScanner() {
   }
   // The ray pointed at in the sinogram.
   const ray = shownRay();
-  if (ray) {
+  if (ray && ray.s !== null) {
     ctx.strokeStyle = C.pick; ctx.lineWidth = 1.6;
     line(P(SRC_D, ray.s), P(-DET_D, ray.s));
     ctx.fillStyle = C.pick; ctx.beginPath(); ctx.arc(...P(-DET_D, ray.s), 3.5, 0, TWO_PI); ctx.fill();
@@ -626,8 +627,10 @@ function drawSinogram(data) {
   // The ray pointed at: its row, and a ring at its place on the detector.
   if (ray) {
     markRow(ray.j, C.pick);
-    ctx.strokeStyle = C.pick; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(g.X(ray.s), g.Y(sc.angle(ray.j)), 6, 0, TWO_PI); ctx.stroke();
+    if (ray.s !== null) {
+      ctx.strokeStyle = C.pick; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(g.X(ray.s), g.Y(sc.angle(ray.j)), 6, 0, TWO_PI); ctx.stroke();
+    }
   }
 }
 
@@ -784,7 +787,7 @@ function overlays(v, which) {
     ctx.beginPath(); ctx.moveTo(X(-1), Y(state.py0)); ctx.lineTo(X(1), Y(state.py0)); ctx.stroke(); ctx.setLineDash([]);
   }
   const ray = shownRay();
-  if (ray && (which === 'bp' || which === 'fbp')) {
+  if (ray && ray.s !== null && (which === 'bp' || which === 'fbp')) {
     // Where the measurement pointed at was smeared: the line of its ray.
     const th = sc.angle(ray.j), c = Math.cos(th), sn = Math.sin(th), s = ray.s;
     ctx.strokeStyle = C.pick; ctx.lineWidth = 1.2;
@@ -946,7 +949,7 @@ const pixel = (arr, x, y) => {
   const i = Math.round(x / H + N / 2), j = Math.round(N / 2 - y / H);
   return i >= 0 && j >= 0 && i < N && j < N ? arr[j * N + i] : 0;
 };
-let hover = { scanner: null, sinogram: null, kspace: null, bp: null, fbp: null, extra: null };
+let hover = { scanner: null, sinogram: null, kspace: null, slice: null, bp: null, fbp: null, extra: null };
 
 let rmsCache = { key: '', rms: NaN, smooth: NaN };
 // The pixels "away from edges": where the object is the same, to 0.1% of its range, for four
@@ -996,7 +999,9 @@ function updateReadouts(data) {
       : state.tool === 'look' ? ['Point at the object to see its sinusoid'] : [state.tool === 'brush' ? 'Paint on the object' : 'Erase part of the object']);
   // The sinogram.
   const hg = shownRay();
-  if (hg) {
+  if (hg && hg.s === null) {
+    setSlots($('#sino-readout'), ['θ ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, sc.measured[hg.j] ? '°: the slice pointed at' : '°: not measured']);
+  } else if (hg) {
     const k = Math.round(hg.s / sc.ds + sc.M / 2);
     const val = sc.measured[hg.j] && k >= 0 && k < sc.M ? { v: sc.meas[hg.j * sc.M + k], dec: 4, w: 7 } : 'not measured';
     setSlots($('#sino-readout'), ['θ ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, '°, s ', { v: hg.s, dec: 3, w: 6 }, ': p = ', val]);
@@ -1139,11 +1144,22 @@ sinoCanvas.addEventListener('pointerleave', () => { hover.sinogram = null; dirty
 
 // Fourier space: read out k.
 const kCanvasEl = $('#kspace');
-kCanvasEl.addEventListener('pointermove', (e) => { hover.kspace = worldOf(kCanvasEl, e, KMAX / state.kz); dirty = true; schedule(); });
+kCanvasEl.addEventListener('pointermove', (e) => {
+  const p = worldOf(kCanvasEl, e, KMAX / state.kz);
+  hover.kspace = p;
+  // The slice through this point, at the angle theta = atan2(ky, kx) (mod 180°): the projection
+  // whose transform it is (if one was measured near enough to that angle).
+  let th = Math.atan2(p.y, p.x);
+  if (th < 0) th += Math.PI;
+  if (th > Math.PI - sc.dth / 2) th -= Math.PI;
+  const j = Math.round(th / sc.dth);
+  hover.slice = Math.hypot(p.x, p.y) > 0.02 * KMAX / state.kz && j >= 0 && j < sc.nA ? { j, s: null } : null;
+  dirty = true; schedule();
+});
 const kZoom = $('#k-zoom');
 for (const z of [1, 2, 4]) kZoom.append(el('option', { value: z }, `zoom ${z}×`));
 kZoom.addEventListener('change', () => { state.kz = +kZoom.value; dirty = true; updateHash(); schedule(); });
-kCanvasEl.addEventListener('pointerleave', () => { hover.kspace = null; dirty = true; schedule(); });
+kCanvasEl.addEventListener('pointerleave', () => { hover.kspace = null; hover.slice = null; dirty = true; schedule(); });
 
 // The reconstructions: read out values; drag to move the profile.
 for (const [id, key] of [['#bp', 'bp'], ['#fbp', 'fbp'], ['#extra', 'extra']]) {

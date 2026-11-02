@@ -125,8 +125,9 @@
   of Fourier space, and the smear it adds to each back-projection (orange where the filtered
   projection is negative).  <em>Step</em> (or the → key) measures one angle at a time.  Point at a
   row of the sinogram and it turns magenta: the scanner turns to that angle and shows the ray.
-  Point at the object, or at a back-projection, and that point turns yellow, with its sinusoid in
-  the sinogram.  Click to pin either.</p>
+  Point at Fourier space and the slice through that place turns magenta, with its row.  Point at
+  the object, or at a back-projection, and that point turns yellow, with its sinusoid in the
+  sinogram.  Click to pin a ray or a point.</p>
 
   <article class="exp" data-setup="sinusoid">
     <h3>1. One point, one sinusoid</h3>
@@ -194,7 +195,9 @@
     puts two bright spots in $F$, at $|k|=40$ in the direction 60°.  Fourier space is magnified
     four times, with the object's own transform drawn faintly underneath.  Watch the cyan slice
     turn, 5° per angle: the spots light up when it reaches 60°, when the rays run along the
-    stripes.  Collect slices at enough angles and you have $F$, and so the object.</p>
+    stripes.  Point at a spot: the slice through it and its row of the sinogram turn magenta, and
+    the scanner shows that projection, with the stripes' ripple on it.  Collect slices at enough
+    angles and you have $F$, and so the object.</p>
   </article>
 
   <article class="exp" data-setup="density">
