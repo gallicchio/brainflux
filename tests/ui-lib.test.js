@@ -1,6 +1,6 @@
 import { test, assert } from './harness.js';
 import { fixedNum, FIGURE_SPACE, numSlot, setSlots, setGroups } from '../lib/ui.js';
-import { fillSlots, slotsWidth } from '../lib/plot.js';
+import { fillSlots, slotsWidth, Frame } from '../lib/plot.js';
 
 const eq = (got, want) => assert(got === want, `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
 
@@ -148,5 +148,22 @@ test('fillSlots: a canvas line is the same width, its words in the same places, 
   for (let i = 0; i < 3; i++) {
     const xs = words.filter((_, k) => k % 3 === i);
     assert(xs.every((x) => Math.abs(x - xs[0]) < 1e-9), `the unit stays put (${xs})`);
+  }
+});
+
+test('Frame.axes: an x label too wide for the margins is drawn inside the canvas', () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 300; canvas.height = 120;
+  const ctx = canvas.getContext('2d'), calls = [];
+  const fill = ctx.fillText.bind(ctx);
+  ctx.fillText = (t, x, y) => { calls.push({ t, x, y, w: ctx.measureText(t).width, align: ctx.textAlign }); fill(t, x, y); };
+  const colors = { line: '#ccc', ink2: '#333', ink3: '#666' };
+  for (const right of [12, 80]) {
+    calls.length = 0;
+    const F = new Frame(ctx, 300, 120, { right, bottom: 24 });
+    F.axes({ xlabel: 'time since the kick (s)', colors });
+    const c = calls.find((k) => k.t === 'time since the kick (s)');
+    const x0 = c.align === 'right' ? c.x - c.w : c.x;
+    assert(x0 >= 0 && x0 + c.w <= 300 + 1e-9, `right margin ${right}: the label spans ${x0.toFixed(0)} to ${(x0 + c.w).toFixed(0)} of 300 px`);
   }
 });
