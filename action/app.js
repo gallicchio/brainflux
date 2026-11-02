@@ -372,6 +372,7 @@ function rebuild({ snap = false } = {}) {
   }
   evaluate();
   if (!snap) record();
+  setCaption();
   recomputeTruth(0, { snap });
 }
 
@@ -692,7 +693,7 @@ function drawPath() {
   const { ctx, width, height } = fitCanvas(pathCanvas);
   const c = themeColors(), d = state.sys;
   ctx.clearRect(0, 0, width, height);
-  const f = new Frame(ctx, width, height, { left: 52, right: 16, top: 12, bottom: 36 });
+  const f = new Frame(ctx, width, height, { left: 52, right: 16, top: 8, bottom: 36 });
   frame = f;
   // The range holds still while a knot is dragged (an end point moves the true paths).
   if (!pathView || !dragging) pathView = viewRange();
