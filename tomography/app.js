@@ -6,7 +6,7 @@ import { Scanner } from './scan.js';
 import { sheppLogan, disk, blob, FILTERS, filterResponse, objectSpectrum, TWO_PI } from './radon.js';
 import { colorize } from '../lib/complexcolor.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, toast, readHash, writeHash, setSlots } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors, fillSlots } from '../lib/plot.js';
+import { fitCanvas, Frame, themeColors, fillSlots, slotsWidth } from '../lib/plot.js';
 import { stroke as paintStroke, paint } from '../fft2d/tools.js';
 import { PRESETS as GALLERY, makePreset, loadImage, imageData } from '../fft2d/presets.js';
 
@@ -14,11 +14,17 @@ const N = 256, H = 2 / N;              // the picture: N x N pixels across the s
 const sc = new Scanner(N);
 const DEG = Math.PI / 180;
 
-// Colours on the black pictures (the same in light and dark themes).
+// Colours on the black pictures (the same in light and dark themes).  Three things are tied
+// together by colour in every panel: the angle just measured is cyan, the detector's colour (its
+// projection on the detector, its row of the sinogram, its slice of Fourier space, its smear in
+// the back-projections); a row of the sinogram you point at is magenta (its ray in the scanner,
+// its slice, its smear); a point of the object you point at is yellow (its sinusoid).
 const C = {
-  source: '#ffb347', ray: 'rgba(255, 196, 120, 0.22)', detector: '#7fd3ff', profile: 'rgba(127, 211, 255, 0.28)',
-  pick: '#ff5fd2', trace: '#ffe14d', circle: 'rgba(255, 255, 255, 0.4)', text: 'rgba(255, 255, 255, 0.82)',
+  source: '#ffb347', ray: 'rgba(255, 196, 120, 0.22)', detector: '#7fd3ff',
+  now: '#7fd3ff', pick: '#ff5fd2', trace: '#ffe14d', circle: 'rgba(255, 255, 255, 0.4)', text: 'rgba(255, 255, 255, 0.82)',
 };
+const RGB = { now: [127, 211, 255], pick: [255, 95, 210], neg: [255, 128, 64] };
+const soft = (role, a) => `rgba(${RGB[role].join(', ')}, ${a})`;
 
 // --------------------------------------------------------------------------- state
 
@@ -41,6 +47,7 @@ const state = {
   pick: null,                          // a ray picked in the sinogram: { j, s }
   point: null,                         // a point picked on the object: { x, y, pinned }
   pmax: 1,                             // the sinogram's grey scale
+  bpScale: [0, 1],                     // the back-projection's: black and white
   objRange: [0, 1],
   camera: null,
 };
@@ -51,6 +58,8 @@ const state = {
 const POINT_SIGMA = H, POINT_MASS = TWO_PI * H * H;
 const shapesFor = {
   phantom: () => sheppLogan(state.contrast),
+  // One disk at the centre (its band in the sinogram is straight) and two off it (sinusoids).
+  disks: () => [disk(0, 0, 0.15, 1), disk(0.5, 0.3, 0.08, 1.5), disk(-0.3, -0.4, 0.22, 0.5)],
   point: () => [blob(state.px, state.py, POINT_SIGMA, POINT_MASS)],
   disk: () => [disk(0, 0, 0.6, 1)],
   // The 1974 phantom (realistic attenuations) with two metal pins, 20 times water's.
@@ -58,12 +67,14 @@ const shapesFor = {
 };
 const OBJECTS = [
   { id: 'phantom', label: 'Shepp–Logan', title: 'The Shepp–Logan head phantom: ten ellipses, projected exactly' },
+  { id: 'disks', label: 'Disks', title: 'Three disks, projected exactly: the one in the middle draws a straight band in the sinogram, the others sinusoids' },
   { id: 'point', label: 'Point', title: 'One small Gaussian spot, projected exactly' },
   { id: 'disk', label: 'Disk', title: 'A uniform disk: its projection is the chord length 2√(R² − s²)' },
   { id: 'metal', label: 'Metal pins', title: 'The 1974 phantom with two metal pins, 20 times as absorbing as water' },
-  { id: 'portrait', label: 'Fourier', title: "Joseph Fourier's portrait (public domain), projected numerically" },
   { id: 'formula', label: 'Formula', title: 'Type the object f(x, y)' },
 ];
+// Fourier's portrait heads the list of pictures (it was a button of its own: its name stays).
+const PORTRAIT = { id: 'portrait', label: 'Fourier’s portrait', title: "Joseph Fourier's portrait (public domain), projected numerically" };
 const FORMULAS = [
   { label: 'Stripes', f: '(r < 0.8)*(1 + cos(k*(x cos(a) + y sin(a))))/2', fp: { k: 40, a: 1.0472 } },
   { label: 'Rings', f: '(r < 0.85)*(1 + cos(k*r))/2', fp: { k: 40 } },
@@ -220,6 +231,17 @@ function finishScan() {
   state.playing = true;
   while (state.next < sc.nA) measureNext();
   dirty = true; schedule();
+}
+
+/** Measure one more angle and stop there (the Step button, or the → key).  After a finished
+ *  scan, the first angle of a new one. */
+function stepScan() {
+  if (jobs.flight || jobs.target) return;   // (every angle is being measured again in the workers)
+  if (scanFinished()) { sc.pass++; restartScan(); }
+  state.playing = false;
+  measureNext();
+  state.progress = state.next;
+  updatePlay(); dirty = true; schedule();
 }
 
 // Measuring everything at once, in worker threads.
@@ -385,7 +407,8 @@ function draw() {
     greyInto(off.fbp, sc.fbp, lo, hi);
     // Back-projection has no natural scale (it is the object blurred by 1/r): its own.
     const bpLo = quantile(sc.bp, 0.002), bpHi = quantile(sc.bp, 0.998);
-    greyInto(off.bp, sc.bp, bpLo, bpHi > bpLo ? bpHi : bpLo + 1);
+    state.bpScale = [bpLo, bpHi > bpLo ? bpHi : bpLo + 1];
+    greyInto(off.bp, sc.bp, ...state.bpScale);
     drawn.recon = `${data}:${lo}:${hi}`;
   }
   drawScanner();
@@ -409,12 +432,19 @@ function quantile(arr, q) {
   return vals[Math.min(vals.length - 1, Math.floor(q * vals.length))];
 }
 
-// The angle the source and detector are drawn at: the picked ray's, or the last measured.
-function hardwareIndex() {
-  if (state.pick) return state.pick.j;
-  if (!sc.count) return 0;
-  return (state.next - 1 + sc.nA) % sc.nA;
-}
+// The ray of the sinogram pointed at (under the pointer, else the one clicked), or null.
+const shownRay = () => { const r = hover.sinogram || state.pick; return r && r.j < sc.nA ? r : null; };
+// The angle measured last.
+const lastIndex = () => (sc.count ? (state.next - 1 + sc.nA) % sc.nA : 0);
+// The angle just measured, while a scan goes on (paused or stepping too): cyan in every panel.
+// None once the scan is over.
+const nowIndex = () => (sc.count && !scanFinished() ? lastIndex() : -1);
+// The angle the source and detector are drawn at, and its role (the colour it is drawn in): the
+// row pointed at in the sinogram, else the angle just measured.
+function hardwareIndex() { const r = shownRay(); return r ? r.j : lastIndex(); }
+const hardwareRole = () => (shownRay() ? 'pick' : 'now');
+// The angle whose smear the back-projections show: the ray pointed at, or the angle just measured.
+function smearIndex() { const r = shownRay(); return r ? (sc.measured[r.j] ? r.j : -1) : nowIndex(); }
 
 const SCAN_W = 1.36, SRC_D = 1.17, DET_D = 1.08, PROFILE_H = 0.25;
 
@@ -439,54 +469,76 @@ function drawScanner() {
     for (let k = 0; k < sc.M; k++) { const s0 = (k - sc.M / 2) * ds; line(P(-DET_D, s0 - w / 2), P(-DET_D, s0 + w / 2)); }
   } else line(P(-DET_D, -1), P(-DET_D, 1));
   ctx.lineCap = 'butt';
-  // What the detector measured at this angle, drawn outward from it.
+  // What the detector measured at this angle, drawn outward from it, in the colour of the angle's
+  // role (cyan: just measured; magenta: the row pointed at in the sinogram).
+  const role = hardwareRole();
   if (sc.measured[j]) {
     const M = sc.M, row = sc.meas.subarray(j * M, (j + 1) * M), k0 = (k) => (k - M / 2) * sc.ds;
     ctx.beginPath(); ctx.moveTo(...P(-DET_D, k0(0)));
     for (let k = 0; k < M; k++) ctx.lineTo(...P(-DET_D - PROFILE_H * Math.max(0, Math.min(1.15, row[k] / state.pmax)), k0(k)));
     ctx.lineTo(...P(-DET_D, k0(M - 1)));
     ctx.closePath();
-    ctx.fillStyle = C.profile; ctx.fill();
-    ctx.strokeStyle = C.detector; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = soft(role, 0.28); ctx.fill();
+    ctx.strokeStyle = C[role]; ctx.lineWidth = 1.2; ctx.stroke();
   }
-  // A picked ray.
-  if (state.pick) {
+  // The ray pointed at in the sinogram.
+  const ray = shownRay();
+  if (ray) {
     ctx.strokeStyle = C.pick; ctx.lineWidth = 1.6;
-    line(P(SRC_D, state.pick.s), P(-DET_D, state.pick.s));
-    ctx.fillStyle = C.pick; ctx.beginPath(); ctx.arc(...P(-DET_D, state.pick.s), 3.5, 0, TWO_PI); ctx.fill();
+    line(P(SRC_D, ray.s), P(-DET_D, ray.s));
+    ctx.fillStyle = C.pick; ctx.beginPath(); ctx.arc(...P(-DET_D, ray.s), 3.5, 0, TWO_PI); ctx.fill();
   }
   // The point object, which is only a pixel wide: a ring round it.
   if (state.obj === 'point') {
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(X(state.px), Y(state.py), 9, 0, TWO_PI); ctx.stroke();
   }
-  // A picked point.
+  // A point pointed at, and the ray through it at this angle: where its shadow falls on the
+  // detector, s = x cos θ + y sin θ (the yellow dot on its sinusoid in the sinogram).
   if (state.point) {
+    const { x, y } = state.point, s = x * c + y * sn;
+    ctx.strokeStyle = 'rgba(255, 225, 77, 0.7)'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+    line(P(SRC_D, s), P(-DET_D, s)); ctx.setLineDash([]);
+    ctx.fillStyle = C.trace; ctx.beginPath(); ctx.arc(...P(-DET_D, s), 3.5, 0, TWO_PI); ctx.fill();
     ctx.strokeStyle = C.trace; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.arc(X(state.point.x), Y(state.point.y), 5, 0, TWO_PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(X(x), Y(y), 5, 0, TWO_PI); ctx.stroke();
   }
   // The brush.
   if (brushHover && (state.tool === 'brush' || state.tool === 'eraser')) {
     ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(X(brushHover.x), Y(brushHover.y), Math.max(2, (state.brush.size / 2) * H * v.s), 0, TWO_PI); ctx.stroke();
   }
-  ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = C.text; ctx.textBaseline = 'top';
-  fillSlots(ctx, ['θ = ', { v: th / DEG, dec: 1, w: 5 }, '°'], 8, 8);
+  // The angle, and which of the angles it is, on a dark backing (the bars pass under them).
+  ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'top';
+  const label = ['θ = ', { v: th / DEG, dec: 1, w: 5 }, '°'], count = ['angle ', { v: j + 1, dec: 0, w: 3 }, ' of ', { v: sc.nA, dec: 0, w: 3 }];
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.fillRect(4, 5, slotsWidth(ctx, label) + 8, 18);
+  if (sc.count) { const w = slotsWidth(ctx, count) + 8; ctx.fillRect(size - 4 - w, 5, w, 18); }
+  ctx.fillStyle = sc.count ? C[role] : C.text;
+  fillSlots(ctx, label, 8, 8);
+  if (sc.count) {
+    ctx.textAlign = 'right';
+    fillSlots(ctx, count, size - 8, 8);
+    ctx.textAlign = 'left';
+  }
 }
 
-// The sinogram: s across, theta down.
-const SINO_M = { left: 34, right: 8, top: 8, bottom: 20 };
+// The sinogram: s across, theta down.  Bin k (centred on s_k) spans the k-th of M columns; row j
+// is centred on its angle theta_j.  When the rows are more than 4 px apart they are drawn as
+// bands narrower than the spacing, so that the gaps show which angles were measured.
+const SINO_M = { left: 40, right: 10, top: 8, bottom: 20 };
 const sinoImg = { canvas: document.createElement('canvas'), data: null };
 function sinoGeom() {
   const cv = $('#sinogram'), r = cv.getBoundingClientRect();
   const w = r.width - SINO_M.left - SINO_M.right, h = r.height - SINO_M.top - SINO_M.bottom;
-  const M = sc.M, ds = sc.ds, dth = sc.dth;
+  const M = sc.M, ds = sc.ds, rowPx = (h * sc.dth) / Math.PI;
   return {
-    w, h,
+    w, h, rowPx,
+    band: rowPx <= 4 ? rowPx : Math.max(3, Math.min(8, rowPx / 2)),   // the height a row is drawn
     X: (s) => SINO_M.left + ((s / ds + M / 2 + 0.5) / M) * w,
-    Y: (th) => SINO_M.top + ((th + dth / 2) / Math.PI) * h,
+    Y: (th) => SINO_M.top + (th / Math.PI) * h,
     s: (px) => (((px - SINO_M.left) / w) * M - 0.5 - M / 2) * ds,
-    th: (py) => ((py - SINO_M.top) / h) * Math.PI - dth / 2,
+    th: (py) => ((py - SINO_M.top) / h) * Math.PI,
   };
 }
 
@@ -509,56 +561,73 @@ function drawSinogram(data) {
     ic.getContext('2d').putImageData(sinoImg.data, 0, 0);
     drawn.sino = `${data}:${state.pmax}`;
   }
-  ctx.imageSmoothingEnabled = nA > g.h;
-  const rangeFrac = sc.opts.range / Math.PI;
-  ctx.drawImage(ic, SINO_M.left, SINO_M.top, g.w, g.h * rangeFrac);
+  const L0 = SINO_M.left, T0 = SINO_M.top, dth = sc.dth, rangeEnd = g.Y(sc.angle(nA - 1) + dth / 2);
+  if (g.band === g.rowPx) {
+    // Rows side by side: one picture, row j from theta_j - dth/2 to theta_j + dth/2.
+    ctx.imageSmoothingEnabled = nA > g.h;
+    ctx.drawImage(ic, L0, g.Y(-dth / 2), g.w, nA * g.rowPx);
+  } else {
+    ctx.imageSmoothingEnabled = false;
+    for (let j = 0; j < nA; j++) if (sc.measured[j]) ctx.drawImage(ic, 0, j, M, 1, L0, g.Y(sc.angle(j)) - g.band / 2, g.w, g.band);
+  }
   // The angles never reached (a limited range): hatched.
-  if (rangeFrac < 0.999) {
-    const y0 = SINO_M.top + g.h * rangeFrac;
-    ctx.save(); ctx.beginPath(); ctx.rect(SINO_M.left, y0, g.w, g.h * (1 - rangeFrac)); ctx.clip();
+  if (sc.opts.range < Math.PI - 1e-6) {
+    const y0 = rangeEnd, hh = T0 + g.h - y0;
+    ctx.save(); ctx.beginPath(); ctx.rect(L0, y0, g.w, hh); ctx.clip();
     ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
-    for (let x = -g.h; x < g.w; x += 9) { ctx.beginPath(); ctx.moveTo(SINO_M.left + x, y0 + g.h); ctx.lineTo(SINO_M.left + x + g.h, y0); ctx.stroke(); }
+    for (let x = -g.h; x < g.w; x += 9) { ctx.beginPath(); ctx.moveTo(L0 + x, y0 + g.h); ctx.lineTo(L0 + x + g.h, y0); ctx.stroke(); }
     ctx.restore();
     ctx.fillStyle = C.text; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('not measured', SINO_M.left + g.w / 2, y0 + (g.h * (1 - rangeFrac)) / 2);
+    if (hh > 16) ctx.fillText('not measured', L0 + g.w / 2, y0 + hh / 2);
   }
-  // Axes.
+  // Axes: theta down the left, s along the bottom (the end labels inside the ends).
   ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right';
   for (const a of [0, 45, 90, 135, 180]) {
-    const y = SINO_M.top + (a / 180) * g.h;
-    ctx.fillText(`${a}°`, SINO_M.left - 5, y);
-    ctx.beginPath(); ctx.moveTo(SINO_M.left - 3, y); ctx.lineTo(SINO_M.left, y); ctx.stroke();
+    const y = g.Y(a * DEG);
+    ctx.textBaseline = a === 180 ? 'bottom' : 'middle';
+    ctx.fillText(`${a}°`, L0 - 9, a === 180 ? y + 4 : y);
+    ctx.beginPath(); ctx.moveTo(L0 - 3, y); ctx.lineTo(L0, y); ctx.stroke();
   }
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.textBaseline = 'top';
   for (const s of [-1, -0.5, 0, 0.5, 1]) {
-    const x = SINO_M.left + ((s + 1) / 2) * g.w;
-    ctx.fillText(s === 0 ? 's = 0' : String(s).replace('-', '−'), x, SINO_M.top + g.h + 4);
+    ctx.textAlign = s === -1 ? 'left' : s === 1 ? 'right' : 'center';
+    const x = s === -1 ? L0 : s === 1 ? L0 + g.w : g.X(s);
+    ctx.fillText(s === 0 ? 's = 0' : String(s).replace('-', '−'), x, T0 + g.h + 4);
   }
-  // The angle being measured.
-  if (state.playing && nA > 1) {
-    const y = g.Y(sc.angle(state.next) - sc.dth / 2);
-    ctx.fillStyle = C.detector;
-    ctx.beginPath(); ctx.moveTo(SINO_M.left - 1, y); ctx.lineTo(SINO_M.left - 7, y - 4); ctx.lineTo(SINO_M.left - 7, y + 4); ctx.fill();
-  }
-  // A point's sinusoid.
+  // A row: outlined in its colour, with a mark in each margin.
+  const markRow = (j, colour) => {
+    const y = g.Y(sc.angle(j)), half = Math.max(1.5, g.band / 2) + 1;
+    ctx.strokeStyle = colour; ctx.lineWidth = 1;
+    ctx.strokeRect(L0 - 0.5, y - half, g.w + 1, 2 * half);
+    ctx.fillStyle = colour;
+    ctx.beginPath(); ctx.moveTo(L0 - 1, y); ctx.lineTo(L0 - 7, y - 4); ctx.lineTo(L0 - 7, y + 4); ctx.fill();
+    const R = L0 + g.w;
+    ctx.beginPath(); ctx.moveTo(R + 1, y); ctx.lineTo(R + 7, y - 4); ctx.lineTo(R + 7, y + 4); ctx.fill();
+  };
+  const now = nowIndex(), ray = shownRay();
+  if (now >= 0 && (!ray || ray.j !== now)) markRow(now, C.now);
+  // A point's sinusoid, and where it is at the angle the scanner is drawn at.
   if (state.point) {
     const { x, y } = state.point;
-    ctx.save(); ctx.beginPath(); ctx.rect(SINO_M.left, SINO_M.top, g.w, g.h); ctx.clip();
+    ctx.save(); ctx.beginPath(); ctx.rect(L0, T0, g.w, g.h); ctx.clip();
     ctx.strokeStyle = C.trace; ctx.lineWidth = 1.4; ctx.setLineDash([5, 4]);
     ctx.beginPath();
     for (let a = 0; a <= 180; a += 1) {
-      const t = a * DEG, s = x * Math.cos(t) + y * Math.sin(t);
-      const px = g.X(s), py = SINO_M.top + (a / 180) * g.h;
+      const t = a * DEG, px = g.X(x * Math.cos(t) + y * Math.sin(t)), py = g.Y(t);
       if (a) ctx.lineTo(px, py); else ctx.moveTo(px, py);
     }
     ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    if (sc.count || ray) {
+      const t = sc.angle(hardwareIndex());
+      ctx.fillStyle = C.trace; ctx.beginPath(); ctx.arc(g.X(x * Math.cos(t) + y * Math.sin(t)), g.Y(t), 3.5, 0, TWO_PI); ctx.fill();
+    }
   }
-  // A picked ray.
-  if (state.pick) {
-    const px = g.X(state.pick.s), py = g.Y(sc.angle(state.pick.j));
+  // The ray pointed at: its row, and a ring at its place on the detector.
+  if (ray) {
+    markRow(ray.j, C.pick);
     ctx.strokeStyle = C.pick; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(px, py, 6, 0, TWO_PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(g.X(ray.s), g.Y(sc.angle(ray.j)), 6, 0, TWO_PI); ctx.stroke();
   }
 }
 
@@ -631,17 +700,20 @@ function drawK() {
     if (label && k * s > 30 && k < kw * 0.95) { ctx.fillStyle = C.text; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(label, X(-0.71 * k) - 2, Y(0.71 * k) - 2); }
   };
   if (state.circles) {
-    ring(Math.PI / sc.ds, [6, 4], 'π/ds');
-    ring(Math.PI / sc.dth, [2, 3], 'π/Δθ');
+    // The detector's Nyquist frequency, and the radius inside which the slices are close enough
+    // together to sample an object of radius R = 1 (the scan circle): k Δθ < π / R.
+    ring(Math.PI / sc.ds, [6, 4], 'π/Δs');
+    ring(Math.PI / sc.dth, [2, 3], 'π/(RΔθ)');
   }
-  // The slice of the picked ray, and the one being measured.
+  // The slice of the angle just measured, and of the row pointed at in the sinogram.
   const sliceLine = (j, colour, w) => {
     const th = sc.angle(j), r = KMAX * 1.5;
     ctx.strokeStyle = colour; ctx.lineWidth = w;
     ctx.beginPath(); ctx.moveTo(X(-r * Math.cos(th)), Y(-r * Math.sin(th))); ctx.lineTo(X(r * Math.cos(th)), Y(r * Math.sin(th))); ctx.stroke();
   };
-  if (state.pick) sliceLine(state.pick.j, 'rgba(255, 95, 210, 0.7)', 1);
-  else if (state.playing && sc.count) sliceLine(hardwareIndex(), 'rgba(127, 211, 255, 0.45)', 1);
+  const now = nowIndex(), ray = shownRay();
+  if (now >= 0 && (!ray || ray.j !== now)) sliceLine(now, soft('now', 0.75), 1.2);
+  if (ray) sliceLine(ray.j, soft('pick', 0.8), 1.2);
   ctx.fillStyle = C.text; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   subscripted(ctx, 'k', 'x', ' →', size - 40, size / 2 + 4);
   subscripted(ctx, '↑ k', 'y', '', size / 2 + 4, 6);
@@ -661,7 +733,48 @@ function drawRecon(canvas, img, which) {
   const v = view(canvas, 1), { ctx, size, X, Y } = v;
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, size, size);
   drawPicture(v, img);
+  if (which === 'bp' || which === 'fbp') drawSmear(v, which);
   overlays(v, which);
+}
+
+// One angle's smear: its projection (or, for the filtered back-projection, its filtered
+// projection) spread back along its rays, tinted in the colour of the angle's role over the
+// picture (and the filtered projection's negative values in orange).  It is what that angle adds
+// to the picture, up to the factor Δθ.
+const smear = { bp: { canvas: greyCanvas(), key: '' }, fbp: { canvas: greyCanvas(), key: '' } };
+const smearImg = new ImageData(N, N);
+function drawSmear(v, which) {
+  const j = smearIndex();
+  if (j < 0) return;
+  const role = hardwareRole(), M = sc.M, item = smear[which];
+  const key = `${dataVersion()}:${j}:${role}:${M}`;
+  if (item.key !== key) {
+    item.key = key;
+    const row = (which === 'bp' ? sc.meas : sc.filt).subarray(j * M, (j + 1) * M);
+    let scale = which === 'bp' ? state.pmax : 0;
+    const alpha = which === 'bp' ? 80 : 125;
+    if (which === 'fbp') { for (const q of row) scale = Math.max(scale, Math.abs(q)); scale = 0.35 * scale || 1; }
+    const th = sc.angle(j), c = Math.cos(th), sn = Math.sin(th), pos = RGB[role], neg = RGB.neg, d = smearImg.data;
+    const { lo, hi } = sc.inside;
+    d.fill(0);
+    for (let jj = 0; jj < N; jj++) {
+      const y = (N / 2 - jj) * H;
+      for (let i = lo[jj]; i <= hi[jj]; i++) {
+        const b = (((i - N / 2) * H * c + y * sn) / sc.ds) + M / 2, k = Math.floor(b), f = b - k;
+        if (k < 0 || k + 1 >= M) continue;
+        const val = row[k] + f * (row[k + 1] - row[k]), a = Math.min(1, Math.abs(val) / scale);
+        if (a < 0.02) continue;
+        const col = val > 0 ? pos : neg, o = (jj * N + i) * 4;
+        d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = alpha * a;
+      }
+    }
+    item.canvas.getContext('2d').putImageData(smearImg, 0, 0);
+  }
+  const { ctx, X, Y, s } = v;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(X(0), Y(0), s, 0, TWO_PI); ctx.clip();
+  ctx.drawImage(item.canvas, X(-1 - H / 2), Y(1 + H / 2), 2 * s, 2 * s);
+  ctx.restore();
 }
 
 function overlays(v, which) {
@@ -670,9 +783,10 @@ function overlays(v, which) {
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1; ctx.setLineDash([6, 5]);
     ctx.beginPath(); ctx.moveTo(X(-1), Y(state.py0)); ctx.lineTo(X(1), Y(state.py0)); ctx.stroke(); ctx.setLineDash([]);
   }
-  if (state.pick && which === 'bp') {
-    // Where the picked measurement was smeared.
-    const th = sc.angle(state.pick.j), c = Math.cos(th), sn = Math.sin(th), s = state.pick.s;
+  const ray = shownRay();
+  if (ray && (which === 'bp' || which === 'fbp')) {
+    // Where the measurement pointed at was smeared: the line of its ray.
+    const th = sc.angle(ray.j), c = Math.cos(th), sn = Math.sin(th), s = ray.s;
     ctx.strokeStyle = C.pick; ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(X(s * c + 1.5 * sn), Y(s * sn - 1.5 * c)); ctx.lineTo(X(s * c - 1.5 * sn), Y(s * sn + 1.5 * c)); ctx.stroke();
   }
@@ -715,8 +829,21 @@ function drawExtra() {
 
 const BP_COLOUR = '#d4872a';
 
+// A legend line: items [label, colour, dash, width] from x at height y.
+function legend(ctx, items, x, y, col) {
+  ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  for (const [label, colour, dash = [], w = 2] of items) {
+    ctx.strokeStyle = colour; ctx.lineWidth = w; ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 16, y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = col.ink2; ctx.fillText(label, x + 19, y);
+    x += 26 + ctx.measureText(label).width;
+  }
+}
+
+const PLOT_M = { left: 42, right: 44, top: 36, bottom: 34 };
+
 function drawProfile(ctx, width, height, col) {
-  const f = new Frame(ctx, width, height, { left: 40, right: 44, top: 22, bottom: 30 });
+  const f = new Frame(ctx, width, height, PLOT_M);
   const [lo, hi] = window_(), pad = 0.12 * (hi - lo);
   f.x0 = -1; f.x1 = 1; f.y0 = lo - pad; f.y1 = hi + pad;
   f.axes({ xlabel: 'x', colors: col });
@@ -729,7 +856,9 @@ function drawProfile(ctx, width, height, col) {
   for (let i = 0; i < N; i++) if (inside(i)) bvals.push(sc.bp[j * N + i]);
   bvals.sort((a, b) => a - b);
   bmax = (bvals[Math.floor(0.93 * (bvals.length - 1))] || 1) * 1.3;
-  const YB = f.rightAxis(0, bmax, '', col);
+  // The back-projection has a scale of its own (it is f blurred by 1/r, in other units): the
+  // right-hand axis, in its colour.
+  const YB = f.rightAxis(0, bmax, '', { ...col, ink2: BP_COLOUR, ink3: BP_COLOUR });
   const curve = (get, colour, width_, dash = [], Y = (y) => f.Y(y)) => {
     f.clip();
     ctx.strokeStyle = colour; ctx.lineWidth = width_; ctx.setLineDash(dash);
@@ -750,27 +879,17 @@ function drawProfile(ctx, width, height, col) {
   }
   curve((i) => sc.truth[j * N + i], col.ink2, 2.4);
   curve((i) => sc.fbp[j * N + i], col.accent, 1.4);
-  // A legend.
-  ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  let x = f.left + 4;
-  const item = (label, colour, dash = [], w = 2) => {
-    ctx.strokeStyle = colour; ctx.lineWidth = w; ctx.setLineDash(dash);
-    ctx.beginPath(); ctx.moveTo(x, 10); ctx.lineTo(x + 16, 10); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = col.ink2; ctx.fillText(label, x + 19, 10);
-    x += 24 + ctx.measureText(label).width;
-  };
-  item('object', col.ink2, [], 2.4);
-  item('filtered', col.accent);
-  item(state.obj === 'point' ? 'back-proj. (right), m/r' : 'back-proj. (right)', BP_COLOUR, [4, 3], 1.2);
+  legend(ctx, [['object', col.ink2, [], 2.4], ['filtered back-projection', col.accent]], f.left, 10, col);
+  legend(ctx, [['back-projection, right axis', BP_COLOUR, [4, 3], 1.2], ...(state.obj === 'point' ? [['m/r', col.ink3, [1.5, 2.5], 1]] : [])], f.left, 25, col);
 }
 
 function projRow() {
-  const j = state.pick ? state.pick.j : hardwareIndex();
+  const j = hardwareIndex();
   return sc.measured[j] ? j : -1;
 }
 
 function drawProjection(ctx, width, height, col) {
-  const f = new Frame(ctx, width, height, { left: 40, right: 44, top: 22, bottom: 30 });
+  const f = new Frame(ctx, width, height, PLOT_M);
   const j = projRow(), M = sc.M;
   f.x0 = -1; f.x1 = 1; f.y0 = -0.08 * state.pmax; f.y1 = 1.12 * state.pmax;
   f.axes({ xlabel: 's', colors: col });
@@ -779,7 +898,7 @@ function drawProjection(ctx, width, height, col) {
   let qmax = 0;
   for (const v of q) qmax = Math.max(qmax, Math.abs(v));
   qmax = qmax || 1;
-  const YQ = f.rightAxis(-qmax * 1.1, qmax * 1.1, '', col);
+  const YQ = f.rightAxis(-qmax * 1.1, qmax * 1.1, '', { ...col, ink2: col.accent, ink3: col.accent });
   const sOf = (k) => (k - M / 2) * sc.ds;
   f.clip();
   // Zero of the filtered projection.
@@ -793,9 +912,11 @@ function drawProjection(ctx, width, height, col) {
   curve(p, (v) => f.Y(v), col.ink2, 2);
   curve(q, YQ, col.accent, 1.3);
   ctx.restore();
-  ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  ctx.fillStyle = col.ink2; fillSlots(ctx, ['projection p(s) at θ = ', { v: sc.angle(j) / DEG, dec: 1, w: 5 }, '° (left)'], f.left + 4, 10);
-  ctx.fillStyle = col.accent; ctx.textAlign = 'right'; ctx.fillText('filtered (right)', f.right - 2, 10);
+  legend(ctx, [['projection p(s), left axis', col.ink2]], f.left, 10, col);
+  legend(ctx, [['filtered Q(s), right axis', col.accent, [], 1.3]], f.left, 25, col);
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = col.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  fillSlots(ctx, ['θ = ', { v: sc.angle(j) / DEG, dec: 1, w: 5 }, '°'], f.right, 10);
+  ctx.textAlign = 'left';
 }
 
 let filterPlotStale = true;
@@ -805,7 +926,7 @@ function drawFilterPlot() {
   ctx.clearRect(0, 0, width, height);
   const f = new Frame(ctx, width, height, { left: 30, right: 10, top: 8, bottom: 34 });
   f.x0 = 0; f.x1 = 1; f.y0 = 0; f.y1 = 1.05;
-  f.axes({ xlabel: 'frequency |k|, as a fraction of π/ds', colors: col });
+  f.axes({ xlabel: 'frequency |k|, as a fraction of π/Δs', colors: col });
   // Using the settings being worked towards, if a rescan is on its way.
   const o = targetOpts(), M = o.M, ds = 2 / M, Hr = filterResponse(o.filter, M, ds, o.cutoff), L = Hr.length, nyq = 1 / (2 * ds);
   f.clip();
@@ -864,39 +985,39 @@ function rmsSmooth(img) {
 const XY = (p) => ['x ', { v: p.x, dec: 3, w: 6 }, ', y ', { v: p.y, dec: 3, w: 6 }, ': '];
 const RMS = (v) => (Number.isFinite(v) ? { v, dec: 4, w: 6, tiny: true } : { text: '–', w: 6 });
 function updateReadouts(data) {
-  const nA = sc.nA, j = hardwareIndex(), NA = { v: nA, dec: 0, w: 3 };   // (up to 720 angles)
-  // The scanner.
-  const hs = hover.scanner;
-  setSlots($('#scan-readout'), hs && Math.hypot(hs.x, hs.y) <= 1
-    ? [...XY(hs), 'attenuation ', { v: pixel(sc.truth, hs.x, hs.y), dec: 3, w: 6 }]
-    : state.playing ? ['angle ', { v: Math.min(state.next + 1, nA), dec: 0, w: 3 }, ' of ', NA, ', θ = ', { v: sc.angle(Math.min(state.next, nA - 1)) / DEG, dec: 1, w: 5 }, '°']
-      : [{ v: sc.count, dec: 0, w: 3 }, ' of ', NA, ' angles measured over ', { v: sc.opts.range / DEG, dec: 0, w: 3 }, '°']);
+  const nA = sc.nA;
+  // The scanner: under the pointer (or the point pinned there), else a hint.
+  const hs = hover.scanner && Math.hypot(hover.scanner.x, hover.scanner.y) <= 1 ? hover.scanner : null, pin = state.point?.pinned ? state.point : null;
+  setSlots($('#scan-readout'), hs ? [...XY(hs), 'attenuation ', { v: pixel(sc.truth, hs.x, hs.y), dec: 3, w: 6 }]
+    : pin ? [{ html: '<span class="dot trace"></span>' }, ' ', ...XY(pin), 'attenuation ', { v: pixel(sc.truth, pin.x, pin.y), dec: 3, w: 6 }]
+      : state.tool === 'look' ? ['Point at the object to see its sinusoid'] : [state.tool === 'brush' ? 'Paint on the object' : 'Erase part of the object']);
   // The sinogram.
-  const hg = hover.sinogram || state.pick;
-  if (hg && hg.j !== undefined && hg.j >= 0 && hg.j < nA) {
+  const hg = shownRay();
+  if (hg) {
     const k = Math.round(hg.s / sc.ds + sc.M / 2);
     const val = sc.measured[hg.j] && k >= 0 && k < sc.M ? { v: sc.meas[hg.j * sc.M + k], dec: 4, w: 7 } : 'not measured';
     setSlots($('#sino-readout'), ['θ ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, '°, s ', { v: hg.s, dec: 3, w: 6 }, ': p = ', val]);
-  } else setSlots($('#sino-readout'), [NA, ' angles × ', { v: sc.M, dec: 0, w: 3 }, ' detector bins']);
-  setSlots($('#sino-note'), state.point ? ['the dashed curve: (', { v: state.point.x, dec: 2, w: 5 }, ', ', { v: state.point.y, dec: 2, w: 5 }, ')'] : []);
+  } else setSlots($('#sino-readout'), ['Point at a row to see its ray']);
+  setSlots($('#sino-note'), [{ v: nA, dec: 0, w: 3 }, nA === 1 ? ' angle × ' : ' angles × ', { v: sc.M, dec: 0, w: 3 }, ' bins']);   // (up to 720 angles)
   // Fourier space.
   const hk = hover.kspace;
   if (hk) {
     const k = Math.hypot(hk.x, hk.y);
     setSlots($('#k-readout'), ['kx ', { v: hk.x, dec: 1, w: 6 }, ', ky ', { v: hk.y, dec: 1, w: 6 }, ': |k| ', { v: k, dec: 1, w: 5 },
-      ', wavelength ', k ? { v: TWO_PI / k, dec: 3, w: 6 } : { text: '∞', w: 6 }]);
-  } else setSlots($('#k-readout'), [{ v: sc.count, dec: 0, w: 3 }, ' slices of ', { v: sc.L, dec: 0, w: 4 }, ' samples; detector Nyquist π/ds = ', { v: Math.PI / sc.ds, dec: 1, w: 5 }]);
+      ', λ ', k ? { v: TWO_PI / k, dec: 3, w: 6 } : { text: '∞', w: 6 }]);
+  } else setSlots($('#k-readout'), [{ v: sc.count, dec: 0, w: 3 }, sc.count === 1 ? ' slice; ' : ' slices; ', 'detector limit π/Δs = ', { v: Math.PI / sc.ds, dec: 1, w: 5 }]);
   $('#k-note').textContent = state.under ? 'slices over the object’s 2D transform' : 'one slice per projection';
   // The reconstructions.
   const hb = hover.bp;
-  setSlots($('#bp-readout'), hb ? [...XY(hb), { v: pixel(sc.bp, hb.x, hb.y), dec: 3, w: 7 }] : ['its own grey scale']);
+  setSlots($('#bp-readout'), hb ? [...XY(hb), { v: pixel(sc.bp, hb.x, hb.y), dec: 3, w: 7 }]
+    : ['black ', { v: state.bpScale[0], dec: 3, w: 6 }, ', white ', { v: state.bpScale[1], dec: 3, w: 6 }, ': its own scale']);
   if (rmsCache.key !== `${data}:${objVersion}`) {
     rmsCache = { key: `${data}:${objVersion}`, rms: sc.count ? sc.rmsError(sc.fbp) : NaN, smooth: sc.count ? rmsSmooth(sc.fbp) : NaN };
   }
   const hf = hover.fbp, rms = rmsCache.rms, smooth = rmsCache.smooth;
   state.rmsSmooth = smooth;
-  setSlots($('#fbp-readout'), hf ? [...XY(hf), { v: pixel(sc.fbp, hf.x, hf.y), dec: 4, w: 7 }, ' (object ', { v: pixel(sc.truth, hf.x, hf.y), dec: 4, w: 7 }, ')']
-    : ['RMS error ', RMS(rms), ...(Number.isFinite(smooth) ? [', away from edges ', RMS(smooth)] : [])]);
+  setSlots($('#fbp-readout'), hf ? [...XY(hf), { v: pixel(sc.fbp, hf.x, hf.y), dec: 4, w: 7 }, ', object ', { v: pixel(sc.truth, hf.x, hf.y), dec: 4, w: 7 }]
+    : ['RMS error ', RMS(rms), ...(Number.isFinite(smooth) ? ['; away from edges ', RMS(smooth)] : [])]);
   state.rms = rms;
   setSlots($('#fbp-note'), [FILTERS[sc.opts.filter].label, ...(sc.opts.cutoff < 1 ? [', cut at ', { v: sc.opts.cutoff, dec: 2, w: 4 }] : [])]);
   // The sixth panel.
@@ -905,13 +1026,13 @@ function updateReadouts(data) {
     const img = directCache.img, e = img && sc.count ? sc.rmsError(img) : NaN;
     state.rmsDirect = e;
     setSlots($('#extra-readout'), he ? [...XY(he), { v: pixel(img || sc.fbp, he.x, he.y), dec: 4, w: 7 }] : ['RMS error ', RMS(e)]);
-    $('#extra-note').textContent = 'slices gridded, one inverse FFT';
+    $('#extra-note').textContent = 'gridding + FFT';
   } else if (state.view === 'profile') {
-    setSlots($('#extra-readout'), ['along y = ', { v: state.py0, dec: 3, w: 6 }, ' (drag on a reconstruction to move it)']);
+    setSlots($('#extra-readout'), ['along the dashed line y = ', { v: state.py0, dec: 3, w: 6 }, ' (drag it)']);
     $('#extra-note').textContent = '';
   } else {
     const jr = projRow();
-    setSlots($('#extra-readout'), jr >= 0 ? ['angle ', { v: jr + 1, dec: 0, w: 3 }, ': click the sinogram to choose another'] : ['nothing measured yet']);
+    setSlots($('#extra-readout'), jr >= 0 ? ['angle ', { v: jr + 1, dec: 0, w: 3 }, ' of ', { v: nA, dec: 0, w: 3 }, ' (point at a row)'] : ['nothing measured yet']);
     $('#extra-note').textContent = '';
   }
 }
@@ -990,8 +1111,9 @@ const sinoCanvas = $('#sinogram');
 function sinoAt(e) {
   const r = sinoCanvas.getBoundingClientRect(), g = sinoGeom();
   const px = e.clientX - r.left, py = e.clientY - r.top;
+  // The nearest row (rows are centred on their angles).
   const th = g.th(py), j = Math.round(th / sc.dth), s = g.s(px);
-  return j >= 0 && j < sc.nA && th <= sc.opts.range && Math.abs(s) <= 1 ? { j, s } : null;
+  return j >= 0 && j < sc.nA && Math.abs(s) <= 1 && py >= SINO_M.top - 4 && py <= SINO_M.top + g.h ? { j, s } : null;
 }
 let pickingSino = false;
 sinoCanvas.addEventListener('pointerdown', (e) => {
@@ -1016,7 +1138,7 @@ sinoCanvas.addEventListener('pointerleave', () => { hover.sinogram = null; dirty
 const kCanvasEl = $('#kspace');
 kCanvasEl.addEventListener('pointermove', (e) => { hover.kspace = worldOf(kCanvasEl, e, KMAX / state.kz); dirty = true; schedule(); });
 const kZoom = $('#k-zoom');
-for (const z of [1, 2, 4]) kZoom.append(el('option', { value: z }, z === 1 ? 'Whole' : `${z}× zoom`));
+for (const z of [1, 2, 4]) kZoom.append(el('option', { value: z }, `zoom ${z}×`));
 kZoom.addEventListener('change', () => { state.kz = +kZoom.value; dirty = true; updateHash(); schedule(); });
 kCanvasEl.addEventListener('pointerleave', () => { hover.kspace = null; dirty = true; schedule(); });
 
@@ -1038,13 +1160,20 @@ for (const [id, key] of [['#bp', 'bp'], ['#fbp', 'fbp'], ['#extra', 'extra']]) {
     if (key === 'extra' && state.view !== 'direct') return;
     const p = worldOf(cv, e, 1);
     hover[key] = Math.hypot(p.x, p.y) <= 1 ? p : null;
+    // The place pointed at, unless a point is pinned: its sinusoid in the sinogram is the curve
+    // along which back-projection adds up the projections to make this pixel.
+    if (!state.point?.pinned) state.point = hover[key] ? { ...p, pinned: false } : null;
     if (down) setProfile(p);
     dirty = true; schedule();
   });
   const up = () => { down = false; updateHash(); };
   cv.addEventListener('pointerup', up);
   cv.addEventListener('pointercancel', up);
-  cv.addEventListener('pointerleave', () => { hover[key] = null; dirty = true; schedule(); });
+  cv.addEventListener('pointerleave', () => {
+    hover[key] = null;
+    if (state.point && !state.point.pinned) state.point = null;
+    dirty = true; schedule();
+  });
 }
 
 // ------------------------------------------------------------------------ controls
@@ -1059,6 +1188,7 @@ playButton.addEventListener('click', () => {
   else { state.playing = true; state.progress = state.next; }
   updatePlay(); dirty = true; schedule();
 });
+$('#step').addEventListener('click', stepScan);
 $('#again').addEventListener('click', () => { sc.pass++; restartScan(); });
 $('#finish').addEventListener('click', finishScan);
 
@@ -1081,10 +1211,12 @@ for (const o of OBJECTS) {
   $('#objects').append(b);
   objectButtons[o.id] = b;
 }
+// The pictures: the list shows the one in the scanner.
 const gallery = $('#gallery');
-gallery.append(el('option', { value: '', disabled: true, selected: true }, 'Pictures…'));
+gallery.append(el('option', { value: '', disabled: true, selected: true }, 'Pictures…'), el('option', { value: PORTRAIT.id, title: PORTRAIT.title }, PORTRAIT.label));
 for (const p of GALLERY) if (p.side === 'x' && p.id !== 'portrait') gallery.append(el('option', { value: `g:${p.id}`, title: p.title }, p.label));
-gallery.addEventListener('change', () => { chooseObject(gallery.value); gallery.value = ''; });
+gallery.addEventListener('change', () => chooseObject(gallery.value));
+const isPicture = (id) => id === PORTRAIT.id || id.startsWith('g:');
 
 function chooseObject(id) {
   setObject(id);
@@ -1092,8 +1224,8 @@ function chooseObject(id) {
 
 // Options that belong to one object.
 const contrastSeg = segmented([
-  { value: 'modified', label: 'High contrast', title: 'Toft’s modified phantom: skull 1, brain 0.2, the details 0.1 apart' },
-  { value: 'original', label: '1974', title: 'Shepp and Logan’s original: skull 2, brain 1.02, the details only 0.01 apart (realistic attenuations)' },
+  { value: 'modified', label: 'High contrast', title: 'Toft’s modified phantom (1996), which most software shows: skull 1, brain 0.2, the details 0.1 apart' },
+  { value: 'original', label: 'Real (1974)', title: 'Shepp and Logan’s original of 1974, with realistic attenuations: skull 2, brain 1.02, the details only 0.01 apart' },
 ], state.contrast, (v) => { state.contrast = v; setObject('phantom'); }, { label: 'Contrast' });
 const pxSlider = slider({ label: 'x₀', min: -0.9, max: 0.9, step: 0.005, value: state.px, onInput: (v) => { state.px = v; movePoint(); } });
 const pySlider = slider({ label: 'y₀', min: -0.9, max: 0.9, step: 0.005, value: state.py, onInput: (v) => { state.py = v; movePoint(); } });
@@ -1125,23 +1257,25 @@ function setFormula(f, fp) {
 
 function updateObjectUI() {
   for (const [id, b] of Object.entries(objectButtons)) b.setAttribute('aria-pressed', String(id === state.obj));
+  gallery.value = isPicture(state.obj) ? state.obj : '';
+  gallery.classList.toggle('chosen', isPicture(state.obj));
   const box = $('#object-options');
   box.replaceChildren();
   if (state.obj === 'phantom') box.append(contrastSeg);
   else if (state.obj === 'point') box.append(pxSlider, pySlider);
   else if (state.obj === 'formula') box.append(formulaPresets, formulaField, formulaHelp);
   else if (state.obj === 'painted') box.append(el('div', { class: 'small muted' }, 'Painted: projected numerically from now on.'));
-  else if (state.obj.startsWith('g:') || state.obj === 'custom' || state.obj === 'camera') box.append(el('div', { class: 'small muted' }, 'A picture: projected numerically (line sums with linear interpolation).'));
+  else if (isPicture(state.obj) || state.obj === 'custom' || state.obj === 'camera') box.append(el('div', { class: 'small muted' }, 'A picture: projected numerically (line sums with linear interpolation).'));
   contrastSeg.value = state.contrast;
 }
 
 // Tools.
 const toolSeg = segmented([
-  { value: 'look', label: 'Point at', title: 'Point at the object to see its sinusoid in the sinogram (click to pin it)' },
-  { value: 'brush', label: 'Brush', title: 'Paint attenuation onto the object' },
-  { value: 'eraser', label: 'Eraser', title: 'Paint zero' },
-], state.tool, (v) => setTool(v), { label: 'Tool' });
-$('#tool-box').append(el('span', { class: 'small muted' }, 'Tool'), toolSeg);
+  { value: 'look', label: 'Point at', title: 'Point at the object to see its sinusoid in the sinogram and the ray through it (click to pin it, click outside the circle to let go)' },
+  { value: 'brush', label: 'Brush', title: 'Paint attenuation onto the object in the scanner' },
+  { value: 'eraser', label: 'Eraser', title: 'Paint zero onto the object in the scanner' },
+], state.tool, (v) => setTool(v), { label: 'What the pointer does on the scanner' });
+$('#tool-box').append(el('span', { class: 'small muted' }, 'On the scanner'), toolSeg);
 const sizeSlider = slider({ label: 'Brush size', min: 1, max: 60, step: 1, value: state.brush.size, onInput: (v) => { state.brush.size = Math.round(v); } });
 const valueSlider = slider({ label: 'Attenuation', min: 0, max: 3, step: 0.01, value: state.brush.value, title: 'What the brush paints, in units of water', onInput: (v) => { state.brush.value = v; } });
 function setTool(t) {
@@ -1239,7 +1373,7 @@ const apertureSlider = slider({ label: 'Detector width', min: 0.05, max: 1, step
   onInput: (v) => { state.ap = v; reconfigure({ aperture: v }); } });
 const beamSeg = segmented([
   { value: false, label: 'One energy', title: 'A monochromatic beam' },
-  { value: true, label: 'Two energies', title: 'Half the photons absorbed 4/3 as strongly as water’s mean, half 2/3: beam hardening' },
+  { value: true, label: 'Two energies', title: 'Half the photons soft, half hard: water absorbs the soft ones 1.35 times as strongly as the hard ones, metal 4 times, and the scanner corrects for water only (beam hardening)' },
 ], state.poly, (v) => { state.poly = v; reconfigure({ poly: v }); }, { label: 'Beam' });
 $('#more-box').append(apertureSlider, el('div', { class: 'small muted' }, 'Beam'), beamSeg);
 
@@ -1247,7 +1381,7 @@ $('#more-box').append(apertureSlider, el('div', { class: 'small muted' }, 'Beam'
 const filterSeg = segmented(Object.entries(FILTERS).map(([value, f]) => ({ value, label: f.label, title: f.title })), state.filter,
   (v) => { state.filter = v; reconfigure({ filter: v }); }, { label: 'Filter' });
 $('#filter-box').append(filterSeg);
-const cutoffSlider = slider({ label: 'Cutoff', min: 0.05, max: 1, step: 0.01, value: state.cut, title: 'The highest frequency the filter keeps, as a fraction of the detector’s Nyquist frequency π/ds',
+const cutoffSlider = slider({ label: 'Cutoff', min: 0.05, max: 1, step: 0.01, value: state.cut, title: 'The highest frequency the filter keeps, as a fraction of the detector’s Nyquist frequency π/Δs',
   onInput: (v) => { state.cut = v; reconfigure({ cutoff: v }); } });
 $('#cutoff-box').append(cutoffSlider);
 
@@ -1276,7 +1410,7 @@ $('#window-box').append(profileSlider);
 const underToggle = toggle('Object’s transform underneath', state.under, (on) => { state.under = on; kStale = true; dirty = true; updateHash(); schedule(); },
   'Draw the object’s own 2D Fourier transform faintly under the measured slices');
 const circleToggle = toggle('Circles', state.circles, (on) => { state.circles = on; dirty = true; schedule(); },
-  'In Fourier space: the detector’s Nyquist frequency π/ds (dashed), and the radius n_θ inside which the angles sample fully (dotted)');
+  'In Fourier space: the detector’s Nyquist frequency π/Δs (dashed), and the radius π/(RΔθ) inside which the slices are close enough together to sample the scan circle, of radius R (dotted)');
 $('#show-box').append(underToggle, circleToggle);
 
 const extraSelect = $('#extra-view');
@@ -1291,6 +1425,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', (
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === ' ') { e.preventDefault(); playButton.click(); }
+  else if (e.key === 'ArrowRight' && !e.target.closest('button')) { e.preventDefault(); stepScan(); }
 });
 
 // ----------------------------------------------------------------------- the address
@@ -1344,12 +1479,14 @@ async function apply(changes = {}) {
   filterPlotStale = true; directCache.key = '';
   await setObject(s.obj);
   if (s.lo !== null && s.lo !== undefined) setWindow(s.lo, s.hi); else autoWindow();
+  // A set-up that is to be followed one angle at a time waits before the first (press Step).
+  if (s.paused) { state.playing = false; updatePlay(); dirty = true; schedule(); }
   updateHash();
 }
 
 const setups = {
   sinusoid: () => apply({ obj: 'point', px: 0.45, py: 0.25, speed: 30, view: 'projection' }),
-  smear: () => apply({ obj: 'phantom', na: 1 }),
+  smear: () => apply({ obj: 'disks', na: 12, paused: true }),
   blur: () => apply({ obj: 'point', px: 0.3, py: 0.2, py0: 0.2, na: 360, speed: 120 }),
   ramp: () => apply({ obj: 'phantom', view: 'projection', speed: 30 }),
   slice: () => apply({ obj: 'formula', f: FORMULAS[0].f, fp: { k: 40, a: 1.0472 }, na: 36, speed: 12, under: true, kz: 4 }),
@@ -1359,7 +1496,7 @@ const setups = {
   noise: () => apply({ obj: 'phantom', contrast: 'original', noise: true, I0: 1e5, lo: 0.95, hi: 1.1, py0: 0.1 }),
   aliasing: () => apply({ obj: 'formula', f: '(r < 0.9)*(1 + cos(k*r^2))/2', fp: { k: 100 }, nd: 64, ap: 0.2, speed: 90 }),
   metal: () => apply({ obj: 'metal', noise: true, I0: 1e5, poly: true, filter: 'hann', lo: 0.9, hi: 1.15, py0: -0.28, speed: 90 }),
-  faint: () => apply({ obj: 'phantom', contrast: 'original', lo: 1, hi: 1.05, py0: -0.605, speed: 90 }),
+  faint: () => apply({ obj: 'phantom', contrast: 'original', I0: 1e6, lo: 1, hi: 1.05, py0: -0.605, speed: 90 }),
   picture: () => apply({ obj: 'portrait', na: 360, speed: 90 }),
 };
 const help = drawer($('#help'), $('#help-button'), setups);
@@ -1384,7 +1521,7 @@ function fromHash(h) {
     c.fp = {};
     for (const part of (h.fp || '').split(',')) { const [k, v] = part.split(':'); if (k && Number.isFinite(+v)) c.fp[k] = +v; }
   }
-  const valid = OBJECTS.some((o) => o.id === c.obj) || (c.obj.startsWith('g:') && GALLERY.some((p) => `g:${p.id}` === c.obj));
+  const valid = OBJECTS.some((o) => o.id === c.obj) || c.obj === PORTRAIT.id || (c.obj.startsWith('g:') && GALLERY.some((p) => `g:${p.id}` === c.obj));
   if (!valid) c.obj = DEFAULTS.obj;
   return c;
 }
@@ -1395,7 +1532,8 @@ const ready = setups[hash.setup] ? setups[hash.setup]().then(() => help.open()) 
 
 // For the tests (tools/cdp.py), and for curious students with the console open.
 window.__app = {
-  Scanner, state, sc, setups, setObject, reconfigure, finishScan, restartScan, setView, setWindow, setTool,
+  Scanner, state, sc, setups, setObject, reconfigure, finishScan, restartScan, stepScan, setView, setWindow, setTool,
+  get nowIndex() { return nowIndex(); }, get hardwareIndex() { return hardwareIndex(); },
   get idle() { return !jobs.flight && !jobs.target && !rescanSoon; }, get workers() { return workers ? workers.length : 0; },
   get rms() { return state.rms; }, get rmsSmooth() { return state.rmsSmooth; }, get rmsDirect() { return state.rmsDirect; }, directImage, draw, ready: false,
 };
