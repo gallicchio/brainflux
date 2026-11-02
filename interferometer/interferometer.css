@@ -48,8 +48,9 @@
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
-.motor-row { gap: 8px; }
+.motor-row, .sides-row { gap: 8px; }
 .motor-row .seg > button { min-width: 34px; padding: 3px 6px; }
+.sides-row .seg > button { padding: 3px 10px; }
 #fts-readout, #st-readout { color: var(--ink-2); line-height: 1.5; }
 #mirror-readout, #counter-readout { color: var(--ink-2); }
 .warn-text { color: var(--warn); }

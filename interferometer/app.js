@@ -50,6 +50,7 @@ function saveHash() {
       lam: m.source === 'gauss' ? p.lam : undefined, fwhm: m.source === 'gauss' ? p.fwhm : undefined, T: m.source === 'lamp' ? Math.round(p.T) : undefined,
       d: +(m.dc + m.df).toFixed(4), tilt: m.tilt || undefined, motor: m.motor, v: m.speed,
       plot: m.plot === 'fts' ? 'fts' : undefined, L: m.plot === 'fts' ? m.fts.L : undefined, step: m.plot === 'fts' ? m.fts.step : undefined,
+      sides: m.fts.sides === 1 ? 1 : undefined, eps: m.fts.zero || undefined,
       apo: m.fts.apodize ? 1 : undefined, axis: m.axis === 'lambda' ? 'lambda' : undefined,
       w0: +m.win[0].toPrecision(7), w1: +m.win[1].toPrecision(7), s0: +m.view[0].toPrecision(6), s1: +m.view[1].toPrecision(6),
     });
@@ -67,7 +68,7 @@ function michelson(o = {}) {
   m.speed = o.speed ?? 0.3;
   m.axis = o.axis || 'sigma';
   m.plot = o.plot || 'trace';
-  m.fts.L = o.L ?? 50; m.fts.step = o.step ?? 0.1; m.fts.apodize = !!o.apodize;
+  m.fts.L = o.L ?? 50; m.fts.step = o.step ?? 0.1; m.fts.apodize = !!o.apodize; m.fts.sides = o.sides ?? 2; m.fts.zero = o.zero ?? 0;
   const d = o.d ?? 0;
   M.placeMirror(d, { tilt: o.tilt || 0 });
   const D = 2 * d, W = o.window ?? 15;
@@ -89,9 +90,10 @@ function stellar(o = {}) {
 const setups = {
   count: () => michelson({ source: 'hene', d: 250, motor: 'fwd', speed: 0.5, window: 16 }),
   tilt: () => michelson({ source: 'hene', d: 0, tilt: 150, window: 6 }),
-  sodium: () => michelson({ source: 'sodium', d: 0, motor: 'fwd', speed: 60, win: [-60, 2440], viewPreset: 'fit' }),
-  white: () => michelson({ source: 'white', d: -0.8, tilt: 200, motor: 'sweep', speed: 0.25, win: [-4, 4] }),
-  coherence: () => michelson({ source: 'gauss', params: { lam: 550, fwhm: 10 }, d: -8, motor: 'sweep', speed: 2.5, win: [-32, 32] }),
+  sodium: () => michelson({ source: 'sodium', d: -640, motor: 'sweep', speed: 60, win: [-1300, 1300], viewPreset: 'fit' }),
+  // (Also what the page opens with.)
+  white: () => michelson({ source: 'white', d: -1, tilt: 200, motor: 'sweep', speed: 0.25, win: [-4, 4], record: [-4, 4] }),
+  coherence: () => michelson({ source: 'gauss', params: { lam: 550, fwhm: 10 }, d: -15, motor: 'sweep', speed: 2.5, win: [-32, 32] }),
   led: () => michelson({ source: 'led', d: -2, tilt: 120, motor: 'sweep', speed: 0.3, win: [-8, 8] }),
   draws: () => {
     michelson({ source: 'draw', d: 0, win: [-12, 12], record: [-12, 12] });
@@ -105,11 +107,13 @@ const setups = {
     M.useSpectrum(sp.update());
   },
   fts: () => { michelson({ source: 'mercury', d: 0, plot: 'fts', L: 60, step: 0.1 }); M.startScan(); },
+  sides: () => { michelson({ source: 'mercury', d: 0, plot: 'fts', L: 60, step: 0.1, zero: 0.137 }); M.startScan(); },
   resolution: () => { michelson({ source: 'sodium', d: 0, plot: 'fts', L: 1200, step: 0.25, viewPreset: 'fit' }); M.startScan(); },
   aliasing: () => michelson({ source: 'hene', d: 0, plot: 'fts', L: 20, step: 0.4, view: [0, 3.2] }),
   drawi: () => michelson({ source: 'hene', d: 0, plot: 'fts', L: 10, step: 0.05, view: [0, 3.2] }),
   star: () => stellar({ theta: 20, lam: 550, B: 1, sweeping: true }),
-  betelgeuse: () => stellar({ theta: 47, lam: 575, B: 0.5, sweeping: true }),
+  // Baselines up to the length of Michelson and Pease's beam, 20 feet.
+  betelgeuse: () => stellar({ theta: 47, lam: 575, B: 0.5, sweeping: true, span: 6.1 }),
   binary: () => stellar({ kind: 'binary', theta: 6, rho: 50, pa: 0, ratio: 0.9, lam: 550, B: 0.2, sweeping: true }),
 };
 
@@ -138,6 +142,7 @@ function fromHash(h) {
   michelson({
     source: src, params, d: num('d') ?? 500, tilt: num('tilt') ?? 0, motor: ['fwd', 'back', 'stop', 'sweep'].includes(h.motor) ? h.motor : 'fwd',
     speed: num('v') ?? 0.3, plot: h.plot === 'fts' ? 'fts' : 'trace', L: num('L') ?? 50, step: num('step') ?? 0.1, apodize: h.apo === '1',
+    sides: h.sides === '1' ? 1 : 2, zero: num('eps') ?? 0,
     axis: h.axis === 'lambda' ? 'lambda' : 'sigma',
     win: num('w0') !== undefined && num('w1') > num('w0') ? [num('w0'), num('w1')] : undefined,
     view: num('s0') !== undefined && num('s1') > num('s0') ? [num('s0'), num('s1')] : undefined,
@@ -147,7 +152,7 @@ function fromHash(h) {
 const hash = readHash();
 if (setups[hash.setup]) setups[hash.setup]();
 else if (Object.keys(hash).length) fromHash(hash);
-else michelson({ source: 'hene', d: 500, motor: 'fwd', speed: 0.3, window: 15 });
+else setups.white();
 
 // --------------------------------------------------------------------- the loop
 

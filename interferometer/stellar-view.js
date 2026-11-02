@@ -410,10 +410,11 @@ export function init(hooks) {
   showKind();
 }
 
-/** Set everything at once (for set-ups and the hash). */
-export function configure(s) {
+/** Set everything at once (for set-ups and the hash); span: the longest baseline, if not the star's own choice. */
+export function configure({ span, ...s }) {
   Object.assign(state, s);
   rebuild();
+  if (span > 0) { xmax = Math.max(span, state.B); dirty = true; }
   thetaSlider.value = state.theta; limbSlider.value = state.limb; rhoSlider.value = state.rho; paSlider.value = state.pa;
   ratioSlider.value = state.ratio; lamSlider.value = state.lam; bwSlider.value = state.bw; kindSeg.value = state.kind;
   seeingToggle.on = state.seeing;

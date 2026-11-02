@@ -193,6 +193,62 @@ test('FT spectroscopy round trip: a smooth spectrum comes back', () => {
   return `largest difference ${(100 * worst / peak).toFixed(3)}% of the peak; area ${area.toFixed(5)} (I0 = ${sp.I0.toFixed(5)})`;
 });
 
+test('FT spectroscopy, two-sided: I(−Δ) = I(Δ), and the samples at kδ + ε agree with direct sums', () => {
+  const sp = SOURCES.lamp.make({ T: 2500 });
+  sp.lines.push(gaussianLine(500, 3, 0.2)); sp.update();
+  let worst = 0, odd = 0;
+  for (const [step, K, eps] of [[0.1, 1000, 0], [0.1, 1000, 0.137], [0.37, 3000, -0.3], [0.05, 4000, 0.02]]) {
+    const a = sampleInterferogram(sp, step, K, 'fft', { sides: 2, offset: eps }), b = sampleInterferogram(sp, step, K, 'direct', { sides: 2, offset: eps });
+    assert(a.length === 2 * K + 1, `${a.length} samples`);
+    for (let k = 0; k < a.length; k++) worst = Math.max(worst, Math.abs(a[k] - b[k]));
+    close(b[K + 7], sp.intensity(7 * step + eps), 1e-12, 'sample 7');
+    close(b[K - 7], sp.intensity(-7 * step + eps), 1e-12, 'sample -7');
+    if (!eps) for (let k = 1; k <= K; k++) odd = Math.max(odd, Math.abs(a[K + k] - a[K - k]));
+  }
+  assert(worst < 2e-4 && odd < 1e-12, `FFT against direct ${worst}; I(Δ) − I(−Δ) up to ${odd}`);
+  return `FFT within ${worst.toExponential(1)} of direct sums; |I(Δ) − I(−Δ)| < ${odd.toExponential(1)}`;
+});
+
+test('FT spectroscopy: both sides give the same spectrum as one side (the same information)', () => {
+  const sp = lineSpectrum(LINE_DATA.mercury), step = 0.1, K = 600;
+  const one = recoverSpectrum(sampleInterferogram(sp, step, K), step, { pad: 4 });
+  const two = recoverSpectrum(sampleInterferogram(sp, step, K, 'auto', { sides: 2 }), step, { pad: 4, sides: 2, zero: K, ref: sp.I0 });
+  let worst = 0, top = 0, imag = 0;
+  for (let p = 0; p < one.v.length; p++) { worst = Math.max(worst, Math.abs(one.v[p] - two.v[p])); top = Math.max(top, one.v[p]); imag = Math.max(imag, Math.abs(two.im[p])); }
+  assert(worst < 1e-9 * top && imag < 1e-9 * top, `differ by ${worst}, imaginary part ${imag} (peak ${top})`);
+  return `largest difference ${(worst / top).toExponential(1)} of the peak; the two-sided transform is real to ${(imag / top).toExponential(1)}`;
+});
+
+test('FT spectroscopy: a zero error spoils one side, not both (phase correction)', () => {
+  // A line at σ0 with the samples at kδ + ε: one side gives it times cos 2πσ0ε (plus a wiggle).
+  const he = lineSpectrum(LINE_DATA.hene), lam = 0.632816, step = 0.1, K = 500;
+  // At the line itself, between the bins (at λ/4 the wiggle is steep there).
+  const at = (r) => { const u = 1 / lam / r.ds, p = Math.floor(u), t = u - p; return r.v[p] * (1 - t) + r.v[p + 1] * t; };
+  const ref = recoverSpectrum(sampleInterferogram(he, step, K), step, { pad: 8 }), h = at(ref);
+  const out = [];
+  for (const eps of [lam / 4, lam / 2, 0.41]) {
+    const one = recoverSpectrum(sampleInterferogram(he, step, K, 'auto', { offset: eps }), step, { pad: 8, ref: he.I0 });
+    const two = recoverSpectrum(sampleInterferogram(he, step, K, 'auto', { sides: 2, offset: eps }), step, { pad: 8, sides: 2, zero: K, ref: he.I0 });
+    close(at(one) / h, Math.cos(2 * Math.PI * eps / lam), 0.02, `one side at ε = ${eps}`);
+    close(at(two) / h, 1, 0.01, `both sides at ε = ${eps}`);
+    out.push(`ε = ${eps.toFixed(3)}: one side ${(at(one) / h).toFixed(3)}, both ${(at(two) / h).toFixed(3)}`);
+  }
+  // A continuum: S(σ) e^{2πiσε} has its phase taken out everywhere.
+  const sp = SOURCES.lamp.make({ T: 4000 });
+  sp.lines.push(gaussianLine(520, 30, 0.5)); sp.update();
+  let peak = 0, worst2 = 0, worst1 = 0;
+  for (const eps of [0.05, -0.31]) {
+    const two = recoverSpectrum(sampleInterferogram(sp, 0.1, 3000, 'auto', { sides: 2, offset: eps }), 0.1, { pad: 2, sides: 2, zero: 3000, ref: sp.I0 });
+    const one = recoverSpectrum(sampleInterferogram(sp, 0.1, 3000, 'auto', { offset: eps }), 0.1, { pad: 2, ref: sp.I0 });
+    for (let p = 0; p < two.v.length; p++) {
+      const d = sp.density(p * two.ds);
+      peak = Math.max(peak, d); worst2 = Math.max(worst2, Math.abs(two.v[p] - d)); worst1 = Math.max(worst1, Math.abs(one.v[p] - d));
+    }
+  }
+  assert(worst2 < 0.01 * peak && worst1 > 0.3 * peak, `continuum: both sides ${worst2 / peak}, one side ${worst1 / peak}`);
+  return `HeNe line, height against ε = 0: ${out.join('; ')}.  A continuum: both sides within ${(100 * worst2 / peak).toFixed(3)}%, one side off by ${(100 * worst1 / peak).toFixed(0)}%`;
+});
+
 function peaks(r, lo, hi) {
   const out = [];
   for (let m = 1; m + 1 < r.v.length; m++) {
