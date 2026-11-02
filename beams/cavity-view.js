@@ -251,7 +251,12 @@ export function createCavity(app) {
     F.x0 = -0.04; F.x1 = 2.04; F.y0 = 0; F.y1 = 1.2;
     const FSR = fsr(state.L), q0 = q0Now();
     ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(F.w > 560 ? 'Resonant frequencies of the modes of order N (N + 1 modes each)' : 'Resonances', F.left, 15);
+    {
+      // The longest title that ends before the legend of colours (drawn below, at the right).
+      const legendLeft = F.right - 7 * (F.w > 560 ? 28 : 22) - ctx.measureText('N =').width - 18;
+      const titles = ['Resonant frequencies of the modes of order N (N + 1 modes each)', 'Resonances of the modes of order N', 'Resonances'];
+      ctx.fillText(titles.find((t) => F.left + ctx.measureText(t).width <= legendLeft) || titles[2], F.left, 15);
+    }
     F.clip();
     // The plain comb q c/2L, without the Gouy phase.
     ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
