@@ -330,7 +330,7 @@ function drawResponse() {
   if (ng) items.push({ label: 'n_g = c dk/dω', color: colors.ng, dash: [5, 3], width: 1.5 });
   legend(ctx, f, items, f.left + 4, 1);
   ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = colors.ink3; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-  if (state.yRange) ctx.fillText('zoomed (double-click for automatic)', f.right, 6);
+  if (state.yRange) ctx.fillText(width > 640 ? 'zoomed (double-click for automatic)' : 'zoomed', width > 640 ? f.right : f.right - 4, width > 640 ? 6 : f.top + 4);
   else if (state.source === 'osc' && state.oscs.length && width > 760) ctx.fillText('● drag a line about (up: stronger) · ◇ its width', f.right, 6);
   ctx.restore();
 }
@@ -1127,7 +1127,7 @@ function drawSnapshot() {
   ctx.restore();
   f.axes({ xlabel: win.moving ? `${U().z}: the picture moves with the pulse` : `${U().z}, depth in the medium`, colors, yTicks: false });
   const narrow = width < 640;
-  const items = [{ title: 'Inside, at one moment' }, ...(narrow ? [] : [{ label: 'E', color: colors.ink, width: 1.5 }]), { label: narrow ? 'vacuum' : 'in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
+  const items = [{ title: narrow ? 'Inside, now' : 'Inside, at one moment' }, ...(narrow ? [] : [{ label: 'E', color: colors.ink, width: 1.5 }]), { label: narrow ? 'vacuum' : 'in vacuum', color: colors.ink3, dash: [5, 4], width: 1.3 }];
   if (sh === 'gauss') items.push({ label: narrow ? 'crest' : 'a crest: c/n', color: colors.charge, mark: true }, { label: narrow ? 'peak' : 'the peak: c/n_g', color: colors.ng, mark: true });
   legend(ctx, f, items, f.left + 4, 4);
 }
