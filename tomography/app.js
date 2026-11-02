@@ -988,8 +988,11 @@ function updateReadouts(data) {
   const nA = sc.nA;
   // The scanner: under the pointer (or the point pinned there), else a hint.
   const hs = hover.scanner && Math.hypot(hover.scanner.x, hover.scanner.y) <= 1 ? hover.scanner : null, pin = state.point?.pinned ? state.point : null;
-  setSlots($('#scan-readout'), hs ? [...XY(hs), 'attenuation ', { v: pixel(sc.truth, hs.x, hs.y), dec: 3, w: 6 }]
-    : pin ? [{ html: '<span class="dot trace"></span>' }, ' ', ...XY(pin), 'attenuation ', { v: pixel(sc.truth, pin.x, pin.y), dec: 3, w: 6 }]
+  // (A yellow dot before the values when they are the yellow point's; the same room kept empty
+  // otherwise, so that the line does not move.)
+  const dot = (yellow) => ({ html: `<span class="dot${yellow ? ' trace' : ''}"></span>` });
+  setSlots($('#scan-readout'), hs ? [dot(state.point && !state.point.pinned), ' ', ...XY(hs), 'attenuation ', { v: pixel(sc.truth, hs.x, hs.y), dec: 3, w: 6 }]
+    : pin ? [dot(true), ' ', ...XY(pin), 'attenuation ', { v: pixel(sc.truth, pin.x, pin.y), dec: 3, w: 6 }]
       : state.tool === 'look' ? ['Point at the object to see its sinusoid'] : [state.tool === 'brush' ? 'Paint on the object' : 'Erase part of the object']);
   // The sinogram.
   const hg = shownRay();
@@ -1006,7 +1009,7 @@ function updateReadouts(data) {
     setSlots($('#k-readout'), ['kx ', { v: hk.x, dec: 1, w: 6 }, ', ky ', { v: hk.y, dec: 1, w: 6 }, ': |k| ', { v: k, dec: 1, w: 5 },
       ', λ ', k ? { v: TWO_PI / k, dec: 3, w: 6 } : { text: '∞', w: 6 }]);
   } else setSlots($('#k-readout'), [{ v: sc.count, dec: 0, w: 3 }, sc.count === 1 ? ' slice; ' : ' slices; ', 'detector limit π/Δs = ', { v: Math.PI / sc.ds, dec: 1, w: 5 }]);
-  $('#k-note').textContent = state.under ? 'slices over the object’s 2D transform' : 'one slice per projection';
+  $('#k-note').textContent = state.under ? 'slices over F(k)' : 'one slice per projection';
   // The reconstructions.
   const hb = hover.bp;
   setSlots($('#bp-readout'), hb ? [...XY(hb), { v: pixel(sc.bp, hb.x, hb.y), dec: 3, w: 7 }]
@@ -1425,7 +1428,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', (
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === ' ') { e.preventDefault(); playButton.click(); }
-  else if (e.key === 'ArrowRight' && !e.target.closest('button')) { e.preventDefault(); stepScan(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); stepScan(); }
 });
 
 // ----------------------------------------------------------------------- the address
@@ -1475,6 +1478,7 @@ async function apply(changes = {}) {
   if (s.obj === 'formula') { formulaField.set(s.f, s.fp, false); formulaExpr = formulaField.expr; }
   cancelJobs();
   sc.reset();
+  sc.pass = 0;      // (the same photon noise every time a set-up is chosen: the numbers in its help)
   sc.configure({ nA: s.na, range: s.range * DEG, M: s.nd, aperture: s.ap, noise: s.noise, I0: s.I0, poly: s.poly, filter: s.filter, cutoff: s.cut });
   filterPlotStale = true; directCache.key = '';
   await setObject(s.obj);

@@ -2,7 +2,7 @@ import { test, assert, close } from './harness.js';
 import {
   sheppLogan, disk, blob, shapesMass, projectShapes, rasterizeShapes, prepareRaster, projectRaster,
   filterResponse, padLength, measureRow, transmission, MU, projectionSpectrum, objectSpectrum, erf, TWO_PI,
-  poisson, random, waterCorrect,
+  poisson, random, waterCorrect, shapesAt,
 } from '../tomography/radon.js';
 import { Scanner } from '../tomography/scan.js';
 import { besselJ } from '../lib/bessel.js';
@@ -171,6 +171,46 @@ test('the ramp filter is |nu| with the right average', () => {
   const hann = filterResponse('hann', M, ds);
   close(hann[L / 2 - 1] / H[L / 2 - 1], 0, 1e-3, 'Hann at Nyquist');
   return `within ${(100 * worst).toFixed(2)}% of |nu| away from 0; H(0) = ${H[0].toExponential(2)}`;
+});
+
+test('the Shepp-Logan phantom has the values the help quotes, 1974 and high contrast', () => {
+  // Places inside the skull's rim, the brain, a ventricle, the big ellipse at the top and the
+  // middle spot at the bottom.  In Hounsfield units, 1000 (mu / mu_water - 1), the 1974 head is
+  // a brain of +20, ventricles of 0 (fluid) and a skull of +1000.
+  const where = { skull: [0, 0.9], brain: [0.45, 0.3], ventricle: [0.22, 0], top: [0, 0.35], spot: [0, -0.605] };
+  const want = { original: { skull: 2, brain: 1.02, ventricle: 1, top: 1.03, spot: 1.03 }, modified: { skull: 1, brain: 0.2, ventricle: 0, top: 0.3, spot: 0.3 } };
+  const hu = {};
+  for (const variant of ['original', 'modified']) {
+    const sh = sheppLogan(variant);
+    assert(sh.length === 10, `${variant}: ten ellipses`);
+    for (const [name, [x, y]] of Object.entries(where)) close(shapesAt(sh, x, y), want[variant][name], 1e-12, `${variant} ${name}`);
+    if (variant === 'original') for (const name of ['skull', 'brain', 'ventricle']) hu[name] = Math.round(1000 * (shapesAt(sh, ...where[name]) - 1));
+  }
+  close(hu.brain, 20, 0, 'brain HU'); close(hu.ventricle, 0, 0, 'ventricle HU'); close(hu.skull, 1000, 0, 'skull HU');
+  return `1974: skull 2, brain 1.02, ventricles 1.00, details 1.03 (HU ${hu.skull}, ${hu.brain}, ${hu.ventricle}); high contrast: 1, 0.2, 0, 0.3`;
+});
+
+test('the back-projection at a point is the sum of the sinogram along its sinusoid', () => {
+  // b(r) = integral of p(theta, r . n) dtheta: the sinogram read along s = x cos theta + y sin theta,
+  // interpolated linearly between bins, times the angle step.
+  const sc = new Scanner(N);
+  sc.setShapes([disk(0.2, -0.1, 0.3, 1), disk(-0.4, 0.3, 0.1, 2)]);
+  sc.configure({ nA: 60, M: 128 });
+  sc.measureAll();
+  const M = sc.M;
+  let worst = 0, peak = 0;
+  for (const [i, j] of [[128, 128], [90, 150], [170, 100], [60, 70], [140, 200]]) {
+    const x = (i - N / 2) * h, y = (N / 2 - j) * h;
+    let b = 0;
+    for (let a = 0; a < sc.nA; a++) {
+      const t = sc.angle(a), u = (x * Math.cos(t) + y * Math.sin(t)) / sc.ds + M / 2, k = Math.floor(u), f = u - k;
+      const p = (q) => (q >= 0 && q < M ? sc.meas[a * M + q] : 0);
+      b += (p(k) + f * (p(k + 1) - p(k))) * sc.dth;
+    }
+    worst = Math.max(worst, Math.abs(b - sc.bp[j * N + i])); peak = Math.max(peak, Math.abs(b));
+  }
+  assert(worst < 1e-12 * peak, `${worst} of ${peak}`);
+  return `the sum along the sinusoid matches the back-projection to ${(worst / peak).toExponential(0)}`;
 });
 
 test('back-projecting every angle of a point gives m / r', () => {
