@@ -173,10 +173,16 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
           if ((c > l && c >= q) || (c < l && c <= q)) r.push(((i - 128) + 0.5 * (l - q) / (l - 2 * c + q)) * 5); }
         return r; })()""")
     worst = max(abs(r - math.sqrt((k + 1) * LAM * 60000)) for k, r in enumerate(rings))
-    centre_bright = S('__app.W.H[128 * 256 + 128] > __app.W.H[128 * 256 + 128 + 30]')
-    check(len(rings) == 10 and worst < 0.5 and centre_bright, f'zone plate: {len(rings)} ring edges out to the edge, at sqrt(n lambda z) to {worst:.2f} um, round a bright middle')
+    # Bright in the middle, then dark at r_1, bright at r_2, ...
+    vals = S(f'[128, {128 + round(rings[0] / P)}, {128 + round(rings[1] / P)}].map((i) => __app.W.H[128 * 256 + i])')
+    alternate = vals[0] > vals[1] < vals[2]
+    check(len(rings) == 10 and worst < 0.5 and alternate, f'zone plate: {len(rings)} brightest and darkest circles out to the edge, at sqrt(n lambda z) to {worst:.2f} um, bright in the middle and dark at n = 1 ({[round(v, 3) for v in vals]})')
     v = S('T.spot(128, 128, 2)')
-    lab = S("JSON.stringify(__app.marks())")
+    # In line, round the dot: the zero order, the plate out of focus, L/d wide (across a row just
+    # off the dot).  The twin's light lies on top and interferes with it at its edges, which
+    # blurs them by a few per cent; experiment 2, with the beams apart, measures it cleanly.
+    a0, a1 = edges(S('T.row(134, 1)'), 0.25, 60, 196)
+    check(abs((a1 - a0) * DU * 1000 - L / 60) < 1.5, f'in line, the zero order round the dot is a square {(a1 - a0) * DU * 1000:.1f} mrad wide (L/d = {L/60:.1f}; the twin on top blurs its edges)')
     S("T.button('on the twin')"); redraw()
     r = S('T.spot(128, 128, 2)')
     check(abs(S('__app.state.focus') + 60000) < 1 and abs(r[0] - 128) < 0.3 and abs(r[1] - 128) < 0.3 and r[2] > 0.5 * v[2],

@@ -136,9 +136,9 @@
     ($\theta$ = 0).  The hologram is a set of rings.  Why: light from the point reaches the plate
     a distance $r$ from its middle after travelling $\sqrt{z^2+r^2}\approx z+r^2/2z$, farther
     than at the middle by $r^2/2z$, and each half wavelength farther turns bright into dark.  So
-    the edges between bright and dark are at $r_n=\sqrt{n\lambda z}$: 10 of them out to the edge
-    of the plate, ever closer together, round a bright middle.  This is a Fresnel zone
-    plate.</p>
+    the rings are brightest and darkest at $r_n=\sqrt{n\lambda z}$, bright for even $n$ and dark
+    for odd: 10 of them out to the edge of the plate, ever closer together, round a bright
+    middle.  This is a Fresnel zone plate.</p>
     <p>Lit again, a zone plate is a lens with two focal lengths, $+z$ and $-z$.  It spreads part
     of the light as if from a point 60 mm behind (the image), it gathers part to a point 60 mm
     in front (the twin), and the rest goes straight on (the zero order).  The camera, focused at
@@ -155,7 +155,7 @@
     down to 0 and back up.  The rings' centre is where the point's light arrives parallel to the
     reference, so as the reference tilts up it slides up, to $z\tan\theta$ above the axis, and at
     0.61°, where $\tan\theta=L/2z$, it leaves the plate.  Then the plate holds arcs of a zone
-    plate centred off to the side: a lens and a grating in one.</p>
+    plate centred above it: a lens and a grating in one.</p>
     <p>Now the three beams leave in three directions (the Relight view): the zero order straight
     on, at $\theta$; the image along the object's own light; and the twin, bent twice as far, at
     $2\theta$, converging to a real point 60 mm in front and $2z\sin\theta$ = 2.1 mm up.  The
@@ -259,7 +259,7 @@
     often binary: printed, etched, or shown on micromirror displays.  Try more bits under
     <em>Laser and camera</em>: with 4 bits (16 grey levels) the image is all but perfect.</p>
     <p>Try it on one point too (experiment 1, then 1 bit): the rings turn black and white, like
-    Fresnel's own zone plate.  A square wave of the phase has harmonics, $e^{\pm3i\phi}$,
+    an ordinary zone plate cut from opaque and clear rings.  A square wave of the phase has harmonics, $e^{\pm3i\phi}$,
     $e^{\pm5i\phi}$, ..., so this zone plate has more focal lengths: focus at $z/3$ = 20 mm and
     there is another sharp dot.</p>
   </article>
@@ -313,7 +313,7 @@
     to a few grey levels is optional.</li>
     <li>The view: the light leaving the plate goes through a lens that makes light from a point
     at distance $d$ parallel (its phase is exact for a point on the axis), and one FFT sorts the
-    light by direction, as a camera's sensor does.  The directions are $\lambda/L$ apart, out to
+    light by direction: together, a camera focused at $d$.  The directions are $\lambda/L$ apart, out to
     $\pm\lambda/2p$.  For $d<0$ this is also the Fresnel transform: the light on a screen
     $|d|$ in front of the plate.  A plate of pixels is a grating of period $p$, which sends a
     copy of everything $\lambda/p$ away, so light that would leave at more than $\lambda/2p$
