@@ -1,43 +1,95 @@
+/* The least-action demo.  Desktop: the plots on the left (the score over them, the path beside
+   the record of its action, one more view below), the controls on the right.  Narrow screens:
+   one column, in the order a student uses it. */
 .act {
-  display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 12px;
   padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start;
 }
-.plots { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; -webkit-user-select: none; user-select: none; }
-.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.plots {
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; min-width: 0;
+  grid-template-areas: "score score" "path record" "view show";
+  position: sticky; top: 56px; -webkit-user-select: none; user-select: none;
+}
+.score { grid-area: score; } .path-wrap { grid-area: path; } .record-wrap { grid-area: record; }
+.view-wrap { grid-area: view; } #panel-show { grid-area: show; min-width: 0; overflow-y: auto; height: max(240px, calc(38vh - 62px)); }
+#blurb { color: var(--ink-2); line-height: 1.4; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
 .plot-wrap canvas { width: 100%; height: 100%; }
-.path-wrap { height: max(300px, calc(56vh - 60px)); }
-.path-wrap canvas { cursor: grab; }
+.path-wrap { height: max(320px, calc(62vh - 112px)); }
+.path-wrap canvas { cursor: default; touch-action: pan-y; }
+.path-wrap canvas.over { cursor: grab; }
 .path-wrap canvas.dragging { cursor: grabbing; }
-.row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.small-wrap { height: max(160px, 27vh); }
-#phasor { position: absolute; top: 6px; right: 6px; width: 64px; height: 64px; }
-/* The readout: fixed slots, so that nothing moves as the numbers change. */
-.readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 2px 4px; min-height: 2.2em; color: var(--ink-2); }
-.readout .slot { flex: none; white-space: nowrap; }
-.readout .lab { margin-right: 0.4em; }
-.readout .num { display: inline-block; text-align: right; white-space: pre; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
-.readout .big { font-size: 20px; font-weight: 600; color: var(--ink); }
-.readout .note { flex: 1 1 24ch; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.readout .good { color: var(--good); }
-.readout .warn { color: var(--warn); }
+.record-wrap, .view-wrap { display: flex; flex-direction: column; }
+.record-wrap { height: max(320px, calc(62vh - 112px)); }
+.record-wrap canvas, .view-body { flex: 1; min-height: 0; }
+.view-body { position: relative; }
+.view-body canvas { position: absolute; inset: 0; }
+.view-wrap { height: max(240px, calc(38vh - 62px)); }
+.cap { font-size: 12px; color: var(--ink-2); padding: 6px 10px 0; line-height: 1.35; }
+.cap b { color: var(--ink); font-weight: 600; }
+.view-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 8px 0; }
+.view-head .hbar { flex: 1 1 200px; padding: 0; }
+#view-cap { min-height: 2.7em; }
+.view-head .seg button { font-size: 12px; padding: 2px 8px; min-height: 26px; }
+
+/* The key to the path plot. */
+.plot-key {
+  position: absolute; right: 22px; top: 18px; max-width: calc(100% - 90px); pointer-events: none;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 2px 12px;
+  padding: 2px 6px; font-size: 12px; color: var(--ink-2); border-radius: 4px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+}
+.plot-key span { white-space: nowrap; }
+.plot-key i { display: inline-block; vertical-align: middle; margin: -2px 4px 0 0; }
+.plot-key .you { width: 18px; border-top: 3px solid var(--accent); }
+.plot-key .true { width: 18px; border-top: 2px dashed var(--good); }
+.plot-key .knot { width: 10px; height: 10px; border: 2px solid var(--accent); border-radius: 50%; background: var(--panel); }
+.plot-key .end { width: 10px; height: 10px; border: 2px solid var(--accent); background: var(--panel); }
+.plot-key .end.filled { background: var(--accent); }
+
+/* The score: your path against the true path, the numbers in fixed slots. */
+.score { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; padding: 2px 4px; color: var(--ink-2); }
+.score-grid { display: grid; align-items: baseline; gap: 0 14px; }
+.score-grid .h { font-size: 12px; color: var(--ink-3); text-align: right; white-space: nowrap; }
+.score-grid .rl { white-space: nowrap; font-size: 13px; }
+.score .num { display: inline-block; text-align: right; white-space: pre; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); justify-self: end; }
+.score .you .num, .score .you.rl { color: var(--accent); }
+.score .you .num.main { font-size: 20px; font-weight: 600; }
+.score .tru .num, .score .tru.rl { color: var(--good); }
+.verdict { display: flex; flex-direction: column; gap: 0; min-width: 0; flex: 1 1 22ch; }
+.verdict .line { white-space: nowrap; font-size: 15px; color: var(--ink); }
+.verdict .line .num { font-size: 18px; font-weight: 600; }
+.verdict .note { font-size: 13px; min-height: 1.4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score .good { color: var(--good); }
+.score .warn { color: var(--warn); }
 
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.controls .sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
 .button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
 #shows button { font-size: 13px; padding: 3px 8px; }
 .formula { min-height: 2em; overflow-x: auto; }
 .formula math { font-size: 1.1em; }
-#truth { color: var(--ink-2); }
-#truth { display: flex; flex-direction: column; gap: 2px; }
+#truth { color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
 #truth button.path { display: flex; gap: 6px; align-items: center; width: 100%; text-align: left; border: 1px solid transparent; background: none; padding: 2px 4px; min-height: 0; font-size: 12px; color: var(--ink-2); }
 #truth button.path:hover { border-color: var(--line); background: var(--panel-2); }
 #truth .swatch { width: 18px; flex: none; border-top: 3px dashed; }
 #truth .mark { color: var(--accent); }
-#howto { line-height: 1.35; }
+#howto { line-height: 1.4; color: var(--ink-2); }
 
+/* One column: the score, the path, its record, the path's controls, then the rest. */
 @media (max-width: 1000px) {
   .act { grid-template-columns: minmax(0, 1fr); }
-  .plots { position: static; }
-  .row3 { grid-template-columns: minmax(0, 1fr); }
+  .plots, .controls { display: contents; }
+  .score { order: 1; } .path-wrap { order: 2; } .record-wrap { order: 3; } #panel-path { order: 4; }
+  .view-wrap { order: 5; } #panel-show { order: 6; } #panel-system { order: 7; }
+  .act > *, .plots > *, .controls > * { min-width: 0; grid-area: auto; }
+  #panel-show { height: auto; grid-area: auto; }
+}
+@media (max-width: 700px) {
+  .path-wrap { height: 330px; }
+  .record-wrap { height: 230px; }
+  .view-wrap { height: 300px; }
+  .plot-key { right: 8px; top: 8px; max-width: calc(100% - 60px); }
 }

@@ -139,7 +139,7 @@ export const SYSTEMS = [
     s: 't', q: 'x', s0: 0, s1: 6, q0: 1, q1: 0, qrange: [-2, 2], knots: 7, vmax: 10, tmax: 15,
     source: 'exp(gamma t) (v^2/2 - x^2/2)', params: {},
     formula: 'L(x,\\dot x,t)',
-    blurb: 'Any Lagrangian, with v standing for the velocity.  The example, e^{γt}(v²/2 − x²/2), is a damped oscillator: friction from a stationary action.',
+    blurb: 'Any Lagrangian, with v standing for the velocity.  The example, exp(γt)(v²/2 − x²/2), is a damped oscillator: friction from a stationary action.',
   },
 ];
 

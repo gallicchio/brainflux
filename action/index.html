@@ -19,41 +19,49 @@
 
 <main class="act">
   <section class="plots">
-    <div class="readout" id="readout" aria-live="polite"></div>
-    <div class="plot-wrap path-wrap"><canvas id="path" tabindex="0" aria-label="The path.  Drag a knot up or down to change where the path goes, sideways to change when it gets there.  Keyboard: [ and ] choose a knot, the arrow keys move it."></canvas></div>
-    <div class="row3">
-      <div class="plot-wrap small-wrap"><canvas id="history" aria-label="The action of every path you have drawn, newest on the right"></canvas><canvas id="phasor" width="64" height="64" aria-label="The phasor exp(iS/ħ)"></canvas></div>
-      <div class="plot-wrap small-wrap" id="phase-wrap"><canvas id="phase" aria-label="The path in phase space, over the energy contours"></canvas></div>
-      <div class="plot-wrap small-wrap" id="energy-wrap"><canvas id="energy" aria-label="The energy along the path"></canvas></div>
+    <div class="score" id="score" aria-live="off"></div>
+    <div class="plot-wrap path-wrap" id="path-wrap">
+      <canvas id="path" tabindex="0" aria-label="The path.  Drag a knot up or down to change where the path goes, sideways to change when it gets there.  Keyboard: [ and ] choose a knot, the arrow keys move it, R puts the path back on the true path."></canvas>
+      <div class="plot-key" id="path-key"></div>
+    </div>
+    <div class="plot-wrap record-wrap">
+      <div class="cap"><b>The action of every path you try</b></div>
+      <canvas id="record" aria-label="The action of every path you have drawn, newest on the right, against the true path's"></canvas>
+    </div>
+    <div class="plot-wrap view-wrap">
+      <div class="view-head"><div id="view-tabs"></div></div>
+      <div id="view-cap" class="cap"></div>
+      <div class="view-body"><canvas id="view" aria-label="Phase space, the energy along the path, or Feynman's arrows"></canvas></div>
+    </div>
+    <div class="panel" id="panel-show">
+      <div id="formula" class="formula"></div>
+      <div id="blurb" class="small"></div>
+      <div id="truth" class="small"></div>
+      <div class="row" id="shows"></div>
     </div>
   </section>
 
   <aside class="controls">
-    <div class="panel">
+    <div class="panel" id="panel-system">
       <div class="label">System</div>
       <div id="systems" class="button-grid"></div>
-      <div id="formula" class="formula"></div>
-      <div id="blurb" class="small muted"></div>
       <div id="typed"></div>
       <div id="params" class="stack"></div>
     </div>
-    <div class="panel">
-      <div class="label">The path you draw</div>
-      <div id="howto" class="small muted"></div>
-      <div class="button-grid">
-        <button type="button" id="roll" aria-pressed="false" title="Let every knot slide downhill in the action, up or down and in time, steepest first">Roll downhill</button>
-        <button type="button" id="reset" title="Put the path back on the true path, where every experiment starts">Back to true path</button>
-        <button type="button" id="bend" title="Bend the whole path by half a sine wave (a whole one for a loop).  Shift-click bends it the other way.">Bend it</button>
+    <div class="panel" id="panel-path">
+      <div class="label">Your path</div>
+      <div id="howto" class="small"></div>
+      <button type="button" id="reset" class="primary" title="Put the path back on the true path, where every experiment starts (R)">Back to the true path</button>
+      <div class="sub">Try a wrong path:</div>
+      <div class="button-grid" id="tries">
+        <button type="button" id="bend-up" title="Bend the whole path by half a sine wave (a whole one for a loop)">Bend ↑</button>
+        <button type="button" id="bend-down" title="Bend the whole path the other way">Bend ↓</button>
         <button type="button" id="straight" title="A straight line between the end points: constant speed">Straight line</button>
+        <button type="button" id="rush" title="Reach every knot sooner, and dawdle afterwards: the same places at the wrong times">Rush, then dawdle</button>
       </div>
+      <button type="button" id="roll" aria-pressed="false" title="Let every knot slide downhill in the action, up or down and in time, steepest first">Roll downhill</button>
       <div id="knot-box"></div>
       <div id="mode-box" class="stack"></div>
-    </div>
-    <div class="panel">
-      <div class="label">Show</div>
-      <div class="row" id="shows"></div>
-      <div id="hbar-box"></div>
-      <div id="truth" class="small"></div>
     </div>
   </aside>
 </main>
