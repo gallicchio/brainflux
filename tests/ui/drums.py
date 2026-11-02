@@ -168,6 +168,18 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
                 frac = float(m.group(1)) if m else None
                 want = (lambda f: f > 13) if name == 'poisson' else (lambda f: f < 9)
                 check(frac is not None and want(frac), f'{name}: {frac}% of spacings below 1/4 (Poisson 22%, Wigner 4.8%)')
+            if name == 'wigner':
+                # The help: the whole stadium, four symmetry classes mixed, has about 14% of its
+                # spacings below 1/4, twice as many as the quarter.
+                b.eval('__app.setShape("stadium")')
+                ok = wait_for(b, '__app.modes && __app.state.shape === "stadium"', 600)
+                b.click('#count-more')
+                ok = ok and wait_for(b, '__app.counted && __app.state.shape === "stadium"', 900)
+                b.sleep(0.5)
+                m = re.search(r'below ¼: ([0-9.]+)%', b.eval("document.getElementById('count-note').textContent"))
+                whole = float(m.group(1)) if m else None
+                check(ok and whole is not None and 13.5 < whole < 15.5 and whole > 1.8 * frac,
+                      f'the whole stadium: {whole}% of spacings below 1/4, against {frac}% for the quarter (help: about 14%, twice as many)')
 
     # 12. The isospectral pair.
     with step('gww'):
