@@ -31,6 +31,7 @@ DEMOS = {
     'maxwell2d': ('#setup=ftir', 12),
     'radiation': ('#setup=fastdipole', 3),
     'schrodinger2d': ('#setup=crystal', 1, '__app.runUntil(0.55 * __app.tEnd)'),
+    'action': ('#setup=pendulum', 2, '__app.bend(1)'),
 }
 
 
