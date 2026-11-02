@@ -19,7 +19,7 @@ WIDTH = 1040   # of the page, in CSS pixels, that the thumbnail shows
 # demo: (address, seconds to let it run[, JavaScript to run first])
 DEMOS = {
     'thinfilms': ('#setup=soap', 3),
-    'dispersion': ('#setup=spread', 3),
+    'dispersion': ('#m=one&v=medium&w=1.9', 3),
     'interferometer': ('#setup=white', 3),
     'imaging': ('#setup=zernike', 3),
     'holography': ('#setup=portrait', 3),
