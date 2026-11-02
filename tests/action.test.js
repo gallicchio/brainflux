@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Path, action, quadrature, knotQuadrature, truePaths, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, hamiltonianGrid } from '../action/physics.js';
+import { Path, action, quadrature, knotQuadrature, truePaths, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, hamiltonianGrid, knotPhasors } from '../action/physics.js';
 import { SYSTEMS, typedSystem, parseTyped, cycloid, oscillatorOrbit } from '../action/systems.js';
 
 const sys = (id, over = {}) => {
@@ -312,6 +312,27 @@ test('a typed Lagrangian: exp(gamma t)(v^2/2 - x^2/2) is a damped oscillator', (
   assert(worst < 1e-5, `worst ${worst}`);
 });
 
+test('typed Lagrangians: the true path is found and classified, even near a conjugate point', () => {
+  // With L differenced numerically, rounding once made the shooting miss the damped oscillator's
+  // path at T = 3 and the oscillator typed as V = x^2/2 for T near pi, and gave the damped one
+  // a conjugate point it does not have (index 1 at T = 3).
+  const gamma = 0.3, w = Math.sqrt(1 - gamma * gamma / 4), tc = Math.PI / w;
+  const damped = typedSystem('L', parseTyped('L', 'exp(gamma t) (v^2/2 - x^2/2)'), { gamma });
+  for (const T of [3, 3.3, 6]) {
+    const tp = truePaths(damped, 0, 1, T, 0, { vmax: 10 });
+    assert(tp.length === 1, `damped, T=${T}: ${tp.length} paths`);
+    close(tp[0].v0, -gamma / 2 - w * Math.cos(w * T) / Math.sin(w * T), 1e-6, `damped, T=${T}: v0`);
+    assert(tp[0].index === (T < tc ? 0 : 1), `damped, T=${T}: index ${tp[0].index} (conjugate point at ${tc.toFixed(4)})`);
+  }
+  const typedOsc = typedSystem('V', parseTyped('V', 'x^2/2'), {}, 1), osc = sys('harmonic');
+  for (const T of [2.9, 3, 3.25, 3.5]) {
+    const tp = truePaths(typedOsc, 0, 1, T, 0.5, { vmax: 20 });
+    assert(tp.length === 1, `typed x^2/2, T=${T}: ${tp.length} paths`);
+    close(tp[0].S, osc.d.exact(osc.params, 0, 1, T, 0.5), 1e-6 * (1 + Math.abs(tp[0].S)), `typed x^2/2, T=${T}`);
+    assert(tp[0].index === Math.floor(T / Math.PI), `typed x^2/2, T=${T}: index ${tp[0].index}`);
+  }
+});
+
 test('the knot gradient points downhill', () => {
   const { L } = sys('gravity');
   const quad = quadrature(0, 2, 400);
@@ -336,4 +357,38 @@ test('phase space: H = p^2/2m + V on a grid for the oscillator', () => {
   close(Ht[0], Math.sqrt(0.75 ** 2 + 1), 1e-9, 'relativistic H');
   const ml = sys('mirage').L, Hm = hamiltonianGrid(ml, [0], [0.6]);
   close(Hm[0], -Math.sqrt(1 - 0.36), 1e-7, 'light: H = -sqrt(n^2 - p^2)');
+});
+
+test('Feynman\'s arrows over the heights of one knot add up to the Fresnel integral', () => {
+  // On the true path S(h) = S* + S''(h - h*)^2 / 2 for a knot's height h (exactly, for these
+  // Lagrangians), so the sum of e^{iS/hbar} dh is sqrt(2 pi hbar / S'') e^{i pi/4}, from the
+  // heights within a few sqrt(hbar / S'') of h*, which is the knot's own height.
+  const notes = [];
+  for (const [id, mode] of [['free', 'spline'], ['gravity', 'segments'], ['harmonic', 'spline']]) {
+    const st = start(id, { mode }), { L, path, quad } = st, k = 2, hbar = 0.05;
+    const { H } = knotDerivatives(L, path, quad, [k]), S2 = H[0][0], sigma = Math.sqrt(hbar / S2);
+    const qk = path.q[k], r = knotPhasors(L, path, quad, k, qk - 60 * sigma, qk + 60 * sigma, hbar);
+    close(r.hStar, qk, 1e-6 * (1 + Math.abs(qk)), `${id}: h* at the knot`);
+    const X = r.x[r.x.length - 1], Y = r.y[r.y.length - 1], amp = Math.hypot(X, Y), want = Math.sqrt((2 * Math.PI * hbar) / S2);
+    close(amp / want, 1, 0.02, `${id}: |sum|`);
+    close(Math.atan2(Y, X), Math.PI / 4, 0.03, `${id}: phase`);
+    // The quarter-turn zone is |h - h*| < sqrt(pi hbar / S'').
+    close((r.zone[1] - r.zone[0]) / 2, Math.sqrt((Math.PI * hbar) / S2), 0.01 * sigma + (r.h[1] - r.h[0]), `${id}: zone`);
+    notes.push(`${id}: |sum| ${(amp / want).toFixed(4)} of the Fresnel value`);
+  }
+  // Off the true path, h* is where the knot would have to be: the minimum of S over its height.
+  const st = start('gravity'), q = Float64Array.from(st.path.q);
+  q[1] += 2;
+  const p = st.path.withKnots(q), r = knotPhasors(st.L, p, st.quad, 2, -5, 15, 0.5);
+  const { g, H } = knotDerivatives(st.L, p, st.quad, [2]);
+  close(r.hStar, q[2] - g[0] / H[0][0], 1e-6, 'h* off the true path');
+  // The twin's middle event, moved sideways between two at rest 2.5 apart in time: S(h) =
+  // -2 sqrt(2.5^2 - h^2) - 5, undefined beyond the light cone; the quarter-turn zone is where
+  // 2 (2.5 - sqrt(6.25 - h^2)) < pi hbar / 2.
+  const tw = sys('twin'), ts = [0, 2.5, 5, 7.5, 10], pt = new Path(0, 10, [0, 0, 0, 0, 0], 'segments', { s: ts });
+  const rt = knotPhasors(tw.L, pt, knotQuadrature(ts), 2, -7, 7, 1);
+  close(rt.hStar, 0, 1e-9, 'twin: h*');
+  close(rt.zone[1], Math.sqrt(6.25 - (2.5 - Math.PI / 4) ** 2), 0.04, 'twin: zone');
+  assert(rt.x.every(Number.isFinite) && rt.y.every(Number.isFinite), 'twin: heights beyond the light cone add nothing');
+  return notes.join('; ');
 });

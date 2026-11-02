@@ -39,7 +39,7 @@ export const SYSTEMS = [
       // x(t) = q0 + (q1 - q0) t/T + g t (T - t)/2: S = m (q1-q0)^2/2T - m g (q0+q1) T/2 - m g^2 T^3/24.
       return (m * (q1 - q0) ** 2) / (2 * T) - (m * g * (q0 + q1) * T) / 2 - (m * g * g * T ** 3) / 24;
     },
-    blurb: 'A ball thrown up and caught two seconds later.  The parabola balances kinetic energy (spent getting high) against potential energy (earned while up there).',
+    blurb: 'A ball thrown up and caught two seconds later.  Going higher would lower −∫V dt but raise ∫½mẋ² dt more; the parabola is the balance.',
   },
   {
     id: 'harmonic', label: 'Harmonic oscillator',
@@ -106,7 +106,7 @@ export const SYSTEMS = [
   },
   {
     id: 'brachistochrone', label: 'Brachistochrone', flip: true, singularStart: true, lockStart: true,
-    s: 'x', q: 'depth', s0: 0, s1: Math.PI, q0: 0, q1: 2, qrange: [-0.4, 3], knots: 8, vmax: 50,
+    s: 'x', q: 'y', qlabel: 'depth y', s0: 0, s1: Math.PI, q0: 0, q1: 2, qrange: [-0.4, 3], knots: 8, vmax: 50,
     params: { g: { value: 1, min: 0.2, max: 5 } },
     formula: 'L = \\frac{\\sqrt{1+y\'^2}}{\\sqrt{2gy}}',
     make: ({ g }) => ({
@@ -139,7 +139,7 @@ export const SYSTEMS = [
     s: 't', q: 'x', s0: 0, s1: 6, q0: 1, q1: 0, qrange: [-2, 2], knots: 7, vmax: 10, tmax: 15,
     source: 'exp(gamma t) (v^2/2 - x^2/2)', params: {},
     formula: 'L(x,\\dot x,t)',
-    blurb: 'Any Lagrangian, with v standing for the velocity.  The example, e^{γt}(v²/2 − x²/2), is a damped oscillator: friction from a stationary action.',
+    blurb: 'Any Lagrangian, with v standing for the velocity.  The example, exp(γt)(v²/2 − x²/2), is a damped oscillator: friction from a stationary action.',
   },
 ];
 
@@ -147,15 +147,22 @@ export const SYSTEMS = [
 export function typedSystem(kind, expr, params, m = 1) {
   const env = (q, v, s) => ({ x: q, v, t: s, m, ...params });
   if (kind === 'V') {
+    const V = (q, s) => expr.evaluate(env(q, q, s), q.length).re;
     return {
       L: (q, v, s) => {
-        const V = expr.evaluate(env(q, v, s), q.length).re;
-        const out = new Float64Array(q.length);
-        for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - V[i];
+        const Vq = V(q, s), out = new Float64Array(q.length);
+        for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - Vq[i];
         return out;
+      },
+      // Newton: m x'' = -dV/dx, by a central difference of V alone.
+      accel: (q, v, s) => {
+        const n = q.length, h = Float64Array.from(q, (x) => 1e-5 * (1 + Math.abs(x)));
+        const a = V(Float64Array.from(q, (x, i) => x + h[i]), s), b = V(Float64Array.from(q, (x, i) => x - h[i]), s);
+        return Float64Array.from({ length: n }, (_, i) => -(a[i] - b[i]) / (2 * h[i] * m));
       },
       p: (q, v) => Float64Array.from(v, (u) => m * u),
       vOfP: (q, p) => Float64Array.from(p, (x) => x / m),
+      kinetic: (q, v) => Float64Array.from(v, (u) => 0.5 * m * u * u),
     };
   }
   return { L: (q, v, s) => expr.evaluate(env(q, v, s), q.length).re };
