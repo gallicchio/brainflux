@@ -24,6 +24,8 @@
 #scanner { cursor: crosshair; }
 #scanner.brush { cursor: cell; }
 #sinogram, #bp, #fbp, #kspace, #extra { cursor: crosshair; }
+/* Fourier space and the sixth panel take no drags: on a phone, a swipe over them scrolls the page. */
+#kspace, #extra { touch-action: pan-y pinch-zoom; }
 .sq.drop { outline: 3px dashed var(--accent); outline-offset: -3px; }
 .readout {
   color: var(--ink-2); min-height: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -37,7 +39,16 @@
 .button-grid button, .button-grid select { padding: 3px 2px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .swatch { display: inline-block; width: 14px; height: 4px; border-radius: 2px; vertical-align: middle; margin: 0 3px 0 6px; }
 .swatch.source { background: #ffb347; }
-.swatch.detector { background: #7fd3ff; }
+.swatch.detector, .swatch.now { background: #7fd3ff; }
+.swatch.pick { background: #ff5fd2; }
+.swatch.trace { background: #ffe14d; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: 0; }
+.dot.trace { background: #e6c200; }
+/* A picture chosen from the list looks like a pressed button. */
+#gallery.chosen { background: var(--accent-soft); border-color: var(--accent); }
+/* Pause, Step, Scan again and Finish on one line. */
+#scan-buttons { flex-wrap: nowrap; gap: 4px; }
+#scan-buttons button { padding: 4px 8px; flex: 0 0 auto; }
 .formula-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .formula-presets button { padding: 2px 8px; font-size: 12.5px; min-height: 26px; }
 details summary { cursor: pointer; color: var(--ink-2); }
@@ -53,14 +64,20 @@ details .stack { margin-top: 6px; }
   .sq, .readout { max-width: 100%; }
 }
 @media (max-width: 900px) {
-  .tomo { grid-template-columns: minmax(0, 1fr); padding: 8px; }
-  .stage { grid-template-columns: minmax(0, 1fr); }
+  /* One column: the pictures and the panels of controls are all items of one grid, so that the
+     scan's buttons come right under the scanner, and the rest under the pictures. */
+  .tomo { grid-template-columns: minmax(0, 1fr); padding: 8px; gap: 10px; }
+  .stage, .controls { display: contents; }
   .sq, .readout { max-width: min(100%, 560px); }
-  /* On a phone the pictures come in the order of the story: object, sinogram, reconstruction. */
-  #cell-fbp { order: 3; }
-  #cell-bp { order: 4; }
-  #cell-k { order: 5; }
-  #cell-extra { order: 6; }
+  /* The pictures in the order of the story: object, sinogram, reconstruction. */
+  #cell-scan { order: 1; }
+  #scan-panel { order: 2; }
+  #cell-sino { order: 3; }
+  #cell-fbp { order: 4; }
+  #cell-bp { order: 5; }
+  #cell-k { order: 6; }
+  #cell-extra { order: 7; }
+  .controls > .panel { order: 8; }
 }
 /* Pause, Play and Go on take the same room, so that the buttons beside it stay put. */
-#play { min-width: 5em; }
+#play { min-width: 4.6em; }

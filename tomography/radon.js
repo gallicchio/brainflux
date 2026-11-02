@@ -319,9 +319,9 @@ export function padRow(row, M, out = new Float64Array(M + 3)) {
 
 export const FILTERS = {
   ramlak: { label: 'Ram-Lak', title: 'The pure ramp |k|, cut off at the cutoff frequency (Ramachandran and Lakshminarayanan)', w: () => 1 },
-  shepplogan: { label: 'Shepp-Logan', title: 'The ramp times sinc: a little smoother', w: (v) => (v === 0 ? 1 : Math.sin((Math.PI * v) / 2) / ((Math.PI * v) / 2)) },
-  cosine: { label: 'Cosine', title: 'The ramp times cos(pi k / 2 k_c)', w: (v) => Math.cos((Math.PI * v) / 2) },
-  hann: { label: 'Hann', title: 'The ramp times the Hann window (1 + cos(pi k / k_c)) / 2: much less noise, a little blur', w: (v) => 0.5 * (1 + Math.cos(Math.PI * v)) },
+  shepplogan: { label: 'Shepp-Logan', title: 'The ramp times sin(πk/2k_c) / (πk/2k_c): a little smoother', w: (v) => (v === 0 ? 1 : Math.sin((Math.PI * v) / 2) / ((Math.PI * v) / 2)) },
+  cosine: { label: 'Cosine', title: 'The ramp times cos(πk/2k_c): smoother still', w: (v) => Math.cos((Math.PI * v) / 2) },
+  hann: { label: 'Hann', title: 'The ramp times the Hann window ½(1 + cos(πk/k_c)): much less noise, a little blur', w: (v) => 0.5 * (1 + Math.cos(Math.PI * v)) },
 };
 
 /** Smallest power of two >= 2M: room to convolve without wrapping round. */
