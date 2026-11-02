@@ -8,8 +8,8 @@ import { wavelengthRGB, signedSlider, arcPath, haloText, lenParts, piParts, freq
 
 const DARK = '#07080b';
 const RAY_COLORS = ['#ffd166', '#5ee1ff', '#ff7ab8'];
-const PASS_TIME = 0.07;      // seconds per pass of the rays
-const TRAIL = 50;            // passes drawn
+const PASS_TIME = 0.1;       // seconds per pass of the rays
+const TRAIL = 6;             // passes drawn (fading): three round trips
 const N_COLORS = ['#e8eaf0', '#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dabf7', '#b197fc'];
 
 export function createCavity(app) {
@@ -236,19 +236,29 @@ export function createCavity(app) {
 
   // ------------------------------------------------------------------- the spectrum
 
+  /**
+   * The resonances.  The optical frequencies are huge multiples of c/2L (q ~ 2L/lambda, near
+   * 790 000 here), so the plot shows two free spectral ranges above q0 c/2L: the thin grey
+   * lines are the plain comb q c/2L that a plane wave between flat mirrors would have, and every
+   * mode sits above it by its Gouy phase, (N + 1) psi1/pi of a free spectral range.
+   */
   function drawSpectrum() {
     const { ctx, width, height } = fitCanvas(spec);
     const c = themeColors();
     ctx.clearRect(0, 0, width, height);
     const F = new Frame(ctx, width, height, { left: 52, right: 14, top: 24, bottom: 34 });
-    F.x0 = -0.04; F.x1 = 2.04; F.y0 = 0; F.y1 = 1.14;
-    const FSR = fsr(state.L);
+    F.x0 = -0.04; F.x1 = 2.04; F.y0 = 0; F.y1 = 1.2;
+    const FSR = fsr(state.L), q0 = q0Now();
     ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('Resonant frequencies, by mode order N', F.left, 15);
+    ctx.fillText(F.w > 560 ? 'Resonant frequencies of the modes of order N (N + 1 modes each)' : 'Resonances, by order N', F.left, 15);
     F.clip();
+    // The plain comb q c/2L, without the Gouy phase.
+    ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+    for (let q = 0; q <= 2; q++) { const x = Math.round(F.X(q)) + 0.5; ctx.beginPath(); ctx.moveTo(x, F.Y(0)); ctx.lineTo(x, F.Y(1.2)); ctx.stroke(); }
+    ctx.setLineDash([]);
     if (!mode) {
       ctx.restore();
-      F.axes({ yTicks: false, colors: c });
+      spectrumAxes(ctx, F, c, FSR, q0);
       ctx.fillStyle = c.warn; ctx.textAlign = 'center'; ctx.fillText('unstable: no modes', F.left + F.w / 2, F.top + F.h / 2);
       return;
     }
@@ -259,31 +269,41 @@ export function createCavity(app) {
       ctx.lineWidth = ln.N === 0 ? 3 : 2;
       ctx.beginPath(); ctx.moveTo(x, F.Y(0)); ctx.lineTo(x, F.Y(h)); ctx.stroke();
     }
-    // The transverse spacing, from the TEM00 line of the first FSR to N = 1.
-    const nu0 = lines.find((l) => l.N === 0 && l.nu >= 0 && l.nu < 1);
-    if (nu0) {
-      const d = mode.gouy / Math.PI, y = F.Y(1.05);
-      let x1 = nu0.nu + d;
-      if (x1 > F.x1) x1 -= 1;
-      ctx.strokeStyle = c.ink2; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(F.X(nu0.nu), y); ctx.lineTo(F.X(x1), y); ctx.stroke();
-      ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      if (Math.abs(F.X(x1) - F.X(nu0.nu)) > 30) ctx.fillText('Δν_T', (F.X(nu0.nu) + F.X(x1)) / 2, y - 1);
-    }
+    // The Gouy offset of TEM00 from the plain comb, and the spacing of the orders.
+    const d = mode.gouy / Math.PI;
+    ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.strokeStyle = c.ink2; ctx.lineWidth = 1;
+    // From the plain comb to TEM00: the Gouy phase psi1/pi; from TEM00 to N = 1: the same again.
+    const bracket = (x0, x1, y, label) => {
+      ctx.beginPath(); ctx.moveTo(F.X(x0), y - 3); ctx.lineTo(F.X(x0), y + 3); ctx.moveTo(F.X(x0), y); ctx.lineTo(F.X(x1), y);
+      ctx.moveTo(F.X(x1), y - 3); ctx.lineTo(F.X(x1), y + 3); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      if (Math.abs(F.X(x1) - F.X(x0)) > ctx.measureText(label).width + 6) ctx.fillText(label, (F.X(x0) + F.X(x1)) / 2, y - 2);
+    };
+    bracket(0, d, F.Y(1.1), 'ψ₁/π');
+    bracket(d, 2 * d, F.Y(1.1), 'Δν_T');
     ctx.restore();
-    F.axes({ yTicks: false, colors: c });
-    ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    fillSlots(ctx, ['frequency ν, in units of the free spectral range c/2L = ', ...freqParts(FSR)], F.left + F.w / 2, F.bottom + 18);
+    spectrumAxes(ctx, F, c, FSR, q0);
     // A legend of colours.
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '12px system-ui, sans-serif';
-    let x = F.right - 7 * 30;
-    ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.fillText('N =', x - 6, 11); ctx.textAlign = 'left';
-    for (let N = 0; N <= 6; N++) {
-      ctx.fillStyle = N === 0 ? c.accent : N_COLORS[N];
-      ctx.fillRect(x, 6, 4, 11);
-      ctx.fillStyle = c.ink2; ctx.fillText(`${N}`, x + 8, 11);
-      x += 30;
+    let x = F.right - 7 * 28;
+    if (x > F.left + 300 || F.w < 560) {
+      ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.fillText('N =', x - 6, 11); ctx.textAlign = 'left';
+      for (let N = 0; N <= 6; N++) {
+        ctx.fillStyle = N === 0 ? c.accent : N_COLORS[N];
+        ctx.fillRect(x, 6, 4, 11);
+        ctx.fillStyle = c.ink2; ctx.fillText(`${N}`, x + 8, 11);
+        x += 28;
+      }
     }
+  }
+  /** The longitudinal index of the plot's left edge: the comb just below c/lambda. */
+  const q0Now = () => Math.floor((2 * state.L) / lam() - (mode ? mode.gouy / Math.PI : 0));
+  function spectrumAxes(ctx, F, c, FSR, q0) {
+    F.axes({ yTicks: false, xTicks: false, colors: c });
+    ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let q = 0; q <= 2; q++) ctx.fillText(q ? `q₀ + ${q}` : 'q₀', F.X(q), F.bottom + 5);
+    for (const v of [0.5, 1.5]) ctx.fillText(tickLabel(v), F.X(v), F.bottom + 5);
+    fillSlots(ctx, ['ν in units of c/2L = ', ...freqParts(FSR), ', above q₀ c/2L, q₀ = ', { v: q0, dec: 0, w: 7 }], F.left + F.w / 2, F.bottom + 19);
   }
 
   // ------------------------------------------------------------------- rays in phase space
@@ -341,9 +361,10 @@ export function createCavity(app) {
         ['waist from mirror 1', lenParts(mode.zw, 7)],
         ['Rayleigh range z_R', lenParts(mode.zR, 7)],
         ['spot on mirror 1, 2', [...lenParts(mode.w1, 7), ', ', ...lenParts(mode.w2, 7)]],
-        ['Gouy phase ψ₁, one way', piParts(mode.gouy, 3, 5)],
-        ['free spectral range', freqParts(fsr(state.L))],
-        ['transverse spacing Δν_T', freqParts((fsr(state.L) * mode.gouy) / Math.PI)],
+        ['Gouy phase ψ₁ each way', piParts(mode.gouy, 3, 5)],
+        ['free spectral range c/2L', freqParts(fsr(state.L))],
+        ['TEM₀₀ resonances', ['(q + ', { v: mode.gouy / Math.PI, dec: 3, w: 5 }, ') c/2L']],
+        ['order spacing Δν_T', freqParts((fsr(state.L) * mode.gouy) / Math.PI)],
       );
     }
     const dl = $('#cav-numbers'), nkey = rows.map(([k]) => k).join('|');

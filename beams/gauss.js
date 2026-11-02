@@ -163,11 +163,18 @@ export function beamAt(trace, z, seg = segmentAt(trace, z)) {
   };
 }
 
-/** The waists of a trace: one per segment, { z, w0, zR, theta, real (inside its segment), seg }. */
+/**
+ * The waists of a trace: one per segment, { z, w0, zR, theta, real, seg }.  A waist is real if
+ * the light passes through it: inside its segment, where the first segment reaches back for ever
+ * and the last one on for ever (the beam is there beyond the stretch traced).  Otherwise it is
+ * virtual: where the beam would have its waist if the element before or after weren't there.
+ */
 export function waists(trace) {
-  return trace.segments.map((seg) => {
+  const last = trace.segments.length - 1;
+  return trace.segments.map((seg, i) => {
     const b = beamOf(seg.q, trace.lambda, seg.n), z = seg.za - b.dz;
-    return { z, w0: b.w0, zR: b.zR, theta: b.theta, real: z >= seg.za - 1e-9 && z <= seg.zb + 1e-9, seg };
+    const real = (i === 0 || z >= seg.za - 1e-9) && (i === last || z <= seg.zb + 1e-9);
+    return { z, w0: b.w0, zR: b.zR, theta: b.theta, real, seg };
   });
 }
 

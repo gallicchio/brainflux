@@ -70,7 +70,17 @@ dl.numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
-.chips button { font-size: 12px; padding: 2px 8px; min-height: 26px; }
+/* The list of what is on the bench: a row each, to edit it or take it off. */
+.el-list { display: flex; flex-direction: column; gap: 4px; }
+.el-list:empty { display: none; }
+.el-row { display: flex; gap: 4px; align-items: stretch; }
+.el-pick { flex: 1; min-width: 0; text-align: left; font-size: 12px; padding: 3px 8px; min-height: 28px; }
+.el-x { font-size: 12px; min-width: 30px; min-height: 28px; padding: 2px 6px; color: var(--ink-2); }
+.el-x:hover { color: var(--warn); border-color: var(--warn); }
+.presets button { font-size: 12px; padding: 2px 8px; min-height: 26px; }
+/* What the pointer can do, under the bench: kept two lines tall so nothing below moves. */
+.hint { min-height: 2.6em; padding: 0 4px; line-height: 1.3; }
+@media (min-width: 1200px) { .hint { min-height: 1.4em; } }
 .editor-head { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 6px; }
 .editor-head .remove { font-size: 12px; min-height: 24px; }
 .signed { display: flex; flex-direction: column; gap: 4px; }
@@ -78,7 +88,8 @@ dl.numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
 .el-info { color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
 .el-info b { color: var(--ink); }
 .el-info .warn { color: var(--warn); }
-.lens-plot-wrap { height: 190px; border: 1px solid var(--line); border-radius: 6px; }
+.lens-plot-wrap { height: 190px; border: 1px solid var(--line); border-radius: 6px; margin-top: 4px; }
+details.lens-law summary { cursor: pointer; color: var(--accent); }
 .lens-plot { width: 100%; height: 100%; }
 .formula { min-height: 1.8em; overflow-x: auto; }
 .formula math { font-size: 1.05em; }
@@ -94,6 +105,12 @@ dl.numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
 }
 @media (max-width: 700px) {
   .readout { min-height: 4.4em; }
+  /* The waist table fits the width: smaller, and without its notes (a virtual waist is greyed). */
+  table.waists { min-width: 0; font-size: 12px; }
+  table.waists th, table.waists td { padding: 3px 4px 3px 2px; white-space: normal; }
+  table.waists th:nth-child(6), table.waists td:nth-child(6) { display: none; }
+  table.waists th:nth-child(1) { width: 24%; }
+  table.waists th:nth-child(2), table.waists th:nth-child(3), table.waists th:nth-child(4), table.waists th:nth-child(5) { width: 19%; }
 }
 @media (max-width: 520px) {
   .gallery.g-hg { grid-template-columns: repeat(4, minmax(0, 1fr)); }

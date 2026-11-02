@@ -113,13 +113,17 @@ export function realTable(R, size = 1024) {
   return { lut, size, vmax };
 }
 
-/** A colour table for intensities in [0, imax]: black through the laser's colour to white. */
+/**
+ * A colour table for intensities in [0, imax]: black through the laser's colour to white, like
+ * film: the exposure t = 1 - exp(-I/Iref) is 0.63 at Iref (full colour) and 0.13 at the 1/e^2
+ * edge of a beam whose peak is Iref; past 2 Iref it goes to white (overexposed).
+ */
 export function intensityTable(rgb, Iref, size = 1024) {
-  const imax = 12 * Iref, lut = new Uint8ClampedArray(4 * size);
+  const imax = 8 * Iref, lut = new Uint8ClampedArray(4 * size);
   for (let k = 0; k < size; k++) {
     const I = ((k + 0.5) / size) * imax;
-    const t = (2 / Math.PI) * Math.atan(I / Iref);      // 0..1, 1/2 at Iref
-    const u = Math.min(1, t / 0.62), white = Math.max(0, (t - 0.62) / 0.38);
+    const t = 1 - Math.exp(-I / Iref);
+    const u = Math.min(1, t / 0.7), white = Math.max(0, (t - 0.7) / 0.3) ** 1.5;
     for (let c = 0; c < 3; c++) lut[4 * k + c] = 255 * Math.min(1, rgb[c] * u + white * (1 - rgb[c] * u));
     lut[4 * k + 3] = 255;
   }
