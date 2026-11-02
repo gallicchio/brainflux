@@ -110,7 +110,7 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     check(st == [1, 60000, 1, 60000, False], f'the page opens on one point 60 mm behind the plate, the reference at 1°, the camera focused at 60 mm, still ({st})')
     check('Three separate islands' in S('__app.verdict()'), f"... off axis and clean: {S('__app.verdict()')!r}")
     note, terms = S("T.text('#recon-note')"), S("T.text('#terms')").replace(' ', ' ')
-    check('60.0 mm behind the plate, on the image' in note, f'... and says so: {note!r}')
+    check('60.0 mm behind, on the image' in note, f'... and says so: {note!r}')
     check('1.00° up' in terms and 'as if from 60.0 mm behind (virtual)' in terms and 'converging 60.0 mm in front (real)' in terms,
           f'the three terms say where their light goes: {terms!r}')
 

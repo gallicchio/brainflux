@@ -35,13 +35,12 @@
 #play { cursor: crosshair; }
 .sq { width: 100%; aspect-ratio: 1; background: #000; border-radius: var(--radius); overflow: hidden; }
 .sq canvas { width: 100%; height: 100%; }
-.focus-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .pane-foot .slider { grid-template-columns: minmax(4.6em, auto) 1fr 4.6em; }
 
 /* The three terms of the relit light, each with its colour, its formula and where it goes. */
 #pane-terms { align-self: stretch; padding-top: 30px; }
 .terms {
-  height: 150px; overflow: hidden; background: var(--panel); border: 1px solid var(--line);
+  min-height: 150px; background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 6px 10px; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
 }
 .terms .head { color: var(--ink-2); }
@@ -77,13 +76,16 @@ details.panel[open] summary { margin-bottom: 6px; }
 @media (max-width: 1100px) {
   .holo { grid-template-columns: minmax(0, 1fr); }
   .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); align-items: start; }
-  .step-head { margin: 0; }
+  .step-head { margin: 0; grid-column: 1 / -1; }
+  /* The three terms under the Relight view, across, where they have room. */
+  .stage { grid-template-areas: "rec rec rec" "play play play" "front terms terms" "holo spec recon"; }
+  .pane-sub { white-space: normal; min-height: 2.9em; }
+  #pane-terms { padding-top: 0; }
+  .terms { min-height: 0; }
 }
 /* A phone: one column, in the order of the story. */
 @media (max-width: 760px) {
   .stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rec" "front" "holo" "play" "terms" "recon" "spec"; }
-  #pane-terms { padding-top: 0; }
-  .terms { height: auto; }
   .front-wrap { width: 100%; max-width: 300px; height: 160px; margin: 0 auto; }
   .side-wrap { height: 160px; }
   .pane-head .note { white-space: normal; }

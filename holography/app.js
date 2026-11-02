@@ -833,20 +833,20 @@ const mathHTML = (tex) => ({ html: texToMathML(tex) });
 // decimals, so that nothing in a note moves as the numbers change (setSlots).
 function updateNotes() {
   const p = state.pitch, sMax = sinMax();
-  setSlots($('#holo-note'), ['what the plate records, |O + R|²: ', `${N}² pixels of `, { v: p, dec: 1, w: 4 }, ' µm']);
-  setSlots($('#spec-note'), ['its fringes sorted by spacing and direction, to ±', { v: sMax * 1000, dec: 0, w: 3 }, ' mrad']);
+  setSlots($('#holo-note'), ['|O + R|², recorded on pixels ', { v: p, dec: 1, w: 4 }, ' µm apart']);
+  setSlots($('#spec-note'), ['fringes by spacing and direction, to ±', { v: sMax * 1000, dec: 0, w: 3 }, ' mrad']);
   const d = state.focus, F = focusPoint(), T = terms(F);
   // Which image the camera is on, if any (within the depth of focus of the plate).
   const sharp = T.slice(1).filter((t) => { const f = focusOf(t.wave); return Number.isFinite(f.R) && Math.abs(1 / f.R - 1 / d) * plateL() < 2 * dU(); });
   const on = sharp.length ? `, on the ${sharp.map((t) => t.name).join(' and the ')}` : '';
-  const cjWords = state.ref === 'plane' ? ' (the reference tilted the other way)' : ' (converging to the source’s mirror point)';
-  setSlots($('#play-note'), ['lit by ', mathHTML(conj() ? 'R^*' : 'R'), conj() ? cjWords : ' alone', ', the plate sends on three beams; click to focus the camera there']);
-  setSlots($('#recon-note'), ['focused ', { v: Math.abs(d) / MM, dec: 1, w: 5 }, ` mm ${d >= 0 ? 'behind' : 'in front of'} the plate${on}`]);
+  const cjWords = state.ref === 'plane' ? ' (R tilted the other way)' : ' (converging to the mirror point)';
+  setSlots($('#play-note'), ['lit by ', mathHTML(conj() ? 'R^*' : 'R'), conj() ? cjWords : ' alone', ', the plate sends on three beams; click to focus there']);
+  setSlots($('#recon-note'), ['focus: ', { v: Math.abs(d) / MM, dec: 1, w: 5 }, ` mm ${d >= 0 ? 'behind' : 'in front'}${on}`]);
   // The fringes, under the hologram.
   let fr;
   if (state.ref === 'plane') {
     const s = Math.sin(state.theta);
-    fr = s > 1e-9 ? ['The fringes are λ/sin θ = ', { v: state.lambda / s, dec: 1, w: 5 }, ' µm apart at the middle, ', { v: state.lambda / s / p, dec: 2, w: 5 }, ' pixels (the camera needs at least 2).']
+    fr = s > 1e-9 ? ['Light arriving straight on makes fringes λ/sin θ = ', { v: state.lambda / s, dec: 1, w: 5 }, ' µm apart with the reference: ', { v: state.lambda / s / p, dec: 2, w: 5 }, ' pixels (the camera needs at least 2).']
       : ['In line: no tilt, so the fringes are the rings of the point’s light meeting the reference head on.'];
   } else {
     fr = ['The reference comes from ', { v: Math.hypot(state.refSrc.x, state.refSrc.y) / state.refSrc.z * 1000, dec: 1, w: 5 }, ' mrad off the axis, ', { v: state.refSrc.z / MM, dec: 1, w: 5 }, ' mm away.'];
@@ -1231,7 +1231,6 @@ const focusSlider = slider({ label: 'focus (mm)', min: -300, max: 300, step: 0.1
   onInput: (v) => { state.sweepFocus = false; sweepFocusToggle.on = false; setFocus(v * MM, false); } });
 $('#focus-box').append(focusSlider);
 const sweepFocusToggle = toggle('Sweep', false, (on) => { state.sweepFocus = on; t0 = performance.now(); changed(); }, 'Sweep the focus back and forth through the object');
-$('#sweep-box').append(sweepFocusToggle);
 function setFocus(d, updateSlider = true) {
   if (Math.abs(d) < 1000) d = d < 0 ? -1000 : 1000;
   state.focus = Math.max(-1e6, Math.min(1e6, d));
@@ -1246,7 +1245,7 @@ function sweepRange() {
 }
 const jumpImage = el('button', { type: 'button', title: 'Focus on the image (of the selected point)', onclick: () => jump('image') }, 'Focus on the image');
 const jumpTwin = el('button', { type: 'button', title: 'Focus on the twin image (of the selected point)', onclick: () => jump('twin') }, 'on the twin');
-$('#jump-box').append(jumpImage, jumpTwin);
+$('#jump-box').append(jumpImage, jumpTwin, sweepFocusToggle);
 function jump(which) {
   // Lit by the conjugate beam, the image to look at is the real one, made by the O* term.
   const T = terms(focusPoint()), t = (which === 'image') !== conj() ? T[1] : T[2], f = focusOf(t.wave);
