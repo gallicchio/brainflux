@@ -112,7 +112,8 @@ const setups = {
   aliasing: () => michelson({ source: 'hene', d: 0, plot: 'fts', L: 20, step: 0.4, view: [0, 3.2] }),
   drawi: () => michelson({ source: 'hene', d: 0, plot: 'fts', L: 10, step: 0.05, view: [0, 3.2] }),
   star: () => stellar({ theta: 20, lam: 550, B: 1, sweeping: true }),
-  betelgeuse: () => stellar({ theta: 47, lam: 575, B: 0.5, sweeping: true }),
+  // Baselines up to the length of Michelson and Pease's beam, 20 feet.
+  betelgeuse: () => stellar({ theta: 47, lam: 575, B: 0.5, sweeping: true, span: 6.1 }),
   binary: () => stellar({ kind: 'binary', theta: 6, rho: 50, pa: 0, ratio: 0.9, lam: 550, B: 0.2, sweeping: true }),
 };
 

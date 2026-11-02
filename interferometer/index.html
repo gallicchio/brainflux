@@ -114,9 +114,12 @@
   $$I(\Delta)=\int S(\sigma)\,[1+\cos 2\pi\sigma\Delta]\,d\sigma .$$
   The cosine is even, so $I(-\Delta)=I(\Delta)$: the interferogram is the same on both sides of
   zero path.  Apart from the constant, it is the Fourier (cosine) transform of the spectrum: they
-  are a Fourier pair, and you can change either one here.  The screen shows what you would see
-  looking into the instrument, in true colour.  Scroll over the spectrum or the interferogram to
-  zoom; the buttons above them set their ranges.</p>
+  are a Fourier pair, and you can change either one here.  The dashed line on the interferogram is
+  the level with no interference, half the signal at zero path.  The screen shows what you would
+  see looking into the instrument, in true colour; over it, the visibility is the contrast
+  $(I_\text{max}-I_\text{min})/(I_\text{max}+I_\text{min})$ of the fringes around the present
+  $\Delta$: 1 for a laser, smaller where the wavelengths in the light have got out of step.  Scroll
+  over the spectrum or the interferogram to zoom; the buttons above them set their ranges.</p>
 
   <article class="exp" data-setup="count">
     <h3>1. Count the fringes: the laser's wavelength</h3>
@@ -240,7 +243,10 @@
     both sides, the shift only gives the transform a phase, $2\pi\sigma\varepsilon$ at each line,
     which the spectrometer measures and takes out (phase correction).  That is why spectrometers
     scan both sides of zero path, or at least a little of the second side, to measure the phase.
-    Set $\varepsilon$ to 0 and the two kinds of scan agree.</p>
+    (A real instrument can be lopsided in other ways too: without a compensating plate, the glass
+    of the beam splitter delays each colour differently, and the phase is no longer in proportion
+    to $\sigma$.  A two-sided scan measures that phase too.)  Set $\varepsilon$ to 0 and the two
+    kinds of scan agree.</p>
   </article>
 
   <article class="exp" data-setup="resolution">
