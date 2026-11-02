@@ -855,12 +855,24 @@ function drawSketch() {
   if (state.illum !== 'incoherent' && state.tiltNA > 0) notes.push(`tilted: sin θ = ${state.tiltNA.toFixed(2)}`);
   notes.forEach((n, i) => text(n, Math.max(narrow ? 34 : 50, (xL + xo) / 2), top + 2 + i * (font + 2), 'center', col.ink3));
   // Legend, right of the image plane (or under the title on a phone).
-  const lw = 16 + Math.max(ctx.measureText(legendZero).width, legendDiff ? ctx.measureText(legendDiff).width : 0);
-  const lx = Math.min(xI + 14, w - lw - 6), ly = top + 6;
+  const lwOf = (a, b) => 16 + Math.max(ctx.measureText(a).width, b ? ctx.measureText(b).width : 0);
+  if (lwOf(legendZero, legendDiff) > w - xI - 20) {
+    legendZero = state.illum === 'incoherent' ? 'from one point' : 'zero order';
+    if (legendDiff) legendDiff = 'diffracted';
+  }
+  const lx = Math.min(xI + 14, w - lwOf(legendZero, legendDiff) - 6), ly = top + 6;
   const key = (rgb, s, y) => { ctx.fillStyle = rgba(rgb, 0.85); ctx.fillRect(lx, y - 2, 12, 4); text(s, lx + 16, y, 'left'); };
   if (!narrow) {
     key(ZERO, legendZero, ly);
     if (legendDiff) key(DIFF, legendDiff, ly + 15);
+  } else {
+    // On a phone: in the row of labels, at its two ends.
+    const keyAt = (rgb, s, x, align) => {
+      const tw = ctx.measureText(s).width, x0 = align === 'right' ? x - tw - 16 : x;
+      ctx.fillStyle = rgba(rgb, 0.85); ctx.fillRect(x0, yt - 2, 12, 4); text(s, x0 + 16, yt, 'left');
+    };
+    keyAt(ZERO, state.illum === 'incoherent' ? 'from one point' : 'zero order', 4, 'left');
+    if (legendDiff) keyAt(DIFF, 'diffracted', w - 4, 'right');
   }
 }
 
@@ -1230,19 +1242,25 @@ zoomSel.value = state.zoom;
 zoomSel.addEventListener('change', () => { state.zoom = +zoomSel.value; changed('fp'); });
 const logToggle = toggle('log', state.fpLog, (on) => { state.fpLog = on; changed('fp'); }, 'Brightness on a logarithmic scale: shows the faint light far from the zero order');
 $('#fp-view').append(fpView, zoomSel);
+// What a drag on the Fourier plane does: tilt the light, or paint the pupil with one of the
+// brushes.  Two groups, one choice between them.
+const setFpTool = (v) => { state.fpTool = v; tiltTool.value = v; fpTool.value = v; fpCanvas.classList.toggle('tilt', v === 'tilt'); };
+const tiltTool = segmented([{ value: 'tilt', label: 'Tilt the light', title: 'Drag the light: where you press is where the zero order goes (oblique illumination)' }],
+  state.fpTool, setFpTool, { label: 'Drag to tilt the light' });
 const fpTool = segmented([
-  { value: 'tilt', label: 'Tilt the light', title: 'Drag the light: where you press is where the zero order goes (oblique illumination)' },
   { value: 'block', label: 'Block', title: 'Paint the pupil opaque' },
   { value: 'open', label: 'Pass', title: 'Paint the pupil clear (even outside the aperture)' },
   { value: 'minus', label: '−90°', title: 'Paint a quarter-period advance' },
   { value: 'plus', label: '+90°', title: 'Paint a quarter-period delay' },
   { value: 'erase', label: 'Unpaint', title: 'Remove paint: back to the pupil the panel sets' },
-], state.fpTool, (v) => { state.fpTool = v; fpCanvas.classList.toggle('tilt', v === 'tilt'); }, { label: 'Fourier-plane tool' });
+], state.fpTool, setFpTool, { label: 'Paint the pupil' });
 ctl.fpBrush = slider({ label: 'size', min: 1, max: 30, step: 1, value: state.fpBrush, title: 'Brush size (frequency pixels)', onInput: (v) => { state.fpBrush = Math.round(v); } });
 const mirrorToggle = toggle('Mirror', state.fpMirror, (on) => { state.fpMirror = on; }, 'Paint the point opposite through the centre too');
 const clearPaintButton = el('button', { type: 'button', title: 'Remove all paint from the pupil', disabled: true, onclick: () => { clearPaint(); clearPaintButton.disabled = true; changed('pupil'); } }, 'Remove paint');
 ctl.fpBright = slider({ label: 'brightness', min: -3, max: 3, step: 0.01, value: 0, title: 'How bright to draw the Fourier plane (factors of 10)', onInput: (v) => { state.fpBright = v; changed('fp'); } });
-$('#fp-tools').append(fpTool, ctl.fpBrush, mirrorToggle, clearPaintButton, ctl.fpBright, logToggle);
+const line = (...kids) => el('div', { class: 'line' }, ...kids);
+$('#fp-tools').append(line(el('span', { class: 'note' }, 'Drag to:'), tiltTool, el('span', { class: 'note' }, 'or paint:'), fpTool),
+  line(ctl.fpBrush, mirrorToggle, clearPaintButton), line(ctl.fpBright, logToggle));
 const xzoomSel = el('select', { 'aria-label': 'Magnify the object and the image', title: 'Magnify the middle of the object and the image' },
   ...[1, 2, 4].map((z) => el('option', { value: z }, `${z}×`)));
 xzoomSel.value = state.xzoom;
@@ -1278,7 +1296,7 @@ function syncControls() {
   ctl.profile.value = state.profile; ctl.enc.value = state.enc; ctl.filter.value = state.filter; ctl.illum.value = state.illum;
   objView.value = state.objView; fpView.value = state.fpView; zoomSel.value = state.zoom; xzoomSel.value = state.xzoom;
   logToggle.on = state.fpLog; exposureSel.value = state.exposure;
-  fpTool.value = state.fpTool; fpCanvas.classList.toggle('tilt', state.fpTool === 'tilt');
+  setFpTool(state.fpTool);
   syncVisibility();
 }
 
