@@ -14,7 +14,7 @@ import { fftCentered } from '../lib/fft.js';
 import { paint as stamp } from '../fft2d/tools.js';
 import { loadImage, imageData } from '../fft2d/presets.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, setGroups } from '../lib/ui.js';
-import { Frame, themeColors, fillSlots } from '../lib/plot.js';
+import { Frame, themeColors, fillSlots, slotsWidth } from '../lib/plot.js';
 
 const N = 256;             // grid points across
 const DX = 0.1;            // micrometres per point: the field of view is 25.6 um
@@ -754,14 +754,16 @@ function drawSketch() {
   // The light.
   const [sx, sy] = tiltPx(), along = (u, v) => (u * Math.cos(side.a) + v * Math.sin(side.a)) / k;
   const s0 = along(sx, sy);
-  let legendZero = 'zero order: straight through', legendDiff = 'diffracted light';
+  // The legend gives each its share of the light leaving the object (in fixed slots).
+  const zw = side.zero.w, pct = (v) => ({ v: 100 * v, dec: 1, w: 5 });
+  let legendZero = ['zero order ', pct(zw), '%'], legendDiff = ['diffracted ', pct(1 - zw), '%'];
   if (state.illum === 'incoherent') {
     // Every point shines on its own: rays in every direction from the middle of the object.
     for (let s = -smax; s <= smax + 1e-9; s += 0.1) ray(s, 0.55, ZERO);
     const g = ctx.createRadialGradient(xo, y0, 0, xo, y0, 9);
     g.addColorStop(0, rgba(ZERO, 0.9)); g.addColorStop(1, rgba(ZERO, 0));
     ctx.fillStyle = g; ctx.fillRect(xo - 9, y0 - 9, 18, 18);
-    legendZero = 'light from one point of the object'; legendDiff = null;
+    legendZero = ['light from one point of the object']; legendDiff = null;
   } else {
     // Diffracted light: one ray per frequency pixel along the cut, as bright as its share.
     let wmax = 0;
@@ -806,6 +808,8 @@ function drawSketch() {
   // Words.
   ctx.font = `${font}px system-ui, sans-serif`; ctx.textBaseline = 'middle';
   const text = (s, x, y, align = 'center', color = col.ink2) => { ctx.textAlign = align; ctx.fillStyle = color; ctx.fillText(s, x, y); };
+  // Words with live numbers in them: each number in a slot of its own (fillSlots), so that nothing moves.
+  const slots = (parts, x, y, align = 'left', color = col.ink3) => { ctx.textAlign = align; ctx.fillStyle = color; fillSlots(ctx, parts, x, y); };
   const step = (n, s, x, y) => {
     // A numbered label, the number in a ring as on the panel it belongs to.
     ctx.font = `${font}px system-ui, sans-serif`;
@@ -832,10 +836,11 @@ function drawSketch() {
   }
   // The aperture's edge and what is in the plane.
   const yNA = Y(Ys * Math.min(state.NA, smax));
-  text(`NA ${state.NA.toFixed(2)}`, xF + sw / 2 + 4, Math.max(top + 4, yNA - 7), 'left', col.ink3);
-  const what = state.filter === 'stop' ? 'stop' : state.filter === 'dot' ? `phase dot ${state.dotPhase > 0 ? '+' : state.dotPhase < 0 ? '−' : ''}${Math.abs(state.dotPhase)}°`
-    : state.filter === 'knife' ? 'knife edge' : null;
-  if (what || paintLayer.used) text([what, paintLayer.used ? 'paint' : null].filter(Boolean).join(' + '), xF + sw / 2 + 4, Math.min(bottom - 4, Y(-Ys * Math.min(state.NA, smax)) + 8), 'left', col.ink3);
+  slots(['NA ', { v: state.NA, dec: 2, w: 4 }], xF + sw / 2 + 4, Math.max(top + 4, yNA - 7));
+  const what = state.filter === 'stop' ? ['stop'] : state.filter === 'dot' ? ['phase dot ', { v: state.dotPhase, dec: 0, w: 4, plus: '+' }, '°']
+    : state.filter === 'knife' ? ['knife edge'] : [];
+  if (paintLayer.used) what.push(what.length ? ' + paint' : 'paint');
+  if (what.length) slots(what, xF + sw / 2 + 4, Math.min(bottom - 4, Y(-Ys * Math.min(state.NA, smax)) + 8));
   // A grating's orders, numbered beside the Fourier plane.
   const orders = gratingOrderList();
   if (orders && state.illum !== 'incoherent' && Math.abs(Math.sin(side.a)) < 1e-9) {   // (the orders lie along x)
@@ -851,17 +856,17 @@ function drawSketch() {
   }
   // Tilted light: say so, by the light coming in.
   const notes = [];
-  if (state.illum === 'condenser') notes.push(`a cone, NA ${state.condNA.toFixed(2)}`);
-  if (state.illum !== 'incoherent' && state.tiltNA > 0) notes.push(`tilted: sin θ = ${state.tiltNA.toFixed(2)}`);
-  notes.forEach((n, i) => text(n, Math.max(narrow ? 34 : 50, (xL + xo) / 2), top + 2 + i * (font + 2), 'center', col.ink3));
-  // Legend, right of the image plane (or under the title on a phone).
-  const lwOf = (a, b) => 16 + Math.max(ctx.measureText(a).width, b ? ctx.measureText(b).width : 0);
-  if (lwOf(legendZero, legendDiff) > w - xI - 20) {
-    legendZero = state.illum === 'incoherent' ? 'from one point' : 'zero order';
-    if (legendDiff) legendDiff = 'diffracted';
-  }
+  if (state.illum === 'condenser') notes.push(['a cone, NA ', { v: state.condNA, dec: 2, w: 4 }]);
+  if (state.illum !== 'incoherent' && state.tiltNA > 0) notes.push(['tilted: sin θ = ', { v: state.tiltNA, dec: 2, w: 4 }]);
+  notes.forEach((n, i) => slots(n, Math.max(narrow ? 40 : 56, (xL + xo) / 2), top + 2 + i * (font + 2), 'center'));
+  // Legend, right of the image plane (or, on a phone, at the two ends of the row of labels).
+  const lwOf = (a, b) => 16 + Math.max(slotsWidth(ctx, a), b ? slotsWidth(ctx, b) : 0);
+  if (lwOf(legendZero, legendDiff) > w - xI - 20 && state.illum === 'incoherent') legendZero = ['from one point'];
   const lx = Math.min(xI + 14, w - lwOf(legendZero, legendDiff) - 6), ly = top + 6;
-  const key = (rgb, s, y) => { ctx.fillStyle = rgba(rgb, 0.85); ctx.fillRect(lx, y - 2, 12, 4); text(s, lx + 16, y, 'left'); };
+  const key = (rgb, parts, y) => {
+    ctx.fillStyle = rgba(rgb, 0.85); ctx.fillRect(lx, y - 2, 12, 4);
+    ctx.textAlign = 'left'; ctx.fillStyle = col.ink2; fillSlots(ctx, parts, lx + 16, y);
+  };
   if (!narrow) {
     key(ZERO, legendZero, ly);
     if (legendDiff) key(DIFF, legendDiff, ly + 15);

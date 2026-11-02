@@ -199,10 +199,12 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     st = stats(b)
     dev = max(st['max'] - 1, 1 - st['min'])
     check(near(100 * dev, 0.15, 2), f'cells (0.3 rad of phase) at NA 1.4: the image is even to {100 * dev:.2f}%')
+    zw = b.eval('__app.side.zero.w')
+    check(near(100 * zw, 99.7, 1), f'{100 * zw:.2f}% of their light is in the zero order (the sketch says so)')
     put(b, NA=0.25)
     c2 = b.eval('__app.stats().contrast')
     check(near(c2, 0.006, 3), f'closing the aperture to NA 0.25 shows faint rims (contrast {c2:.4f})')
-    quoted(b, 'invisible', '0.3 rad', '1.4', '0.15%', '0.25', '0.006')
+    quoted(b, 'invisible', '0.3 rad', '1.4', '0.15%', '0.25', '0.006', '99.7%')
 
     # 6. Defocus: the thickest parts bright beyond focus, dark before it (I ~ 1 - lambda z lap(phi) / 2 pi).
     setup(b, 'defocus')
