@@ -1445,6 +1445,7 @@ document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === ' ') { e.preventDefault(); playButton.click(); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); stepScan(); }
+  else if (e.key === 'Escape') { state.pick = null; if (state.point?.pinned) state.point = null; dirty = true; schedule(); }
 });
 
 // ----------------------------------------------------------------------- the address

@@ -32,7 +32,7 @@
     <figure class="cell" id="cell-k">
       <figcaption class="cell-head"><h2>Fourier space</h2><span class="note" id="k-note"></span><span class="spacer"></span><select id="k-zoom" class="small-select" aria-label="Zoom into Fourier space"></select></figcaption>
       <div class="sq"><canvas id="kspace" tabindex="0" aria-label="Fourier space: each projection's 1D Fourier transform lies on a line through the centre of the object's 2D transform"></canvas></div>
-      <div class="readout mono small" id="k-readout">&nbsp;</div>
+      <div class="readout mono small" id="k-readout" title="Point at Fourier space: kx, ky and |k| in radians per unit length (the unit is the scan circle’s radius, 10 cm), and the wavelength λ = 2π/|k|.  The slice through that place, its row of the sinogram and its projection turn magenta.">&nbsp;</div>
     </figure>
     <figure class="cell" id="cell-bp">
       <figcaption class="cell-head"><h2>Back-projection</h2><span class="note">no filter · <span class="swatch now"></span>this angle’s smear</span></figcaption>
@@ -127,7 +127,7 @@
   row of the sinogram and it turns magenta: the scanner turns to that angle and shows the ray.
   Point at Fourier space and the slice through that place turns magenta, with its row.  Point at
   the object, or at a back-projection, and that point turns yellow, with its sinusoid in the
-  sinogram.  Click to pin a ray or a point.</p>
+  sinogram.  Click to pin a ray or a point; Esc lets go.</p>
 
   <article class="exp" data-setup="sinusoid">
     <h3>1. One point, one sinusoid</h3>
