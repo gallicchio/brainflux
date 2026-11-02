@@ -152,14 +152,20 @@ export class Propagator {
    * frequency.  What field() gives at the retarded time τ = t − z, summed directly,
    *     a(z, t) = Σ_k X_k e^{iω_k t0} e^{iñ_k ω_k z} e^{−iω_k t},
    * over the frequencies that carry the pulse (sig), stepping each one in z by e^{iñωdz}.
+   * wTop > 0 leaves out frequencies above it, rolling off the top 40% below it smoothly (cos²):
+   * a sharp front, which has every frequency, is then drawn rounded over a time of about 3/wTop,
+   * which a picture cannot show anyway, at a fraction of the cost.
    * Returns {re, im, w} (w: the local frequency, NaN where the field is negligible).
    */
-  snapshot(t, z0, dz, M) {
+  snapshot(t, z0, dz, M, wTop = 0) {
     const out = { re: new Float64Array(M), im: new Float64Array(M), w: new Float64Array(M) };
     const { Xr, Xi, pr, pi, dw, sig, t0 } = this, wr = new Float64Array(M), wi = new Float64Array(M);
     if (!sig || !this.n) return out;
+    const knee = 0.6 * wTop;
     for (const k of sig) {
-      const w = k * dw, f = k === 0 ? 1 : 2;
+      const w = k * dw;
+      if (wTop > 0 && w > wTop) break;
+      const f = (k === 0 ? 1 : 2) * (wTop > 0 && w > knee ? Math.cos((0.5 * Math.PI * (w - knee)) / (wTop - knee)) ** 2 : 1);
       // ñω z = ω z + (pr + i pi) z, with pr = (n − 1)ω, pi = κω.
       const kr = w + pr[k], ki = pi[k];
       const lnA0 = -ki * z0;

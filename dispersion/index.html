@@ -17,19 +17,44 @@
   <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
 </header>
 
-<main class="dsp" id="main" data-view="pulse">
+<main class="dsp" id="main" data-view="medium">
   <section class="stage">
     <div class="row view-row" id="view-row"></div>
-    <div class="plot-wrap resp" id="resp-wrap"><canvas id="resp" tabindex="0" aria-label="The response of the medium against frequency: drag the round handles to move a resonance or change its strength, the small ones to change its width"></canvas></div>
+    <div class="plot-wrap resp" id="resp-wrap"><canvas id="resp" tabindex="0" aria-label="The index n and the absorption κ against frequency: drag the square handle to change the light's frequency, the round handles to move a resonance or change its strength, the small ones to change its width"></canvas></div>
+    <div class="pics" id="pics">
+      <div class="plot-wrap pic" id="charge-wrap"><canvas id="charge" aria-label="One charge on its spring, shaken by the light's field E, and its displacement x against E in time"></canvas></div>
+      <div class="plot-wrap pic" id="wave-wrap"><canvas id="wave" aria-label="The light's wave meeting the medium: its wavelength and its decay inside"></canvas></div>
+    </div>
     <div class="plot-wrap refl" id="refl-wrap"><canvas id="refl" aria-label="The reflectance at normal incidence against frequency"></canvas></div>
-    <div class="plot-wrap pulse" id="pulse-wrap"><canvas id="pulse" aria-label="The pulse after a distance z in the medium, against the same pulse in vacuum"></canvas></div>
-    <div class="plot-wrap kk" id="kkim-wrap"><canvas id="kkim" aria-label="The imaginary part of chi: draw on it"></canvas></div>
-    <div class="plot-wrap kk" id="kkre-wrap"><canvas id="kkre" aria-label="The real part of chi: draw on it"></canvas></div>
+    <div class="plot-wrap snap" id="snap-wrap"><canvas id="snap" aria-label="The pulse inside the medium at one moment, against depth"></canvas></div>
+    <div class="plot-wrap pulse" id="pulse-wrap"><canvas id="pulse" aria-label="The pulse at the detector against time, against the same pulse in vacuum"></canvas></div>
+    <div class="plot-wrap kk" id="kkim-wrap"><canvas id="kkim" aria-label="The imaginary part of chi, the absorption: draw on it; drag the sliver's handle along the top"></canvas></div>
+    <div class="plot-wrap kk" id="kkre-wrap"><canvas id="kkre" aria-label="The real part of chi, the dispersion: draw on it"></canvas></div>
     <div class="plot-wrap kk" id="kkt-wrap"><canvas id="kkt" aria-label="The impulse response chi(t)"></canvas></div>
     <div class="readout small" id="readout" aria-live="off"></div>
   </section>
 
   <aside class="controls">
+    <div class="panel" id="light-panel">
+      <div class="label">The light</div>
+      <div id="light-box" class="stack"></div>
+      <div class="row" id="light-row"></div>
+    </div>
+    <div class="panel" id="pulse-panel">
+      <div class="label">Pulse</div>
+      <div class="row">
+        <button type="button" id="play" class="primary" title="Send the pulse through again and again (space)">Pause</button>
+        <button type="button" id="fit" title="Fit the detector's time axis to the pulse">Fit time axis</button>
+      </div>
+      <div id="shape-row"></div>
+      <div id="pulse-box" class="stack"></div>
+      <div class="row" id="frame-row"></div>
+    </div>
+    <div class="panel" id="kk-panel">
+      <div class="label">Kramers–Kronig</div>
+      <div class="small muted">Draw on either plot; the other follows.</div>
+      <div class="row" id="kk-row"></div>
+    </div>
     <div class="panel">
       <div class="label">Medium</div>
       <div class="button-grid" id="media"></div>
@@ -48,21 +73,6 @@
         <summary class="small">Background and range</summary>
         <div id="range-box" class="stack"></div>
       </details>
-    </div>
-    <div class="panel" id="kk-panel">
-      <div class="label">Kramers–Kronig</div>
-      <div class="small muted">Draw on either plot; the other follows.</div>
-      <div class="row" id="kk-row"></div>
-    </div>
-    <div class="panel" id="pulse-panel">
-      <div class="label">Pulse</div>
-      <div class="row">
-        <button type="button" id="play" class="primary" title="Send the pulse through again and again (space)">Pause</button>
-        <button type="button" id="fit" title="Fit the time axis to the pulse at the largest distance">Fit time axis</button>
-      </div>
-      <div id="shape-row"></div>
-      <div id="pulse-box" class="stack"></div>
-      <div class="row" id="frame-row"></div>
     </div>
     <div class="panel" id="show-panel">
       <div class="label">Show</div>
