@@ -100,6 +100,33 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     check([l[0] for l in labels] == ['1', '2', '3', '4'] and 'Light' in labels[0] and 'Object' in labels[1] and 'Objective' in labels[2] and 'Fourier' in labels[3],
           f'the side panel goes along the light: {labels}')
 
+    # A student's first clicks, on the buttons themselves: the four things to put in the Fourier
+    # plane, the sign of the dot, the light, an object, the NA slider.
+    def click_text(sel, text):
+        b.eval(f"[...document.querySelectorAll({json.dumps(sel)})].find((e) => e.textContent.includes({json.dumps(text)})).click()"); settle(b)
+    click_text('.filters button', 'Open')
+    c, note = b.eval('__app.stats().contrast'), b.eval("document.querySelector('#filter-note').textContent")
+    check(b.eval('__app.state.filter') == 'open' and c < 0.01 and 'barely shows' in note, f'Open: the cells all but vanish (contrast {c:.4f}), and the note says why')
+    click_text('.filters button', 'Stop')
+    tp = b.eval('__app.throughput()')
+    check(b.eval('__app.state.filter') == 'stop' and tp < 0.05, f'Stop: the zero order is blocked, {100 * tp:.1f}% of the light gets through')
+    click_text('.filters button', 'Knife edge')
+    check(b.eval('__app.state.filter') == 'knife' and b.eval('__app.stats().contrast') > 0.1, 'Knife edge: the cells show in relief')
+    click_text('.filters button', 'Phase dot')
+    click_text('#filter .seg button', '+90°')
+    check(b.eval('__app.state.dotPhase') == 90 and b.eval(CORR_PHASE) > 0.9, 'Phase dot, then +90°: the cells turn bright')
+    click_text('#filter .seg button', '−90°')
+    check(b.eval('__app.state.dotPhase') == -90 and b.eval(CORR_PHASE) < -0.9, '−90°: dark again')
+    click_text('#illum .seg button', 'Condenser')
+    shown = b.eval("[...document.querySelectorAll('#illum .slider')].some((e) => !e.hidden && e.textContent.includes('condenser'))")
+    check(b.eval('__app.state.illum') == 'condenser' and shown, 'Condenser: the light is a cone, and its NA slider appears')
+    click_text('#illum .seg button', 'Coherent')
+    b.eval("(() => { const r = [...document.querySelectorAll('#objective .slider')].find((e) => e.textContent.startsWith('NA')).querySelector('input[type=range]'); r.value = 500; r.dispatchEvent(new Event('input')); })()"); settle(b)
+    na = b.eval('__app.state.NA')
+    check(0.7 < na < 0.75, f'the NA slider moves the aperture (NA {na})')
+    click_text('#presets button', 'Grating')
+    check(b.eval('__app.state.preset') == 'grating' and b.eval('__app.orders()') is not None, 'the Grating button puts a grating under the lens')
+
     # Speed: the work of one frame after a change of the pupil (dragging NA, painting the pupil)
     # and of the object (painting it).  The fastest of 9 measures the code; the median also
     # measures whatever else the computer is doing.

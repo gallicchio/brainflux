@@ -494,7 +494,7 @@ function drawFourier() {
   };
   // What the colours mean, top left.
   label(ctx, view === 'otf' ? 'the OTF: what incoherent light transfers' : view === 'pupil' ? 'the pupil P: colour = its phase'
-    : 'colour = phase, brightness = amplitude', 8 * dd, 14 * dd);
+    : state.illum === 'incoherent' ? 'the light as one plane wave would make it' : 'colour = phase, brightness = amplitude', 8 * dd, 14 * dd);
   if (view === 'otf') {
     circle(0, 0, 2 * state.NA * k, 'rgba(255,255,255,0.55)', [5 * dd, 4 * dd]);
     label(ctx, 'cutoff 2NA/λ', X(0) + 2 * state.NA * k * s * 0.72, Y(0) - 2 * state.NA * k * s * 0.72 - 8 * dd);
