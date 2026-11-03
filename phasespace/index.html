@@ -21,8 +21,10 @@
   <section class="stage">
     <div class="readouts mono small" id="readouts" aria-live="off"></div>
     <div class="plot-wrap main-wrap"><canvas id="plot" tabindex="0" aria-label="Phase space: the Wigner function W(x, p) in colour, red where positive and blue where negative, with classical points as dots, energy contours, and the probability densities of x and p along the edges. Drag the state's centre; arrow keys move it too."></canvas></div>
+    <div class="hint" id="hint">Drag the blob by its ⊕ centre</div>
     <div class="legend small">
       <span class="cbar"><span id="cb-name">W(x, p)</span> <span id="cb-lo">−1/πħ</span><canvas id="colorbar" aria-hidden="true"></canvas><span id="cb-hi">+1/πħ</span></span>
+      <span id="neg" title="W is not a probability density: wherever the state has no classical picture it goes negative, in blue.  Least: the lowest value of W in the window, in units of 1/πħ (W ≥ −1/πħ, always).  Volume: the integral of |W| over the region where W < 0; it is 0 for a coherent or squeezed state and grows as a state becomes more quantum."></span>
       <span id="dots-note"></span>
       <span id="hover"></span>
     </div>
@@ -64,99 +66,101 @@
 </main>
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
-  <header><h2>Experiments</h2></header>
-  <p>A classical particle is a point $(x,p)$ in phase space; an uncertain one is a cloud of
-  points, a probability density that flows along the contours of $H(x,p)=p^2/2m+V(x)$.  A
-  quantum state has its own phase-space picture, the <em>Wigner function</em>
-  $$W(x,p)=\frac{1}{\pi\hbar}\int\psi^*(x+y)\,\psi(x-y)\,e^{2ipy/\hbar}\,dy,$$
-  drawn here in colour: red where $W>0$, blue where $W<0$, white (black on a dark page) where it
-  is zero.  The colours are full at $\pm1/\pi\hbar$, the largest value $|W|$ can ever take.  $W$
-  behaves like a probability density in one way: integrating it over $p$ gives $|\psi(x)|^2$
-  and over $x$ gives $|\phi(p)|^2$, the strips along the top and the right.  But it can be
-  negative, which no probability can.</p>
-  <p>The black dots are classical particles, each moving by Hamilton's equations under the same
-  $H$; their histograms are the black lines in the strips.  At $t=0$ they are drawn from $W$
-  when $W$ is positive; when it is not, from a positive stand-in (the note under the plot says
-  which).  Drag the centre of a coherent, squeezed or cat state on the plot.  The thin grey
-  curves are contours of $H$ at the stationary states' energies; the dashed one is
-  $\langle E\rangle$.  Units: $\hbar=m=1$.</p>
+  <header><h2>Experiments &amp; help</h2></header>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>The picture is phase space: position <i>x</i> across, momentum <i>p</i> up.  The red
+    blob is a quantum state drawn as a cloud of "where, and how fast" (its <em>Wigner
+    function</em>); the black dots are classical particles started in the same cloud.  In this
+    harmonic well the two circle together, once per period.</p>
+    <p>Drag the blob by its ⊕ centre (or click where you want it) and it circles from there.
+    The strips above and at the right are the blob's shadows on the two axes: the probability
+    distributions of <i>x</i> and of <i>p</i>, what a measurement would find.</p>
+    <p>Then press <b>Quartic</b> under Potential (or <b>Set it up</b> in experiment 2): the outer
+    dots now run ahead of the inner ones and the cloud winds into a spiral.  The quantum blob
+    follows for a while, then breaks into fringes with blue patches, where its Wigner function
+    is negative, which no cloud of classical particles can ever be.</p>
+  </section>
 
   <article class="exp" data-setup="coherent">
     <h3>1. Quantum and classical agree</h3>
-    <p>A coherent state in a harmonic well: a round Gaussian blob, as small as quantum mechanics
-    allows, circling once per period $2\pi/\omega$ without changing shape.  The classical points
-    circle with it, exactly.  For a quadratic $H$ the Wigner function obeys the classical
-    Liouville equation, so every $W$ flows like a classical fluid.  Here $W$ stays positive (min
-    $W$ in the readout is 0) and $\sigma_x\sigma_p$ stays at $\hbar/2$.  Drag the blob somewhere
-    else.</p>
+    <p>A coherent state in a harmonic well, $V=\tfrac12\omega^2x^2$: a round Gaussian blob, as
+    small as quantum mechanics allows, with 3000 classical points drawn from it.  Watch it
+    circle once per period $2\pi/\omega$ without changing shape, the classical points circling
+    with it, exactly.  Drag the blob somewhere else: a bigger circle, the same period.  Under
+    the plot, the least value of $W$ stays 0 (no blue anywhere), and in the readout the
+    uncertainty $\sigma_x\sigma_p$ stays at its limit $\hbar/2$.  Why: for a quadratic $H$ the
+    Wigner function obeys the classical Liouville equation, so this $W$ flows exactly like a
+    classical fluid.</p>
+  </article>
+
+  <article class="exp" data-setup="anharmonic">
+    <h3>2. Where quantum and classical part</h3>
+    <p>The same coherent state in an anharmonic well, $V=\tfrac12x^2+\lambda x^4$, where bigger
+    orbits take less time.  Watch the dots: the outer ones run ahead of the inner ones and the
+    cloud winds into a spiral, its arms ever longer and thinner.  $W$ follows at first, then
+    cannot: where two arms of the one wave function lie close together they interfere, and $W$
+    fills with fringes, negative (blue) between the positive ones; by $t=10$ the negative part
+    of $W$ has a volume of 0.9 (under the plot).  The classical cloud never does this.  Why:
+    $W$ moves by
+    $$\frac{\partial W}{\partial t}=-\frac{p}{m}\frac{\partial W}{\partial x}+V'\frac{\partial W}{\partial p}-\frac{\hbar^2}{24}V'''\frac{\partial^3W}{\partial p^3}+\dots,$$
+    the classical Liouville equation plus corrections in powers of $\hbar^2$, with ever higher
+    derivatives of $V$.  For a quadratic $V$ they all vanish; for this quartic one only the term
+    shown is left, and it is the whole difference between the two pictures.  Make $\lambda$
+    smaller (the slider under $V$) and the parting comes later.</p>
+  </article>
+
+  <article class="exp" data-setup="free">
+    <h3>3. Free motion shears phase space</h3>
+    <p>No force at all.  Every point moves at its own speed: $x\to x+pt/m$, $p$ unchanged, so
+    the blob is sheared into a tilted ellipse, ever longer and thinner.  Watch its shadows: the
+    one on $x$ widens (the packet spreads, $\sigma_x^2(t)=\sigma_x^2+\sigma_p^2t^2/m^2$ here),
+    the one on $p$ never changes, and the blob's area never changes either.  Again the classical
+    points follow $W$ exactly.  Drag the blob to a larger $p$ and it shears faster.</p>
   </article>
 
   <article class="exp" data-setup="squeezed">
-    <h3>2. A squeezed state breathes</h3>
+    <h3>4. A squeezed state breathes</h3>
     <p>The ellipse is narrower than a coherent state in $x$ (by $e^{-r}$) and wider in $p$, with
     the same area.  It turns rigidly, so its shadow on the $x$ axis, $|\psi(x)|^2$, narrows and
-    widens twice per period: $\sigma_x$ goes from 0.32 up to 1.57 and back.  $\sigma_x\sigma_p$ is
-    $\hbar/2$ only when the ellipse lies along the axes.  Try other angles and squeezes ($r<0$
-    squeezes $p$ instead).</p>
+    widens twice per period: $\sigma_x$ goes from 0.32 up to 1.57 and back.  $\sigma_x\sigma_p$
+    is $\hbar/2$ only when the ellipse lies along the axes.  Try other angles and squeezes
+    ($r<0$ squeezes $p$ instead).</p>
   </article>
 
   <article class="exp" data-setup="number">
-    <h3>3. Number states are rings, and negative</h3>
+    <h3>5. Number states are rings, and negative</h3>
     <p>The oscillator's first excited state $|1\rangle$.  Its Wigner function is
     $W_1=\frac{1}{\pi\hbar}\left(\frac{2(x^2+p^2)}{\hbar}-1\right)e^{-(x^2+p^2)/\hbar}$ (with $m\omega=1$):
     a positive ring around a negative centre, where $W_1(0,0)=-1/\pi\hbar$, as negative as any
-    $W$ can be (min $W$ in the readout: $-1/\pi\hbar$).  Raise $n$: $|n\rangle$ has a disk and $n$
-    rings of alternating sign, with $W_n(0,0)=(-1)^n/\pi\hbar$, its outermost ring just inside
-    the contour $H=E_n$.  Nothing moves: a stationary state's $W$ is stationary.  $W$ is not a
-    probability here, so the classical points come from the Husimi $Q$ (experiment 11), which
-    gives them about $\hbar\omega/2$ more energy on average (see the readout): they circle round
-    the ring for ever.</p>
+    $W$ can be (the least $W$ under the plot: $-1/\pi\hbar$).  Raise $n$: $|n\rangle$ has a disk
+    and $n$ rings of alternating sign, with $W_n(0,0)=(-1)^n/\pi\hbar$, its outermost ring just
+    inside the contour $H=E_n$.  Nothing moves: a stationary state's $W$ is stationary.  $W$ is
+    not a probability here, so the classical points come from the Husimi $Q$ (experiment 11),
+    which gives them about $\hbar\omega/2$ more energy on average (compare the two energies in
+    the readout): they circle round the ring for ever.</p>
   </article>
 
   <article class="exp" data-setup="cat">
-    <h3>4. A cat state's fringes</h3>
+    <h3>6. A cat state's fringes</h3>
     <p>Two coherent states, at $\pm x_0$, added: $|\alpha\rangle+e^{i\varphi}|{-\alpha}\rangle$.
     Besides the two blobs, $W$ has fringes between them, positive and negative, spaced
     $\pi\hbar/x_0$ in $p$.  They are the coherence between the blobs: a mixture (half a chance
     of each, no superposition) would have the blobs and no fringes.  Change the phase $\varphi$:
     the fringes slide, and at $\varphi=180°$ the centre has $W(0,0)=-1/\pi\hbar$ (an odd state;
-    in general $\pi\hbar\,W(0,0)$ is the mean value of the parity).  The whole picture rotates rigidly,
-    fringes and all.</p>
+    in general $\pi\hbar\,W(0,0)$ is the mean value of the parity).  The whole picture rotates
+    rigidly, fringes and all.  Drag one blob and the other goes opposite.</p>
   </article>
 
   <article class="exp" data-setup="marginals">
-    <h3>5. The marginals are what you measure</h3>
+    <h3>7. The marginals are what you measure</h3>
     <p>The same cat a quarter period on: the two blobs now have momenta $\pm p_0$ and sit on top of
     each other in $x$.  $|\psi(x)|^2$ along the top has interference fringes: two waves with
     opposite momenta make a standing wave.  Each point of it is the sum of $W$ over $p$ along a
     vertical line, positive and negative stripes together.  The momentum distribution at the
     right has no fringes.  Press <em>Play</em> and watch the fringes pass from one strip to the
     other as the picture turns.  No measurement ever sees $W$ itself, only its shadows.</p>
-  </article>
-
-  <article class="exp" data-setup="free">
-    <h3>6. Free motion shears phase space</h3>
-    <p>With no force every point moves at its own speed: $x\to x+pt/m$, $p$ unchanged.  The blob
-    is sheared into a tilted ellipse, ever longer and thinner.  Its shadow on $x$ widens (the
-    packet spreads, $\sigma_x^2(t)=\sigma_x^2+\sigma_p^2t^2/m^2$ here), its shadow on $p$ never
-    changes, and its area never changes either.  Again the classical points follow $W$
-    exactly.</p>
-  </article>
-
-  <article class="exp" data-setup="anharmonic">
-    <h3>7. Where quantum and classical part</h3>
-    <p>The same coherent state in an anharmonic well, $V=\tfrac12x^2+\lambda x^4$, where bigger
-    orbits take less time.  The outer points run ahead of the inner ones and the classical
-    cloud winds into a spiral, its arms ever longer and thinner.  $W$ follows at first, then
-    cannot: where two arms of the one wave function lie close together they interfere, and $W$
-    fills with fringes, negative between the positive ones (by $t=10$ the negative part of $W$
-    has a volume of 0.9; min $W$ and the volume are in the readout).  The classical cloud
-    never does this.  $W$ moves by
-    $$\frac{\partial W}{\partial t}=-\frac{p}{m}\frac{\partial W}{\partial x}+V'\frac{\partial W}{\partial p}-\frac{\hbar^2}{24}V'''\frac{\partial^3W}{\partial p^3}+\dots,$$
-    the classical Liouville equation plus corrections in powers of $\hbar^2$, with ever higher
-    derivatives of $V$.  For a quadratic $V$ they all vanish; for this quartic one only the term
-    shown is left, and it is the whole difference between the two pictures.  Make $\lambda$
-    smaller and the parting comes later.</p>
   </article>
 
   <article class="exp" data-setup="orbits">
@@ -166,17 +170,17 @@
     contour), with fringes inside.  The contours are drawn at the energies $E_n$, and the area
     inside each is $2\pi\hbar(n+\tfrac12)$: Bohr and Sommerfeld's rule, exact for this potential
     and close for most others.  So each ring between two contours holds one state, and one
-    state takes up an area $2\pi\hbar=h$ of phase space.  Above $E=D$ the orbits are open: the
-    molecule comes apart.</p>
+    state takes up an area $2\pi\hbar=h$ of phase space.  Raise $n$ and the state moves out one
+    ring.  Above $E=D$ the orbits are open: the molecule comes apart.</p>
   </article>
 
   <article class="exp" data-setup="tunnel">
     <h3>9. Tunnelling in phase space</h3>
     <p>A double well, and $(|0\rangle+|1\rangle)/\sqrt2$: the particle in the left well, with
-    a mean energy of 1.50, below the barrier at 3.  The classical points stay there, all but the
-    12% whose energy is above the barrier, which roll over the top and back.  The quantum state
-    goes through the barrier, where no classical orbit of its energy goes; halfway it is a cat
-    state of the two wells, with fringes between them.  It reaches the right well at
+    a mean energy of 1.50, below the barrier at 3.  Watch the classical points stay there, all
+    but the 12% whose energy is above the barrier, which roll over the top and back.  The
+    quantum state goes through the barrier, where no classical orbit of its energy goes; halfway
+    it is a cat state of the two wells, with fringes between them.  It reaches the right well at
     $t=\pi\hbar/(E_1-E_0)=28.1$ and is back at 56.2.  (Here the points come from
     $|\psi(x)|^2|\phi(p)|^2$, which has the state's own mean energy.  The Husimi $Q$, the
     stand-in elsewhere, would raise their mean energy to 2.78 and send a third of them over the
@@ -231,22 +235,41 @@
     or <code>exp(-x^2/2) cos(k x)</code>.</p>
   </article>
 
-  <h3>How it is computed</h3>
-  <p>$\psi$ evolves by the split-operator method, as in the 1D Schrödinger demo, on 1024 points
-  (2048 for the free particle) between walls well outside the window.  $W$ is computed from
-  $\psi$ every frame, one FFT for every two columns of the picture: with $y=kh$ the integral is
-  the sum $\frac{h}{\pi\hbar}\sum_k\psi^*(x-kh)\,\psi(x+kh)\,e^{-2ipkh/\hbar}$.  Because of the 2
-  in the exponent, the momenta reach only $\pm\pi\hbar/2h$, half the usual range, so $\psi$ is
-  first stripped of momenta beyond that (twice the window's), and then the sum is exact.  $Q$
-  is a windowed Fourier transform, interpolated to the picture (to a few parts in a thousand of
-  its peak).  The stationary states come from the 1D demo's finite-difference eigenvalue solver;
-  their energies are good to $10^{-4}$ or better here.  Being the finite-difference states, not
-  quite those of the exact kinetic energy, they do change a little as they evolve: by
-  $10^{-4}$ to $3\times10^{-3}$ of their size by $t=10$.  The
-  classical points move by the leapfrog method, which keeps phase-space area exactly and energy
-  to a few parts in a million.  The quadrature shadow integrates $W$ along lines across the
-  window.  On a slow computer the picture of $W$ is computed on a coarser grid, to keep the page
-  responsive.</p>
+  <section class="theory">
+    <h3>How it works</h3>
+    <p>A classical particle is a point $(x,p)$ in phase space; an uncertain one is a cloud of
+    points, a probability density that flows along the contours of $H(x,p)=p^2/2m+V(x)$.  A
+    quantum state has its own phase-space picture, the <em>Wigner function</em>
+    $$W(x,p)=\frac{1}{\pi\hbar}\int\psi^*(x+y)\,\psi(x-y)\,e^{2ipy/\hbar}\,dy,$$
+    drawn here in colour: red where $W>0$, blue where $W<0$, white (black on a dark page) where it
+    is zero.  The colours are full at $\pm1/\pi\hbar$, the largest value $|W|$ can ever take.  $W$
+    behaves like a probability density in one way: integrating it over $p$ gives $|\psi(x)|^2$
+    and over $x$ gives $|\phi(p)|^2$, the strips along the top and the right.  But it can be
+    negative, which no probability can; the line under the plot says how negative, and over how
+    much of phase space.</p>
+    <p>The black dots are classical particles, each moving by Hamilton's equations under the same
+    $H$; their histograms are the black lines in the strips.  At $t=0$ they are drawn from $W$
+    when $W$ is positive; when it is not, from a positive stand-in (the note under the plot says
+    which).  The thin grey curves are contours of $H$ at the stationary states' energies; the
+    dashed one is at $\langle E\rangle$.  Units: $\hbar=m=1$.</p>
+
+    <h3>How it is computed</h3>
+    <p>$\psi$ evolves by the split-operator method, as in the 1D Schrödinger demo, on 1024 points
+    (2048 for the free particle) between walls well outside the window.  $W$ is computed from
+    $\psi$ every frame, one FFT for every two columns of the picture: with $y=kh$ the integral is
+    the sum $\frac{h}{\pi\hbar}\sum_k\psi^*(x-kh)\,\psi(x+kh)\,e^{-2ipkh/\hbar}$.  Because of the 2
+    in the exponent, the momenta reach only $\pm\pi\hbar/2h$, half the usual range, so $\psi$ is
+    first stripped of momenta beyond that (twice the window's), and then the sum is exact.  $Q$
+    is a windowed Fourier transform, interpolated to the picture (to a few parts in a thousand of
+    its peak).  The stationary states come from the 1D demo's finite-difference eigenvalue solver;
+    their energies are good to $10^{-4}$ or better here.  Being the finite-difference states, not
+    quite those of the exact kinetic energy, they do change a little as they evolve: by
+    $10^{-4}$ to $3\times10^{-3}$ of their size by $t=10$.  The
+    classical points move by the leapfrog method, which keeps phase-space area exactly and energy
+    to a few parts in a million.  The quadrature shadow integrates $W$ along lines across the
+    window.  On a slow computer the picture of $W$ is computed on a coarser grid, to keep the page
+    responsive.</p>
+  </section>
 
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
