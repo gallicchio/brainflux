@@ -446,7 +446,7 @@ function drawScreen() {
   ctx.beginPath(); ctx.moveTo(cx - s, cy); ctx.lineTo(cx - 3, cy); ctx.moveTo(cx + 3, cy); ctx.lineTo(cx + s, cy);
   ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy - 3); ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + s); ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-  ctx.fillText('±5.7°', 8, height - 6);
+  ctx.fillText('field of view ±5.7°', 8, height - 6);
   ctx.textAlign = 'right';
   ctx.fillText('detector at the cross', width - 8, height - 6);
 }
@@ -978,6 +978,7 @@ export function setPlot(p) {
   state.plot = p;
   if (plotSeg) plotSeg.value = p;
   $('#trace-foot').hidden = p !== 'trace';
+  if (p === 'fts') $('#fts-panel').open = true;
   dirty.trace = dirty.spec = dirty.readout = true;
   onChange();
 }
@@ -999,29 +1000,28 @@ const ftsLines = [0, 1, 2, 3].map(() => el('div'));
 $('#fts-readout').replaceChildren(...ftsLines);
 function updateReadouts() {
   const d = state.dc + state.df;
-  setGroups($('#mirror-readout'), [['M2 is d = ', ...pathParts(d), ' from equal paths;'], ['Δ = 2d = ', ...pathParts(2 * d)]]);
+  setGroups($('#mirror-readout'), [['Mirror M2 is d = ', ...pathParts(d), ' from equal paths;'], ['path difference Δ = 2d = ', ...pathParts(2 * d)]]);
   const travel = (D() - counter.start) / 2;
-  setGroups($('#counter-readout'), counter.lost ? ['Counter: lost count (the mirror moved too fast); reset it']
-    // (one fringe: a no-break space for the s (a monospace readout), so that the readout keeps its width)
-    : [['Counter: ', { v: counter.count, dec: 0, w: 6 }, Math.abs(counter.count) === 1 ? ' fringe;\u00a0' : ' fringes;'], ['mirror moved ', ...pathParts(travel)]]);
+  setGroups($('#counter-readout'), counter.lost ? ['Lost count (the mirror moved too fast): press Reset']
+    : [['Fringes counted: ', { v: counter.count, dec: 0, w: 6 }, ';'], ['mirror moved ', ...pathParts(travel)]]);
   const s = meanSigma(), rate = (2 * state.speed * s);
   setGroups($('#motor-note'), state.motor === 'stop' ? ['stopped'] : ['fringes pass the detector at about', ['2v/λ = ', { v: rate, dec: 2, w: 7 }, ' per second']]);
   const V = spec.visibility(D());
-  setGroups($('#screen-note'), [['Δ = ', ...pathParts(D()), ','], ['visibility ', { v: V, dec: 3, w: 5 }]]);
+  setGroups($('#screen-note'), [['at Δ = ', ...pathParts(D()), ','], ['fringe contrast (visibility) ', { v: V, dec: 3, w: 5 }]]);
   // The spectrometer.
   const K = ftsK(), step = state.fts.step, Lm = K * step, res = 1 / (2 * Lm), sN = 1 / (2 * step), two = twoSided();
   const nm = 1000 / s, resNm = (res * nm * nm) / 1000, eps = state.fts.zero;
   const alias = spec.range()[1] > sN;
   const reach = Lm < 1000 ? [{ v: Lm, dec: 3, w: 7 }, ' μm'] : [{ v: Lm / 1000, dec: 4, w: 7 }, ' mm'];
-  setGroups(ftsLines[0], two ? [[{ v: 2 * K + 1, dec: 0, w: 6 }, ' samples,'], ['Δ = ±', ...reach]]
-    : [[{ v: K + 1, dec: 0, w: 6 }, ' samples,'], ['Δ = 0 to ', ...reach]]);
+  setGroups(ftsLines[0], two ? [['scan: ', { v: 2 * K + 1, dec: 0, w: 6 }, ' samples,'], ['Δ = ±', ...reach]]
+    : [['scan: ', { v: K + 1, dec: 0, w: 6 }, ' samples,'], ['Δ = 0 to ', ...reach]]);
   // What the zero error does: nothing to a two-sided scan (its phase is taken out); a one-sided one goes wrong.
-  setGroups(ftsLines[3], !eps ? [] : two ? ['zero error: phase taken out'] : ['zero error: one side goes wrong']);
+  setGroups(ftsLines[3], !eps ? [] : two ? ['zero error ε: harmless with both sides scanned (its phase is taken out)'] : ['zero error ε: one side only, so the spectrum comes out wrong']);
   ftsLines[3].className = !two && eps ? 'warn-text' : '';
-  setGroups(ftsLines[1], [['resolution ', { html: '1/(2Δ<sub>max</sub>)' }, ' = ', { v: res, dec: 5, w: 7 }, ' μm⁻¹'],
+  setGroups(ftsLines[1], [['tells apart lines ', { html: '1/(2Δ<sub>max</sub>)' }, ' = ', { v: res, dec: 5, w: 7 }, ' μm⁻¹ apart'],
     ['(', { v: resNm, dec: 3, w: 7 }, ' nm at ', { v: nm, dec: 0, w: 4 }, ' nm)']]);
-  setGroups(ftsLines[2], [['Nyquist ', { html: 'σ<sub>N</sub>' }, ' = 1/(2δ) = ', { v: sN, dec: 2, w: 5 }, ' μm⁻¹'],
-    ['(λ > ', { v: 1000 / sN, dec: 0, w: 4 }, ` nm)${alias ? ':' : ''}`], ...(alias ? ['light beyond it folds back'] : [])]);
+  setGroups(ftsLines[2], [['follows fringes up to ', { html: 'σ<sub>N</sub>' }, ' = 1/(2δ) = ', { v: sN, dec: 2, w: 5 }, ' μm⁻¹'],
+    ['(λ > ', { v: 1000 / sN, dec: 0, w: 4 }, ` nm; the Nyquist limit)${alias ? ':' : ''}`], ...(alias ? ['light beyond it folds back'] : [])]);
   ftsLines[2].className = alias ? 'warn-text' : '';
   $('#undraw').hidden = !fts.drawn;
   $('#scan').textContent = fts.scanning ? 'Scanning...' : 'Scan';
@@ -1148,6 +1148,7 @@ export function syncControls() {
   LSlider.value = state.fts.L; stepSlider.value = state.fts.step; zeroSlider.value = state.fts.zero; sidesSeg.value = state.fts.sides;
   apodToggle.on = state.fts.apodize;
   $('#trace-foot').hidden = state.plot !== 'trace';
+  if (state.plot === 'fts') $('#fts-panel').open = true;
   showSourceControls();
   Object.keys(dirty).forEach((k) => { dirty[k] = true; });
 }
