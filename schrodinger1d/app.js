@@ -593,8 +593,8 @@ let readoutLayout = '', readoutValues = [];
 function updateReadouts(o) {
   // [label, value, decimals, width in characters, what follows]
   const items = [
-    ['t', sim.t, 2, 7], ['⟨x⟩', o.x, 3, 8], ['σx', o.sx, 3, 7], ['⟨p⟩', o.p, 3, 7], ['σp', o.sp, 3, 7],
-    ['σxσp', o.sx * o.sp, 3, 7, '≥ ½'], ['⟨E⟩', o.E, 3, 8],
+    ['t', sim.t, 2, 7], ['mean ⟨x⟩', o.x, 3, 8], ['spread σx', o.sx, 3, 7], ['mean ⟨p⟩', o.p, 3, 7], ['σp', o.sp, 3, 7],
+    ['σxσp', o.sx * o.sp, 3, 7, '≥ ħ/2 = ½'], ['energy ⟨E⟩', o.E, 3, 8],
   ];
   if (state.pot.barrier !== undefined) {
     const xb = state.pot.barrier;
@@ -620,8 +620,11 @@ function showKey() {
   const set = (sel, on) => { const e = $(sel); if (e.hidden === on) e.hidden = !on; };
   const dot = state.show.classical && !!classical?.alive;
   set('#key-levels', state.show.levels && shownLevels.length > 0);
+  set('#key-current', state.view === 'current');
   set('#key-classical', dot);
   set('#key-classical-p', dot);
+  // The hint under the plot offers the levels only where there are some to click.
+  set('#hint-levels', state.show.levels && shownLevels.length > 0);
 }
 
 function updateClock() {}
@@ -698,7 +701,7 @@ $('#v-field').append(vField);
 // says what is loaded: a named state, as long as it is unchanged, or else its kind (a packet, a
 // formula... of your own, after a slider has moved).
 const KINDS = [
-  { kind: 'packet', label: 'Packet', title: 'A Gaussian packet: drag its position x₀, width σ and momentum k₀ below' },
+  { kind: 'packet', label: 'Packet', title: 'A Gaussian packet: drag its position x₀, width σ and wavenumber k₀ (momentum ħk₀) below' },
   { kind: 'eigen', label: 'Stationary', title: 'One stationary state, an eigenstate of the energy: choose n below, or click a level on the plot' },
   { kind: 'two', label: 'Two states', title: 'An equal superposition (ψₙ + ψₘ)/√2 of two stationary states' },
   { kind: 'typed', label: 'Typed', title: 'Any ψ₀(x) you type: it is normalised for you, and each new symbol gets a slider' },
@@ -762,8 +765,10 @@ function setKind(kind, init) {
     nSlider.value = n + off; mSlider.value = m + off;
     stateBox.append(nSlider);
     if (kind === 'two') stateBox.append(mSlider);
-    stateNote.textContent = shownLevels.length
-      ? `${shownLevels.length} stationary state${shownLevels.length > 1 ? 's' : ''} ${state.boundary === 'walls' ? 'below the top of the plot' : 'bound'}; click a level to choose it.`
+    // How they are numbered here: from 0 (n + ½ for the oscillator) or from 1 (the box, the bouncer).
+    const N = shownLevels.length, nums = N > 2 ? `n = ${off} to ${off + N - 1}` : N === 2 ? `n = ${off}, ${off + 1}` : `n = ${off}`;
+    stateNote.textContent = N
+      ? `${N} stationary state${N > 1 ? 's' : ''} (${nums}) ${state.boundary === 'walls' ? 'below the top of the plot' : 'bound'}; click a level to choose it.`
       : 'This potential has no bound states.';
     stateBox.append(stateNote);
     state.init = { kind, n, m };

@@ -25,8 +25,10 @@
         <span><svg class="mark" viewBox="0 0 24 12" aria-hidden="true"><path d="M2 3v7M22 3v7M2 7.5h20"/><path d="M12 1.5l-5.5 10h11z"/></svg>⟨x⟩ ± σ<sub>x</sub></span>
         <span><i class="dash"></i>⟨E⟩</span>
         <span id="key-levels"><i class="level"></i>levels, <i class="cn"></i>|c<sub>n</sub>|²</span>
+        <span id="key-current" hidden><i class="jr"></i>flowing right, <i class="jl"></i>flowing left, <i class="level"></i>|ψ|² for reference</span>
         <span id="key-classical" hidden><i class="dot"></i>classical particle</span>
       </div></div>
+    <div class="hint" id="hint">Pick a potential and a starting wave function on the right, and drag its sliders<span id="hint-levels">; click a thin grey line on the plot (an energy level) to load that stationary state</span>.</div>
     <div class="plot-wrap mom-wrap" id="mom-wrap"><canvas id="momentum" aria-label="φ(p), the wave function in momentum space, with the mean momentum and its spread"></canvas>
       <div class="plot-key"><b>Momentum</b>
         <span><svg class="mark" viewBox="0 0 24 12" aria-hidden="true"><path d="M2 3v7M22 3v7M2 7.5h20"/><path d="M12 1.5l-5.5 10h11z"/></svg>⟨p⟩ ± σ<sub>p</sub></span>
@@ -83,9 +85,26 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
+  <section class="start">
+    <h3>Start here</h3>
+    <p>A quantum particle in one dimension, already running.  The coloured hump is where the
+    particle is likely to be found, the grey curve is the potential it lives in, and the colours
+    are the phase of its wave function: stripes mean it is moving.  Below are the same wave
+    function in momentum space and a space-time picture that scrolls as time goes on.</p>
+    <p>Pick a <b>potential</b> on the right, then a starting <b>wave function</b> from its rows of
+    named states, and drag the sliders (<b>x₀</b>, <b>σ</b>, <b>k₀</b> for a packet).  Click a thin
+    grey line on the plot to load that stationary state.  <b>Play</b> pauses and resumes,
+    <b>Restart</b> goes back to the beginning, <b>Backwards</b> runs time in reverse, and
+    <b>Speed</b> slows a fast packet down.</p>
+    <p>Look for this: a stationary state only changes colour; anything else moves, spreads or
+    sloshes.  The triangle and bar at the foot of the plot are the mean position and its spread,
+    and the readouts above the plot give the same numbers.  Each experiment below sets up one
+    idea: press <b>Set it up</b>.</p>
+  </section>
   <p>The time-dependent Schrödinger equation
   $$i\hbar\frac{\partial\psi}{\partial t}=-\frac{\hbar^2}{2m}\frac{\partial^2\psi}{\partial x^2}+V(x,t)\,\psi$$
-  with $\hbar=m=1$.  The filled curve is $|\psi|^2$, the probability density, coloured by the
+  with $\hbar=m=1$ (the mass is a slider under <em>Domain and numerics</em>).  The filled curve
+  is $|\psi|^2$, the probability density, coloured by the
   phase of $\psi$ (the colour wheel below); the grey region is $V(x)$ (an infinite wall is a grey
   band), read on the right-hand energy axis, with the stationary states' energies as thin lines
   and $\langle E\rangle$ dashed.  The triangle at the foot is $\langle x\rangle$, and the bar
@@ -115,7 +134,8 @@
 
   <article class="exp" data-setup="phase">
     <h3>2. The phase is the momentum</h3>
-    <p>A packet moving to the right has colours cycling along it, at a rate set by $k_0$.  Drag the
+    <p>A packet moving to the right has colours cycling along it, once every $2\pi/k_0$ (3.1 here,
+    for $k_0=2$): $k_0$ is the wavenumber, and the momentum is $\hbar k_0$.  Drag the
     $k_0$ slider through zero: the colour stripes stop, then cycle the other way, and the packet
     goes left.  The momentum panel shows the same thing: $|\phi(p)|^2$ is centred on
     $\hbar k_0$.</p>
@@ -132,7 +152,7 @@
     <h3>4. Stationary states, and what moves</h3>
     <p>The second state of the infinite well.  $|\psi|^2$ does not change at all; only the phase
     turns, as $e^{-iE_2t/\hbar}$ (the colours cycle).  Now choose <em>1 + 2</em>: a superposition of
-    two energies sloshes from side to side with period $2\pi\hbar/(E_2-E_1)$.  Only
+    two energies sloshes from side to side with period $2\pi\hbar/(E_2-E_1)$ (42 here).  Only
     superpositions of different energies move.  The bars at the right edge show the state's
     energy distribution $|c_n|^2$; they never change.</p>
   </article>
@@ -148,7 +168,8 @@
 
   <article class="exp" data-setup="coherent">
     <h3>6. A coherent state: almost classical</h3>
-    <p>A Gaussian with the ground state's width, displaced, in a harmonic well.  It swings back
+    <p>A Gaussian with the ground state's width, $\sigma=\sqrt{\hbar/2m\omega}=0.71$, displaced to
+    $x_0=3$ in a harmonic well.  It swings back
     and forth without changing shape (the bar $\langle x\rangle\pm\sigma_x$ keeps its length), with
     $\langle x\rangle$ (the triangle) following the classical particle (the red dot, under
     <em>Show</em>: <em>Classical</em>) exactly: for a quadratic potential Ehrenfest's theorem
@@ -159,7 +180,8 @@
 
   <article class="exp" data-setup="squeezed">
     <h3>7. A squeezed state breathes</h3>
-    <p>Narrower than the ground state and at rest in the middle, this packet stays put,
+    <p>Narrower than the ground state ($\sigma=0.3$ against its 0.71) and at rest in the middle,
+    this packet stays put,
     $\langle x\rangle=\langle p\rangle=0$, but its width oscillates at twice the oscillator's
     frequency, trading position uncertainty for momentum uncertainty and back: the bars
     $\pm\sigma_x$ and $\pm\sigma_p$ take turns to be long.  $\sigma_x\sigma_p$ is back at its
@@ -169,21 +191,24 @@
   <article class="exp" data-setup="tunnel">
     <h3>8. Tunnelling</h3>
     <p>The packet's energy is below the top of the barrier ($\langle E\rangle$ dashed, under the
-    grey), yet part of it gets through.  The readout gives the probability transmitted.  Widen the
-    barrier: the transmission falls roughly as $e^{-2\kappa a}$, with
-    $\kappa=\sqrt{2m(V_0-E)}/\hbar$.  Inside the barrier the wave function decays without
-    oscillating: no colour stripes.  $P(x>0)$ in the readout is the probability on the far side:
-    once the packet has gone, it is the transmission.  Choose <em>probability current</em> under
-    <em>Show</em>: $j=\frac{\hbar}{m}\mathrm{Im}\,\psi^*\psi'$ flows through the barrier, and its
-    integral over time is the transmitted probability.  (A stationary state, real up to a phase,
-    carries no current at all.)</p>
+    grey), yet part of it gets through.  $P(x>0)$ in the readout is the probability on the far
+    side: once the packet has gone it is the transmission, 0.39 here (the plane-wave $T$ at this
+    energy is 0.39 too).  Widen the barrier: the transmission falls roughly as $e^{-2\kappa a}$,
+    with $\kappa=\sqrt{2m(V_0-E)}/\hbar$.  Inside the barrier the wave function decays without
+    oscillating: no colour stripes.  Choose <em>probability current</em> under <em>Show</em>:
+    $j=\frac{\hbar}{m}\mathrm{Im}\,\psi^*\psi'$ is drawn blue where probability flows to the right
+    and red where it flows to the left; it pours through the barrier, and its integral over time
+    at a point is the probability that has passed that point.  (A bound stationary state is real
+    up to a phase and carries no current at all.)</p>
   </article>
 
   <article class="exp" data-setup="step">
     <h3>9. Reflection from a step, even going over it</h3>
     <p>Above the step, a classical particle would always go on; a wave is partly reflected, with
-    $R=\left(\frac{k-k'}{k+k'}\right)^2$.  Below the step, everything comes back, after a short
-    excursion into the forbidden region.</p>
+    $R=\left(\frac{k-k'}{k+k'}\right)^2$, $k'=\sqrt{k^2-2mV_0/\hbar^2}$ the wavenumber over the
+    step.  Here $k_0=2.4$ and $V_0=2$, so $k'=1.33$ and $R=0.083$; $P(x<0)$ ends a little higher,
+    at 0.094, because the slower parts of the packet reflect more.  Choose <em>Below the
+    step</em>: everything comes back, after a short excursion into the forbidden region.</p>
   </article>
 
   <article class="exp" data-setup="well">
@@ -211,7 +236,8 @@
     <h3>12. Tunnelling back and forth</h3>
     <p>A particle in the left well of a double well is the superposition
     $(\psi_0+\psi_1)/\sqrt2$ of the two lowest states, which differ in energy by a tiny splitting
-    $\Delta E$.  It tunnels to the right well and back with period $2\pi\hbar/\Delta E$.  Raise the
+    $\Delta E$.  It tunnels to the right well and back with period $2\pi\hbar/\Delta E$ (here
+    $\Delta E=0.112$, so 56).  Raise the
     barrier: the splitting shrinks exponentially, and the tunnelling slows.  This is the
     ammonia molecule's inversion and the qubit's two states.</p>
   </article>
@@ -238,8 +264,9 @@
 
   <article class="exp" data-setup="bloch">
     <h3>15. Bloch oscillations</h3>
-    <p>An electron in a crystal ($V_0\cos 2\pi x/a$) pushed by a constant force $F$ does not
-    accelerate forever: it oscillates, with period $2\pi\hbar/Fa$, because its momentum runs to
+    <p>An electron in a crystal ($V_0\cos 2\pi x/a$) pulled by a constant force (the $Fx$ in $V$:
+    the force is $-F$, to the left) does not accelerate forever: it oscillates, with period
+    $2\pi\hbar/Fa$ (25 here, swinging about 16 to the left), because its momentum runs to
     the edge of the Brillouin zone and is Bragg-reflected.  Set $F=0$ to see it simply spread.
     A little of the packet leaks to higher bands each time (Zener tunnelling); a smaller $V_0$
     leaks more.</p>
@@ -263,8 +290,9 @@
   <article class="exp" data-setup="measure">
     <h3>18. Measurement</h3>
     <p>Press <em>Position</em> under <em>Make a measurement</em>: a position is chosen at random with
-    probability $|\psi|^2$, and the wave function collapses to a narrow packet there, which then
-    spreads.  Press <em>Energy</em>: one stationary state is chosen with probability $|c_n|^2$
+    probability $|\psi|^2$, and the wave function collapses to a narrow packet there ($\sigma=0.05$,
+    a two-hundredth of the box), which then spreads.  Press <em>Energy</em>: one stationary state
+    is chosen with probability $|c_n|^2$
     and the wave function becomes it, motionless.  Measure the energy twice: the same answer.</p>
   </article>
 
