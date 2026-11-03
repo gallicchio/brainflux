@@ -15,7 +15,7 @@ import { POTENTIALS, addGaussian, catState, normalize } from './states.js';
 const KINDS = ['coherent', 'squeezed', 'cat', 'eigen', 'two', 'typed'];
 const TYPED_PSI = 'exp(-(x/a)^8)';
 const state = {
-  pot: POTENTIALS.find((p) => p.id === 'quartic'),
+  pot: POTENTIALS.find((p) => p.id === 'harmonic'),
   // One record for every kind of initial state, so switching kinds keeps the centre.
   init: { kind: 'coherent', x0: 3, p0: 0, r: 0.6, theta: 0, phi: 0, n: 1, m: 0, psi: TYPED_PSI, params: { a: 2 } },
   view: 'W',                      // 'W' (Wigner) or 'Q' (Husimi)
@@ -428,7 +428,7 @@ function draw() {
     ctx.fillText(errorText, f.left + f.w / 2, f.top + 24);
   }
   ctx.restore();
-  f.axes({ xlabel: 'x', ylabel: 'p', colors: c });
+  f.axes({ xlabel: 'position x', ylabel: 'momentum p', colors: c });
   if (state.show.marginals) drawMarginals(ctx, f, c);
 }
 
@@ -495,12 +495,30 @@ function drawContours(ctx, f, c) {
     contourKey = key;
     energyPath = null;
   }
-  if (!energyPath && Number.isFinite(E0)) energyPath = contourPathOf(contourPath.H, nx, ny, [E0], f);
+  if (!energyPath && Number.isFinite(E0)) {
+    energyPath = contourPathOf(contourPath.H, nx, ny, [E0], f);
+    // Where to name it: above the well's lowest point, at the momentum the orbit has there.
+    let xm = 0, vmin = Infinity;
+    for (let i = 0; i < nx; i++) {
+      const x = win.x0 + ((win.x1 - win.x0) * i) / (nx - 1), v = table.potential(x);
+      if (v < vmin) { vmin = v; xm = x; }
+    }
+    const pt = Math.sqrt(Math.max(0, 2 * (E0 - vmin)));
+    contourPath.top = pt > 0 && pt < win.p1 ? [xm, pt] : null;
+  }
   ctx.save();
   ctx.strokeStyle = c.ink3; ctx.globalAlpha = 0.55; ctx.lineWidth = 1;
   ctx.stroke(contourPath);
   ctx.globalAlpha = 0.9; ctx.strokeStyle = c.ink2; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.3;
-  if (energyPath) ctx.stroke(energyPath);
+  if (energyPath) {
+    ctx.stroke(energyPath);
+    if (contourPath.top) {
+      const [tx, tp] = contourPath.top;
+      ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.fillStyle = c.ink2;
+      ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillText('orbit at ⟨E⟩', f.X(tx) + 6, f.Y(tp) - 2);
+    }
+  }
   ctx.restore();
 }
 
@@ -524,17 +542,23 @@ function drawDots(ctx, f, c) {
 }
 
 const draggable = () => ['coherent', 'squeezed', 'cat'].includes(state.init.kind);
-function drawHandle(ctx, f, c) {
-  if (!draggable()) return;
+/** The handles that can be dragged: the state's centre, and for a cat state the other blob's. */
+function handles() {
+  if (!draggable()) return [];
   const it = state.init, pts = [[it.x0, it.p0, true]];
   if (it.kind === 'cat') pts.push([-it.x0, -it.p0, false]);
+  return pts;
+}
+let hot = false;                  // the pointer is on a handle: draw it lit
+function drawHandle(ctx, f, c) {
+  const lit = hot || !!dragging, r = lit ? 9 : 7;
   ctx.save();
-  for (const [x, p, main] of pts) {
+  for (const [x, p, main] of handles()) {
     const px = f.X(x), py = f.Y(p);
-    ctx.lineWidth = 2; ctx.strokeStyle = c.panel; ctx.globalAlpha = 0.9;
-    ctx.beginPath(); ctx.arc(px, py, 7, 0, 2 * Math.PI); ctx.stroke();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = c.ink; ctx.setLineDash(main ? [] : [3, 3]);
-    ctx.beginPath(); ctx.arc(px, py, 7, 0, 2 * Math.PI); ctx.stroke();
+    ctx.lineWidth = lit ? 3 : 2; ctx.strokeStyle = c.panel; ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, 2 * Math.PI); ctx.stroke();
+    ctx.lineWidth = lit ? 2 : 1.5; ctx.strokeStyle = lit ? c.accent : c.ink; ctx.setLineDash(main ? [] : [3, 3]);
+    ctx.beginPath(); ctx.arc(px, py, r, 0, 2 * Math.PI); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(px - 3, py); ctx.lineTo(px + 3, py); ctx.moveTo(px, py - 3); ctx.lineTo(px, py + 3); ctx.stroke();
   }
@@ -610,7 +634,7 @@ function drawMarginals(ctx, f, c) {
   }
   if (hx) stepLine(ctx, hx, (k) => f.X(win.x0 + ((win.x1 - win.x0) * k) / nb), ty, c, false);
   ctx.fillStyle = c.ink2; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('|ψ(x)|²', T.left + 6, T.top + 4);
+  ctx.fillText('|ψ(x)|²  =  W summed over p', T.left + 6, T.top + 4);
 
   // ---- |phi(p)|^2 at the right
   const P = mom.d.length, dp = mom.dp;
@@ -639,7 +663,7 @@ function drawMarginals(ctx, f, c) {
   ctx.save();
   ctx.translate(R.right - 6, R.top + 6); ctx.rotate(Math.PI / 2);
   ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('|φ(p)|²', 0, 0);
+  ctx.fillText('|φ(p)|²  =  W summed over x', 0, 0);
   ctx.restore();
   ctx.restore();
 }
@@ -678,7 +702,15 @@ function updateLegend() {
   setSlots($('#cb-lo'), state.scale === 'fixed' ? [`−${fixedLabel}`] : [{ v: -s, dec: 2, w: 5, tiny: true }]);
   setSlots($('#cb-hi'), state.scale === 'fixed' ? [`+${fixedLabel}`] : [{ v: s, dec: 2, w: 5, plus: '+', tiny: true }]);
   $('#cb-name').textContent = name === 'W' ? 'W(x, p)' : 'Q(x, p)';
-  setSlots($('#dots-note'), !state.show.dots || !ens.N ? [] : ['• ', { v: ens.N, dec: 0, w: 5 }, ' classical points, drawn at t = 0 from ' + {
+  // How negative W is, in words: the least value, and the volume of the negative part.
+  const m = Wstats ? Wstats.min * Math.PI : 0, vol = Wstats ? Wstats.negative : 0;
+  const neg = $('#neg');
+  neg.classList.toggle('neg', m < -1e-4);
+  setSlots(neg, [
+    name === 'W' ? 'Blue is W < 0, which no probability can be: least W ' : 'Q is never negative; W, hidden by the blur, is: least W ',
+    { v: Math.abs(m) < 1e-4 ? 0 : m, dec: 3, w: 6, class: 'v' }, '/πħ, volume ', { v: vol < 1e-4 ? 0 : vol, dec: 3, w: 5, class: 'v' },
+  ]);
+  setSlots($('#dots-note'), !state.show.dots || !ens.N ? [] : ['• ', { v: ens.N, dec: 0, w: 5 }, ' classical points (black; their histograms are the black steps in the strips), started at t = 0 from ' + {
     W: 'W',
     Q: 'the Husimi Q (W < 0 in places, so it is not a probability density)',
     product: '|ψ(x)|² |φ(p)|² (W < 0 in places, so it is not a probability density)',
@@ -688,40 +720,28 @@ function updateLegend() {
 
 // ------------------------------------------------------------------ readouts
 
-// The readouts: a span for each quantity, made again only when the quantities shown change, its
-// number in a slot of its own (setSlots: a fixed number of decimals, right-aligned in a fixed
-// width), so that nothing moves as the numbers change.
+// The readouts: a group for each thing the reader may ask about (a word for it, then its
+// numbers), made again only when the groups change, each number in a slot of its own
+// (setSlots: a fixed number of decimals, right-aligned in a fixed width), so that nothing moves
+// as the numbers change.  A group never wraps inside.
 let readoutLayout = '';
 function updateReadouts() {
   const box = $('#readouts');
   if (!sim) return;
   const o = sim.observables();
   const num = (v, dec, w) => ({ v, dec, w, class: 'v' });
-  // [label parts, value, what follows, attributes]
-  const items = [
-    [['t '], num(sim.t, 2, 7)],
-    [['⟨x⟩ '], num(o.x, 3, 7)],
-    [['⟨p⟩ '], num(o.p, 3, 7)],
-    [[{ html: 'σ<sub>x</sub>σ<sub>p</sub>' }, ' '], num(o.sx * o.sp, 3, 6), ' ≥ ħ/2'],
-    [['⟨E⟩ '], num(o.E, 3, 8)],
+  const groups = [
+    { k: 'time', title: 'The time since the start, t (ħ = m = 1; one period of the harmonic well is 2π = 6.28)', parts: ['t = ', num(sim.t, 2, 7)] },
+    { k: 'centre', title: 'Where the state is, on average: its mean position ⟨x⟩ and mean momentum ⟨p⟩ (the middle of the blob)', parts: ['⟨x⟩ = ', num(o.x, 3, 7), '   ⟨p⟩ = ', num(o.p, 3, 7)] },
+    { k: 'uncertainty', title: 'The spread of the state in x times its spread in p, σx σp, which Heisenberg\'s relation keeps at or above ħ/2 = 0.5.  A coherent state sits at the limit; a sheared or tilted one casts wider shadows and reads higher.', parts: [{ html: 'σ<sub>x</sub>σ<sub>p</sub>' }, ' = ', num(o.sx * o.sp, 3, 6), ' (limit ħ/2 = 0.5)'] },
+    { k: 'energy', title: 'The mean energy ⟨E⟩ = ⟨p²/2m + V(x)⟩ of the quantum state (the dashed contour is the classical orbit at this energy), and the mean energy of the classical points', parts: ['⟨E⟩ = ', num(o.E, 3, 8), ...(ens.N && state.show.dots ? ['   classical points ', num(ens.stats(table).E, 3, 8)] : [])] },
   ];
-  if (Wstats) {
-    // Values below 1e-4 of the scale are round-off (or the far tails of a Gaussian): 0.
-    const m = Wstats.min * Math.PI;
-    items.push([['min W '], num(Math.abs(m) < 1e-4 ? 0 : m, 3, 6), '/πħ', { title: 'The least value of W in the window, in units of 1/πħ (W ≥ −1/πħ always)', neg: m < -1e-4 }]);
-    items.push([['W<0 volume '], num(Wstats.negative < 1e-4 ? 0 : Wstats.negative, 3, 5), '', { title: 'The volume of the negative part of W: the integral of |W| where W < 0' }]);
-  }
-  if (ens.N && state.show.dots) items.push([['classical ⟨E⟩ '], num(ens.stats(table).E, 3, 8), '', { class: 'cl' }]);
-  const layout = items.map(([k, , , a]) => k.map((x) => x.html ?? x).join('') + (a?.class || '')).join('|');
+  const layout = groups.map((g) => g.k + g.parts.length).join('|');
   if (layout !== readoutLayout) {
     readoutLayout = layout;
-    box.replaceChildren(...items.map(([, , , a]) => el('span', { class: a?.class, title: a?.title })));
+    box.replaceChildren(...groups.map((g) => el('span', { class: 'g', title: g.title }, el('span', { class: 'k' }, g.k), ' ', el('span', { class: 'vals' }))));
   }
-  items.forEach(([label, value, after, a], i) => {
-    const span = box.children[i];
-    span.classList.toggle('neg', !!a?.neg);
-    setSlots(span, [...label, value, ...(after ? [after] : [])]);
-  });
+  groups.forEach((g, i) => setSlots(box.children[i].lastChild, g.parts));
 }
 
 // ------------------------------------------------------------------- the loop
@@ -737,12 +757,16 @@ function loop(now) {
     draw();
     updateLegend();
     if (frameCount++ % 4 === 0 || !state.running) updateReadouts();
-    dirty = false;
+    dirty = false; redraw = false;
     adapt(now, performance.now() - t0);
+  } else if (redraw) {
+    // Only the picture (a lit handle): W is as it was.
+    draw();
+    redraw = false;
   }
   requestAnimationFrame(loop);
 }
-let frameCount = 0;
+let frameCount = 0, redraw = false;
 
 // On a slow device, a coarser grid for W: the work of a frame is kept under about 25 ms (so
 // the page still answers the pointer at 30 frames a second or more).  Checked once a second,
@@ -775,9 +799,17 @@ const slowNote = el('div', { class: 'note', style: { visibility: 'hidden' } }, '
 $('#speed-box').append(speedSlider, slowNote);
 
 // Potentials.
+const POT_TITLES = {
+  harmonic: 'A spring, V = ½ω²x²: every orbit takes the same time, and a quantum state circles rigidly',
+  free: 'No force, V = 0: every point moves at its own speed, and the state shears',
+  quartic: 'A spring that stiffens, V = ½x² + λx⁴: bigger orbits are faster, and the cloud winds into a spiral',
+  morse: 'The bond of a vibrating molecule, V = D(1 − e^−ax)²: soft on one side, and open above E = D',
+  double: 'Two wells with a barrier between them: tunnelling',
+  typed: 'Any V(x) you type; each new symbol gets a slider',
+};
 const potButtons = {};
 for (const p of POTENTIALS) {
-  potButtons[p.id] = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => { choosePotential(p); kick(); } }, p.label);
+  potButtons[p.id] = el('button', { type: 'button', 'aria-pressed': 'false', title: POT_TITLES[p.id], onclick: () => { choosePotential(p); kick(); } }, p.label);
   $('#potentials').append(potButtons[p.id]);
 }
 const vField = exprField({
@@ -841,11 +873,24 @@ function syncKindControls() {
   nSlider.setRange(0, top); mSlider.setRange(0, top);
   nSlider.value = it.n; mSlider.value = it.m;
   const harmonic = state.pot.id === 'harmonic';
-  if (['coherent', 'squeezed', 'cat'].includes(k)) stateNote.textContent = 'Drag the centre on the plot (or use the arrow keys there).';
-  else if (k === 'eigen' || k === 'two') stateNote.textContent = levels.length
-    ? `${levels.length} stationary states fit in the window (n = 0…${levels.length - 1})${harmonic ? ': the oscillator\'s number states |n⟩' : ''}.`
-    : 'This potential has no bound states.';
-  else stateNote.textContent = 'Any formula in x; each new symbol gets a slider.  It is normalised for you.';
+  // What this kind of state is, in a line; and the hint under the plot: what to drag.
+  stateNote.textContent = {
+    coherent: 'A coherent state: the smallest, roundest blob quantum mechanics allows, centred at (x₀, p₀).',
+    squeezed: 'A squeezed state: the same area as a coherent state, but thinner one way (by e⁻ʳ) and wider the other, turned by the angle.',
+    cat: 'A cat state: two coherent states, at (x₀, p₀) and (−x₀, −p₀), in superposition: fringes between them.',
+    eigen: levels.length
+      ? `A stationary state: nothing moves.  ${levels.length} fit in the window (n = 0…${levels.length - 1})${harmonic ? ': the oscillator\'s number states |n⟩' : ''}.`
+      : 'This potential has no bound states.',
+    two: levels.length
+      ? `Two stationary states added: the state sloshes at the beat frequency (Eₘ − Eₙ)/ħ.  ${levels.length} fit in the window (n = 0…${levels.length - 1}).`
+      : 'This potential has no bound states.',
+    typed: 'Any formula in x; each new symbol gets a slider.  It is normalised for you.',
+  }[k];
+  $('#hint').textContent = {
+    coherent: 'Drag the blob by its ⊕ centre (or click where you want it); the arrow keys nudge it, space pauses',
+    squeezed: 'Drag the blob by its ⊕ centre (or click where you want it); the arrow keys nudge it, space pauses',
+    cat: 'Drag either blob by its ⊕ centre (the other goes opposite); the arrow keys nudge it, space pauses',
+  }[k] || 'This kind of state has no centre to drag: watch it (space pauses), or choose Coherent, Squeezed or Cat for a blob to drag';
 }
 
 // What to show.
@@ -853,7 +898,7 @@ const viewSeg = segmented([
   { value: 'W', label: 'Wigner W', title: 'The Wigner function: its marginals are the probability densities; it can be negative' },
   { value: 'Q', label: 'Husimi Q', title: 'The Husimi function: W smoothed by a coherent state; never negative' },
 ], state.view, (v) => { state.view = v; kick(); updateHash(); }, { label: 'Which phase-space function' });
-$('#view').append(viewSeg);
+$('#view').append(viewSeg, el('div', { class: 'note' }, 'Wigner W: the state as a cloud over (x, p), blue where it goes negative.  Husimi Q: W blurred by a coherent state, never negative.'));
 const showToggles = {
   dots: toggle('Classical points', state.show.dots, (on) => { state.show.dots = on; kick(); updateHash(); }, 'An ensemble of classical particles, drawn at t = 0 from W (or Q), each following Hamilton\'s equations'),
   contours: toggle('Energy contours', state.show.contours, (on) => { state.show.contours = on; kick(); updateHash(); }, 'Contours of H(x, p) = p²/2m + V(x) at the stationary states\' energies; dashed: ⟨E⟩'),
@@ -861,6 +906,7 @@ const showToggles = {
   quadrature: toggle('Quadrature', state.show.quadrature, (on) => { state.show.quadrature = on; quadSlider.hidden = !on; kick(); updateHash(); }, 'The distribution of x cos θ + (p/mω) sin θ: the shadow of W on a line at angle θ'),
 };
 $('#shows').append(...Object.values(showToggles));
+$('#shows').after(el('div', { class: 'note' }, 'Classical points: particles obeying Newton, started where the cloud is.  Energy contours: the classical orbits, H(x, p) = Eₙ (dashed: at ⟨E⟩).  Marginals: the cloud\'s shadows on the axes, |ψ(x)|² and |φ(p)|².  Quadrature: its shadow on a tilted line.'));
 const quadSlider = slider({ label: 'angle <math><mi>θ</mi></math>', labelHTML: true, min: -180, max: 180, value: state.quad, title: 'The quadrature\'s angle in degrees: 0 is x, 90 is p/mω', onInput: (v) => { state.quad = v; kick(); updateHash(); } });
 quadSlider.hidden = !state.show.quadrature;
 $('#quad-box').append(quadSlider);
@@ -922,9 +968,18 @@ function inMain(px, py) {
   return m && px >= m.left && px <= m.right && py >= m.top && py <= m.bottom;
 }
 let pendingMove = null;
+/** Whether the pointer at (px, py) is on a handle (within 14 px). */
+const onHandle = (px, py) => !!frame && handles().some(([x, p]) => Math.hypot(frame.X(x) - px, frame.Y(p) - py) < 14);
+function setHot(on) {
+  if (on === hot) return;
+  hot = on; redraw = true;
+}
 plot.addEventListener('pointerdown', (e) => {
   const [px, py] = eventPoint(e);
   if (!frame || !inMain(px, py)) return;
+  // So that the arrow keys work straight after a press (the pointer event's preventDefault
+  // below stops the press from focusing the plot by itself).
+  plot.focus({ preventScroll: true });
   if (!draggable()) { toast('Coherent, squeezed and cat states can be dragged; this one stays put.'); return; }
   // A cat state: grab whichever of its two blobs is nearer.
   const it = state.init, x = frame.invX(px), p = frame.invY(py);
@@ -942,11 +997,14 @@ plot.addEventListener('pointermove', (e) => {
     const x = frame.invX(px), p = frame.invY(py), F = state.view === 'Q' ? grid.Q : grid.W, v = grid.at(F, x, p);
     hover = ['x = ', { v: x, dec: 2, w: 6 }, ', p = ', { v: p, dec: 2, w: 6 }, `:  ${state.view} = `, { v, dec: 3, w: 7, tiny: true },
       ' = ', { v: v * Math.PI, dec: 3, w: 7, tiny: true }, '/πħ'];
-    plot.style.cursor = draggable() ? 'grab' : 'crosshair';
-  } else hover = null;
+    // On the handle the hand says "drag me"; elsewhere a press puts the blob there.
+    const near = onHandle(px, py);
+    setHot(near);
+    plot.style.cursor = near ? 'grab' : 'crosshair';
+  } else { hover = null; setHot(false); plot.style.cursor = ''; }
   if (!state.running) updateLegend();
 });
-plot.addEventListener('pointerleave', () => { hover = null; updateLegend(); });
+plot.addEventListener('pointerleave', () => { hover = null; setHot(false); updateLegend(); });
 const endDrag = () => {
   if (!dragging) return;
   dragging = null; plot.classList.remove('dragging');
@@ -1037,14 +1095,15 @@ function go(potId, { params, init = {}, view = 'W', show = {}, speed, quad, run 
   updateHash();
 }
 
+// In the drawer's order: the first is the opening state.
 const setups = {
   coherent: () => go('harmonic', { init: { kind: 'coherent', x0: 3, p0: 0 }, speed: 1.5 }),
+  anharmonic: () => go('quartic', { init: { kind: 'coherent', x0: 3, p0: 0 }, speed: 2 }),
+  free: () => go('free', { init: { kind: 'squeezed', x0: -5, p0: 1, r: 0.3, theta: 0 }, speed: 1 }),
   squeezed: () => go('harmonic', { init: { kind: 'squeezed', x0: 3, p0: 0, r: 0.8, theta: 0 }, speed: 1 }),
   number: () => go('harmonic', { init: { kind: 'eigen', n: 1 }, show: { dots: true }, speed: 1 }),
   cat: () => go('harmonic', { init: { kind: 'cat', x0: 3, p0: 0, phi: 0 }, speed: 0.6 }),
   marginals: () => go('harmonic', { init: { kind: 'cat', x0: 0, p0: 3, phi: 0 }, show: { dots: false }, run: false }),
-  free: () => go('free', { init: { kind: 'squeezed', x0: -5, p0: 1, r: 0.3, theta: 0 }, speed: 1 }),
-  anharmonic: () => go('quartic', { init: { kind: 'coherent', x0: 3, p0: 0 }, speed: 2 }),
   orbits: () => go('morse', { init: { kind: 'eigen', n: 4 }, show: { dots: false }, speed: 1 }),
   tunnel: () => go('double', { init: { kind: 'two', n: 0, m: 1 }, speed: 6, proxy: 'product' }),
   uncertainty: () => go('harmonic', { init: { kind: 'squeezed', x0: 0, p0: 0, r: 1.2, theta: 30 }, show: { dots: false }, speed: 0.5 }),
@@ -1112,7 +1171,9 @@ if (setups[hash.setup]) {
   setups[hash.setup]();
   if (+hash.t > 0) { runTo(Math.min(+hash.t, 1000)); setRunning(false); kick(); }
 }
-else if (!fromHash(hash)) go('quartic', { init: { kind: 'coherent', x0: 3, p0: 0 }, speed: 2 });
+// The opening state is experiment 1: the simplest case, a coherent state circling a harmonic
+// well with the classical points (the quartic well's spiral is experiment 2).
+else if (!fromHash(hash)) setups.coherent();
 setInterval(() => { updateGridNote(); slowNote.style.visibility = slowFrames > 20 ? 'visible' : 'hidden'; slowFrames = 0; }, 1000);
 requestAnimationFrame(loop);
 
@@ -1121,6 +1182,7 @@ window.__app = {
   get sim() { return sim; }, get grid() { return grid; }, get ens() { return ens; }, get levels() { return levels; },
   get Wstats() { return Wstats; }, get dotsFrom() { return dotsFrom; }, get error() { return errorText; }, get table() { return table; }, get omegaRef() { return omegaRef; },
   computePhase, draw, frames: () => frameCount, frame: () => frame, get quality() { return quality; }, get work() { return workAvg; },
+  get hot() { return hot; },
   fixQuality(q) { adaptive = false; quality = q; layout = null; dirty = true; },
   ready: true,
 };

@@ -57,14 +57,46 @@ def still(b, name, sel, text_sel, steps, min_compared=3):
           f'{name}: the read-outs keep still while their numbers change ({len(texts)} different texts, {compared} compared with the same words, '
           f'{len(base)} wordings)' + (f'; moved: {moved[:2]}' if moved else ''))
 
-READOUTS = '#readouts > span, #readouts .fixnum, .legend .cbar, #cb-lo, #cb-hi, #colorbar, #dots-note, #dots-note .fixnum, #hover, #hover .fixnum'
+READOUTS = ('#readouts > span, #readouts .k, #readouts .fixnum, #hint, .legend .cbar, #cb-lo, #cb-hi, #colorbar, #neg, #neg .fixnum, '
+            '#dots-note, #dots-note .fixnum, #hover, #hover .fixnum')
+
+# The contrast ratio (WCAG) between the text colour of sel and the background colour of bgSel.
+CONTRAST = r'''((sel, bgSel) => { const lum = (c) => { const m = c.match(/\d+(\.\d+)?/g).map(Number);
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+  const fg = getComputedStyle(document.querySelector(sel)).color, bg = getComputedStyle(document.querySelector(bgSel)).backgroundColor;
+  const [x, y] = [lum(fg), lum(bg)].sort((u, v) => v - u); return (x + 0.05) / (y + 0.05); })'''
+
+def first_screen(b, where):
+    """What a cold reader meets: a hint under the picture saying what to drag, on screen without
+    scrolling; a word beside every readout; and in the drawer a Start-here block first (plain
+    words, no equations) and the theory last.  Readable in this theme."""
+    h = b.eval('''(() => { const h = document.getElementById('hint'), r = h.getBoundingClientRect(), p = document.getElementById('plot').getBoundingClientRect();
+      return { text: h.textContent, top: r.top, bottom: r.bottom, h: r.height, plotBottom: p.bottom, inner: innerHeight }; })()''')
+    check(h['text'].startswith('Drag the blob') and h['h'] > 10 and 0 <= h['top'] - h['plotBottom'] < 16 and h['bottom'] <= h['inner'],
+          f"{where}: the hint \"{h['text'][:34]}...\" sits right under the plot, on screen without scrolling (bottom {h['bottom']:.0f} of {h['inner']})")
+    keys = b.eval("[...document.querySelectorAll('#readouts .g .k')].map((e) => e.textContent)")
+    check(keys == ['time', 'centre', 'uncertainty', 'energy'], f"{where}: every readout group has a word for it: {keys}")
+    d = b.eval('''(() => { const d = document.getElementById('help'), kids = [...d.children].map((e) => (e.tagName + '.' + e.className).toLowerCase());
+      const start = d.querySelector('section.start'), h3 = start && start.querySelector('h3');
+      return { kids, text: start ? start.textContent.replace(/\\s+/g, ' ').trim() : '', h3: h3 ? h3.textContent : '', eqs: start ? start.querySelectorAll('math').length : -1 }; })()''')
+    exps = [i for i, k in enumerate(d['kids']) if k == 'article.exp']
+    theory = [i for i, k in enumerate(d['kids']) if k == 'section.theory']
+    check(d['kids'][1] == 'section.start' and d['h3'] == 'Start here' and d['eqs'] == 0 and 'Drag the blob' in d['text'] and 300 < len(d['text']) < 1200,
+          f"{where}: the drawer opens with a Start-here block in plain words, no equations ({len(d['text'])} characters)")
+    check(len(exps) == 13 and exps[0] == 2 and theory and theory[0] > exps[-1],
+          f"{where}: {len(exps)} experiments after it, and the theory ('How it works') last")
+    c1, c2 = b.eval(CONTRAST + "('#hint', 'body')"), b.eval(CONTRAST + "('.drawer .start p', '.drawer .start')")
+    check(c1 >= 4.5 and c2 >= 4.5, f"{where}: the hint and the Start-here block read (contrast {c1:.1f} and {c2:.1f} to 1)")
 
 with Browser('phasespace/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready')
     try: b.wait('__app.sim.t > 0.2', timeout=15)
     except TimeoutError: pass
     info = b.eval(INFO)
-    check(info['t'] > 0.2, f"it opens running (t = {info['t']:.2f}): a coherent state in the quartic well")
+    opening = b.eval('({ pot: __app.state.pot.id, kind: __app.state.init.kind, first: Object.keys(__app.setups)[0], second: Object.keys(__app.setups)[1] })')
+    check(info['t'] > 0.2 and opening['pot'] == 'harmonic' and opening['kind'] == 'coherent' and opening['first'] == 'coherent' and opening['second'] == 'anharmonic',
+          f"it opens running (t = {info['t']:.2f}) on experiment 1, a coherent state in the harmonic well; the quartic well is experiment 2")
+    first_screen(b, 'desktop, light')
     t0, f0 = time.time(), b.eval('__app.frames()')
     b.sleep(2)
     fps = (b.eval('__app.frames()') - f0) / (time.time() - t0)
@@ -91,6 +123,12 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     check(i['minW'] > -1e-9 and i['from'] == 'W', f"coherent: W >= 0 (min pi W = {i['minW']:.1e}), points drawn from W")
     check(abs(i['sxsp'] - 0.5) < 1e-4, f"coherent: sigma_x sigma_p stays hbar/2 ({i['sxsp']:.6f})")
     check(abs(i['E'] - 5.0) < 1e-3 and abs(i['Ecl'] - i['E']) < 0.1, f"coherent: <E> = {i['E']:.4f} (exact 5), classical points {i['Ecl']:.4f}")
+    b.sleep(0.3)
+    ro = b.eval("[...document.querySelectorAll('#readouts .g')].map((e) => e.textContent.replace(/\\s+/g, ' ').trim())")
+    neg = b.eval("document.getElementById('neg').textContent.replace(/\\s+/g, ' ')")
+    check(any(r.startswith('uncertainty') and '0.500 (limit ħ/2 = 0.5)' in r for r in ro) and any(r.startswith('energy') and '5.000' in r and 'classical points' in r for r in ro),
+          f'coherent: the readouts say what they are: {ro}')
+    check(neg.startswith('Blue is W < 0') and 'least W 0.000/πħ' in neg and 'volume 0.000' in neg, f'coherent: the legend says W is nowhere negative: "{neg}"')
     # 2. A squeezed state breathes: sigma_x oscillates at twice the frequency, W stays positive.
     b.eval('__app.setups.squeezed()'); b.eval(RESTART)
     sx = []
@@ -118,6 +156,9 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     b.eval('__app.setups.number()'); b.eval(RUN_TO + '(2)')
     i = b.eval(INFO)
     check(abs(i['W00'] + 1) < 1e-3 and abs(i['minW'] + 1) < 1e-3, f"|1>: pi W(0,0) = {i['W00']:.5f}, min pi W = {i['minW']:.5f} (exact -1)")
+    b.sleep(0.3)
+    neg = b.eval("document.getElementById('neg').textContent.replace(/\\s+/g, ' ')")
+    check('least W −1.000/πħ' in neg, f'|1>: the legend says so: "{neg}"')
     check(i['from'] == 'Q', f"|1>: W < 0, so the points come from the Husimi Q ({i['from']}), classical <E> {i['Ecl']:.3f} vs {i['E']:.3f} + 1/2")
     b.eval('document.querySelectorAll("#state-box input[type=number]")[5].value = 4; document.querySelectorAll("#state-box input[type=number]")[5].dispatchEvent(new Event("change"))')
     b.sleep(0.3)
@@ -144,10 +185,18 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     pred = math.sqrt(i0['sx'] ** 2 + 16 * i0['sp'] ** 2)
     check(abs(i1['sp'] - i0['sp']) < 1e-6 and abs(i1['sx'] - pred) < 1e-4 and i1['minW'] > -1e-6,
           f"free: sigma_p {i0['sp']:.5f} -> {i1['sp']:.5f}, sigma_x {i0['sx']:.4f} -> {i1['sx']:.4f} (predicted {pred:.4f}), W >= 0")
+    # The help: a larger p0 travels faster but shears just the same; a harder squeeze shears faster.
+    b.eval("__app.go('free', { init: { kind: 'squeezed', x0: -5, p0: 3, r: 0.3, theta: 0 }, run: false })"); b.eval(RUN_TO + '(4)'); i3 = b.eval(INFO)
+    b.eval("__app.go('free', { init: { kind: 'squeezed', x0: -5, p0: 1, r: 0.8, theta: 0 }, run: false })"); b.eval(RUN_TO + '(4)'); i8 = b.eval(INFO)
+    check(abs(i3['sx'] - i1['sx']) < 1e-4 and i8['sx'] > 1.5 * i1['sx'],
+          f"free: at t = 4 sigma_x is {i1['sx']:.3f} for p0 = 1 and {i3['sx']:.3f} for p0 = 3 (the same shear), {i8['sx']:.3f} when squeezed harder (r = 0.8)")
     # 7. The anharmonic well: the classical points conserve energy while W grows negative regions.
     b.eval('__app.setups.anharmonic()'); b.eval(RESTART)
     i0 = b.eval(INFO); b.eval(RUN_TO + '(10)'); i1 = b.eval(INFO)
-    check(i0['neg'] < 1e-4 and i1['neg'] > 0.3, f"anharmonic: negative volume of W {i0['neg']:.1e} at t = 0, {i1['neg']:.2f} at t = 10")
+    check(i0['neg'] < 1e-4 and abs(i1['neg'] - 0.9) < 0.05, f"anharmonic: negative volume of W {i0['neg']:.1e} at t = 0, {i1['neg']:.2f} at t = 10 (help: 0.9)")
+    b.sleep(0.3)
+    neg = b.eval("document.getElementById('neg').textContent.replace(/\\s+/g, ' ')")
+    check(f"volume {i1['neg']:.3f}" in neg and f"least W {i1['minW']:.3f}".replace('-', '−') in neg, f'anharmonic: the legend under the plot says how negative: "{neg}"')
     check(abs(i1['Ecl'] - i0['Ecl']) < 1e-3 * abs(i0['Ecl']) and abs(i1['E'] - i0['E']) < 1e-4 * i0['E'],
           f"anharmonic: classical <E> {i0['Ecl']:.5f} -> {i1['Ecl']:.5f}, quantum {i0['E']:.6f} -> {i1['E']:.6f}")
     b.screenshot('build/ps-anharmonic-t10.png')
@@ -178,10 +227,18 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
       return Math.max(...P.map((v, i) => Math.abs(v - X[i]))) / Math.max(...X); })()''')
     check(sh < 0.005, f'tomography: |psi(x, t)|^2 against the shadow of W(0) at theta = t: largest difference {sh:.4f} of the peak')
 
-    # Dragging a coherent state moves it.
+    # What the hint says to drag: the handle lights up under the pointer, with a "grab" cursor
+    # there and a crosshair (press to place the blob) elsewhere.
     b.eval('__app.setups.coherent()'); b.eval('__app.state.running = false')
     b.sleep(0.3)
-    # The handle is at (3, 0); drag it to (-2, 1.5).
+    hx, hy = b.eval('''(() => { const f = __app.frame(), r = document.getElementById("plot").getBoundingClientRect(), it = __app.state.init;
+      return [r.left + f.X(it.x0), r.top + f.Y(it.p0)]; })()''')
+    b.mouse('mouseMoved', hx + 4, hy - 3); b.sleep(0.3)
+    on = b.eval('[__app.hot, document.getElementById("plot").style.cursor]')
+    b.mouse('mouseMoved', hx + 90, hy + 70); b.sleep(0.3)
+    off = b.eval('[__app.hot, document.getElementById("plot").style.cursor]')
+    check(on == [True, 'grab'] and off == [False, 'crosshair'], f'the handle lights up under the pointer, with a grab cursor ({on}); elsewhere {off}')
+    # Dragging a coherent state moves it.  The handle is at (3, 0); drag it to (-2, 1.5).
     pts = b.eval('''(() => { const f = __app.frame(); const r = document.getElementById("plot").getBoundingClientRect();
       return [(f.X(3)) / r.width, (f.Y(0)) / r.height, f.X(-2) / r.width, f.Y(1.5) / r.height]; })()''')
     b.drag('#plot', (pts[0], pts[1]), (pts[2], pts[3]), steps=10)
@@ -191,11 +248,11 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     check(abs(st['x0'] + 2) < 0.1 and abs(st['p0'] - 1.5) < 0.1 and abs(i['E'] - (4 + 2.25 + 1) / 2) < 0.15,
           f"dragging moves the coherent state to ({st['x0']:.2f}, {st['p0']:.2f}), <E> = {i['E']:.3f}")
 
-    # The arrow keys move it too.
-    b.eval('document.getElementById("plot").focus()')
+    # The arrow keys move it too, straight after the drag (the press focused the plot).
+    focused = b.eval('document.activeElement && document.activeElement.id')
     x0 = b.eval('__app.state.init.x0')
     b.key('ArrowRight', 'ArrowRight'); b.sleep(0.3)
-    check(b.eval('__app.state.init.x0') > x0 + 0.1, f"the right arrow key moves the state ({x0:.2f} -> {b.eval('__app.state.init.x0'):.2f})")
+    check(focused == 'plot' and b.eval('__app.state.init.x0') > x0 + 0.1, f"the right arrow key moves the state straight after a drag ({x0:.2f} -> {b.eval('__app.state.init.x0'):.2f}; focus on '{focused}')")
     # Hovering reads W off the plot.
     hx, hy = b.point('#plot', (0.5, 0.55))
     b.mouse('mouseMoved', hx, hy); b.sleep(0.3)
@@ -274,16 +331,43 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     i = b.eval('({ t: __app.sim.t, left: __app.sim.probabilityLeftOf(0) })')
     check(abs(i['t'] - 28.09) < 1e-6 and i['left'] < 0.02, f"#setup=tunnel&t=28.09 opens it paused at t = {i['t']:.2f}, tunnelled (P(x < 0) = {i['left']:.4f})")
 
+    # A state with no centre: the hint says so, and what to choose instead.
+    b.eval('__app.setups.number()'); b.sleep(0.3)
+    hint = b.eval("document.getElementById('hint').textContent")
+    check(hint.startswith('This kind of state has no centre to drag') and 'Coherent' in hint, f'|1>: the hint says there is nothing to drag: "{hint[:60]}..."')
+
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 
-# A phone-sized window, and the dark theme.
-with Browser('phasespace/index.html#setup=cat', size=(400, 850)) as b:
+# The dark theme at desktop size: the first screen reads there too.
+with Browser('about:blank', size=(1400, 900)) as b:
+    b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
+    b.goto('phasespace/index.html')
+    b.wait('window.__app && __app.ready'); b.sleep(1.5)
+    first_screen(b, 'desktop, dark')
+    b.screenshot('build/ps-dark.png')
+
+# A phone-sized window, light and dark: the opening screen, then the cat and the quartic well.
+with Browser('phasespace/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1.5)
     w = b.eval('document.documentElement.scrollWidth')
-    check(w <= 400, f'phone: no horizontal scrolling (page width {w})')
+    check(w <= 390, f'phone: no horizontal scrolling (page width {w})')
+    first_screen(b, 'phone, light')
+    order = b.eval("[...document.querySelectorAll('main > *, main .stage > *')].map((e) => e.id || e.className.split(' ')[0])")
+    check(order.index('readouts') < order.index('plot-wrap') < order.index('hint') < order.index('legend') < order.index('controls'),
+          f'phone: the readouts, the picture, the hint and the legend come before the controls ({order})')
+    # (Through about:blank: a change of hash alone would not reload the page.)
+    b.call('Page.navigate', url='about:blank'); time.sleep(0.3)
+    b.goto('phasespace/index.html#setup=cat')
+    b.wait('window.__app && __app.ready'); b.sleep(1)
+    check(b.eval("document.getElementById('hint').textContent").startswith('Drag either blob'), 'phone: the cat state says to drag either blob')
     b.screenshot('build/ps-phone.png')
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
+    b.call('Page.navigate', url='about:blank'); time.sleep(0.3)
+    b.goto('phasespace/index.html')
+    b.wait('window.__app && __app.ready'); b.sleep(1.5)
+    first_screen(b, 'phone, dark')
+    b.call('Page.navigate', url='about:blank'); time.sleep(0.3)
     b.goto('phasespace/index.html#setup=anharmonic')
     b.wait('window.__app && __app.ready'); b.sleep(2)
     b.screenshot('build/ps-phone-dark.png')
