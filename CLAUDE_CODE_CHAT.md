@@ -942,3 +942,95 @@ them yet); a hollow-cone condenser with a phase ring in the imaging demo (the ph
 supports it; it would add controls); dispersion in an uncompensated Michelson arm; the
 interferometer's Betelgeuse range is not kept in the address.  Still marked beta until you
 have tried them again.
+
+## Prompt 14
+
+> Keep working on main. Do a top to bottom review of the "Beta" apps, making sure that from the
+> moment the apps are opened, someone who has a little exposure to the concepts understands how
+> to play with them and explore the physics. Fix anything that comes up. Commit it to main.
+
+### Response 14 (2026-11-03)
+
+I opened all thirteen cold and looked at the first screen and the drawer of each as a student
+with a lecture's worth of the idea would.  The same things got in the way almost everywhere:
+nothing on the picture said what to drag (the hints were small grey text in the side panels);
+the readouts were rows of symbols (`β = 0.094  γ = 1.004  |a| = 36.00  P/P_Larmor = 1.027`);
+some pages opened on the hardest case they could show (a chaotic stadium billiard, a quartic
+well with the Wigner function already sheared negative, six tomography panels at once); and
+every drawer began with the theory, equations first, before a word about what to do.
+
+So one standard, applied to all thirteen by nine agents in worktrees (one per demo, or a pair
+of related ones), with two shared styles in `lib/style.css`:
+
+- **The first screen.**  Something is already happening; a one-line hint on or directly under
+  the main picture (`.hint`, with an arrow) says what to drag or click; every number has words
+  beside it, in the fixed slots as before; the opening is the simplest instance of the idea,
+  which is experiment 1; headings, buttons and sliders are plain words, with a gloss under the
+  control for anything a student might not know (NA, taper, Ram-Lak, Husimi, ¼ wave, dB);
+  the useful controls are near the top and the obscure ones fold under "More".
+- **The drawer.**  It opens with a "Start here" block (`.drawer .start`): what the page shows,
+  what to drag, what to look for, in three to five plain sentences and no equations.  Then the
+  experiments, each with a heading that says what you will see, "Set it up", what to do, what
+  to look for, why.  The theory and conventions, every equation kept, moved to the end under
+  "How it works".
+- **The interactions.**  Each agent did what its hints say, in headless Chromium, at desktop
+  and phone widths and in both themes, and fixed what didn't respond; the UI tests now check
+  the hint is on the first screen, the Start-here block comes first and has no equations, and
+  the contrast of both in the dark theme.
+
+What changed in each, beyond the standard:
+
+- **Imaging** opens on Abbe's grating in bright field, its orders ringed and numbered in the
+  Fourier plane (the phase-contrast cells are experiment 8 and the card).  "Paint on the
+  Fourier plane: Block an order and watch the image."  The brush size, mirror and brightness
+  fold under "More".
+- **Interferometer**: the whole Fourier-transform-spectrometer panel folds away until an
+  experiment needs it; "fringe contrast (visibility)" and "path difference Δ = 2d" in words.
+  **Holography**: hints under both side views; the zero order, the twin and R* glossed where
+  they are named.  It keeps opening on the tilted reference (experiment 2) because in line the
+  three beams overlap and the first screen would show nothing apart.
+- **Least action**: the hint under the path; "kinetic part / − potential part" over the score;
+  "Your path" above the list of systems; throw and catch is experiment 1.  **Radiation**:
+  "speed β = v/c, Lorentz factor γ, acceleration, radiated power (1 for a slow charge)"; the
+  probe is a yellow dot you drag, and the page says so; the probe's lines hide rather than
+  leave blanks.
+- **Phase space** opens on the coherent state circling in the harmonic well with the classical
+  points (the quartic shear is experiment 2); the readout line is four groups with a word each;
+  the ⊕ handle lights up under the pointer and a press focuses the plot so the arrow keys work.
+- **Thin films** opens as "A soap film"; each layer's edge has a grip tab that lights up, with
+  the cursor to match; "Of the light at 550 nm: reflected R 5.63%, transmitted T 94.37%";
+  the plots say "Reflected fraction R against wavelength"; every stack preset has a tooltip.
+  **Dispersion**: hints in all three views, sliders named ("resonance ω₀, width γ,
+  strength ω_p"), presets and chips glossed ("free: charges with no spring, as in a metal").
+- **Tomography** opens on three disks with three panels (scanner, sinogram, reconstruction);
+  Fourier space, the unfiltered back-projection and the profile fold under "More panels" and
+  unfold for the experiments about them; every panel head says in words what it is.
+- **Beams**: hints in the Cavity and Modes views too; "g₁g₂ = 0.563 is between 0 and 1"; the
+  Numbers panel in words; the higher-order mode, the stretch, the exposure and mode matching
+  fold away.  **Arrays**: "−10 dB is a tenth of the beam's"; "Directivity: 8.0× an isotropic
+  antenna's power towards the beam"; the synthesis view's panels titled in words ("What is
+  measured", "The true sky", "Dirty image"); clicking an element is how "By hand" is found.
+- **Drums** opens on the Drum tab: a circle struck a little off centre, slowed 167 times so the
+  ripple can be watched and the spectrum separates its peaks in a few seconds, with the sound
+  on.  "Click the drum to strike it there (you hear it too); click a peak of the spectrum to
+  see that mode."  The mode box says what will appear in it; "80 exact modes found in 1.6 s"
+  instead of "shift-invert Lanczos"; the drawing pen, the ring time and the pinned drum fold
+  away; every shape button has a tooltip (GWW drums: "two different drums that sound the
+  same").  The chaotic stadium is experiment 7.
+- **Maxwell 2D**: the hint under the picture follows the state (the beam's dot and its aiming
+  ring; the brush chosen; "the green lines are power meters: drag their ends"); the colour bar
+  says "Ez, the electric field out of the screen"; the fifteen shape buttons are now set-ups
+  that also aim the source (before, "Gap" from the opening left the beam inside the glass),
+  each with a tooltip saying what it shows; polarisation, meters, the probe and the grid fold
+  under "More"; the grid is 24 cells per wavelength instead of 30, which halves the work.
+
+No physics changed; the quoted numbers were re-measured by the tests as before.  Two small
+things on the way: `tools/cdp.py` crashed in a fresh checkout (no `build/` folder), and the
+beams cavity test is now seeded.
+
+**Tests.**  Each branch passed its demo's UI test and the 315 unit tests before merging; the full run of `tools/test_all.sh` on the merged `main` is in progress.
+
+**Left.**  `lib/style.css` gives every canvas `touch-action: none`, so on a phone a finger can't
+scroll the page from over a picture that fills the width; several demos set `pan-y` on the
+canvases that take no drag, and the rest would need it only while dragging.  Still pictures
+per experiment.
