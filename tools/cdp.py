@@ -111,6 +111,7 @@ class Browser:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f'http://127.0.0.1:{self.server.server_address[1]}/'
         port = _free_port()
+        os.makedirs(os.path.join(ROOT, 'build'), exist_ok=True)   # gitignored; absent in a fresh checkout
         self.profile = tempfile.mkdtemp(prefix='bf-cdp-', dir=os.path.join(ROOT, 'build'))
         self.proc = subprocess.Popen(
             [self.chromium, '--headless', '--disable-gpu', '--hide-scrollbars', '--no-first-run',
