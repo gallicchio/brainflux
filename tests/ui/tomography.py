@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Drive the tomography demo: every experiment and the numbers its help quotes, the scanner's
-physics, stepping, the colours that tie the panels together, pointing in each direction, painting,
-readouts that keep still and fit, and the phone layout.
+"""Drive the tomography demo: the first screen (three panels, hints in words, the others folded
+away), the drawer (Start here first, the theory last), every experiment and the numbers its help
+quotes, the scanner's physics, stepping, the colours that tie the panels together, pointing in
+each direction, painting, readouts that keep still and fit, both themes, and the phone layout.
 
 Nothing here waits on the clock: the scan is stepped (__app.stepScan) or finished at once, and
 pictures are read after __app.draw() or two animation frames."""
@@ -39,10 +40,10 @@ def track(base, now, tol=0.5):
              if k in base and max(abs(x - y) for x, y in zip(base[k], p)) > tol]
     for k, p in now.items(): base.setdefault(k, p)
     return moved
-READOUTS = f"{LAYOUT}('#scan-readout, #sino-readout, #sino-note, #k-readout, #bp-readout, #fbp-readout, #fbp-note, #extra-readout')"
+READOUTS = f"{LAYOUT}('#scan-readout, #sino-readout, #k-readout, #bp-readout, #fbp-readout, #fbp-note, #extra-readout')"
 # Readouts cut short (text-overflow: ellipsis): [id, text] of each wider than its box.
-CUT = "[...document.querySelectorAll('.readout, .cell-head .note')].filter((e) => e.getClientRects().length && e.scrollWidth > e.clientWidth + 1).map((e) => [e.id, e.textContent])"
-# The x of the words drawn on the scanner and the sixth panel around live numbers (fillText calls
+CUT = "[...document.querySelectorAll('.readout, .cell-head .note, .more-panels > summary')].filter((e) => e.getClientRects().length && e.scrollWidth > e.clientWidth + 1).map((e) => [e.id, e.textContent])"
+# The x of the words drawn on the scanner and the last panel around live numbers (fillText calls
 # without digits): they must not move as the numbers change.
 CANVAS_WORDS = r"""(() => { if (window.__words) return; window.__words = [];
   const orig = CanvasRenderingContext2D.prototype.fillText;
@@ -50,6 +51,11 @@ CANVAS_WORDS = r"""(() => { if (window.__words) return; window.__words = [];
     const s = String(t), id = this.canvas.id;
     if ((id === 'scanner' || id === 'extra') && /^(θ = |°|angle | of )$/.test(s)) __words.push([id, s, Math.round((this.getTransform().e + x * this.getTransform().a) * 10) / 10]);
     return orig.call(this, t, x, y, m); }; })()"""
+# The contrast ratio (WCAG) between an element's text and a background colour.
+CONTRAST = r"""((sel, bgSel, pseudo) => { const lum = (c) => { const m = c.match(/\d+(\.\d+)?/g).map(Number);
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+  const e = document.querySelector(sel), fg = getComputedStyle(e, pseudo || null).color, bg = getComputedStyle(document.querySelector(bgSel)).backgroundColor;
+  const a = lum(fg), b = lum(bg); return Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 10) / 10; })"""
 
 # Finish the scan, wait for any rescan in the workers (up to a minute: the machine may be busy),
 # and for two frames to be drawn.
@@ -100,24 +106,55 @@ def quoted(v, text):
     digits = len(text.split('.')[1]) if '.' in text else 0
     return round(v, digits) == float(text)
 
-SETUPS = ['sinusoid', 'smear', 'blur', 'ramp', 'slice', 'density', 'streaks', 'wedge', 'noise', 'aliasing', 'metal', 'faint', 'picture']
+SETUPS = ['shadows', 'sinusoid', 'smear', 'blur', 'ramp', 'slice', 'density', 'streaks', 'wedge', 'noise', 'aliasing', 'metal', 'faint', 'picture']
+# The experiments about back-projection and Fourier space unfold the second row of panels.
+UNFOLDED = {'smear', 'blur', 'ramp', 'slice', 'density', 'streaks', 'wedge'}
+# (A closed <details> keeps its content laid out in Chromium, so checkVisibility, not the boxes.)
+HIDDEN = "['#kspace', '#bp', '#extra'].map((s) => document.querySelector(s).checkVisibility() ? 1 : 0)"
+HINTS = """['#scan-readout', '#sino-readout'].map((s) => { const e = document.querySelector(s);
+  return [e.classList.contains('hint'), e.textContent.trim(), getComputedStyle(e, '::before').content]; })"""
 
 with Browser('tomography/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready && __app.sc.count > 0', timeout=60)
     # (Paused at once, in the same breath: the scan goes on at its own pace meanwhile.)
-    st = b.eval('(() => { const r = { playing: __app.state.playing, count: __app.sc.count, obj: __app.state.obj }; __app.state.playing = false; return r; })()')
-    check(st['playing'] and 0 < st['count'] < 180 and st['obj'] == 'phantom', f"it opens scanning the Shepp–Logan phantom ({st['count']} of 180 angles so far)")
+    st = b.eval('(() => { const r = { playing: __app.state.playing, count: __app.sc.count, obj: __app.state.obj, panels: __app.state.panels, open: document.querySelector("#more-panels").open }; __app.state.playing = false; return r; })()')
+    check(st['playing'] and 0 < st['count'] < 180 and st['obj'] == 'disks' and st['panels'] == 'basic' and not st['open'],
+          f"it opens scanning three disks, with the scanner, the sinogram and the reconstruction ({st['count']} of 180 angles so far) and the other panels folded")
+    frames(b)
+    hints = b.eval(HINTS)
+    check(all(h[0] and '→' in h[2] for h in hints) and hints[0][1].startswith('Point at the object') and hints[1][1].startswith('Point at a row'),
+          f'hints under the scanner and the sinogram say what to point at ({hints[0][1]!r}; {hints[1][1]!r})')
+    check(b.eval(HIDDEN) == [0, 0, 0], 'Fourier space, the plain back-projection and the profile are folded away')
+    heads = b.eval("[...document.querySelectorAll('.cell-head')].map((e) => [e.querySelector('h2, select') ? 1 : 0, e.querySelector('.note').textContent.trim()])")
+    check(len(heads) == 6 and all(h[0] and len(h[1]) > 15 for h in heads), f'every panel has a name and a line of words saying what it is ({[h[1] for h in heads[:3]]})')
     b.screenshot('build/tomo-start.png')
-    check(b.eval('Object.keys(__app.setups).join()') == ','.join(SETUPS), 'the thirteen set-ups keep their names (#setup= links)')
+    check(b.eval('Object.keys(__app.setups).join()') == ','.join(SETUPS), 'the fourteen set-ups keep their names (#setup= links)')
+    # The drawer: Start here first, in plain words, the theory last.
+    dr = b.eval("""(() => { const d = document.querySelector('#help'), kids = [...d.children], first = kids[1];
+        return { first: first.className + ':' + (first.querySelector('h3') || {}).textContent, math: first.querySelectorAll('math').length,
+          sentences: (first.textContent.match(/[.!?](\\s|$)/g) || []).length,
+          theoryLast: kids.findIndex((e) => e.classList.contains('theory')) > kids.findLastIndex((e) => e.classList.contains('exp')),
+          theoryHead: d.querySelector('.theory h3')?.textContent, exps: d.querySelectorAll('.exp').length }; })()""")
+    check(dr['first'] == 'start:Start here' and dr['math'] == 0 and 3 <= dr['sentences'] <= 8 and dr['theoryLast'] and dr['theoryHead'] == 'How it works' and dr['exps'] == 14,
+          f"the drawer starts with 'Start here' ({dr['sentences']} sentences, no equations) and ends with 'How it works' after the {dr['exps']} experiments")
+    # Unfolding the second row: a click on the summary; the address keeps it.
+    b.click('#more-panels > summary'); frames(b)
+    b.wait("location.hash.includes('panels=all')", timeout=5)
+    shown = b.eval(f"[__app.state.panels, ...{HIDDEN}]")
+    check(shown == ['all', 1, 1, 1], f'More panels unfolds the other three, and the address says so ({shown})')
+
+    settle(b)
+    rms_disks = b.eval('__app.rms')
+    check(rms_disks < 0.04, f'three disks, 180 angles x 256 bins: RMS difference {rms_disks:.4f}')
 
     # The angle just measured is cyan in every panel while the scan goes on, and nowhere once it
-    # is over (the scanner then still shows the last projection).
-    frames(b)
+    # is over (the scanner then still shows the last projection).  The head, stepped to angle 60.
+    b.eval("(() => { __app.setObject('phantom'); __app.state.playing = false; while (__app.sc.count < 60) __app.stepScan(); })()"); frames(b)
     j = b.eval('__app.nowIndex')
     mid = {'sino': colour(b, '#sinogram', CYAN), 'k': b.eval(f'{SLICE_BLUE}({j})'), 'bp': b.eval(f"{TINT}('#bp')"), 'fbp': b.eval(f"{TINT}('#fbp')"), 'det': colour(b, '#scanner', CYAN)}
     settle(b)
     end = {'sino': colour(b, '#sinogram', CYAN), 'k': b.eval(f'{SLICE_BLUE}({j})'), 'bp': b.eval(f"{TINT}('#bp')"), 'fbp': b.eval(f"{TINT}('#fbp')"), 'det': colour(b, '#scanner', CYAN)}
-    check(j >= 0 and mid['sino'] > 300 and end['sino'] < 20, f"the angle just measured (angle {j + 1}) is outlined in cyan in the sinogram ({mid['sino']} cyan pixels; {end['sino']} once the scan is over)")
+    check(j == 59 and mid['sino'] > 300 and end['sino'] < 20, f"the angle just measured (angle {j + 1}) is outlined in cyan in the sinogram ({mid['sino']} cyan pixels; {end['sino']} once the scan is over)")
     check(mid['k'] > end['k'] + 40, f"its slice of Fourier space is cyan (blue - red along it {mid['k']:.0f}, against {end['k']:.0f} once the scan is over)")
     check(mid['bp'] > 2000 and mid['fbp'] > 2000 and end['bp'] == 0 and end['fbp'] == 0, f"its smear tints both back-projections ({mid['bp']} and {mid['fbp']} pixels; none once the scan is over)")
     check(mid['det'] > 200 and end['det'] > 200, f"the detector is cyan, with the projection it measured ({mid['det']}, {end['det']} pixels)")
@@ -151,11 +188,15 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
     check(colour(b, '#sinogram', CYAN) > 100 and b.eval(f"{TINT}('#bp')") > 2000, 'while stepping, the current angle is cyan in the sinogram and the back-projection')
     b.screenshot('build/tomo-step.png')
 
+    folds = {}
     for name in SETUPS:
         setup(b, name, finish=name != 'smear')
-        st = b.eval('({ na: __app.sc.nA, M: __app.sc.M, rms: __app.rms, smooth: __app.rmsSmooth, direct: __app.rmsDirect, obj: __app.state.obj })')
+        st = b.eval('({ na: __app.sc.nA, M: __app.sc.M, rms: __app.rms, smooth: __app.rmsSmooth, direct: __app.rmsDirect, obj: __app.state.obj, panels: __app.state.panels, hidden: ' + HIDDEN + ' })')
+        folds[name] = st['panels'] == 'all' and st['hidden'] == [1, 1, 1] if name in UNFOLDED else st['panels'] == 'basic' and st['hidden'] == [0, 0, 0]
         if name != 'smear': b.screenshot(f'build/tomo-exp-{name}.png')
-        print(f"note  {name}: {st['obj']}, {st['na']} angles x {st['M']} bins, RMS {st['rms'] if st['rms'] is None else round(st['rms'], 4)}")
+        print(f"note  {name}: {st['obj']}, {st['na']} angles x {st['M']} bins, RMS {st['rms'] if st['rms'] is None else round(st['rms'], 4)}, panels {st['panels']}")
+        if name == 'shadows':
+            check(st['obj'] == 'disks' and st['na'] == 180 and st['M'] == 256 and b.eval(HINTS)[0][0], 'experiment 1 is the page as it opens: three disks, 180 angles, the hints showing')
         if name == 'sinusoid':
             w = b.eval("""(() => { const sc = __app.sc, M = sc.M, { px, py } = __app.state; let worst = 0;
                 for (let j = 0; j < sc.nA; j++) { let m = 0, ms = 0; for (let k = 0; k < M; k++) { const p = sc.meas[j * M + k]; m += p; ms += p * (k - M / 2) * sc.ds; }
@@ -163,7 +204,7 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
             check(w < 1e-6, f'the point traces s = x0 cos(theta) + y0 sin(theta) (centroids within {w:.0e})')
         if name == 'smear':
             s0 = b.eval('[__app.state.obj, __app.sc.nA, __app.sc.count, __app.state.playing]')
-            check(s0 == ['disks', 12, 0, False], f'experiment 2: three disks, 12 angles, waiting before the first ({s0})')
+            check(s0 == ['disks', 12, 0, False], f'experiment 3: three disks, 12 angles, waiting before the first ({s0})')
             b.click('#step'); frames(b)
             v = b.eval("""(() => { const sc = __app.sc, N = 256; let worst = 0; for (const i of [64, 100, 128, 150, 190]) { const col = [];
                 for (let j = 0; j < N; j++) { const x = (i - N / 2) * 2 / N, y = (N / 2 - j) * 2 / N; if (x * x + y * y < 0.95) col.push(sc.bp[j * N + i]); }
@@ -204,6 +245,7 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
         if name == 'wedge':
             check(st['rms'] > 1.5 * rms, f"a 110-degree range: RMS {st['rms']:.3f}")
         if name == 'noise':
+            check(b.eval("document.querySelector('#show').open"), 'a set-up with a narrow grey scale unfolds the Show controls')
             # The difference away from edges: noise, on top of what is there without it.
             r0 = b.eval('__app.rmsSmooth')
             rc(b, {'I0': 1e6}); r1 = b.eval('__app.rmsSmooth')
@@ -218,6 +260,7 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
             check(abs(n0 / n1 - 10 ** 0.5) < 0.3, f'the noise itself: {n0:.4f} at I0 = 1e5, {n1:.4f} at 1e6 (ratio {n0 / n1:.2f}; sqrt 10 = 3.16)')
             check(0.3 < r2 / r0 < 0.45, f'the Hann window: {r2:.4f} away from edges, {100 * r2 / r0:.0f}% of Ram-Lak, about a third ({100 * n2 / n0:.0f}% of the noise itself)')
         if name == 'aliasing':
+            check(b.eval("document.querySelector('#more').open"), 'the set-up with narrow detector bins unfolds the More controls of the scanner')
             # Beyond r = 0.5 the zone plate's rings are finer than 64 bins can sample: whatever
             # pattern the reconstruction shows there (its spread about the mean) is aliasing.
             ANNULUS = "(() => { const f = __app.sc.fbp, N = 256; let s = 0, s2 = 0, n = 0; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const r = Math.hypot((i - N / 2) * 2 / N, (N / 2 - j) * 2 / N); if (r > 0.6 && r < 0.85) { const v = f[j * N + i]; s += v; s2 += v * v; n++; } } return Math.sqrt(s2 / n - (s / n) ** 2); })()"
@@ -243,7 +286,7 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
             check(cc[2] > 1.5 * c[2], f'photon starvation streaks the brain: RMS away from edges {cc[2]:.3f} against {c[2]:.3f}')
         if name == 'faint':
             sp = b.eval(SPOTS)
-            check(b.eval('__app.sc.opts.I0') == 1e6 and not b.eval('__app.sc.opts.noise') and quoted(sp[0], '0.01'), f'experiment 12 waits with 1e6 photons ready and the noise off; the spots stand {sp[0]:.4f} above the brain')
+            check(b.eval('__app.sc.opts.I0') == 1e6 and not b.eval('__app.sc.opts.noise') and quoted(sp[0], '0.01'), f'experiment 13 waits with 1e6 photons ready and the noise off; the spots stand {sp[0]:.4f} above the brain')
             b.eval("document.querySelector('#noise-box button').click()"); settle(b); g0 = b.eval(SPOTS)
             rc(b, {'filter': 'hann'}); g1 = b.eval(SPOTS)
             rc(b, {'filter': 'ramlak', 'I0': 1e7}); g2 = b.eval(SPOTS)
@@ -251,6 +294,8 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
                   f'the grain round the spots: {g0[1]:.4f} with Ram-Lak at 1e6 (larger than the spots, {g0[0]:.4f}), {g1[1]:.4f} with Hann, {g2[1]:.4f} with 1e7 photons (help: 0.014, 0.005, 0.004)')
         if name == 'picture':
             check(st['obj'] == 'portrait' and st['rms'] < 0.1 and b.eval("document.querySelector('#gallery').value") == 'portrait', f"Fourier's portrait, chosen in the list of pictures: RMS {st['rms']:.4f}")
+    bad = [n for n, ok in folds.items() if not ok]
+    check(not bad, 'the experiments about back-projection and Fourier space unfold the second row of panels, the others fold it' + (f' (wrong: {bad})' if bad else ''))
 
     # Pointing at the sinogram: the scanner turns to that row's angle and draws its ray in
     # magenta; a click pins it.  Pointing at a back-projection shows that point's sinusoid.
@@ -259,13 +304,13 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
     check(colour(b, '#scanner', MAGENTA) < 5 and colour(b, '#sinogram', YELLOW) < 5, 'nothing is pointed at: no magenta ray, no yellow sinusoid')
     x, y = b.point('#sinogram', (0.55, 0.5))
     b.mouse('mouseMoved', x, y); frames(b)
-    hv = b.eval('[__app.hardwareIndex, __app.state.pick, document.querySelector("#sino-readout").textContent]')
+    hv = b.eval('[__app.hardwareIndex, __app.state.pick, document.querySelector("#sino-readout").textContent, document.querySelector("#sino-readout").classList.contains("hint")]')
     mag = {k: colour(b, f'#{k}', MAGENTA, 60) for k in ('scanner', 'sinogram', 'kspace', 'bp', 'fbp')}   # (the slice is drawn over the data, 80% opaque)
-    check(85 <= hv[0] <= 95 and hv[1] is None and hv[2].startswith('θ'), f'pointing at the middle row of the sinogram turns the scanner to angle {hv[0] + 1} (readout: {hv[2]!r})')
+    check(85 <= hv[0] <= 95 and hv[1] is None and hv[2].startswith('angle') and not hv[3], f'pointing at the middle row of the sinogram turns the scanner to angle {hv[0] + 1}; the hint gives way to the readout ({hv[2]!r})')
     check(all(v > 40 for v in mag.values()), f'its ray, row, slice and smears are drawn in magenta ({mag})')
     b.screenshot('build/tomo-point-sinogram.png')
     b.mouse('mouseMoved', 2, 2); frames(b)
-    check(b.eval('__app.hardwareIndex') == 179 and colour(b, '#scanner', MAGENTA) < 5, 'moving off the sinogram turns the scanner back')
+    check(b.eval('__app.hardwareIndex') == 179 and colour(b, '#scanner', MAGENTA) < 5 and b.eval(HINTS)[1][0], 'moving off the sinogram turns the scanner back, and the hint returns')
     # Fourier space: the slice through the place pointed at, here in the direction 60 degrees.
     x, y = b.point('#kspace', (0.5 + 0.3 * 0.5, 0.5 - 0.3 * 0.866))
     b.mouse('mouseMoved', x, y); frames(b)
@@ -292,10 +337,14 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
     b.screenshot('build/tomo-projection.png')
     b.eval("__app.setView('profile')")
 
-    # Dragging on a reconstruction moves the profile.
+    # Dragging on a reconstruction moves the profile, while the profile is shown.
     b.drag('#fbp', (0.5, 0.5), (0.5, 0.3), steps=5); frames(b)
     y = b.eval('__app.state.py0')
     check(abs(y - 0.4) < 0.03, f'dragging on the reconstruction moves the profile to y = {y:.3f}')
+    b.eval("__app.setPanels('basic')"); frames(b)
+    b.drag('#fbp', (0.5, 0.5), (0.5, 0.7), steps=5); frames(b)
+    check(abs(b.eval('__app.state.py0') - y) < 1e-9, 'with the profile folded away, a drag on the reconstruction leaves it alone')
+    b.eval("__app.setPanels('all')"); frames(b)
 
     # Painting: the object becomes a picture, and the scan (already over) is measured again.
     before = b.eval('__app.sc.truth.reduce((a, v) => a + v, 0)')
@@ -349,7 +398,7 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
         cut += b.eval(CUT)
     check(not moved, 'the readouts keep still as the number of angles, the cutoff and the profile move' + (f'; moved {moved[:3]}' if moved else ''))
     b.eval("__app.setView('projection')"); frames(b); cut += b.eval(CUT)
-    check(not cut, 'every readout and note fits its panel at 1400 x 900' + (f': {cut[:3]}' if cut else ''))
+    check(not cut, 'every readout, note and hint fits its panel at 1400 x 900' + (f': {cut[:3]}' if cut else ''))
 
     # The formula: its parameters are sliders.
     b.eval("__app.setObject('formula')"); settle(b)
@@ -360,21 +409,35 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
     check(not errors, 'no exceptions or console errors' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 
 # Links with settings in them, and a link to an experiment.
-for address, want in (('#na=24&nd=128&filter=hann&obj=disk', {'nA': 24, 'M': 128, 'f': 'hann', 'obj': 'disk'}),
-                      ('#obj=disks', {'nA': 180, 'M': 256, 'f': 'ramlak', 'obj': 'disks'}),
-                      ('#obj=portrait&na=90', {'nA': 90, 'M': 256, 'f': 'ramlak', 'obj': 'portrait'})):
+for address, want in (('#na=24&nd=128&filter=hann&obj=disk', {'nA': 24, 'M': 128, 'f': 'hann', 'obj': 'disk', 'panels': 'basic'}),
+                      ('#obj=phantom&panels=all', {'nA': 180, 'M': 256, 'f': 'ramlak', 'obj': 'phantom', 'panels': 'all'}),
+                      ('#obj=portrait&na=90', {'nA': 90, 'M': 256, 'f': 'ramlak', 'obj': 'portrait', 'panels': 'basic'})):
     with Browser(f'tomography/index.html{address}', size=(1400, 900)) as b:
         b.wait('window.__app && __app.ready', timeout=60); settle(b)
-        o = b.eval('({ nA: __app.sc.nA, M: __app.sc.M, f: __app.sc.opts.filter, obj: __app.state.obj })')
+        o = b.eval('({ nA: __app.sc.nA, M: __app.sc.M, f: __app.sc.opts.filter, obj: __app.state.obj, panels: __app.state.panels })')
         check(o == want, f'{address} is restored ({o})')
+        if want['panels'] == 'all':
+            check(b.eval(HIDDEN) == [1, 1, 1], 'and the second row of panels is shown')
+
+# The phone: the hint under the picture without scrolling, the panels in the order of the story,
+# nothing sticking out; the hint and the Start-here block readable in both themes.
 with Browser('tomography/index.html#setup=streaks', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready', timeout=60); settle(b)
     check(b.eval('__app.sc.nA') == 24 and b.eval("document.querySelector('#help').classList.contains('open')"), '#setup=streaks sets up the experiment and opens the drawer')
+    for theme in ('light', 'dark'):
+        b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': theme}]); frames(b)
+        b.eval("document.querySelector('#help').scrollTop = 0")
+        b.screenshot(f'build/tomo-phone-drawer-{theme}.png')
+        c = b.eval(f"[{CONTRAST}('.drawer .start p', '.drawer .start'), {CONTRAST}('.drawer .start h3', '.drawer .start'), {CONTRAST}('#scan-readout', 'body'), {CONTRAST}('#scan-readout', 'body', '::before')]")
+        check(all(v >= 4 for v in c), f'{theme} theme: the Start-here block and the hint (with its arrow) read (contrast {c})')
+    b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'light'}])
     b.eval("document.querySelector('#help').classList.remove('open')"); frames(b)
     wide = b.eval('document.documentElement.scrollWidth')
     check(wide <= 390, f'at phone width nothing sticks out sideways (page {wide} px wide)')
-    order = b.eval("['#cell-scan', '#scan-panel', '#cell-sino', '#cell-fbp', '#cell-bp', '#cell-k', '#cell-extra'].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().top))")
-    check(order == sorted(order), f'on a phone the scan buttons come right under the scanner, then the sinogram and the reconstructions (tops {order})')
+    hint = b.eval("(() => { const r = document.querySelector('#scan-readout').getBoundingClientRect(); return [Math.round(r.bottom), document.querySelector('#scan-readout').classList.contains('hint')]; })()")
+    check(hint[1] and hint[0] <= 844, f'the hint under the scanner is on the first screen of a phone (bottom at {hint[0]} px)')
+    order = b.eval("['#cell-scan', '#scan-panel', '#cell-sino', '#cell-fbp', '#more-panels', '#objects'].map((s) => Math.round(document.querySelector(s).closest('.panel, .cell, details').getBoundingClientRect().top))")
+    check(order == sorted(order), f'on a phone the scan buttons come right under the scanner, then the sinogram, the reconstruction, the folded panels and the controls (tops {order})')
     cut = b.eval(CUT)
     check(not cut, 'every readout fits at phone width' + (f': {cut[:3]}' if cut else ''))
     h = b.eval('document.documentElement.scrollHeight')
