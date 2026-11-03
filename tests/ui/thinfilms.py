@@ -47,8 +47,32 @@ def keeps_still(b, sel, steps, settle=0.3):
         worst = max([worst] + [abs(x - y) for a, c in zip(r0, r) for x, y in zip(a, c)])
     return worst, compared, seen
 
+def visible_hints(b):
+    """The hint lines on or under the pictures that are shown, with their text."""
+    return b.eval("[...document.querySelectorAll('.hint')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; }).map((e) => e.textContent.trim())")
+
+def first_screen(b, where):
+    """What a cold reader needs on the first screen: hints under every picture, saying what to
+    drag; the readout in words; the stack named; the plots' titles naming the quantity."""
+    hints = visible_hints(b)
+    check(len(hints) == 4 and all(h.startswith('Drag') for h in hints) and any('marker' in h for h in hints)
+          and any("layer's right edge" in h for h in hints) and any('wavelength' in h for h in hints) and any('angle' in h for h in hints),
+          f'{where}: hints under the colour column, the stack and both plots say what to drag ({len(hints)})')
+    ro = b.eval("document.getElementById('readouts').innerText").replace('\n', ' ')
+    check(ro.startswith('Of the light at') and 'reflected R' in ro and 'transmitted T' in ro, f'{where}: the readout has words ({ro[:60]}...)')
+    check(b.eval("document.getElementById('stack-title').textContent") == 'A soap film: the layers, and the light in them', f'{where}: the stack picture is titled "A soap film"')
+    titles = b.eval("[document.getElementById('spec-title').textContent, document.getElementById('x2-title').textContent]")
+    check(titles == ['Reflected fraction R against wavelength', 'R against the angle of incidence'], f'{where}: the plots name what they show {titles}')
+
 with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1.0)
+    first_screen(b, 'opening')
+    # The drawer: "Start here" first, in plain words without equations; the theory at the end.
+    order = b.eval("[...document.querySelectorAll('#help > section, #help > article')].map((e) => e.className)")
+    start = b.eval("document.querySelector('#help .start').innerText")
+    check(order[0] == 'start' and order[-1] == 'theory' and 'math' not in b.eval("document.querySelector('#help .start').innerHTML")
+          and 'Drag' in start and len(start) < 1200, f'the drawer opens with Start here and ends with How it works ({len(order)} parts)')
+    check(b.eval("[...document.querySelectorAll('#presets button')].every((e) => e.title.length > 20)"), 'every stack preset has a tooltip in plain words')
     # It opens on a draining soap film: the film thins by itself.
     d0 = b.eval('__app.state.layers[0].d'); h0 = b.eval('__app.state.film.hBottom')
     frames0 = b.eval('(() => { window.__frames = 0; const f = () => { window.__frames++; requestAnimationFrame(f); }; requestAnimationFrame(f); return 0; })()')
@@ -103,6 +127,26 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     b.mouse('mouseReleased', X(320), y + 39, 0, 'left'); b.sleep(0.3)
     d = b.eval('__app.state.layers[0].d'); p2 = point(b)
     check(300 < d < 340 and p2['Ts'] < p['Ts'] / 2, f"dragging the gap's edge widens it to {d} nm; T_s falls from {p['Ts']:.4f} to {p2['Ts']:.4f}")
+
+    # The grip tab at mid-height of the selected layer's edge, where the hint points: drag it.
+    setup(b, 'soap'); b.eval('__app.setThickness(0, 300)'); b.sleep(0.3)
+    x, y, w, h = b.box('#stack')
+    zl, zh, left, right = b.eval('(() => { const r = __app.zRange(); return [r[0], r[1], 46, document.getElementById("stack").getBoundingClientRect().width - 12]; })()')
+    X = lambda z: x + left + (z - zl) / (zh - zl) * (right - left)
+    ymid = y + 30 + (h - 30 - 34) / 2
+    b.mouse('mouseMoved', X(300), ymid)
+    check(b.eval("document.getElementById('stack').style.cursor") == 'ew-resize', 'pointing at the grip tab shows a resize cursor')
+    b.mouse('mousePressed', X(300), ymid, 1, 'left')
+    for i in range(1, 11): b.mouse('mouseMoved', X(300 + 20 * i), ymid, 1, 'left')
+    b.mouse('mouseReleased', X(500), ymid, 0, 'left'); b.sleep(0.3)
+    d = b.eval('__app.state.layers[0].d')
+    check(480 < d < 520 and not b.eval('__app.state.film.running'), f'dragging the grip tab sets the thickness ({d} nm) and stops the draining')
+    check(b.eval("document.getElementById('stack-title').textContent").startswith('A soap film'), 'a thicker soap film is still "A soap film"')
+    b.eval("(() => { const s = document.getElementById('material'); s.value = 'oil'; s.dispatchEvent(new Event('change')); })()"); b.sleep(0.3)
+    check(b.eval("document.getElementById('stack-title').textContent").startswith('Your stack'), 'after changing the material it is "Your stack"')
+    setup(b, 'ar'); b.sleep(1.0)
+    b.goto('thinfilms/index.html' + b.eval('location.hash')); b.wait('window.__app && __app.ready'); b.sleep(0.6)
+    check(b.eval("document.getElementById('stack-title').textContent").startswith('A coated lens'), 'a link to a preset keeps its name in the title')
 
     # 7. The antireflection coating.
     setup(b, 'ar'); p = point(b)
@@ -188,15 +232,15 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     phases = []
     for th in (47.7, 55.3):
         typed_number(b, '#light-box .slider:nth-child(2) input[type=number]', th); b.sleep(0.25)
-        phases.append(readout().split('phase s − p ')[1].split('°')[0])
+        phases.append(readout().split('differ in phase by ')[1].split('°')[0])
     typed_number(b, '#light-box .slider:nth-child(2) input[type=number]', 45); b.sleep(0.25)
     check(phases == ['45.0', '45.0'] and '224 nm' in readout(), f'help, TIR: s-p phase {phases} at 47.7 and 55.3 deg; decay 224 nm at 45 deg')
     setup(b, 'oil'); typed_number(b, '#thick-box input[type=number]', 0.5); b.sleep(0.3)
-    check(readout().startswith('R 2.06%'), 'help, oil: the thinnest oil reflects 2.1% (' + readout()[:8] + ')')
+    check(re.search(r'reflected R\s+2\.06%', readout()) is not None, 'help, oil: the thinnest oil reflects 2.1% (' + readout()[:70] + ')')
     setup(b, 'bragg'); Rs = []
     for N in (1, 2, 3, 5):
         typed_number(b, '#design-sliders .slider:nth-child(2) input[type=number]', N); b.sleep(0.25)
-        Rs.append(round(float(readout().split('  ')[0].split()[1].rstrip('%')), 1))
+        Rs.append(round(float(re.search(r'reflected R\s+([\d.]+)%', readout()).group(1)), 1))
     check(Rs == [76.8, 92.3, 97.6, 99.8], f'help, Bragg mirror: R {Rs} %')
     b.eval("(() => { const s = document.getElementById('design-H'); s.value = 'bk7'; s.dispatchEvent(new Event('change')); })()"); b.sleep(0.3)
     check(round(point(b)['Rs'] * 100) == 15, f"help, Bragg mirror with BK7 for H: R = {point(b)['Rs']:.3f}")
@@ -271,9 +315,18 @@ with Browser('thinfilms/index.html#setup=soap', size=(400, 850)) as b:
     b.screenshot('build/tf-phone.png')
     wide = b.eval('document.documentElement.scrollWidth')
     check(wide <= 400, f'no sideways scrolling on a phone (page {wide} px wide)')
+    first_screen(b, 'phone')
+    film_hint = b.box('#film-hint'); film = b.box('#film-wrap')
+    check(film_hint[1] + film_hint[3] <= 850 and film_hint[1] >= film[1] + film[3] - 1, f'on a phone the hint sits right under the colour column, in view without scrolling (bottom at {film_hint[1] + film_hint[3]:.0f} px)')
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
     # (A new query string, so that the page loads again rather than just changing its hash.)
-    b.goto('thinfilms/index.html?dark#setup=bragg'); b.wait('window.__app && __app.ready'); b.sleep(0.8)
+    b.goto('thinfilms/index.html?dark'); b.wait('window.__app && __app.ready'); b.sleep(0.8)
+    first_screen(b, 'phone, dark')
+    hint_ink, bg = b.eval("[getComputedStyle(document.getElementById('stack-hint')).color, getComputedStyle(document.body).backgroundColor]")
+    start_ink, start_bg = b.eval("(() => { const s = document.querySelector('#help .start'); const c = getComputedStyle(s); return [c.color, c.backgroundColor]; })()")
+    lum = lambda css: sum(int(v) for v in re.findall(r'\d+', css)[:3]) / 3
+    check(lum(hint_ink) - lum(bg) > 80 and lum(start_ink) - lum(start_bg) > 80, f'dark theme: the hint ({hint_ink} on {bg}) and the Start-here block ({start_ink} on {start_bg}) read')
+    b.goto('thinfilms/index.html?dark2#setup=bragg'); b.wait('window.__app && __app.ready'); b.sleep(0.8)
     check(b.eval('__app.state.layers.length') == 11, 'the Bragg mirror on a phone, dark')
     b.screenshot('build/tf-phone-dark.png')
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]

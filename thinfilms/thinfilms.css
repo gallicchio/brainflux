@@ -22,6 +22,10 @@
   min-height: 2.9em; padding: 0 4px; line-height: 1.45;
 }
 .readouts b, .readouts .fixnum.b { color: var(--ink); font-weight: 600; }
+.readouts > span:first-child { color: var(--ink); }
+/* The hints under the pictures: what to drag. */
+.plot-wrap .hint { padding: 2px 8px 6px; }
+.film-col .hint { padding: 0 2px; }
 .readouts .warn { color: var(--warn); }
 .sw { display: inline-block; width: 1.1em; height: 1.1em; border-radius: 3px; vertical-align: -0.2em; border: 1px solid var(--line); margin-right: 3px; }
 
@@ -41,7 +45,9 @@
 .stack-canvas { height: max(190px, calc(37vh - 40px)); }
 .plots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
 .plot-box { display: flex; flex-direction: column; min-width: 0; }
-.plot-canvas { height: max(210px, calc(50vh - 125px)); }
+/* The canvas takes what is left, so that the two plots' hints sit level at the bottom even when
+   one title wraps. */
+.plot-canvas { flex: 1; min-height: max(210px, calc(50vh - 125px)); }
 #stack { cursor: default; }
 #spec, #ang { cursor: ew-resize; }
 
@@ -78,8 +84,11 @@ details.panel[open] summary { margin-bottom: 6px; }
   .tf { grid-template-columns: minmax(0, 1fr); }
   .stage { position: static; }
   .top, .top.nofilm { grid-template-columns: minmax(0, 1fr); }
-  .film-col { display: grid; grid-template-columns: minmax(0, 1fr) 120px; grid-template-rows: auto 1fr; }
-  .film-col .head { grid-column: 1 / -1; }
+  .film-col { display: grid; grid-template-columns: minmax(0, 1fr) 120px; grid-template-rows: auto 1fr auto; }
+  .film-col .head { grid-column: 1 / -1; grid-row: 1; }
+  .film-col .film-wrap { grid-column: 1; grid-row: 2; }
+  .film-col .swatches { grid-column: 2; grid-row: 2; }
+  .film-col .hint { grid-column: 1 / -1; grid-row: 3; }
   .film-wrap { min-height: 220px; height: 220px; }
   .swatches { grid-template-columns: 1fr; align-content: start; }
   .plots { grid-template-columns: minmax(0, 1fr); }

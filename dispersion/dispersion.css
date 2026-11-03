@@ -36,8 +36,10 @@
 #kkim, #kkre { cursor: crosshair; }
 .pics { display: none; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-/* Which plots each view shows, and how tall. */
+/* Which plots each view shows, and how tall; and the hint under each view's main picture. */
 .dsp .plot-wrap { display: none; }
+.dsp .hint { display: none; margin-top: -2px; }
+.dsp[data-view="medium"] #resp-hint, .dsp[data-view="pulse"] #resp-hint, .dsp[data-view="kk"] #kk-hint { display: block; }
 .dsp[data-view="medium"] #resp-wrap { display: block; height: max(250px, calc(37vh - 30px)); }
 .dsp[data-view="medium"] .pics { display: grid; }
 .dsp[data-view="medium"] .pic { display: block; height: 196px; }

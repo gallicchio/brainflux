@@ -32,17 +32,26 @@ const UNITS = {
 const SILICA = [[0.6961663, 18.1253, 1e-4], [0.4079426, 10.6661, 1e-4], [0.8974794, 0.125283, 1e-4]].map(([B, w0, g]) => [w0, g, Math.sqrt(B) * w0]);
 const VISIBLE = { lo: 1.653, hi: 3.263, label: 'visible', rainbow: true };
 // probe: where the light's frequency starts in the medium view.
+// title: what the preset is, in plain words (the button's tooltip).
 const MEDIA = {
-  one: { label: 'One line', units: 'au', wmax: 4, oscs: [[2, 0.2, 1]], probe: 1.6 },
-  weak: { label: 'Weak line', units: 'au', wmax: 4, oscs: [[2, 0.2, 0.2828]], probe: 1.6 },
-  two: { label: 'Two lines', units: 'au', wmax: 4, oscs: [[1.4, 0.12, 0.6], [2.8, 0.25, 0.9]], probe: 2.1 },
+  one: { label: 'One line', units: 'au', wmax: 4, oscs: [[2, 0.2, 1]], probe: 1.6,
+    title: 'One kind of charge on a spring, resonating at ω₀ = 2: the simplest medium' },
+  weak: { label: 'Weak line', units: 'au', wmax: 4, oscs: [[2, 0.2, 0.2828]], probe: 1.6,
+    title: 'The same line, with far fewer charges: a nearly transparent medium (for the pulses)' },
+  two: { label: 'Two lines', units: 'au', wmax: 4, oscs: [[1.4, 0.12, 0.6], [2.8, 0.25, 0.9]], probe: 2.1,
+    title: 'Two kinds of charge, two resonances' },
   glass: { label: 'Fused silica', units: 'eV', wmax: 14, oscs: SILICA, bands: [VISIBLE], probe: 2.2545,
-    lines: [[1.8892, '656 nm (red)'], [2.5506, '486 nm (blue)']] },
-  sodium: { label: 'Sodium', units: 'eV', wmax: 12, oscs: [[0, 0.02, 5.9]], bands: [VISIBLE], probe: 3 },
+    lines: [[1.8892, '656 nm (red)'], [2.5506, '486 nm (blue)']],
+    title: 'Glass: three resonances, two in the ultraviolet and one in the infrared, with the visible between them, where it is transparent' },
+  sodium: { label: 'Sodium', units: 'eV', wmax: 12, oscs: [[0, 0.02, 5.9]], bands: [VISIBLE], probe: 3,
+    title: 'A metal: free electrons with no spring; a mirror below its plasma frequency (5.9 eV), transparent above' },
   ionosphere: { label: 'Ionosphere', units: 'MHz', wmax: 30, oscs: [[0, 0.01, 9]], probe: 1,
-    bands: [{ lo: 0.53, hi: 1.7, label: 'AM' }, { lo: 3, hi: 30, label: 'shortwave' }] },
-  nacl: { label: 'Rock salt', units: 'THz', wmax: 12, epsInf: 2.34, oscs: [[4.9, 0.1, 9.2457]], probe: 6.2 },
-  brillouin: { label: 'Dense (Brillouin)', units: 'au', wmax: 10, oscs: [[4, 0.56, 4.4721]], probe: 2.5 },
+    bands: [{ lo: 0.53, hi: 1.7, label: 'AM' }, { lo: 3, hi: 30, label: 'shortwave' }],
+    title: 'A thin plasma of free electrons high in the air: it reflects AM radio and lets FM through' },
+  nacl: { label: 'Rock salt', units: 'THz', wmax: 12, epsInf: 2.34, oscs: [[4.9, 0.1, 9.2457]], probe: 6.2,
+    title: 'An ionic crystal in the infrared: the vibration of its ions makes it a mirror for one band (Reststrahlen)' },
+  brillouin: { label: 'Dense (Brillouin)', units: 'au', wmax: 10, oscs: [[4, 0.56, 4.4721]], probe: 2.5,
+    title: 'A dense, strongly absorbing medium: Brillouin\'s 1914 numbers, for the precursors of a switched-on wave' },
 };
 
 const TYPED = {
@@ -526,11 +535,11 @@ function drawPictures() {
     const cv = $('#' + id), { ctx, width, height } = fitCanvas(cv), w = state.probe;
     if (id === 'charge') {
       const ch = chargeAt(w), o = ch.osc, many = state.oscs.length > 1;
-      const title = !o ? 'The polarisation P, driven at ω' : o.w0 === 0 ? 'A free charge, driven at ω' : many ? `The charge of line ${state.sel + 1}, driven at ω` : 'A charge on a spring, driven at ω';
+      const title = !o ? 'The polarisation P, driven by the light\'s field E at ω' : o.w0 === 0 ? 'A free charge (no spring), shaken by the light\'s field E at ω' : many ? `The charge of line ${state.sel + 1}, shaken by the light's field E at ω` : 'A charge on a spring, shaken by the light\'s field E at ω';
       drawCharge(ctx, width, height, { phase: anim.phase, amp: ch.amp, lag: ch.lag, free: ch.free, title, colors, polarisation: !o });
     } else {
       const op = optics(resp, Float64Array.of(w));
-      drawWave(ctx, width, height, { n: op.n[0], k: op.k[0], R: op.R[0], phase: anim.phase, colors, title: 'The light at ω, meeting the medium' });
+      drawWave(ctx, width, height, { n: op.n[0], k: op.k[0], R: op.R[0], phase: anim.phase, colors, title: 'The light\'s wave at ω, entering the medium' });
     }
   }
 }
@@ -1354,9 +1363,15 @@ const viewSeg = segmented([
 ], state.view, (v) => setView(v), { label: 'View' });
 $('#view-row').append(viewSeg);
 
+// The hint under the top plot says what to drag in this view (the Kramers–Kronig view has its own).
+const RESP_HINTS = {
+  medium: 'Drag the square handle (or anywhere on the plot) to set the light\'s frequency; drag the ● to move the line, up to strengthen it, and a ◇ to widen it',
+  pulse: 'Drag the carrier\'s square handle to tune the pulse; the detector z slider sets how far it travels; Pause holds the pictures below',
+};
 function setView(v) {
   state.view = v; viewSeg.value = v;
   $('#main').dataset.view = v;
+  if (RESP_HINTS[v]) $('#resp-hint').textContent = RESP_HINTS[v];
   ngToggle.hidden = v !== 'pulse'; sumToggle.hidden = v !== 'medium';
   if (v === 'pulse') { $('#play').textContent = state.playing ? 'Pause' : 'Play'; ensurePropagator(); if (anim.t < -1e8) restartRun(); }
   dirty(); scheduleHash();
@@ -1365,7 +1380,7 @@ function setView(v) {
 // Media.
 const mediaButtons = {};
 for (const [id, m] of Object.entries(MEDIA)) {
-  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => {
+  const b = el('button', { type: 'button', 'aria-pressed': 'false', title: m.title || '', onclick: () => {
     const w0 = state.wmax;
     loadMedium(id);
     // The pulse keeps its place relative to the plotted range of frequencies.
@@ -1397,8 +1412,10 @@ function loadMedium(id, { keepUnits = false } = {}) {
 
 // Source: oscillators, a typed χ, or drawn.
 $('#back-row').append(el('button', { type: 'button', title: 'Forget the drawing and go back to the oscillators', onclick: () => setSource('osc') }, 'Back to the oscillators'));
-const sourceSeg = segmented([{ value: 'osc', label: 'Oscillators' }, { value: 'typed', label: 'Typed χ(ω)' }], 'osc',
-  (v) => setSource(v), { label: 'Medium made of' });
+const sourceSeg = segmented([
+  { value: 'osc', label: 'Oscillators', title: 'The medium is made of charges on springs: one line each, set by the chips and sliders below' },
+  { value: 'typed', label: 'Typed χ(ω)', title: 'Type the susceptibility χ(ω) as a formula instead (the polarisation P = ε₀ χ E)' },
+], 'osc', (v) => setSource(v), { label: 'Medium made of' });
 $('#source-row').append(sourceSeg);
 
 function setSource(v, fire = true) {
@@ -1420,14 +1437,14 @@ function rebuildOscUI() {
   const chips = $('#osc-chips');
   chips.textContent = '';
   state.oscs.forEach((o, j) => {
-    const b = el('button', { type: 'button', 'aria-pressed': String(j === state.sel), title: o.w0 === 0 ? 'Free electrons' : `Line ${j + 1}`, onclick: () => selectOsc(j) },
+    const b = el('button', { type: 'button', 'aria-pressed': String(j === state.sel), title: o.w0 === 0 ? 'Free electrons: charges with no spring, as in a metal' : `Line ${j + 1}: one kind of charge on a spring (select it to set its sliders)`, onclick: () => selectOsc(j) },
       el('span', { class: 'swatch', style: o.w0 === 0 ? { background: 'var(--re)' } : {} }), o.w0 === 0 ? 'free' : String(j + 1));
     chips.append(b);
   });
   chips.append(
-    el('button', { type: 'button', title: 'Add a resonance (bound charges)', onclick: () => addOsc(false) }, '+ line'),
-    el('button', { type: 'button', title: 'Add free electrons (a Drude term)', onclick: () => addOsc(true) }, '+ free'),
-    el('button', { type: 'button', title: 'Remove the selected one', disabled: state.oscs.length === 0, onclick: removeOsc }, 'remove'),
+    el('button', { type: 'button', title: 'Add a line: another kind of charge on a spring, with a resonance of its own', onclick: () => addOsc(false) }, '+ line'),
+    el('button', { type: 'button', title: 'Add free electrons: charges with no spring, as in a metal or a plasma (a Drude term)', onclick: () => addOsc(true) }, '+ free'),
+    el('button', { type: 'button', title: 'Remove the selected line or the free electrons', disabled: state.oscs.length === 0, onclick: removeOsc }, 'remove'),
   );
   const box = $('#osc-sliders');
   box.textContent = '';
@@ -1437,9 +1454,9 @@ function rebuildOscUI() {
   const W = state.wmax, set = (k) => (v) => { const q = state.oscs[state.sel]; if (q) { q[k] = v; rebuild(); } };
   oscSliders = {
     // (Each track covers the present value: glass has lines 1e-4 wide and far above the plot.)
-    w0: slider({ label: '<math><msub><mi>ω</mi><mn>0</mn></msub></math>', labelHTML: true, min: 0.01 * W, max: Math.max(W, o.w0), value: o.w0, title: 'The resonance: the natural frequency of the charge on its spring', onInput: set('w0') }),
-    g: slider({ label: '<math><mi>γ</mi></math>', labelHTML: true, min: Math.min(1e-4 * W, Math.max(o.g, 1e-9)), max: Math.max(W, o.g), log: true, value: Math.max(o.g, 1e-9), title: 'The damping rate: the width of the line', onInput: set('g') }),
-    wp: slider({ label: '<math><msub><mi>ω</mi><mi>p</mi></msub></math>', labelHTML: true, min: 0, max: Math.max(1.5 * W, 1.2 * o.wp), value: o.wp, title: 'Its strength: ω_p² = N q²/ε₀m for these charges (times their oscillator strength f)', onInput: set('wp') }),
+    w0: slider({ label: 'resonance <math><msub><mi>ω</mi><mn>0</mn></msub></math>', labelHTML: true, min: 0.01 * W, max: Math.max(W, o.w0), value: o.w0, title: 'The resonance: the natural frequency of the charge on its spring', onInput: set('w0') }),
+    g: slider({ label: 'width <math><mi>γ</mi></math>', labelHTML: true, min: Math.min(1e-4 * W, Math.max(o.g, 1e-9)), max: Math.max(W, o.g), log: true, value: Math.max(o.g, 1e-9), title: 'The damping rate: the width of the line', onInput: set('g') }),
+    wp: slider({ label: 'strength <math><msub><mi>ω</mi><mi>p</mi></msub></math>', labelHTML: true, min: 0, max: Math.max(1.5 * W, 1.2 * o.wp), value: o.wp, title: 'Its strength, from how many charges there are: ω_p² = N q²/ε₀m (times their oscillator strength f)', onInput: set('wp') }),
   };
   oscSliders.w0.hidden = o.w0 === 0;
   box.append(oscSliders.w0, oscSliders.g, oscSliders.wp);
@@ -1498,7 +1515,7 @@ function syncRangeSliders() {
   epsInfSlider.value = state.epsInf; wmaxSlider.setRange(MEDIA[state.medium]?.wmax / 5 || 0.5, (MEDIA[state.medium]?.wmax || 20) * 5); wmaxSlider.value = state.wmax;
   probeSlider.setRange(0.002 * state.wmax, state.wmax); probeSlider.value = state.probe;
   // The light's frequency by the medium's own name for it (ħω in eV, f in MHz, ν in THz).
-  probeSlider.querySelector('label').innerHTML = `<math>${{ au: '<mi>ω</mi>', eV: '<mi>ħ</mi><mi>ω</mi>', MHz: '<mi>f</mi>', THz: '<mi>ν</mi>' }[state.units]}</math>`;
+  probeSlider.querySelector('label').innerHTML = `frequency <math>${{ au: '<mi>ω</mi>', eV: '<mi>ħ</mi><mi>ω</mi>', MHz: '<mi>f</mi>', THz: '<mi>ν</mi>' }[state.units]}</math>`;
 }
 function setRange(v) {
   state.wmax = v;
@@ -1553,10 +1570,10 @@ const shapeSeg = segmented([
   { value: 'step', label: 'Switched on', title: 'A carrier switched on suddenly at t = 0 (Sommerfeld and Brillouin)' },
 ], state.pulse.shape, (v) => { state.pulse.shape = v; syncPulseSliders(); propKey = ''; fitView(); }, { label: 'Pulse shape' });
 $('#shape-row').append(shapeSeg);
-const w0Slider = slider({ label: '<math><msub><mi>ω</mi><mi>c</mi></msub></math>', labelHTML: true, min: 0.02, max: 4, value: 1, title: 'The carrier frequency (or drag the carrier on the plot)', onInput: (v) => { state.pulse.w0 = v; pulseChanged(); } });
-const TSlider = slider({ label: 'T', min: 1, max: 100, log: true, value: 20, title: 'The duration: full width at half maximum of |E|²', onInput: (v) => { state.pulse.T = v / U().tS; pulseChanged(); } });
+const w0Slider = slider({ label: 'carrier <math><msub><mi>ω</mi><mi>c</mi></msub></math>', labelHTML: true, min: 0.02, max: 4, value: 1, title: 'The carrier frequency, the frequency of the crests inside the pulse (or drag its handle on the plot)', onInput: (v) => { state.pulse.w0 = v; pulseChanged(); } });
+const TSlider = slider({ label: 'length T', min: 1, max: 100, log: true, value: 20, title: 'The duration: full width at half maximum of |E|²', onInput: (v) => { state.pulse.T = v / U().tS; pulseChanged(); } });
 const tfSlider = slider({ label: 'front', min: -100, max: 0, value: -12, title: 'When the cut front passes z = 0 (the Gaussian peaks at 0)', onInput: (v) => { state.pulse.tf = v / U().tS; pulseChanged(); } });
-const zSlider = slider({ label: 'z', min: 0, max: 200, value: 120, title: 'How deep in the medium the detector is', onInput: (v) => { state.pulse.z = v / U().zS; pulseChanged(); } });
+const zSlider = slider({ label: 'detector z', min: 0, max: 200, value: 120, title: 'How deep in the medium the detector is', onInput: (v) => { state.pulse.z = v / U().zS; pulseChanged(); } });
 $('#pulse-box').append(w0Slider, TSlider, tfSlider, zSlider);
 const frameSeg = segmented([
   { value: 'vac', label: 't − z/c', title: 'Time after a flash of light through vacuum would arrive' },
@@ -1582,16 +1599,18 @@ function syncPulseSliders() {
   TSlider.hidden = P.shape === 'step';
   tfSlider.hidden = P.shape !== 'front';
   shapeSeg.value = P.shape; syncFrame(); logToggle.on = P.log;
-  zSlider.querySelector('label').textContent = u.zu ? `z (${u.zu})` : 'z';
-  TSlider.querySelector('label').textContent = u.tu ? `T (${u.tu})` : 'T';
+  zSlider.querySelector('label').textContent = u.zu ? `detector z (${u.zu})` : 'detector z';
+  TSlider.querySelector('label').textContent = u.tu ? `length T (${u.tu})` : 'length T';
   tfSlider.querySelector('label').textContent = u.tu ? `front (${u.tu})` : 'front';
 }
 function pulseChanged() { cache.ng0 = undefined; traceCache = null; anim.crest = null; dirty(); scheduleHash(); if (!drag) checkView(); }
 
 // Show.
-const displaySeg = segmented([{ value: 'n', label: 'n, κ' }, { value: 'eps', label: 'ε′, ε″' }], state.display,
-  (v) => { state.display = v; state.yRange = null; dirty(); scheduleHash(); }, { label: 'Plot' });
-const ngToggle = toggle('n_g', state.showNg, (on) => { state.showNg = on; dirty(); scheduleHash(); }, 'The group index n_g = n + ω dn/dω (in the pulse view)');
+const displaySeg = segmented([
+  { value: 'n', label: 'n, κ', title: 'The index n (the crests move at c/n) and the absorption index κ (the wave fades by 1/e in c/κω): ñ = n + iκ' },
+  { value: 'eps', label: 'ε′, ε″', title: 'The dielectric function instead: ε = ñ² = 1 + χ, its real part ε′ and imaginary part ε″ (the absorption)' },
+], state.display, (v) => { state.display = v; state.yRange = null; dirty(); scheduleHash(); }, { label: 'Plot' });
+const ngToggle = toggle('n_g', state.showNg, (on) => { state.showNg = on; dirty(); scheduleHash(); }, 'The group index n_g = n + ω dn/dω: the envelope of a pulse moves at c/n_g (in the pulse view)');
 const sumToggle = toggle('Sum rule', state.showSum, (on) => { state.showSum = on; dirty(); scheduleHash(); }, 'The f-sum rule: ∫ ω ε″ dω = (π/2) ω_p², in the read-out');
 $('#shows').append(displaySeg, ngToggle, sumToggle);
 

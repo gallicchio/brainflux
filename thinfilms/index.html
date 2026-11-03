@@ -22,23 +22,27 @@
     <div class="readouts mono small" id="readouts" aria-live="off"></div>
     <div class="top" id="top">
       <div class="film-col" id="film-col">
-        <div class="head"><h2>White light</h2><span class="spacer"></span><span id="film-view"></span></div>
-        <div class="film-wrap" id="film-wrap"><canvas id="film" aria-label="The colour of the stack in white light as the selected layer's thickness varies from top to bottom: click to choose a thickness"></canvas></div>
+        <div class="head"><h2>Colour in white light</h2><span class="spacer"></span><span id="film-view"></span></div>
+        <div class="film-wrap" id="film-wrap"><canvas id="film" aria-label="The colour of the stack in white light as the selected layer's thickness grows from top to bottom: drag the marker to choose a thickness"></canvas></div>
+        <div class="hint" id="film-hint">Drag the marker to read the colour at a thickness</div>
         <div class="swatches" id="swatches"></div>
       </div>
       <div class="right-col">
         <div class="plot-wrap stack-box">
-          <div class="head"><h2>The stack, and the light in it</h2><span class="spacer"></span><span id="field-mode"></span><span id="field-pol"></span></div>
-          <div class="stack-canvas"><canvas id="stack" tabindex="0" aria-label="The layers, with the field inside them: click a layer to select it, drag a boundary to change a thickness; arrow keys: left and right change the thickness, up and down select a layer"></canvas></div>
+          <div class="head"><h2 id="stack-title">The stack, and the light in it</h2><span class="spacer"></span><span id="field-mode"></span><span id="field-pol"></span></div>
+          <div class="stack-canvas"><canvas id="stack" tabindex="0" aria-label="The layers, with the field inside them: click a layer to select it, drag its right-hand edge to change its thickness; arrow keys: left and right change the thickness, up and down select a layer"></canvas></div>
+          <div class="hint" id="stack-hint">Drag the layer's right edge (or the thickness slider) to change its thickness; click a layer to select it</div>
         </div>
         <div class="plots">
           <div class="plot-wrap plot-box">
-            <div class="head"><h2>Against wavelength</h2><span class="spacer"></span><span class="small muted" id="spec-note"></span></div>
+            <div class="head"><h2 id="spec-title">Reflected fraction R against wavelength</h2><span class="spacer"></span><span class="small muted" id="spec-note"></span></div>
             <div class="plot-canvas"><canvas id="spec" aria-label="Reflectance, transmittance and absorptance against wavelength: drag to choose the wavelength"></canvas></div>
+            <div class="hint" id="spec-hint">Drag on the plot to change the wavelength</div>
           </div>
           <div class="plot-wrap plot-box">
-            <div class="head"><h2 id="x2-title">Against angle</h2><span class="spacer"></span><span id="x2-seg"></span></div>
+            <div class="head"><h2 id="x2-title">R against angle</h2><span class="spacer"></span><span id="x2-seg"></span></div>
             <div class="plot-canvas"><canvas id="ang" aria-label="Reflectance, transmittance and absorptance against the angle of incidence, or against the selected layer's thickness: drag to choose"></canvas></div>
+            <div class="hint" id="ang-hint">Drag on the plot to change the angle of incidence</div>
           </div>
         </div>
       </div>
@@ -50,10 +54,11 @@
       <div class="label">Light</div>
       <div id="light-box" class="stack"></div>
       <div class="row" id="pol-box"></div>
+      <div class="note">s: <i>E</i> along the surface (solid lines); p: <i>E</i> in the plane of incidence (dashed).  Unpolarised light is half of each.</div>
     </div>
 
     <div class="panel">
-      <div class="label">Stacks</div>
+      <div class="label">Stacks to try</div>
       <div id="presets" class="button-grid"></div>
     </div>
 
@@ -68,11 +73,13 @@
       <div id="index-note" class="note"></div>
       <div id="thick-box"></div>
       <div class="row" id="layer-buttons"></div>
+      <div class="note" id="wave-note">¼ wave: a quarter of the wavelength inside the layer, <i>d</i> = λ/4<i>n</i> (its two reflections then come back half a wave apart); ½ wave: twice that.</div>
     </div>
 
     <details class="panel" id="design-panel">
       <summary class="label">Design a coating</summary>
       <div class="stack">
+        <div class="note">Write the stack as letters: H and L are quarter-wave layers of two materials (thickness λ₀/4<i>n</i>), 2L a half wave, (…)^N repeats.  The light arrives from the left.</div>
         <div class="design-line"><label for="design-text">Layers</label><input type="text" id="design-text" spellcheck="false" autocomplete="off" value="(HL)^N H"></div>
         <div class="err" id="design-err"></div>
         <div class="pair">
@@ -82,12 +89,11 @@
         </div>
         <div id="design-sliders" class="stack"></div>
         <div class="row"><button type="button" id="design-build" class="primary">Build it</button></div>
-        <div class="note">H, L and M are quarter-wave layers at λ₀ (thickness λ₀/4n); 2L is a half wave; (…)^N repeats.  The light arrives from the left.</div>
       </div>
     </details>
 
     <div class="panel">
-      <div class="label">Show</div>
+      <div class="label">Show in the plots</div>
       <div class="row" id="show-box"></div>
     </div>
 
@@ -105,72 +111,83 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>Light arrives from the left on a stack of flat layers.  At every interface part of it is
-  reflected and part goes on; inside each layer the waves bouncing back and forth add up with
-  phases set by the layer's thickness, its index and the wavelength.  The plots show the
-  fractions reflected ($R$, blue), transmitted ($T$, orange) and absorbed ($A$, green), for s
-  polarisation ($\vec E$ parallel to the surface: solid lines) and p ($\vec E$ in the plane of
-  incidence: dashed).  The top panel draws the layers and the light in them: $|\vec E|^2$ in units
-  of the incoming wave's.  The picture headed <em>White light</em> is the colour of the stack in white light,
-  as the eye sees it, while the selected layer's thickness grows from top to bottom; the swatches
-  under it are the stack as it is, brightened to show its colour, with the fraction of the light
-  really reflected and transmitted.</p>
-  <p>Click a layer to select it and drag its right-hand edge to change its thickness, or use
-  the slider.  Drag across a plot to change the wavelength, the angle or the thickness.  Any
-  material can be typed as a formula $n(\lambda)$, with $\lambda$ in micrometres and $i$ for the
-  imaginary part; every new symbol gets a slider.</p>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>Light comes in from the left and meets a stack of flat layers; the page shows how much of
+    it is reflected and transmitted, and the colour that makes.  It opens on a soap film in air,
+    draining and thinning as a real one does.</p>
+    <p><b>Drag the layer's right edge</b> in the stack picture (or the thickness slider) to make
+    the film thicker or thinner, and watch the reflected fraction <i>R</i> and the colour swatch
+    change together.  <b>Drag on a plot</b> to change the wavelength or the angle; <b>drag the
+    marker</b> on the colour column to read the colour at any thickness.</p>
+    <p>Look for this: each thickness picks out its own colours, and a film thinner than about
+    25 nm reflects almost nothing.  The buttons under <em>Stacks to try</em> load the other
+    experiments below.</p>
+  </section>
 
   <article class="exp" data-setup="soap">
-    <h3>1. A soap film</h3>
-    <p>A vertical soap film drains: it is thinnest at the top and grows thicker downwards.  Light
-    reflected from its front and back surfaces interferes, and a wavelength is reflected strongly
-    when the round trip $2nd$ is a whole number of wavelengths plus a half (the half from the
-    front reflection, which flips the sign, the back one does not).  So each thickness picks out
-    its own colours.  Watch the bands move down as the film thins.  At the top, thinner than
-    about 25 nm, the film turns black: the two reflections cancel.  Real films do this just
-    before they burst.  Click the film to see the spectrum at any height.</p>
+    <h3>1. A soap film: colours that move as it drains</h3>
+    <p><b>Set it up:</b> a film of water in air, draining: thinnest at the top, thicker downwards,
+    and thinning as time passes.  Watch the colour column: the bands move down as the film
+    thins, and the top turns black.  Drag the marker to any height and the stack picture, the
+    plots and the swatches show that thickness.</p>
+    <p>Why: light reflected from the front and back surfaces interferes.  The front reflection
+    (air to water) flips the sign, the back one (water to air) does not, so a wavelength is
+    reflected strongly when the round trip $2nd$ is a whole number of wavelengths plus a half,
+    and each thickness picks out its own colours.  Thinner than about 25 nm, the two reflections
+    cancel for every colour and the film is black: real films do this just before they burst.</p>
   </article>
 
   <article class="exp" data-setup="fresnel">
-    <h3>2. Reflection from glass</h3>
-    <p>Bare BK7 glass in air.  At normal incidence it reflects
-    $R=\left(\frac{n_1-n_2}{n_1+n_2}\right)^2$, 4.2% of the light, for either polarisation.
-    Drag the angle up: $R_s$ rises steadily to 1 at grazing incidence, while $R_p$ first falls
-    to zero and then rises.  That is why a lake reflects the sky so well when you look across it.
-    In front of the glass the incident and reflected waves make a weak standing wave.</p>
+    <h3>2. Reflection from glass: 4% head-on, more at a glancing angle</h3>
+    <p><b>Set it up:</b> bare BK7 glass in air, no layers.  Read the readout: at normal incidence
+    it reflects 4.2% of the light, for either polarisation.  Now drag the angle up on the
+    right-hand plot: $R_s$ (solid) rises steadily to 1 at grazing incidence, while $R_p$ (dashed)
+    first falls to zero and then rises.</p>
+    <p>Why: at normal incidence $R=\left(\frac{n_1-n_2}{n_1+n_2}\right)^2$, which the glass's
+    $n=1.52$ makes 4.2%.  The rise at glancing angles is why a lake reflects the sky so well when
+    you look across it.  In front of the glass the incident and reflected waves make a weak
+    standing wave: see the ripple in the stack picture.</p>
   </article>
 
   <article class="exp" data-setup="brewster">
-    <h3>3. Brewster's angle</h3>
-    <p>At $\tan\theta_B=n_2/n_1$ (56.6° for this glass) p-polarised light is not reflected at all:
-    $R_p=0$.  The reflected light is then purely s-polarised, which is why polarising sunglasses,
-    whose axis is vertical, cut the glare from water and roads.  At this angle the refracted and
-    reflected rays would be at right angles, and the dipoles in the glass, driven along the
-    p-field, do not radiate along their own axis.</p>
+    <h3>3. Brewster's angle: no reflection of p light at 56.6°</h3>
+    <p><b>Set it up:</b> the same glass, with the angle set to 56.6°.  The readout gives
+    $R_p=0$: p-polarised light is not reflected at all, and the reflected light is purely
+    s-polarised.  Drag the angle a little either way and $R_p$ comes back.</p>
+    <p>Why: $\tan\theta_B=n_2/n_1$.  At this angle the refracted and reflected rays would be at
+    right angles, and the dipoles in the glass, driven along the p-field, do not radiate along
+    their own axis.  Polarising sunglasses, whose axis is vertical, cut the glare from water and
+    roads because it is s-polarised.</p>
   </article>
 
   <article class="exp" data-setup="tir">
-    <h3>4. Total internal reflection</h3>
-    <p>Now the light is inside the glass, going out into air.  Beyond the critical angle
-    $\sin\theta_c=n_2/n_1$ (41.2°) everything comes back, $R=1$ for both polarisations.  Yet the
-    field does not stop at the surface: it reaches into the air as an evanescent wave that
-    decays as $e^{-\kappa z}$, with
-    $\kappa=\frac{2\pi}{\lambda}\sqrt{n_1^2\sin^2\theta-n_2^2}$.  The readout gives its decay
-    length $1/\kappa$, 147 nm at 50° (the plot shows $|\vec E|^2$, which falls twice as fast,
-    by $1/e$ in 74 nm): drag the angle towards $\theta_c$ and watch it reach farther (224 nm at
-    45°).  It carries no energy away.  The readout also gives the phase
-    difference between the reflected s and p waves, which is 45° at 47.7° and at 55.3°: Fresnel
-    cut a glass rhomb so that light inside it is reflected twice at such an angle, adding up to a
-    quarter wave, which turns linear polarisation into circular.</p>
+    <h3>4. Total internal reflection, and the wave that leaks out anyway</h3>
+    <p><b>Set it up:</b> the light is now inside the glass, going out into air at 50°.  The
+    readout says $R=1$ for both polarisations, and the stack picture shows the field reaching
+    into the air and dying away.  Drag the angle towards the critical angle, 41.2°: the field
+    reaches farther (the readout gives its decay length, 147 nm at 50°, 224 nm at 45°).  Below
+    the critical angle, towards 0°, light gets out again.</p>
+    <p>Why: beyond $\sin\theta_c=n_2/n_1$ nothing can propagate in the air, but the field does
+    not stop at the surface: it goes on as an <em>evanescent wave</em>, decaying as
+    $e^{-\kappa z}$ with $\kappa=\frac{2\pi}{\lambda}\sqrt{n_1^2\sin^2\theta-n_2^2}$ (the plot
+    shows $|\vec E|^2$, which falls twice as fast, by $1/e$ in 74 nm at 50°).  It carries no
+    energy away.  The readout also gives the phase difference between the reflected s and p
+    waves, 45° at 47.7° and at 55.3°: Fresnel cut a glass rhomb so that light is reflected twice
+    inside it at such an angle, adding up to a quarter wave, which turns linear polarisation into
+    circular.</p>
   </article>
 
   <article class="exp" data-setup="ftir">
-    <h3>5. Frustrated total internal reflection</h3>
-    <p>Bring a second glass block close: a gap of air between two prisms, at 45°, beyond the
-    critical angle.  When the gap is thinner than the evanescent wave's reach, light tunnels
-    across it.  The right-hand plot is $T$ against the gap, on a log scale: a straight line,
-    $T\propto e^{-2\kappa d}$.  This is exactly the mathematics of a quantum particle tunnelling
-    through a barrier: for s polarisation $E$ obeys
+    <h3>5. Light tunnelling across an air gap</h3>
+    <p><b>Set it up:</b> two glass blocks with a 200 nm gap of air between them, at 45°, beyond
+    the critical angle.  The right-hand plot is now $T$ against the gap, on a log scale: a
+    straight line.  Drag the gap's right edge in the stack picture to widen it and watch $T$
+    fall; narrow it to nothing and everything gets through.</p>
+    <p>Why: when the gap is thinner than the evanescent wave's reach, light tunnels across it,
+    $T\propto e^{-2\kappa d}$ (frustrated total internal reflection).  This is exactly the
+    mathematics of a quantum particle tunnelling through a barrier: for s polarisation $E$ obeys
     $E''+k_0^2\left(n^2-n_1^2\sin^2\theta\right)E=0$, the Schrödinger equation with the air gap
     as a region where the "energy" is below the "potential", and $T$ is the barrier formula
     $T=\left[1+\frac{(k^2+\kappa^2)^2}{4k^2\kappa^2}\sinh^2\kappa d\right]^{-1}$.  Some beam
@@ -178,109 +195,144 @@
   </article>
 
   <article class="exp" data-setup="oil">
-    <h3>6. Oil on water</h3>
-    <p>A film of oil ($n=1.47$) spreading on water ($n=1.33$), thinning towards its edge
-    (the picture is a wedge, thickening downwards).  The index rises at the top surface and falls
-    at the bottom one, as for the soap film, so the two reflections have opposite signs and the
-    thinnest oil reflects least.  But the reflection from the oil–water surface is weak (the two
-    indices are close), so the cancellation is only partial: the thinnest oil reflects 2.1%, just
-    as bare water does, and the colours, which repeat each time the thickness grows by half a
-    wavelength in the oil, are paler than a soap film's.  On a wet road the dark asphalt
-    underneath makes them stand out.</p>
+    <h3>6. Oil on water: paler colours than a soap film's</h3>
+    <p><b>Set it up:</b> a film of oil ($n=1.47$) on water ($n=1.33$), as a wedge thickening
+    downwards from nothing to 1.2 µm.  Compare the colour column with the soap film's: the
+    colours are paler, and the top is not black.  Drag the thickness down to nothing:
+    the readout gives 2.1%, just what bare water reflects.</p>
+    <p>Why: the index rises at the top surface and falls at the bottom one, as for the soap
+    film, so the two reflections have opposite signs; but the reflection from the oil–water
+    surface is weak (the two indices are close), so the cancellation is only partial, and the
+    colours, which repeat each time the thickness grows by half a wavelength in the oil, are
+    washed out.  On a wet road the dark asphalt underneath makes them stand out.</p>
   </article>
 
   <article class="exp" data-setup="ar">
-    <h3>7. An antireflection coating</h3>
-    <p>A quarter-wave layer of MgF₂ on glass.  The waves reflected from its two surfaces come back
-    half a wavelength apart and nearly cancel.  They would cancel exactly if $n_1=\sqrt{n_0n_2}$;
-    with MgF₂ ($n=1.38$) on BK7,
-    $R=\left(\frac{n_0n_2-n_1^2}{n_0n_2+n_1^2}\right)^2$, 1.25% at the design wavelength, 550 nm,
-    instead of 4.2% (the plot is on a log scale).  It works only near one wavelength, so blue and
-    red are reflected more than green: the purple reflections of coated camera lenses and
-    spectacles.  The picture on the left shows the colour as the coating thickens from nothing
-    to 400 nm; 100 nm is the quarter wave.</p>
+    <h3>7. An antireflection coating: a quarter wave of MgF₂ on glass</h3>
+    <p><b>Set it up:</b> glass with a 100 nm layer of magnesium fluoride on it, the plots on a
+    log scale.  The readout gives $R=1.25\%$ at 550 nm instead of the bare glass's 4.2%, and the
+    reflected swatch is purple.  Drag the layer's edge: the dip in $R$ against wavelength moves
+    with the thickness, and at 0 nm you have bare glass again.  The colour column shows the
+    coating thickening from nothing to 400 nm; 100 nm is the quarter wave.</p>
+    <p>Why: the waves reflected from the coating's two surfaces come back half a wavelength apart
+    and nearly cancel.  They would cancel exactly if $n_1=\sqrt{n_0n_2}$; with MgF₂ ($n=1.38$)
+    on BK7, $R=\left(\frac{n_0n_2-n_1^2}{n_0n_2+n_1^2}\right)^2$ at the design wavelength.  It
+    works only near one wavelength, so blue and red are reflected more than green: the purple
+    reflections of coated camera lenses and spectacles.</p>
   </article>
 
   <article class="exp" data-setup="bragg">
-    <h3>8. A Bragg mirror</h3>
-    <p>Alternate quarter-wave layers of TiO₂ and SiO₂: every reflection comes back in step, and
-    with $N$ pairs the peak reflectance is
+    <h3>8. A Bragg mirror: many weak reflections that add up</h3>
+    <p><b>Set it up:</b> eleven alternate quarter-wave layers of TiO₂ and SiO₂ on glass, built
+    by the <em>Design a coating</em> panel as <code>(HL)^N H</code> with $N=5$.  The readout
+    gives $R=99.8\%$ at 550 nm, and the plot against wavelength shows a band of high reflection,
+    the <em>stop band</em>, from about 460 to 680 nm.  Slide $N$ in the design panel: 1, 2, 3 and
+    5 pairs give 76.8%, 92.3%, 97.6% and 99.8%.  Then drag the angle up: the band moves to
+    shorter wavelengths.</p>
+    <p>Why: every reflection comes back in step, and with $N$ pairs the peak reflectance is
     $$R=\left(\frac{n_0n_L^{2N}-n_sn_H^{2N}}{n_0n_L^{2N}+n_sn_H^{2N}}\right)^2$$
-    for $(HL)^N$ on a substrate of index $n_s$, which approaches 1 quickly.  Here, with one more
-    H layer on top, the readout gives 76.8%, 92.3%, 97.6% and 99.8% for 1, 2, 3 and 5 pairs: open
-    <em>Design a coating</em> and slide $N$.  The band of high reflection, the stop band, has a
-    width set by the index contrast,
-    $\frac{\Delta\lambda}{\lambda_0}\approx\frac{4}{\pi}\arcsin\frac{n_H-n_L}{n_H+n_L}$, here
-    about 460 to 680 nm: choose BK7 glass ($n=1.52$) for H, close to SiO₂, and it shrinks to a
-    sliver whose peak reflects only 15%.  Tilt the mirror and the band moves to shorter wavelengths, as the colours of a
-    beetle's shell or a peacock feather change with the angle.  Inside the mirror the field dies
-    away layer by layer: the band gap of a one-dimensional crystal.</p>
+    for $(HL)^N$ on a substrate of index $n_s$, which approaches 1 quickly.  The width of the
+    band is set by the index contrast,
+    $\frac{\Delta\lambda}{\lambda_0}\approx\frac{4}{\pi}\arcsin\frac{n_H-n_L}{n_H+n_L}$: choose
+    BK7 glass ($n=1.52$) for H, close to SiO₂, and it shrinks to a sliver whose peak reflects
+    only 15%.  The shift with angle is why a beetle's shell or a peacock feather changes colour
+    as you turn it.  Inside the mirror the field dies away layer by layer: the band gap of a
+    one-dimensional crystal.</p>
   </article>
 
   <article class="exp" data-setup="filter">
-    <h3>9. A narrow-band filter</h3>
-    <p>Two Bragg mirrors with a half-wave spacer between them, <code>(HL)^N 2H (LH)^N</code>: a
-    Fabry–Pérot cavity.  Inside the stop band, where each mirror alone reflects almost
-    everything, a single sharp line gets through, 1.12 nm wide.  At that wavelength the light
-    builds up between the mirrors (see the field: 74 times the incoming $|E|^2$) until what leaks
-    out of the far side equals what comes in.  Each extra pair makes the line narrower by about
-    $(n_H/n_L)^2$, 3.3 times: 3.75, 1.12 and 0.34 nm for $N=$ 3, 4 and 5.</p>
+    <h3>9. A narrow-band filter: one sharp line through two mirrors</h3>
+    <p><b>Set it up:</b> two Bragg mirrors with a half-wave spacer between them,
+    <code>(HL)^N 2H (LH)^N</code>.  Inside the stop band, where each mirror alone reflects almost
+    everything, a single sharp line gets through at 550 nm, 1.12 nm wide.  Look at the stack
+    picture: at that wavelength the field between the mirrors is 74 times the incoming $|E|^2$.
+    Drag the wavelength a few nanometres off the line and it collapses.  Slide $N$: each extra
+    pair makes the line narrower, 3.75, 1.12 and 0.34 nm for $N=$ 3, 4 and 5.</p>
+    <p>Why: the two mirrors make a <em>Fabry–Pérot cavity</em>, a space in which light bounces
+    back and forth.  At the wavelength that fits it, the light builds up between the mirrors
+    until what leaks out of the far side equals what comes in.  Each extra pair raises the
+    mirrors' reflectance and narrows the line by about $(n_H/n_L)^2$, 3.3 times.</p>
   </article>
 
   <article class="exp" data-setup="etalon">
-    <h3>10. A Fabry–Pérot etalon</h3>
-    <p>Two thin silver films with 2 µm of air between them.  Transmission peaks wherever the
-    round trip is a whole number of wavelengths, $2d\cos\theta=m\lambda$ (nearly: the reflection
-    from silver adds a phase of its own).  So the peaks are evenly spaced in $1/\lambda$, by
-    $1/2d$, which near a wavelength $\lambda$ is $\Delta\lambda\approx\lambda^2/2d$: 66 nm at
-    514 nm.  The readout measures 63.8 nm, as if the gap were 2.07 µm: the light reaches a little
-    way into the silver before it turns back.  (The plot against thickness shows the same comb as
-    the gap grows: a peak every half wavelength, 275 nm.)  The peaks are sharp because the light
-    bounces many times.  The finesse, peak spacing over peak width, is
-    $\mathcal F\approx\pi\sqrt{R}/(1-R)$ for mirrors of reflectance $R$; seen from inside the gap,
-    each film here reflects $R=82.6\%$ at 514 nm, so $\mathcal F\approx16.4$, and the readout
-    measures 16.4.  Thicken both silver films to 55 nm: $R=90.2\%$, and the finesse rises to 30.4,
-    but the peaks drop from 41% to 16%, because silver absorbs a little at every bounce.</p>
+    <h3>10. A Fabry–Pérot etalon: a comb of transmission peaks</h3>
+    <p><b>Set it up:</b> two thin silver films with 2 µm of air between them.  The plot against
+    wavelength is a comb of peaks, and the right-hand plot, $T$ against the gap, shows the same
+    comb as the gap grows: a peak every half wavelength, 275 nm.  The readout measures the peaks'
+    spacing, 63.8 nm at 514 nm, and the <em>finesse</em>, their spacing over their width: 16.4.
+    Select each silver film in turn and thicken it to 55 nm: the finesse rises to 30.4, but the
+    peaks drop from 41% to 16%.</p>
+    <p>Why: transmission peaks wherever the round trip is a whole number of wavelengths,
+    $2d\cos\theta=m\lambda$ (nearly: the reflection from silver adds a phase of its own).  So the
+    peaks are evenly spaced in $1/\lambda$, by $1/2d$, which near a wavelength $\lambda$ is
+    $\Delta\lambda\approx\lambda^2/2d$: 66 nm at 514 nm.  The measured 63.8 nm is as if the gap
+    were 2.07 µm: the light reaches a little way into the silver before it turns back.  The
+    peaks are sharp because the light bounces many times: $\mathcal F\approx\pi\sqrt{R}/(1-R)$
+    for mirrors of reflectance $R$; seen from inside the gap, each film here reflects
+    $R=82.6\%$ at 514 nm, so $\mathcal F\approx16.4$.  Thicker silver reflects 90.2% and
+    sharpens the peaks, but absorbs a little at every bounce, so they are lower.</p>
   </article>
 
   <article class="exp" data-setup="silver">
-    <h3>11. A silver mirror</h3>
-    <p>Bulk silver reflects over 90% of visible light, nearly evenly (92% at 450 nm, 96% at
-    600 nm), so it looks white: the swatch is neutral.  Its free electrons follow the field and
-    re-radiate it.  In the ultraviolet they can no longer keep up: at the plasma frequency the
-    dielectric constant $\varepsilon=N^2$ passes through zero, here at 324 nm (3.8 eV; the free
-    electrons alone would put it at 9 eV, but the d electrons beneath them pull it down), and the
-    reflectance collapses, to 7% at 309 nm.  Thin silver lets that ultraviolet through.  Against
-    angle, $R_p$ dips to 91% at 71° but never reaches zero: a metal has no true Brewster angle,
-    only this "pseudo-Brewster" angle.  (Real silver reflects a few per cent more than this fit;
-    see below.)</p>
+    <h3>11. A silver mirror, and where it stops working</h3>
+    <p><b>Set it up:</b> bulk silver, with the plot from 280 to 900 nm.  It reflects over 90% of
+    visible light, nearly evenly (92% at 450 nm, 96% at 600 nm), so the reflected swatch is
+    white.  Drag the wavelength into the ultraviolet: the reflectance collapses, to 7% at
+    309 nm.  Then drag the angle: $R_p$ dips to 91% at 71° but never reaches zero.</p>
+    <p>Why: silver's free electrons follow the field and re-radiate it.  In the ultraviolet they
+    can no longer keep up: at the plasma frequency the dielectric constant $\varepsilon=N^2$
+    passes through zero, here at 324 nm (3.8 eV; the free electrons alone would put it at 9 eV,
+    but the d electrons beneath them pull it down).  Thin silver lets that ultraviolet through.
+    A metal has no true Brewster angle, only this "pseudo-Brewster" angle of least $R_p$.  (Real
+    silver reflects a few per cent more than this fit; see <em>How it works</em>.)</p>
   </article>
 
   <article class="exp" data-setup="gold">
-    <h3>12. The colour of gold</h3>
-    <p>Gold's electrons absorb blue and green light (an interband transition of its d
-    electrons), so it reflects mostly yellow and red.  This is a 40 nm gold film on glass: in
-    reflection it is gold, and the light that gets through is green-blue, the colour of gold
-    leaf held up to a lamp.  Switch the picture on the left to <em>transmitted</em>.</p>
+    <h3>12. The colour of gold, in reflection and through</h3>
+    <p><b>Set it up:</b> a 40 nm gold film on glass.  The reflected swatch is gold; switch the
+    colour column to <em>transmitted</em>: the light that gets through is green-blue, the colour
+    of gold leaf held up to a lamp.  Drag the thickness down to 10 nm and up to 120 nm and watch
+    both swatches.</p>
+    <p>Why: gold's electrons absorb blue and green light (an interband transition of its d
+    electrons), so it reflects mostly yellow and red, and what it does not absorb or reflect,
+    the green-blue, is what gets through a film thin enough to leak.</p>
   </article>
 
   <article class="exp" data-setup="spr">
-    <h3>13. A surface plasmon</h3>
-    <p>The Kretschmann geometry: a glass prism, a 50 nm gold film, water behind it, 633 nm
-    light.  At one angle $R_p$ dips sharply: the evanescent wave from the prism matches the
-    wavevector of a surface plasmon, a charge-density wave on the gold–water interface, and
-    the light's energy goes into it and is absorbed (see the field piled up at the gold's far
-    side).  The match is
+    <h3>13. A surface plasmon: a gold film that swallows light at one angle</h3>
+    <p><b>Set it up:</b> a glass prism, a 50 nm gold film, water behind it, red light at 633 nm,
+    arriving at 74.8°.  The plot against angle shows $R_p$ dipping sharply, and the stack picture
+    shows the field piled up at the gold's far side.  The water is selected: move its index
+    $n$ from 1.333 to 1.343 (as when molecules bind to the gold) and the dip moves from 74.8° to
+    76.5°.  In the angle plot $R_s$ (solid) shows no dip: s light cannot do this.</p>
+    <p>Why: this is the Kretschmann geometry.  The evanescent wave from the prism matches the
+    wavevector of a <em>surface plasmon</em>, a charge-density wave running along the gold–water
+    interface, and the light's energy goes into it and is absorbed.  The match is
     $n_\text{glass}\sin\theta=\mathrm{Re}\sqrt{\varepsilon_m\varepsilon_d/(\varepsilon_m+\varepsilon_d)}$,
     with $\varepsilon_d=n^2$ the water's dielectric constant and $\varepsilon_m$ the gold's
     ($-9.8+1.96i$ at 633 nm in this fit): 75.4°; the gold film's coupling to the prism pulls the
     dip a little lower.  The plasmon is a p wave, its $\vec E$ in the plane of incidence, so s
-    light cannot excite it.  The angle depends on the water's index: the water is
-    selected, so move $n$ from 1.333 to 1.343, as when molecules bind to the gold, and the dip
-    moves from 74.8° to 76.5°.  At a fixed angle, the reflected light changes a lot for a tiny
+    light cannot excite it.  At a fixed angle, the reflected light changes a lot for a tiny
     change of index: this is how SPR biosensors weigh molecules.</p>
   </article>
 
+  <section class="theory">
+  <h3>How it works</h3>
+  <p>Light arrives from the left on a stack of flat layers.  At every interface part of it is
+  reflected and part goes on; inside each layer the waves bouncing back and forth add up with
+  phases set by the layer's thickness, its index and the wavelength.  The plots show the
+  fractions reflected ($R$, blue), transmitted ($T$, orange) and absorbed ($A$, green), for s
+  polarisation ($\vec E$ parallel to the surface: solid lines) and p ($\vec E$ in the plane of
+  incidence: dashed).  The stack picture draws the layers and the light in them: $|\vec E|^2$ in
+  units of the incoming wave's, so the dashed line at 1 is the incoming wave alone.  The colour
+  column is the colour of the stack in white light, as the eye sees it, while the selected
+  layer's thickness grows from top to bottom; the swatches under it are the stack as it is,
+  brightened to show its colour, with the fraction of the light really reflected and
+  transmitted.</p>
+  <p>Click a layer to select it and drag its right-hand edge to change its thickness, or use
+  the slider.  Drag across a plot to change the wavelength, the angle or the thickness.  Any
+  material can be typed as a formula $n(\lambda)$, with $\lambda$ in micrometres and $i$ for the
+  imaginary part; every new symbol gets a slider.</p>
   <h3>How it is computed</h3>
   <p>The characteristic-matrix (transfer-matrix) method.  In each layer the field is a wave
   going forward and one going back, $E=a\,e^{ik_zz}+b\,e^{-ik_zz}$ with
@@ -307,6 +359,7 @@
   their colour; the swatches say how much light is really reflected.  The light is unpolarised
   and coherent across each layer: very thick layers would wash out to white in reality, as
   sunlight's coherence length is only a micrometre or so.</p>
+  </section>
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
 </aside>

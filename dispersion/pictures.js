@@ -112,9 +112,11 @@ export function drawCharge(ctx, W, H, o) {
   ctx.fillStyle = c.ink3; ctx.textAlign = 'left'; ctx.fillText('time →', tx0, yc + th + 9);
   // ---- in numbers, and in words
   ctx.font = FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = c.ink;
+  // (The amplitude in units of the static pull, qE/mω₀², what a steady field would pull it.)
   const ampParts = o.polarisation ? [' · |χ| = ', { v: o.amp, dec: 3, w: 6, tiny: true }]
-    : o.free ? [' · amplitude ', { v: o.amp, dec: 2, w: 6, tiny: true }, ' × qE/mω_p²'] : [' · amplitude ', { v: o.amp, dec: 2, w: 6, tiny: true }, ' × the static pull'];
-  fillSlots(ctx, [`${xName} lags E by δ = `, { v: o.lag * DEG, dec: 0, w: 4 }, '°', ...ampParts], 10, H - 24);
+    : o.free ? [' · swings ', { v: o.amp, dec: 2, w: 6, tiny: true }, ' × qE/mω_p²']
+    : narrow ? [' · swings ', { v: o.amp, dec: 2, w: 6, tiny: true }, ' × the static pull'] : [' · swings ', { v: o.amp, dec: 2, w: 6, tiny: true }, ' × as far as a steady E would pull it'];
+  fillSlots(ctx, [`${o.polarisation ? 'P' : 'its ' + xName} lags E by δ = `, { v: o.lag * DEG, dec: 0, w: 4 }, '°', ...ampParts], 10, H - 24);
   ctx.fillStyle = c.ink2;
   ctx.fillText(lagVerdict(o.lag), 10, H - 8);
   ctx.restore();
