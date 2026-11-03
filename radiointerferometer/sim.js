@@ -110,6 +110,7 @@ export class Simulation {
     this.avgHbt = 0;                   // and of the intensity correlation
     this.avgSelf = [0, 0];             // the sum of each source's own term, averaged
     this.avgCross = [0, 0];            // the cross terms between different sources, averaged
+    if (this.avgSelfK) this.avgSelfK.fill(0);
     this.powerA = 0; this.powerB = 0;  // averaged powers ⟨|v|²⟩
     this.specAA.fill(0); this.specBB.fill(0); this.specAB[0].fill(0); this.specAB[1].fill(0);
     this.history.length = 0;
@@ -266,12 +267,13 @@ export class Simulation {
     cr *= inv; ci *= inv; pA *= inv; pB *= inv;
     // Each source's own term and the cross terms between different sources.
     let selfR = 0, selfI = 0, crossR = 0, crossI = 0;
+    if (!this.chunkSelfK || this.chunkSelfK.length !== 2 * K) { this.chunkSelfK = new Float64Array(2 * K); this.avgSelfK = new Float64Array(2 * K); }
     if (decompose) {
       for (let k = 0; k < K; k++) for (let kk = 0; kk < K; kk++) {
         let xr = 0, xi = 0;
         const A = this.partA[k], B = this.partB[kk];
         for (let i = 0; i < nb; i++) { const b = bins[i]; xr += A[0][b] * B[0][b] + A[1][b] * B[1][b]; xi += A[1][b] * B[0][b] - A[0][b] * B[1][b]; }
-        if (k === kk) { selfR += xr * inv; selfI += xi * inv; } else { crossR += xr * inv; crossI += xi * inv; }
+        if (k === kk) { selfR += xr * inv; selfI += xi * inv; this.chunkSelfK[2 * k] = xr * inv; this.chunkSelfK[2 * k + 1] = xi * inv; } else { crossR += xr * inv; crossI += xi * inv; }
       }
     }
     // The time streams (upsampled for display; every UP-th point is one of the chunk's own
@@ -297,6 +299,7 @@ export class Simulation {
     this.avgHbt += al * (hbt - this.avgHbt);
     this.avgSelf[0] += al * (selfR - this.avgSelf[0]); this.avgSelf[1] += al * (selfI - this.avgSelf[1]);
     this.avgCross[0] += al * (crossR - this.avgCross[0]); this.avgCross[1] += al * (crossI - this.avgCross[1]);
+    for (let i = 0; i < 2 * K; i++) this.avgSelfK[i] += al * (this.chunkSelfK[i] - this.avgSelfK[i]);
     this.powerA += al * (pA - this.powerA); this.powerB += al * (pB - this.powerB);
     const sAA = this.specAA, sBB = this.specBB, sAB = this.specAB;
     for (let i = 0; i < nb; i++) {

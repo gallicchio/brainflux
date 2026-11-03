@@ -1,0 +1,123 @@
+/* Radio interferometry: four numbered views on the left (which pictures show depends on the
+   view), the controls on the right.  The colours of the two antennas and the sources are
+   shared by every picture. */
+
+:root {
+  --ant-a: #2f62d8;      /* antenna A and everything of its */
+  --ant-b: #c8501a;      /* antenna B */
+  --src-1: #e3b505;      /* source 1 */
+  --src-2: #7b3fb5;      /* source 2 */
+  --env: #8a8b91;        /* envelopes */
+  --cross: #888;         /* the cross terms */
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ant-a: #7aa2ff; --ant-b: #ff9a5c; --src-1: #ffd84d; --src-2: #c79bff; --env: #9d9ea6; --cross: #9a9a9a; }
+}
+
+.rif {
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px;
+  padding: 12px; max-width: 1560px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.view-row { justify-content: center; }
+.view-row .seg > button { padding: 4px 12px; }
+.view-block { display: none; flex-direction: column; gap: 8px; }
+.rif[data-view="one"] #block-one, .rif[data-view="two"] #block-two,
+.rif[data-view="uv"] #block-uv, .rif[data-view="array"] #block-uv { display: flex; }
+
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.plot-wrap canvas { width: 100%; height: 100%; }
+.stream-big { height: max(200px, calc(34vh - 30px)); }
+.small-plot { height: 150px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pair .small-plot { height: max(190px, calc(30vh - 20px)); }
+.scene-wrap { height: max(240px, calc(36vh - 30px)); }
+#scene { cursor: grab; }
+.live-grid { display: grid; gap: 8px; }
+.live-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.live-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.live-grid .small-plot { height: 140px; }
+#src2-wrap[hidden] { display: none; }
+#pair { cursor: grab; }
+
+/* The pictures of views 3 and 4: the sky and the uv plane (and the ground), then the second
+   row (the image from the samples, the arrow, the sampled plane and the beam). */
+.pictures { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
+.rif[data-view="array"] .pictures { grid-template-columns: 1fr 1fr 1fr; }
+.cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cell-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-height: 22px; }
+.cell-head h2 { font-size: 14px; font-weight: 600; margin: 0; color: var(--ink); }
+.cell-head .note { font-size: 12px; color: var(--ink-2); }
+.cell-head select { font-size: 12px; min-height: 24px; padding: 1px 4px; }
+.canvas-wrap { position: relative; aspect-ratio: 1 / 1; background: var(--canvas-bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#sky, #uv, #ground { cursor: crosshair; }
+.canvas-wrap.drop { outline: 2px dashed var(--accent); }
+/* Which cells each view shows. */
+#ground-cell, #recon-cell, #sampled-cell, #beam-cell, .flow-arrow, #flow-caption { display: none; }
+.rif[data-view="array"] #ground-cell, .rif[data-view="array"] #recon-cell, .rif[data-view="array"] #sampled-cell,
+.rif[data-view="array"] #beam-cell, .rif[data-view="array"] .flow-arrow, .rif[data-view="array"] #flow-caption { display: flex; }
+.rif[data-view="uv"].sketching #recon-cell, .rif[data-view="uv"].sketching #sampled-cell,
+.rif[data-view="uv"].sketching .flow-arrow, .rif[data-view="uv"].sketching #flow-caption { display: flex; }
+.rif[data-view="uv"] #live3 { display: grid; }
+.rif[data-view="array"] #live3, .rif[data-view="array"] #pair-wrap { display: none; }
+/* The arrow from the sampled plane to the image: in the gap between them, pointing left. */
+.flow-arrow { position: relative; align-items: center; justify-content: center; flex-direction: column; color: var(--accent); font-size: 12px; text-align: center; grid-column: 2; grid-row: 2; pointer-events: none; z-index: 2; width: 0; margin-left: -4px; overflow: visible; }
+.flow-arrow b { font-size: 28px; line-height: 1; }
+.flow-arrow span { background: var(--bg); padding: 0 3px; white-space: nowrap; }
+.rif[data-view="uv"].sketching .flow-arrow { grid-column: 2; grid-row: 2; }
+.rif[data-view="array"] .flow-arrow { grid-column: 2; grid-row: 2; }
+.rif[data-view="array"] #recon-cell { grid-column: 1; grid-row: 2; }
+.rif[data-view="array"] #sampled-cell { grid-column: 2; grid-row: 2; }
+.rif[data-view="array"] #beam-cell { grid-column: 3; grid-row: 2; }
+.rif[data-view="array"] #ground-cell { grid-column: 3; grid-row: 1; }
+.rif[data-view="uv"].sketching #recon-cell { grid-column: 1; grid-row: 2; }
+.rif[data-view="uv"].sketching #sampled-cell { grid-column: 2; grid-row: 2; }
+.flow-caption { text-align: center; }
+
+.readout { color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 1.5em; line-height: 1.5; }
+.readout b, .readout .fixnum.b { color: var(--ink); font-weight: 600; }
+.readout .a { color: var(--ant-a); font-weight: 600; }
+.readout .b { color: var(--ant-b); font-weight: 600; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+.pictures-grid { grid-template-columns: repeat(3, 1fr); }
+.controls details summary { cursor: pointer; color: var(--ink-2); }
+.controls details[open] summary { margin-bottom: 6px; }
+#play { min-width: 5.6em; }
+/* Which panels each view shows. */
+#sources-panel, #scene-panel, #pair-panel, #sketch-panel, #array-panel { display: none; }
+.rif[data-view="two"] #scene-panel, .rif[data-view="two"] #pair-panel { display: flex; }
+.rif[data-view="uv"] #sources-panel, .rif[data-view="uv"] #pair-panel, .rif[data-view="uv"] #sketch-panel { display: flex; }
+.rif[data-view="array"] #sources-panel, .rif[data-view="array"] #array-panel { display: flex; }
+.rif[data-view="one"] #sources-panel { display: none; }
+
+@media (max-width: 1100px) {
+  .live-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rif[data-view="array"] .pictures { grid-template-columns: 1fr 1fr; }
+  .rif[data-view="array"] #ground-cell { grid-column: 1; grid-row: 3; }
+  .rif[data-view="array"] #beam-cell { grid-column: 2; grid-row: 3; }
+}
+@media (max-width: 900px) {
+  .rif { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  .stream-big { height: max(200px, 30vh); }
+  .pair { grid-template-columns: minmax(0, 1fr); }
+  .pair .small-plot { height: 170px; }
+  .scene-wrap { height: max(220px, 34vh); }
+  .live-grid.four, .live-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .live-grid .small-plot { height: 130px; }
+  .cell-head h2 { font-size: 13px; }
+  .flow-arrow b { font-size: 22px; }
+}
+@media (max-width: 560px) {
+  .pictures, .rif[data-view="array"] .pictures { grid-template-columns: minmax(0, 1fr); }
+  .rif[data-view="array"] #ground-cell, .rif[data-view="array"] #recon-cell, .rif[data-view="array"] #sampled-cell, .rif[data-view="array"] #beam-cell,
+  .rif[data-view="uv"].sketching #recon-cell, .rif[data-view="uv"].sketching #sampled-cell { grid-column: auto; grid-row: auto; }
+  /* On one column the arrow points up, from the sampled plane to the image above it. */
+  .flow-arrow, .rif[data-view="array"] .flow-arrow, .rif[data-view="uv"].sketching .flow-arrow { grid-column: auto; grid-row: auto; width: auto; margin: -4px 0; flex-direction: row; gap: 6px; }
+  .flow-arrow b { transform: rotate(90deg); font-size: 22px; }
+  .live-grid.four, .live-grid.three { grid-template-columns: minmax(0, 1fr); }
+}
