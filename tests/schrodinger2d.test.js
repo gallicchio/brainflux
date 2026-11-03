@@ -1,5 +1,6 @@
 import { test, assert, close } from './harness.js';
 import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves, radialWaves, fraunhofer, preparePotential2D } from '../schrodinger2d/sim.js';
+import { besselJ } from '../lib/bessel.js';
 
 function setup({ n = 128, L = 64, absorb = true, V, packet }) {
   const sim = new Sim2D({ n, L, absorb });
@@ -188,4 +189,57 @@ test('Bragg: at 2c sin(alpha) = lambda the crystal reflects to 2 alpha; off it, 
   const note = `within 15 degrees of 2 alpha: ${on.toFixed(3)} of the packet at alpha = 30, ${off.toFixed(3)} at 20`;
   assert(on > 0.2 && on > 4 * off, note);
   return note;
+});
+
+// The first Born approximation in two dimensions, with psi -> e^{ikx} + f e^{ikr}/sqrt(r):
+// f = -(m/hbar^2) (2 pi k)^-1/2 e^{i pi/4} V~(q), so dsigma/dtheta = m^2 |V~(q)|^2 / (2 pi hbar^4 k).
+// For a Gaussian bump V0 exp(-r^2/2a^2), V~(q) = 2 pi a^2 V0 exp(-q^2 a^2/2) in closed form; and
+// its partial-wave form, delta_m = -pi (m/hbar^2) integral V J_m^2(kr) r dr, must give the same
+// cross section through sigma = (4/k) sum delta_m^2, and agree with the radial equation when
+// the bump is weak.
+test('Born in 2D: the closed form, the grid sum and Born\'s own phase shifts agree, and so does the radial equation for a weak bump', () => {
+  const V0 = 0.05, a = 1, k = 2, V = (r) => V0 * Math.exp(-(r * r) / (2 * a * a));
+  const th = Array.from({ length: 360 }, (_, i) => ((i - 180) * Math.PI) / 180), dth = Math.PI / 180;
+  const exactBorn = th.map((t) => { const q = 2 * k * Math.sin(t / 2); return (2 * Math.PI * a ** 4 * V0 * V0 * Math.exp(-q * q * a * a)) / k; });
+  const { sim } = setup({ n: 128, L: 32, V: (x, y) => V(Math.hypot(x, y)), packet: {} });
+  const grid = bornCrossSection(sim, k, th), fwd = Math.max(...exactBorn);
+  let worst = 0;
+  for (let i = 0; i < th.length; i++) worst = Math.max(worst, Math.abs(grid[i] - exactBorn[i]) / fwd);
+  assert(worst < 1e-3, `the grid sum is off the closed form by ${worst} of the forward value`);
+  // Born's phase shifts by quadrature, and the partial-wave total.
+  const mmax = 12, h = 0.002, d = new Float64Array(mmax + 1);
+  for (let r = h / 2; r < 8; r += h) { const J = besselJ(mmax, k * r); for (let m = 0; m <= mmax; m++) d[m] -= Math.PI * V(r) * J[m] * J[m] * r * h; }
+  const waves = [];
+  for (let m = -mmax; m <= mmax; m++) waves.push({ m, Sre: Math.cos(2 * d[Math.abs(m)]), Sim: Math.sin(2 * d[Math.abs(m)]) });
+  const pw = fromPartialWaves(waves, k, th);
+  const sBorn = exactBorn.reduce((acc, v) => acc + v * dth, 0), sPW = (4 / k) * waves.reduce((acc, w) => acc + Math.sin(d[Math.abs(w.m)]) ** 2, 0);
+  close(sPW / sBorn, 1, 2e-3, `partial-wave Born total ${sPW} vs the closed form's ${sBorn}`);
+  let worstF = 0;
+  for (let i = 0; i < th.length; i++) worstF = Math.max(worstF, Math.abs(pw.f[i][0] ** 2 + pw.f[i][1] ** 2 - exactBorn[i]) / fwd);
+  assert(worstF < 3e-3, `|f|^2 from Born's phase shifts is off the closed form by ${worstF} of the forward value`);
+  // The radial equation's phase shifts: second order in V0 away from Born's.
+  const exact = radialWaves((r) => r.map(V), k, mmax);
+  let worstD = 0;
+  for (let m = 0; m <= 4; m++) { const e = exact.find((w) => w.m === m); worstD = Math.max(worstD, Math.abs(Math.atan2(e.Sim, e.Sre) / 2 - d[m])); }
+  assert(d[0] < 0 && worstD < 2e-3, `the radial equation's delta_m differ from Born's by up to ${worstD}; delta_0 = ${d[0]}`);
+  return `delta_0 Born ${d[0].toFixed(5)}, exact ${(Math.atan2(exact.find((w) => w.m === 0).Sim, exact.find((w) => w.m === 0).Sre) / 2).toFixed(5)}; sigma Born ${sBorn.toFixed(5)}, from its phase shifts ${sPW.toFixed(5)}; grid sum within ${worst.toExponential(1)}`;
+});
+
+// The optical theorem's phase factor in 2D: sigma_total = -sqrt(8 pi/k) Re[e^{i pi/4} f(0)]
+// (= sqrt(8 pi/k) Im[e^{-i pi/4} f(0)]) is the elastic sum (1/k) sum |S_m - 1|^2 plus the
+// absorbed part (1/k) sum (1 - |S_m|^2): equal to the elastic cross section exactly when every
+// |S_m| = 1, and more than it for an absorbing target.
+test('the optical theorem in 2D: its phase factor, for unitary and for absorbing S_m', () => {
+  const k = 1.7, mk = (eta) => Array.from({ length: 9 }, (_, i) => { const m = i - 4, d = 0.9 * Math.exp(-0.4 * m * m) * (m % 2 ? -1 : 1); return { m, Sre: eta * Math.cos(2 * d), Sim: eta * Math.sin(2 * d) }; });
+  const th = Array.from({ length: 720 }, (_, i) => (i * Math.PI) / 360), dth = Math.PI / 360;
+  for (const eta of [1, 0.8]) {
+    const waves = mk(eta), pw = fromPartialWaves(waves, k, th);
+    const integral = pw.f.reduce((acc, [re, im]) => acc + (re * re + im * im) * dth, 0);
+    close(integral / pw.sigma, 1, 1e-6, `integral of |f|^2 against (1/k) sum |S - 1|^2, eta = ${eta}`);
+    const absorbed = waves.reduce((acc, w) => acc + (1 - w.Sre ** 2 - w.Sim ** 2), 0) / k;
+    close(pw.optical, pw.sigma + absorbed, 1e-9, `optical theorem, eta = ${eta}: elastic ${pw.sigma} + absorbed ${absorbed}`);
+    // The same number in the Im form.
+    const f0 = pw.f[0], imForm = Math.sqrt((8 * Math.PI) / k) * (f0[1] * Math.cos(Math.PI / 4) - f0[0] * Math.sin(Math.PI / 4));
+    close(imForm, pw.optical, 1e-9, 'sqrt(8 pi/k) Im[e^{-i pi/4} f(0)]');
+  }
 });

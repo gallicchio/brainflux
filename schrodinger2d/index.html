@@ -20,6 +20,7 @@
 <main class="s2d">
   <section class="view-col">
     <div class="view-wrap"><canvas id="view" aria-label="The wave function in the plane"></canvas></div>
+    <div class="hint" id="view-hint">Watch the packet (striped) hit the target (faint white); pick another Target, or Show → Scattered only.  The dashed circle is the detector the panels on the right are measured on.</div>
     <div class="readouts mono small" id="readouts"></div>
   </section>
 
@@ -31,11 +32,13 @@
     <div class="panel">
       <div class="panel-head"><span class="label">Differential cross section</span>
         <span class="row small" id="xs-legend"></span></div>
+      <div class="panel-gloss">dσ/dθ: how much of the beam is scattered to each angle θ, per unit of incident flux (a length per radian in 2D)</div>
       <div class="xs-wrap"><canvas id="xsec" aria-label="dσ/dθ against the scattering angle"></canvas></div>
     </div>
     <div class="panel">
       <div class="panel-head"><span class="label">Partial waves and total cross section</span>
-        <span class="small muted">bars sin²δ<sub>m</sub>, dots |S<sub>m</sub>|</span></div>
+        <span class="small muted">bars sin²δ<sub>m</sub> (its share of σ), dots |S<sub>m</sub>| (must be 1), green ticks: exact</span></div>
+      <div class="panel-gloss">each wave e<sup>imθ</sup>, of angular momentum mħ, is scattered with its own phase shift δ<sub>m</sub></div>
       <div class="pw-wrap"><canvas id="waves" aria-label="sin²δ_m for each partial wave m"></canvas></div>
       <table class="sigmas small" id="sigmas"></table>
     </div>
@@ -74,85 +77,151 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>A wave packet, nearly a plane wave across the target, runs into a potential $V(x,y)$ and
-  scatters, with $\hbar=m=1$.  The picture is $\psi$ coloured by phase (the colour wheel of the
-  other demos) and lit by $|\psi|$; the potential is drawn faintly, and the dashed circle is
-  the detector.  Far away the scattered part is an outgoing circular wave,
-  $$\psi\to e^{ikx}+f(\theta)\,\frac{e^{ikr}}{\sqrt r},\qquad \frac{d\sigma}{d\theta}=|f(\theta)|^2,$$
-  and in two dimensions a cross section is a length.  Everything on the right is measured on
-  the detector circle while the packet goes by.  A target that isn't round can be turned
-  (<em>turn</em>): the same as sending the packet in from another direction, with $\theta$
-  still the scattering angle.</p>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>A packet of matter waves (the striped band; the colours are the phase of the wave
+    function) is fired from the left at a <b>target</b>, the faint white disk, and scatters off
+    it.  The dashed circle is the <b>detector</b>: the three panels on the right are measured
+    there as the wave crosses it: the wave sorted by momentum, how much goes to each angle
+    (the cross section) and the share of each partial wave.  Units: ħ = m = 1.</p>
+    <p>Pick another <b>Target</b>; switch <b>Show</b> to <b>Scattered only</b> to see what the
+    target adds to the wave; raise <b>k₀</b> for a faster packet with shorter waves, or the
+    <b>width</b> for a beam more like a plane wave.  Every change restarts the collision;
+    <b>done</b> appears under the picture when the packet has gone.</p>
+    <p>Look for the circular wave spreading from the target and the shadow behind it, the
+    measured curve (blue) settling onto the exact one (green) once the packet has gone, and
+    the totals in the table agreeing.  The experiments take the ideas one at a time: what
+    scatters and how it is counted, the Born approximation, partial waves, interference and
+    Bragg reflection.</p>
+  </section>
 
   <article class="exp" data-setup="disk">
     <h3>1. A packet meets a disk</h3>
-    <p>Watch the reflected crescent and the circular wave spreading from the disk.  Switch the
-    view to <em>Scattered only</em>: that is $\psi-\psi_\text{inc}$, the difference the disk makes,
-    computed exactly because the free packet's motion is known in closed form.</p>
+    <p>The packet comes in from the left, moving along $x$, nearly a plane wave across the
+    disk.  Watch the reflected crescent and the circular wave spreading from the disk.  Switch
+    <em>Show</em> to <em>Scattered only</em>: that is $\psi-\psi_\text{inc}$, the difference the
+    disk makes, computed exactly because the free packet's motion is known in closed form.</p>
+    <p>How the scattering is counted: the scattered wave's outward flux through the detector
+    circle, added up over the collision and divided by the beam's incident flux per unit width,
+    is the <em>differential cross section</em> $d\sigma/d\theta$ (the blue curve): how much of
+    the beam is sent to each angle $\theta$, counted from the forward direction.  Its total
+    over all angles, $\sigma$ (the table's first line), is a length in two dimensions: the
+    width of beam the disk takes out.  Here $\sigma=8.3$, well over the disk's width $2a=3$,
+    which is all a classical particle could hit: more than half of it (4.4) is the forward
+    peak within $\pm40^\circ$, the wave diffracted round the edge, which is what makes the
+    shadow (experiment 2).  Once the packet has gone, the table shows $\sigma$ four ways, and
+    the blue curve lies on the exact one (green).</p>
   </article>
 
   <article class="exp" data-setup="shadow">
     <h3>2. The shadow is the optical theorem</h3>
-    <p>Behind the disk, a shadow.  In the <em>Scattered only</em> view the shadow is a forward
-    scattered wave in step against the incident one.  The interference between them carries
-    probability away from the forward direction: the table's <em>shadow</em> line is that loss,
-    and it equals the total scattered, line for line.  That is the optical theorem,
-    $\sigma=-\sqrt{8\pi/k}\,\mathrm{Re}\,[e^{i\pi/4}f(0)]$: the forward amplitude knows how much is
-    scattered in all directions.</p>
+    <p>Behind the disk, a shadow.  In the <em>Scattered only</em> view the shadow is a wave
+    scattered straight forward, opposite in phase to the incident one, so that the two cancel
+    there.  The interference between them carries probability away from the forward
+    direction: the table's <em>shadow</em> line is that loss, and it equals the total
+    scattered, line for line (8.30 and 8.30).  That is the <em>optical theorem</em>: the
+    amplitude scattered straight forward, $f(0)$, fixes how much is scattered in all
+    directions, $\sigma=-\sqrt{8\pi/k}\,\mathrm{Re}\,[e^{i\pi/4}f(0)]$ in two dimensions (the
+    counterpart of $\sigma=\frac{4\pi}{k}\,\mathrm{Im}\,f(0)$ in three).  The table's
+    <em>optical theorem</em> line is $\sigma$ computed from $f(0)$ alone, out of the measured
+    partial waves (experiment 5).</p>
   </article>
 
   <article class="exp" data-setup="born">
     <h3>3. The Born approximation</h3>
-    <p>A smooth bump, $V_0=1$, half the packet's energy: about a sixth of the packet is
-    scattered, most of it within $60^\circ$ of forward.  To first order, $f(\theta)$ is the
-    Fourier transform of the potential at the momentum transfer $q=2k\sin(\theta/2)$:
-    $\frac{d\sigma}{d\theta}=\frac{m^2}{2\pi\hbar^4k}|\tilde V(q)|^2$ (dashed grey).  The measured
-    curve follows it over the forward peak, and Born's total is only 7% too high.  Lower $V_0$
-    to 0.3 and they agree to 1%, but then less than 2% of the packet scatters: that is what
-    weak means.  Raise $V_0$ to 2: the measured cross section grows less than $V_0^2$, and Born
-    is 60% too high.  Make the bump attractive ($V_0=-1$): Born cannot tell the sign; the exact
-    answer can (2.49 instead of 2.66).</p>
+    <p>A smooth bump, $V_0=1$, half the packet's energy $E=2$: about a sixth of the packet
+    (18%) is scattered, nearly all of it (96%) within $60^\circ$ of forward.  To first order in
+    $V$ (the <em>first Born approximation</em>) the scattered amplitude is the Fourier transform
+    of the potential at the <em>momentum transfer</em> $\hbar\vec q=\hbar(\vec k_\text{out}-\vec k_\text{in})$,
+    the momentum the particle gains in turning through $\theta$, of size $q=2k\sin(\theta/2)$:
+    $$\frac{d\sigma}{d\theta}=\frac{m^2}{2\pi\hbar^4k}\,|\tilde V(q)|^2,\qquad
+    \tilde V(\vec q)=\int V(\vec r)\,e^{-i\vec q\cdot\vec r}\,d^2r$$
+    (dashed grey).  The measured curve follows it over the forward peak, and Born's total is
+    6% above the exact one (the table: 2.83 against 2.67).</p>
+    <p>Born is good when the wave crossing the target is hardly changed by it: the extra phase
+    it picks up on the way through, roughly $V_0a/\hbar v=mV_0a/\hbar^2k$, must be small.  Here
+    it is 0.5.  Lower $V_0$ to 0.3 (0.15) and Born and the exact answer agree to 1%, but then
+    less than 2% of the packet scatters: that is what weak means.  Raise $V_0$ to 2 (1.0): the
+    cross section grows less than $V_0^2$ (2.6 times, not 4) and Born is 65% too high.  Make
+    the bump attractive ($V_0=-1$): Born cannot tell the sign, $|\tilde V|^2$ is the same; the
+    exact answer can (2.48 instead of 2.67).  For the hard disk of experiment 1 the phase is 6,
+    and Born's total, 294, is 35 times the real one: a target that stops the wave is as far
+    from weak as can be.</p>
   </article>
 
   <article class="exp" data-setup="ring">
     <h3>4. Scattering puts the wave on a circle</h3>
     <p>The same bump, in the <em>Scattered only</em> view, so that momentum space shows
-    $\psi-\psi_\text{inc}$ alone.  The incident packet is a spot at $(k_0,0)$; elastic scattering
-    can only turn $\vec k$, not shorten it, so the scattered wave fills in the circle
-    $|\vec k|=k_0$, brightest where $|f(\theta)|^2$ is largest.  The Born approximation says the
-    brightness at $\vec k$ is $|\tilde V(\vec k-\vec k_0)|^2$: the potential's Fourier transform,
-    centred on the incident spot.</p>
+    $\psi-\psi_\text{inc}$ alone.  The incident packet is a spot at $(k_0,0)$; the scattering
+    is elastic, the energy and so $|\vec k|$ are unchanged, and it can only turn $\vec k$, not
+    shorten it: the scattered wave fills in the circle $|\vec k|=k_0$, brightest where
+    $|f(\theta)|^2$ is largest.  The Born approximation says the brightness at $\vec k$ is
+    $|\tilde V(\vec k-\vec k_0)|^2$: the potential's Fourier transform, centred on the incident
+    spot and read round the circle.</p>
   </article>
 
   <article class="exp" data-setup="swave">
     <h3>5. Partial waves: slow particles scatter in all directions</h3>
-    <p>A small hard disk and a slow packet, $ka\approx1$, in a bigger box (slow waves are long):
-    only the $m=0$ wave scatters, and the
-    cross section is nearly the same in every direction.  The bars show $\sin^2\delta_m$ for each
-    partial wave; $\sigma=\frac4k\sum_m\sin^2\delta_m$.  Speed the packet up ($k_0$): more partial
-    waves join in, roughly up to $m\approx ka$, and the scattering turns forward.  The dots show
-    $|S_m|=|e^{2i\delta_m}|$, which must be 1 (probability conserved), as a check.</p>
+    <p>A small hard disk and a slow packet, $ka\approx1$ (here 0.8), in a bigger box, since
+    slow waves are long.  A <em>partial wave</em> is the part of the wave with angular momentum
+    $m\hbar$ about the target, $e^{im\theta}$ times a radial wave.  A round target scatters
+    each one into itself, only shifting the phase of its outgoing part by $2\delta_m$:
+    $\delta_m$ is the <em>phase shift</em> of wave $m$, and $S_m=e^{2i\delta_m}$, the factor the
+    outgoing wave acquires, its <em>S-matrix</em> element.  The bars show $\sin^2\delta_m$ for
+    each $m$ (the green ticks: the exact values), and
+    $$\sigma=\frac4k\sum_m\sin^2\delta_m,$$
+    so the bars are each wave's share of $\sigma$.  Here the $m=0$ wave does most of the
+    scattering ($\sin^2\delta_0=0.998$; $m=\pm1$, at 0.16 each, add a quarter; $m=\pm2$
+    nothing), and the cross section is spread over every direction, forward only three times
+    backward.  Classically a particle with angular momentum $m\hbar=\hbar kb$ passes at
+    distance $b=m/k$, so waves with $m$ beyond $ka$ miss the disk.  Speed the packet up
+    ($k_0=2$, $ka=2$): more partial waves join in, roughly up to $m\approx ka$, with $m=\pm1$
+    now the strongest ($\sin^2\delta_1=0.96$), and the scattering turns forward, seven times
+    the backward.  The dots show $|S_m|=|e^{2i\delta_m}|$, which must be 1, as what goes in must
+    come out (probability conserved: <em>unitarity</em>), as a check on the measurement.</p>
   </article>
 
   <article class="exp" data-setup="resonance">
     <h3>6. A resonance: the packet lingers</h3>
-    <p>An attractive well, with a quasi-bound state near the packet's energy.  Part of the
-    wave is caught, circles inside the well, and leaks out long after the rest has gone,
-    in all directions.  One partial wave's phase shift passes through $\pi/2$
-    ($\sin^2\delta_m=1$, the unitarity limit).</p>
+    <p>An attractive well, with a quasi-bound state near the packet's energy: a state that
+    would be bound if the well were a little deeper, and that lives for a while behind the
+    centrifugal barrier of angular momentum $3\hbar$.  Part of the wave is caught, circles
+    inside the well, and leaks out long after the rest has gone, in all directions.  The
+    $m=\pm3$ phase shift runs up steeply by nearly two radians as the energy crosses the
+    resonance, through $\pi/2$ at $k\approx1.0$ ($E\approx0.5$), just below the packet's
+    $k_0=1.2$ and within its spread of energies: there $\sin^2\delta_3=1$, the <em>unitarity
+    limit</em>, as much as one partial wave can scatter, $4/k$.  At $k_0$ its bar still reads
+    0.85.  The run goes on a little longer than usual here, until the well has emptied:
+    stopped before then, the dots $|S_{\pm3}|$ fall short of 1 by what is still inside.</p>
   </article>
 
   <article class="exp" data-setup="coulomb">
     <h3>7. A screened Coulomb potential</h3>
-    <p>Charge scattering: strongly peaked forward, falling off with angle, as Rutherford
-    found.  The screening (length $\ell$) keeps the total cross section finite.</p>
+    <p>Charge scattering: strongly peaked forward and falling off steeply with angle, as
+    Rutherford found (his $1/\sin^4(\theta/2)$ law is for three dimensions).  Most of the
+    scattering is by the long, weak tail of the potential, which deflects the wave only a
+    little: that is the forward peak, hundreds of times the backward scattering.  The screening
+    (length $\ell$, the distance over which the charge is cancelled by its surroundings) keeps
+    the total cross section finite.</p>
+    <p>One thing to notice: straight forward, the measured curve (blue) falls well short of the
+    partial-wave and exact curves (orange and green, 28), though the totals agree.  The peak is
+    made by the tail of the potential, some 20 across, and a wave from so wide a source takes a
+    long way, $r\sim kD^2/2\pi$, hundreds here, to settle into its far-field form: on the
+    detector circle at $R=18$ it has not, and is still broader and lower, with the same total.
+    The partial waves are read off with the exact Hankel functions at $R$ and do not mind.
+    Shorten $\ell$ to 1 and the source is small enough for the peak to form inside the
+    circle.</p>
   </article>
 
   <article class="exp" data-setup="two">
     <h3>8. Two scatterers interfere</h3>
     <p>Two disks, a distance $d$ apart across the beam.  The waves scattered by each
-    interfere, and $d\sigma/d\theta$ has fringes spaced by about $\lambda/d$: the double slit,
-    done with obstacles instead of holes.</p>
+    interfere, and $d\sigma/d\theta$ has fringes spaced by about $\lambda/d$ in angle
+    ($36^\circ$ here: peaks at $0$, $\pm37^\circ$, $\pm83^\circ$, $\pm141^\circ$ and
+    $180^\circ$): the double slit, done with obstacles instead of holes.  The target is not
+    round, so no single partial wave scatters into itself and the panel below shows no phase
+    shifts.</p>
   </article>
 
   <article class="exp" data-setup="slits">
@@ -161,15 +230,19 @@
     overlap and make fringes.  There is no incident wave behind a wall to subtract, so the graph
     shows the flux of $\psi$ itself through the far half of the detector, from $-90^\circ$ to
     $90^\circ$: every direction there is, since $\sin\theta=k_y/k$ runs from $-1$ to $1$.  The
-    dashed curve is Fraunhofer's, for a plane wave
+    dashed curve is <em>Fraunhofer's</em>, the far-field pattern of plane waves leaving the
+    openings,
     $$\frac{d\sigma}{d\theta}\propto\cos^2\theta\,\cos^2\Big(\frac{kd\sin\theta}{2}\Big)\Big(\frac{\sin(ka\sin\theta/2)}{ka\sin\theta/2}\Big)^2,$$
-    with the packet's spread of energies: dark fringes where $d\sin\theta=(n+\frac12)\lambda$,
-    here $\pm18^\circ$ and $\pm70^\circ$, and bright ones between, near $d\sin\theta=n\lambda$
-    ($0$ and $\pm39^\circ$; the falling envelope pulls them in a little).  The two are scaled to the same height: how much gets through slits
-    about a wavelength wide with soft edges is beyond Fraunhofer (the table has it), but where
-    it goes is not.  Only within a degree or so of $\pm90^\circ$, where the detector runs into
-    the wall (shaded), is nothing measured.  In momentum space the transverse momenta $k_y$ are
-    the diffraction orders.  Move the slits apart ($d$) and the fringes close up; make them
+    averaged over the packet's spread of energies: dark fringes where $d\sin\theta=(n+\frac12)\lambda$,
+    here $\pm18^\circ$ (measured at $\pm17^\circ$; the next, at $\pm70^\circ$, is washed out by
+    the packet's spread of wavelengths and the falling envelope), and bright ones between, near
+    $d\sin\theta=n\lambda$ ($0$ and $\pm39^\circ$; the falling envelope pulls the second in, to
+    $\pm37^\circ$ measured).  The two are scaled to the same height: how much gets through
+    slits about a wavelength wide with soft edges is beyond Fraunhofer (the table has it: 3.0
+    per unit of incident flux, against the openings' width of 2.4), but where it goes is not.
+    Only within a degree or so of $\pm90^\circ$, where the detector runs into the wall
+    (shaded), is nothing measured.  In momentum space the transverse momenta $k_y$ are the
+    diffraction orders.  Move the slits apart ($d$) and the fringes close up; make them
     narrower ($a$) and the envelope spreads.</p>
   </article>
 
@@ -180,29 +253,31 @@
     half-silvered mirror, and lets the rest through; the waves reflected by successive rows add
     up only if their paths differ by whole wavelengths, $2c\sin\alpha=n\lambda$ (Bragg).  Here
     $2c\sin30^\circ=\lambda$: a strong beam leaves at $2\alpha=60^\circ$, about a quarter of the
-    packet (the table).  In momentum space the circles are $\vec k_0+\vec G$: the reciprocal
-    lattice, $\vec G=\frac{2\pi}{c}(n_1,n_2)$ turned with the crystal, hung on the incident spot.
-    A scattered wave $\vec k_0+\vec G$ must also be on the energy circle $|\vec k|=k_0$; where a
-    lattice point sits on it (filled), there is a Bragg beam: Ewald's construction.  Born's curve
-    is the crystal's Fourier transform, the kinematic theory of diffraction.</p>
+    packet (26%, the table).  In momentum space the circles are $\vec k_0+\vec G$: the
+    <em>reciprocal lattice</em>, the wavevectors $\vec G=\frac{2\pi}{c}(n_1,n_2)$ (turned with the
+    crystal) of the plane waves that repeat with the lattice, hung on the incident spot.  A
+    scattered wave $\vec k_0+\vec G$ must also be on the energy circle $|\vec k|=k_0$; where a
+    lattice point sits on it (filled), there is a Bragg beam: <em>Ewald's construction</em>.
+    Born's curve is the crystal's Fourier transform, the kinematic theory of diffraction.</p>
   </article>
 
   <article class="exp" data-setup="offbragg">
     <h3>11. Off the Bragg angle</h3>
     <p>The same crystal turned to $\alpha=20^\circ$: $2c\sin\alpha/\lambda=0.68$, no lattice
     point on the energy circle, and the beam mostly goes through; a sixth as much goes to
-    $2\alpha$.  Turn the crystal slowly back to $30^\circ$ and the reflected beam comes back,
-    strong only within a few degrees of the Bragg angle (the crystal is small, so its lattice
-    points are not sharp).  Or keep $\alpha=20^\circ$ and shorten the wavelength until
-    $2c\sin\alpha=\lambda$: $k_0=4.6$, and the beam reflects to $40^\circ$.  At
+    $2\alpha$ (4.5%).  Turn the crystal slowly back to $30^\circ$ and the reflected beam comes
+    back, strong only within a few degrees of the Bragg angle (the crystal is small, so its
+    lattice points are not sharp).  Or keep $\alpha=20^\circ$ and shorten the wavelength until
+    $2c\sin\alpha=\lambda$: $k_0=4.6$, and the beam reflects to $40^\circ$ (18%).  At
     $\alpha=60^\circ$ it is the columns that reflect, $2c\cos\alpha=\lambda$, to $-60^\circ$.</p>
   </article>
 
   <article class="exp" data-setup="impact">
     <h3>12. The impact parameter</h3>
-    <p>A narrow packet aimed off centre, with impact parameter $b$.  Large $b$: it passes by,
-    barely deflected.  Small $b$: it bounces off.  A classical particle's deflection depends on
-    $b$ alone; a wave's spreads, the more so the narrower the packet.</p>
+    <p>A narrow packet aimed off centre, with <em>impact parameter</em> $b$: how far from the
+    centre it would pass if nothing deflected it.  Large $b$: it passes by, barely deflected.
+    Small $b$: it bounces off.  A classical particle's deflection depends on $b$ alone; a
+    wave's spreads, the more so the narrower the packet.</p>
   </article>
 
   <article class="exp" data-setup="typed">
@@ -211,18 +286,53 @@
     (an edge sharper than the grid can't be followed in time).</p>
   </article>
 
-  <h3>How it is computed</h3>
-  <p>The split-operator method on a $256\times256$ grid, with an absorbing border.  On the
-  detector circle (radius $R$) the outward flux of the scattered wave is added up over the
-  collision and divided by the incident fluence: that is the measured $d\sigma/d\theta$,
-  averaged over the packet's spread of energies.  At the packet's central energy, the time
-  Fourier transform of $\psi_\text{sc}$ on the circle, expanded in $e^{im\theta}$ and divided by the
-  Hankel functions $H_m(kR)$ and by the incident beam's own partial waves, gives
-  $S_m=e^{2i\delta_m}$ exactly, without assuming $kR\gg1$ (for a round target: one that isn't
-  round mixes the partial waves, and has no phase shifts).  Behind a wall, the flux of $\psi$
-  itself is measured instead of the scattered flux.</p>
+  <section class="theory">
+  <h3>How it works</h3>
+  <p>A wave packet, nearly a plane wave across the target, runs into a potential $V(x,y)$ and
+  scatters, with $\hbar=m=1$.  The picture is $\psi$ coloured by phase (the colour wheel of the
+  other demos) and lit by $|\psi|$; the potential is drawn faintly, and the dashed circle is
+  the detector.  Far away the scattered part is an outgoing circular wave,
+  $$\psi\to e^{ikx}+f(\theta)\,\frac{e^{ikr}}{\sqrt r},\qquad \frac{d\sigma}{d\theta}=|f(\theta)|^2,$$
+  and in two dimensions a cross section is a length.  Everything on the right is measured on
+  the detector circle while the packet goes by.  A target that isn't round can be turned
+  (<em>turn</em>): the same as sending the packet in from another direction, with $\theta$
+  still the scattering angle.</p>
+  <p><b>What is measured.</b>  The split-operator method on a $256\times256$ grid, with an
+  absorbing border.  On the detector circle (radius $R$) the outward flux of the scattered wave
+  is added up over the collision and divided by the incident fluence (the beam's probability
+  per unit width): that is the measured $d\sigma/d\theta$, averaged over the packet's spread of
+  energies.  Behind a wall, the flux of $\psi$ itself is measured instead of the scattered
+  flux.</p>
+  <p><b>What is computed from it.</b>  At the packet's central energy $E_0=k_0^2/2$, the time
+  Fourier transform of $\psi_\text{sc}$ on the circle, $\int\psi_\text{sc}(R,\theta,t)\,e^{iE_0t}dt$,
+  picks out the stationary scattered wave at that one energy.  For a round target it is a sum
+  of partial waves, $\sum_m\beta_m\,\frac{S_m-1}{2}\,H_m(kR)\,e^{im\theta}$ with
+  $H_m=J_m+iY_m$ the outgoing Hankel function and $\beta_m$ the incident wave's own partial-wave
+  amplitudes ($i^m$ for a plane wave; a beam of finite width carries a little less of the
+  higher $m$, and its $\beta_m$ are taken from its momentum amplitudes on the energy circle).
+  Expanding in $e^{im\theta}$ and dividing by $\beta_mH_m(kR)$ gives $S_m=e^{2i\delta_m}$
+  exactly, without assuming $kR\gg1$.  A target that isn't round mixes the partial waves and
+  has no phase shifts.  From the $S_m$,
+  $$f(\theta)=\frac{e^{-i\pi/4}}{\sqrt{2\pi k}}\sum_m(S_m-1)\,e^{im\theta},\qquad
+  \sigma=\frac1k\sum_m|S_m-1|^2=\frac4k\sum_m\sin^2\delta_m,$$
+  which are the orange curve and the table's <em>partial waves</em> line; the <em>optical
+  theorem</em> line is $-\sqrt{8\pi/k}\,\mathrm{Re}\,[e^{i\pi/4}f(0)]$ from the same $S_m$.  The
+  two agree when $|S_m|=1$.  For a potential of $r$ alone, $\delta_{-m}=\delta_m$.</p>
+  <p><b>Why they should agree.</b>  The measured curve is the flux of the very same scattered
+  wave, but summed over all the energies in the packet, while the partial waves are taken at
+  $k_0$ alone: a longer packet (<em>length</em>) has a narrower spread of energies and brings
+  the two closer.  The <em>exact</em> curve and line are what time-independent scattering
+  theory gives for the same $V(r)$ at $k_0$: the radial equation integrated outwards for each
+  $m$ and matched to $J_m(kr)$ and $Y_m(kr)$ beyond the potential.  For a hard disk of radius
+  $a$ that gives $\tan\delta_m=J_m(ka)/Y_m(ka)$.  The first Born approximation, with this sign
+  convention (from the two-dimensional Green's function $-\frac i4H_0(kr)$), and its phase
+  shifts, small and negative for a repulsive potential, are
+  $$f(\theta)=-\frac{m}{\hbar^2}\,\frac{e^{i\pi/4}}{\sqrt{2\pi k}}\,\tilde V(\vec q),\quad
+  \vec q=\vec k_\text{out}-\vec k_\text{in},\qquad
+  \delta_m\approx-\pi\frac{m}{\hbar^2}\int_0^\infty V(r)\,J_m^2(kr)\,r\,dr.$$</p>
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+  </section>
 </aside>
 
 <script type="module" src="app.js"></script>
