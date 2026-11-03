@@ -367,12 +367,15 @@ function uvTracks(ctx, width, height, half) {
 // The notes: each number in a slot of its own (setSlots), so that nothing moves as they change.
 function notes() {
   const [lo, hi] = baselineRange(pos), nb = (S.dishes.length * (S.dishes.length - 1)) / 2;
-  setSlots($('#map-note'), [{ v: S.dishes.length, dec: 0, w: 2 }, ' dishes, ', { v: nb, dec: 0, w: 3 }, ` baseline${nb === 1 ? '' : 's'}`]);
+  // One line under each panel's title, in words: what the panel is, then its numbers.
+  setSlots($('#map-note'), [{ v: S.dishes.length, dec: 0, w: 2 }, ' dishes, ', { v: nb, dec: 0, w: 3 }, ` pair${nb === 1 ? '' : 's'} (baseline${nb === 1 ? '' : 's'})`]);
   const decl = [{ v: S.dec, dec: 1, w: 5 }, '°'];
-  setSlots($('#uv-note'), S.hours > 0 ? [{ v: S.hours, dec: 1, w: 4 }, ' h at declination ', ...decl] : ['a snapshot at declination ', ...decl]);
-  setSlots($('#beam-note'), !fit ? [] : fit.stripes ? ['stripes: no single peak to fit']
-    : [...angleParts(fit.major * pix()), ' × ', ...angleParts(fit.minor * pix()), ' at half power']);
-  setSlots($('#sky-note'), [SKIES[S.sky], ...(S.sky === 'point' || S.sky === 'typed' ? [] : [', ', ...angleParts(S.size)]), '; field ', ...angleParts(S.fov)]);
+  setSlots($('#uv-note'), S.hours > 0 ? ['uv plane, a point per pair: ', { v: S.hours, dec: 1, w: 4 }, ' h at declination ', ...decl]
+    : ['uv plane, a point per pair: a snapshot at declination ', ...decl]);
+  setSlots($('#beam-note'), !fit ? [] : fit.stripes ? ['one point’s image: stripes, no single peak to fit']
+    : ['one point’s image: ', ...angleParts(fit.major * pix()), ' × ', ...angleParts(fit.minor * pix()), ' at half power']);
+  const skyName = S.sky === 'portrait' ? 'Fourier’s portrait' : S.sky === 'typed' ? 'typed formula' : `a ${SKIES[S.sky].toLowerCase()}`;
+  setSlots($('#sky-note'), [skyName, ...(S.sky === 'point' || S.sky === 'typed' ? [] : [', ', ...angleParts(S.size), ' across']), '; field of view ', ...angleParts(S.fov)]);
   let up = 0;
   for (let k = 0; k < tr.nt; k++) { let n = 0; for (let a = 0; a < pos.length; a++) n += tr.up[a * tr.nt + k]; if (n >= 2) up++; }
   const total = grid.samples + grid.dropped;
@@ -391,7 +394,8 @@ function notes() {
   lines.forEach((parts, i) => setSlots(box.children[i], parts));
   if (cs) {
     const flux = cs.model.reduce((a, v) => a + v, 0);
-    setSlots($('#clean-note'), cs.iterations ? [{ v: cs.iterations, dec: 0, w: 5 }, ' steps, ', { v: cs.components, dec: 0, w: 4 }, ' components, ', { v: flux, dec: 3, w: 5 }, ' Jy of 1'] : []);
+    setSlots($('#clean-note'), cs.iterations ? [{ v: cs.iterations, dec: 0, w: 5 }, ' steps: ', { v: cs.components, dec: 0, w: 4 }, ' point components found, holding ', { v: flux, dec: 3, w: 5 }, ' Jy of the sky’s 1']
+      : ['Step or Run (in the panel): CLEAN takes the brightest point, subtracts a tenth of the dirty beam centred there, and repeats.']);
   }
 }
 
@@ -506,7 +510,7 @@ function syncPresetButtons() { for (const [id, b] of Object.entries(presetButton
 
 /** The longest baseline (the straight distance between two dishes, through the Earth). */
 function longest() { return baselineRange(S.dishes.map(([E, Nn]) => stationXYZ(E, Nn, S.lat * DEG)))[1]; }
-const scaleSlider = slider({ label: 'longest (km)', min: 0.05, max: 12700, log: true, value: 3.4, title: 'The longest baseline: every dish moves in or out from the centre of the map',
+const scaleSlider = slider({ label: 'longest baseline (km)', min: 0.05, max: 12700, log: true, value: 3.4, title: 'The longest distance between two dishes: every dish moves in or out from the centre of the map',
   onInput: (v) => {
     // Scale the map; on a curved Earth the longest baseline isn't quite proportional, so
     // repeat until it is right.

@@ -42,7 +42,9 @@ const syn = (id, o) => { if (!synthStarted) synthStarted = true; setMode('synth'
 const ring6 = Array.from({ length: 6 }, (_, k) => [Math.round(700 * Math.cos(2.1 * k + 0.4) * (0.4 + 0.12 * k)), Math.round(700 * Math.sin(2.1 * k + 0.4) * (0.4 + 0.12 * k))]);
 
 const setups = {
-  // Antenna arrays.
+  // Antenna arrays.  The opening view: a line of eight, half a wavelength apart, steered to 20
+  // degrees by the phases (beam 13.6 degrees wide, sidelobe -12.8 dB, D = 8).
+  start: () => arr({ n: 8, d: 0.5, theta0: 20, view: 16 }),
   two: () => arr({ n: 2, d: 0.5, theta0: 0, view: 10 }),
   endfire: () => arr({ n: 2, d: 0.5, theta0: 90, view: 10 }),
   cardioid: () => arr({ n: 2, d: 0.25, theta0: 90, view: 10 }),
@@ -83,9 +85,8 @@ function fromAddress() {
   if (setups[hash.setup]) setups[hash.setup]();
   else if (hash.mode === 'synth') { synthStarted = true; setMode('synth'); synthFromHash(hash); }
   else {
-    if (Object.keys(hash).length > 1) arraysFromHash(hash);
-    else configureArrays({ n: 8, d: 0.5, theta0: 20, view: 16 });
-    setMode('arrays');
+    if (Object.keys(hash).length > 1) { arraysFromHash(hash); setMode('arrays'); }
+    else setups.start();
   }
 }
 fromAddress();
