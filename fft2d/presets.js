@@ -111,8 +111,10 @@ export const PRESETS = [
     }) },
   { id: 'points', label: 'Two points', title: 'Two points transform into cosine stripes: the two-slit fringes without the envelope',
     side: 'x', sized: true, make: (n, s) => grid(n, (x, y) => { const d = Math.round(0.06 * n * s); return +(y === 0 && (x === d || x === -d)); }) },
-  { id: 'stripes', label: 'Stripes', title: 'A cosine grating: two bright points in the transform, at plus and minus its wavevector',
-    side: 'x', sized: true, make: (n, s) => grid(n, (x, y) => 0.5 + 0.5 * Math.cos((2 * Math.PI * (x * 0.8 + y * 0.6)) / (0.08 * n * s))) },
+  { id: 'stripes', label: 'Stripes', title: 'A cosine grating: two bright points in the transform, at plus and minus its wavevector (and the centre, its mean)',
+    // Ten cycles across the image at size 1, so that the wavevector, (8, 6), is whole and the
+    // two points are single pixels rather than smears.
+    side: 'x', sized: true, make: (n, s) => grid(n, (x, y) => 0.5 + 0.5 * Math.cos((2 * Math.PI * (x * 0.8 + y * 0.6)) / (0.1 * n * s))) },
   { id: 'lattice', label: 'Lattice', title: 'A square lattice of dots (a crystal) transforms into its reciprocal lattice',
     side: 'x', sized: true, make: (n, s) => {
       const a = Math.max(2, Math.round(0.0625 * n * s));

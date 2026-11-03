@@ -20,14 +20,17 @@
 <main class="fft">
   <section class="side" id="side-x" aria-label="The image">
     <div class="side-head">
-      <h2>Image <span class="fn">f(x, y)</span></h2>
+      <h2 title="x and y are pixels from the centre pixel (y up); the picture wraps round at its edges">Image <span class="fn">f(x, y)</span></h2>
       <select class="mode" aria-label="How to draw the image"></select>
     </div>
     <div class="canvas-wrap"><canvas class="view" tabindex="0" aria-label="The image: paint on it"></canvas></div>
     <div class="side-foot">
+      <div class="under">
+        <div class="hint" id="hint-x">Paint on the picture: the transform follows each stroke</div>
+        <div class="readout mono small" aria-live="off" hidden title="Under the pointer: x and y in pixels from the centre pixel (y up), then the value there: its magnitude |f| and its phase ∠"></div>
+      </div>
       <div class="bright"></div>
       <select class="ops" aria-label="Operations on the image"></select>
-      <div class="readout mono small" aria-live="off">&nbsp;</div>
     </div>
   </section>
 
@@ -55,14 +58,17 @@
 
   <section class="side" id="side-k" aria-label="The Fourier transform">
     <div class="side-head">
-      <h2>Fourier transform <span class="fn">F(k<sub>x</sub>, k<sub>y</sub>)</span></h2>
+      <h2 title="kx and ky count the cycles a wave makes across the picture; the centre is k = 0, the picture's average">Fourier transform <span class="fn">F(k<sub>x</sub>, k<sub>y</sub>)</span></h2>
       <select class="mode" aria-label="How to draw the transform"></select>
     </div>
     <div class="canvas-wrap"><canvas class="view" tabindex="0" aria-label="The Fourier transform: paint on it"></canvas></div>
     <div class="side-foot">
+      <div class="under">
+        <div class="hint" id="hint-k">Paint here too: one dot of k is one wave in the picture</div>
+        <div class="readout mono small" aria-live="off" hidden title="Under the pointer: kx and ky in cycles across the picture, the value there (its magnitude |F| and phase ∠), and the wave that pixel stands for in the picture: its wavelength λ in pixels and its direction"></div>
+      </div>
       <div class="bright"></div>
       <select class="ops" aria-label="Operations on the transform"></select>
-      <div class="readout mono small" aria-live="off">&nbsp;</div>
     </div>
   </section>
 
@@ -82,20 +88,40 @@
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
 
-  <p>Two pictures of the same thing.  On the left an image $f(x,y)$; on the right its
-  two-dimensional discrete Fourier transform
+  <section class="start">
+    <h3>Start here</h3>
+    <p>Two pictures of one thing: on the left a picture, <i>f</i>(<i>x</i>, <i>y</i>), on the
+    right its Fourier transform, <i>F</i>(<i>k<sub>x</sub></i>, <i>k<sub>y</sub></i>), which
+    says how much of each set of stripes (each spacing and direction) the picture is made of.
+    The centre of the transform is <i>k</i> = 0, the picture's average; the farther out from the
+    centre, the finer the stripes.  Brightness is how big a value is and colour is its phase:
+    red for positive, cyan for negative.</p>
+    <p><b>Paint or erase on either side</b> and the other follows as you draw; with the
+    <b>Mask</b> tool, press on the transform's centre and drag outwards, and the picture comes
+    back blurred, then sharper as the circle grows, since the fine detail lives far from the
+    centre.  Pick another picture or shape under <b>Start from</b>, and hover over either side
+    to read the value under the pointer.</p>
+    <p>Look for this: one dot in the transform is one set of stripes in the picture, and the
+    smaller a shape on the left, the wider its pattern on the right.</p>
+  </section>
+
+  <p>On the left an image $f(x,y)$; on the right its two-dimensional discrete Fourier
+  transform
   $$F(k_x,k_y)=\frac{1}{N}\sum_{x,y} f(x,y)\,e^{-2\pi i\,(k_x x+k_y y)/N}$$
   which says how much of each plane wave $e^{2\pi i (k_x x + k_y y)/N}$ the image contains.
   Paint on either side and the other is recomputed as you paint.  The origin of both is the
-  centre pixel; $k$ counts the cycles a wave makes across the whole image.</p>
+  centre pixel; $k$ counts the cycles a wave makes across the whole image, so a point at a
+  distance $|\vec k|$ from the centre is a wave of wavelength $N/|\vec k|$ pixels (the readout
+  under the transform gives it).</p>
 
   <p>Both sides are complex.  Brightness is the magnitude, from black (zero) to white (very
   large), and colour is the phase:</p>
   <figure class="wheel-figure"><canvas id="legend" width="132" height="132"></canvas>
   <figcaption class="small muted">The complex plane: red is positive real, cyan negative real,
   yellow-green $+i$, violet $-i$.  The <em>Brightness</em> sliders only change the drawing, not
-  the data; transforms span many orders of magnitude, so brightness is
-  $\tfrac{2}{\pi}\arctan(|F|/R)$.</figcaption></figure>
+  the data: transforms span many orders of magnitude, so what is drawn is
+  $\tfrac{2}{\pi}\arctan(|F|/R)$, with $R$ the magnitude drawn in full colour; the slider's
+  number moves $R$ by powers of ten, so +1 draws everything ten times brighter.</figcaption></figure>
 
   <article class="exp" data-setup="jacket">
     <h3>1. Take the stripes off Fourier's jacket</h3>
@@ -109,9 +135,10 @@
   <article class="exp" data-setup="lowpass">
     <h3>2. Low-pass filter: blur</h3>
     <p>With the mask tool, press on the centre of the transform and drag outwards: everything
-    farther from the centre than the pointer is set to zero, as you drag.  Only long
-    wavelengths survive, and the image blurs; drag back out and it sharpens.  The faint rings
-    near sharp edges are <em>ringing</em>, the price of cutting the spectrum off abruptly.</p>
+    farther from the centre than the pointer is set to zero, as you drag.  Only the long
+    wavelengths inside the circle survive: the image comes back blurred, and sharpens as you
+    drag farther out; pull back in and it blurs again.  The faint rings near sharp edges are
+    <em>ringing</em>, the price of cutting the spectrum off abruptly.</p>
   </article>
 
   <article class="exp" data-setup="highpass">
@@ -123,8 +150,10 @@
 
   <article class="exp" data-setup="gaussian">
     <h3>4. A Gaussian transforms into a Gaussian</h3>
-    <p>Move the <em>Size</em> slider.  A Gaussian of width $\sigma$ transforms into a Gaussian of
-    width $N/(2\pi\sigma)$: the narrower one is, the wider the other.  This is the uncertainty
+    <p>Move the <em>Size</em> slider.  A Gaussian of width $\sigma$ (its standard deviation, in
+    pixels) transforms into a Gaussian of width $N/(2\pi\sigma)$ pixels: the narrower one is, the
+    wider the other.  Here $\sigma$ is 4% of the image, 10 pixels at 256, so the transform's
+    width is $1/(2\pi\times0.04)=4.0$ pixels at any resolution.  This is the uncertainty
     principle of quantum mechanics, $\sigma_x\sigma_p\ge\hbar/2$, in disguise, and the Gaussian is
     the shape that makes the product smallest.  Paint a single pixel: its transform is flat.</p>
   </article>
@@ -140,10 +169,13 @@
 
   <article class="exp" data-setup="box">
     <h3>6. A square becomes a sinc</h3>
-    <p>The transform of a square is $\mathrm{sinc}(k_x)\,\mathrm{sinc}(k_y)$: a bright centre with
-    lobes along the axes falling off as $1/k$.  Raise the transform's brightness to see the faint
-    lobes off the axes; lower it to see how much brighter the centre is.  Shrink the square and
-    the sinc spreads.  Try the disk (the Airy pattern) and the ring too.</p>
+    <p>The transform of a square of side $w$ is $\mathrm{sinc}(k_x)\,\mathrm{sinc}(k_y)$: a
+    bright centre with lobes along the axes falling off as $1/k$, and zeros every $N/w$ (here
+    $w=31$ pixels, so every 8.3).  Raise the transform's brightness to see the faint lobes off
+    the axes; lower it to see how much brighter the centre is.  Shrink the square and the sinc
+    spreads.  Try the disk too: its Airy pattern has its first dark ring at $k=0.61\,N/R$ for a
+    disk of radius $R$, 6.1 pixels from the centre here ($R=25.6$ pixels); and the ring, whose
+    transform is a Bessel function.</p>
   </article>
 
   <article class="exp" data-setup="slits">
@@ -151,7 +183,8 @@
     <p>Far from an aperture, the light it lets through makes the pattern $|F|^2$: the Fourier
     transform <em>is</em> Fraunhofer diffraction.  The transform is drawn as intensity $|F|^2$.  A
     single slit gives a wide envelope across the slit; two slits put fringes inside it, spaced by
-    the inverse of the separation; seven slits sharpen the fringes into the orders of a grating.</p>
+    the inverse of the separation, $N/d$ for slits $d$ apart (here $d=21$ pixels, so a fringe
+    every 12.2); seven slits sharpen the fringes into the orders of a grating.</p>
   </article>
 
   <article class="exp" data-setup="lattice">
@@ -177,8 +210,8 @@
     magenta.  Fourier's portrait has every colour because it is not symmetric.  An image that a
     half turn about the centre leaves unchanged, $f(-\vec r)=f(\vec r)$, has a real transform:
     load the square or the disk and you see only red, with cyan where the transform is negative
-    (the sinc's side lobes, the Airy rings).  In general, the symmetric part of an image makes the
-    real part of its transform, and the antisymmetric part the imaginary part.</p>
+    (the sinc's side lobes, the Airy rings).  In general, for a real image, the symmetric part
+    makes the real part of its transform, and the antisymmetric part the imaginary part.</p>
     <p>Paint on the transform with <em>Mirror</em> off and the image picks up colour: it has
     become complex.  Turn <em>Mirror</em> on, and every stroke is copied to $-\vec k$ with the
     conjugate value: the image stays real.</p>
@@ -205,9 +238,12 @@
     <h3>12. Every point of k-space is a plane wave</h3>
     <p>One bright pixel in the transform is one plane wave $e^{2\pi i\,\vec k\cdot\vec r/N}$ in the
     image: stripes of rotating colour, perpendicular to $\vec k$, with $|\vec k|$ of them across
-    the image.  The transform is shown magnified 8 times.  Drag the pixel with the hand tool and
-    the stripes turn and change spacing.  Paint a second pixel (with the brush, size 1) and two
-    waves interfere.</p>
+    the image.  Here the pixel is at $\vec k=(5,3)$, so the wave repeats every
+    $N/|\vec k|=43.9$ pixels at 256, in the direction 31° above the $x$ axis: the readout under
+    the transform says so when you point at the pixel.  The transform is shown magnified 8
+    times.  Drag the pixel with the hand tool and the stripes turn and change spacing.  Press
+    <kbd>B</kbd> for the brush (set to one pixel) and click elsewhere to add a second wave: the
+    two interfere.</p>
   </article>
 
   <article class="exp" data-setup="comb">
@@ -222,8 +258,9 @@
   <ul>
     <li>Both pictures wrap around: the discrete transform treats the image as one tile of a
     periodic wallpaper, so paint that leaves one edge comes back on the other.</li>
-    <li>The transform here is unitary: $\sum|f|^2=\sum|F|^2$ (Parseval), so equal colours mean
-    equal values on both sides.</li>
+    <li>The transform here is unitary: $\sum|f|^2=\sum|F|^2$ (Parseval), so the two sides hold
+    the same total power and the values read under the pointer are on one scale.  (Each side is
+    drawn at its own brightness, though, so the same colour need not mean the same value.)</li>
     <li>The brush paints the value under the ring on the wheel, or the one you type, as
     $\mathrm{Re}$ and $\mathrm{Im}$ or as magnitude and angle, times the side's brightness
     scale.  Painting $0$ is the same as erasing.</li>
