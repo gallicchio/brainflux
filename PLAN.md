@@ -122,10 +122,10 @@ magnitude with arctan, as the old applet did.
   - the scattered wave alone, psi - psi_incident (the incident packet is known in closed form),
     showing the outgoing circular wave and the shadow, i.e. the forward interference that is the
     optical theorem;
-  - momentum space, where elastic scattering puts the probability on the circle |k| = k0, with
-    the Born prediction |V~(k - k0)|^2 drawn on it;
-  - dsigma/dtheta measured from the flux through a circle, against the Born approximation and the
-    classical cross section;
+  - momentum space, where elastic scattering puts the probability on the circle |k| = k0 (the
+    Born prediction |V~(k - k0)|^2 is stated in the help, not drawn on it: still to do);
+  - dsigma/dtheta measured from the flux through a circle, against the Born approximation (the
+    classical cross section is not drawn either: still to do);
   - energy-resolved partial waves on that circle: S_m = exp(2i delta_m), unitarity |S_m| = 1, the
     phase shifts against the exact hard-disk ones, and sigma_total three ways (flux, partial
     waves, Im f(0)): the optical theorem as a number.
