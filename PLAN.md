@@ -306,9 +306,24 @@ radial solver's start and runs that ended with probability still in the box), ma
 claims corrected after measuring, a hint and a Start-here block on each, nothing added or
 removed.  `arrays/` lost its aperture-synthesis view (on a branch, merged with the new app).
 
-Four new demos were being built when the session's credits ran out, each on its own
-worktree branch, unmerged: `radiointerferometer/` (physics modules committed, views in
-progress), `nmr/`, `mri/`, `oct/` (briefs in the chat log, Response 15–17).  To resume:
-merge or continue each branch, register its test file in `tests/index.html`'s list, add its
-card to the landing page and its line to `README.md` and `tools/thumbs.py`, run
-`tools/test_all.sh`.  Then the quantum-optics demo (the TODO above).
+Four new demos were being built when the session's credits ran out.  Their work is pushed
+to GitHub on `wip/` branches, unmerged, each from `main` at b0928ed:
+
+- `wip/radiointerferometer`: the physics modules with 14 passing unit tests (registered in
+  `tests/index.html`), and the whole page: four views, 17 experiments, every set-up loading
+  without errors.  Left: the UI test, layout fixes listed in the agent's report (titles cut
+  off, the arrow overlapping a title, the uv axis labels), the quoted numbers checked, the
+  thumbnail (`#setup=uv`), the card.
+- `wip/arrays-phased-only`: `arrays/` without its synthesis view, redirecting the old
+  synthesis addresses to `../radiointerferometer/`.  Merge it together with the radio demo.
+- `wip/mri`: `mri/phantom.js`, `bloch.js`, `scan.js` and `tests/mri.test.js` (12 of 17
+  pass; the five failures are test-side, listed in the agent's report).  No page yet.
+- `wip/oct`: `oct/source.js`, `sample.js`, `tdoct.js`, `fdoct.js`, `scan.js`, `pictures.js`,
+  verified in Node against closed forms.  No page, no tests yet.
+- `wip/nmr`: the physics modules and unit tests, not yet run.  No page yet.
+
+The briefs are in the chat log (Prompts 15–17) and in the agents' final reports there.  To
+resume each: continue the branch (the page, the UI test, the thumbnail), register the test
+file in `tests/index.html`'s list, add the card to the landing page and the line to
+`README.md` and `tools/thumbs.py`, run `tools/test_all.sh`, merge.  Then the quantum-optics
+demo (the TODO above).
