@@ -143,12 +143,14 @@ export const GWW = [
 ];
 
 /**
- * Each preset: label, params {name: {min, max, value, label, title}}, and make(params, h) giving
+ * Each preset: label, tip (its button's tooltip), params {name: {min, max, value, label, title}},
+ * and make(params, h) giving
  * { sdf, area, perimeter, K, outline: [polylines], exact?(lmax), discrete?(count) , note }.
  */
 export const PRESETS = {
   square: {
     label: 'Square',
+    tip: 'A square drum: its modes are products of sines, numbered (m, n)',
     params: { a: { min: 0.3, max: 1, value: 1, label: 'side', title: 'The side of the square (the box is 1)' } },
     make({ a }, h) {
       a = Math.min(1, Math.max(4 * h, 1 - 2 * Math.round((1 - a) / (2 * h)) * h));
@@ -157,6 +159,7 @@ export const PRESETS = {
   },
   rectangle: {
     label: 'Rectangle',
+    tip: 'Sides 1 : 0.618, a ratio far from any fraction: no two modes share a frequency',
     params: {
       a: { min: 0.3, max: 1, value: 1, label: 'width', title: 'Width (the box is 1)' },
       b: { min: 0.2, max: 1, value: 0.618, label: 'height', title: 'Height; with a ratio of sides far from a fraction, the spectrum has no regularity left (Poisson statistics)' },
@@ -169,6 +172,7 @@ export const PRESETS = {
   },
   circle: {
     label: 'Circle',
+    tip: 'A round drum: its modes are Bessel functions',
     params: { R: { min: 0.1, max: 0.49, value: 0.48, label: 'radius', title: 'The radius (the box is 1 wide)' } },
     make({ R }) {
       return {
@@ -181,6 +185,7 @@ export const PRESETS = {
   },
   halfdisc: {
     label: 'Half circle',
+    tip: "Half of the circle: only the circle's modes that are zero along the cut",
     params: { R: { min: 0.1, max: 0.49, value: 0.49, label: 'radius', title: 'The radius' } },
     make({ R }, h) {
       const y0 = onGrid(-R / 2, h);
@@ -195,6 +200,7 @@ export const PRESETS = {
   },
   stadium: {
     label: 'Stadium',
+    tip: "Bunimovich's stadium (a rectangle with round ends): a ball in it moves chaotically",
     params: {
       r: { min: 0.05, max: 0.49, value: 0.245, label: 'radius', title: 'The radius of the round ends' },
       a: { min: 0, max: 0.45, value: 0.245, label: 'straight', title: 'Half the length of the straight sides (0: a circle)' },
@@ -210,6 +216,7 @@ export const PRESETS = {
   },
   qstadium: {
     label: 'Quarter stadium',
+    tip: 'One quarter of the stadium: no mirror symmetry is left, for the level statistics',
     params: {
       r: { min: 0.1, max: 0.98, value: 0.495, label: 'radius', title: 'The radius of the round end' },
       a: { min: 0, max: 0.8, value: 0.495, label: 'straight', title: 'The length of the straight side' },
@@ -227,6 +234,7 @@ export const PRESETS = {
   },
   sinai: {
     label: 'Sinai billiard',
+    tip: 'A square with a round post in the middle (Sinai, 1963): the first billiard proved chaotic',
     params: { R: { min: 0.05, max: 0.45, value: 0.25, label: 'disk', title: 'The radius of the disk in the middle' } },
     make({ R }) {
       const box = rect(1, 1, 1);
@@ -238,6 +246,7 @@ export const PRESETS = {
   },
   sinai8: {
     label: 'Sinai, ⅛',
+    tip: 'One eighth of the Sinai billiard: no symmetry left, for the level statistics',
     params: { R: { min: 0.1, max: 0.8, value: 0.4, label: 'disk', title: 'The radius of the disk' } },
     make({ R }) {
       // One eighth of a square with a disk in its middle, as Bohigas, Giannoni and Schmit (1984)
@@ -254,6 +263,7 @@ export const PRESETS = {
   },
   cardioid: {
     label: 'Cardioid',
+    tip: 'A heart-shaped chaotic billiard, r = a(1 + cos θ)',
     params: { a: { min: 0.1, max: 0.377, value: 0.377, label: 'size', title: 'r = a(1 + cos θ)' } },
     make({ a }) {
       const cx = -0.875 * a; // the cusp, so that the cardioid is centred in the box
@@ -269,6 +279,7 @@ export const PRESETS = {
   },
   triangle: {
     label: 'Triangle',
+    tip: 'An equilateral triangle: its modes are known exactly (Lamé, 1833)',
     params: { s: { min: 0.2, max: 0.98, value: 0.98, label: 'side', title: 'The side of the equilateral triangle' } },
     make({ s }, h) {
       const H = (s * Math.sqrt(3)) / 2, y0 = onGrid(-H / 2, h);
@@ -282,11 +293,13 @@ export const PRESETS = {
   },
   gww1: {
     label: 'GWW drum 1',
+    tip: 'Two different drums that sound the same: the first of the pair of Gordon, Webb and Wolpert (1992)',
     params: { l: { min: 0.08, max: 0.33, value: 0.33, label: 'size', title: 'The legs of the seven triangles (both drums use the same)' } },
     make({ l }, h) { return gwwDrum(0, l, h); },
   },
   gww2: {
     label: 'GWW drum 2',
+    tip: 'Two different drums that sound the same: the second of the pair, with exactly the frequencies of drum 1',
     params: { l: { min: 0.08, max: 0.33, value: 0.33, label: 'size', title: 'The legs of the seven triangles (both drums use the same)' } },
     make({ l }, h) { return gwwDrum(1, l, h); },
   },

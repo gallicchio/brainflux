@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Drive the drums demo: every experiment, the spectroscopist's peaks against the direct solver,
-the filtered modes, Weyl's law, level statistics, the isospectral pair, a revival, drawing, and
-readouts that hold still while their numbers change.
+"""Drive the drums demo as a student would: the opening (a struck circular drum, with its hints,
+worded readouts and the mode box's promise), a peak clicked with the mouse, every experiment, the
+spectroscopist's peaks against the direct solver, the filtered modes, Weyl's law, level
+statistics, the isospectral pair, a revival, drawing, the drawer's shape (Start here first, the
+theory last), the dark theme, the phone layout, and readouts that hold still while their numbers
+change.
 
 The machine running this may be heavily loaded: every wait polls with a generous cap, and a step
 that times out or meets a page that is not ready fails with a message rather than a traceback."""
@@ -43,6 +46,23 @@ def no_exceptions(b, what):
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, f'{what}: no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 
+def text(b, sel):
+    return b.eval(f'document.querySelector({sel!r}).textContent')
+
+def rgb(s):
+    m = re.findall(r'[0-9.]+', s)
+    return [float(v) for v in m[:3]] if m else [0, 0, 0]
+
+def contrast(b, sel):
+    """How far the text colour of the first element matching sel is from the page's background
+    (the sum over the channels, 0..765): a readable hint or block is well above 150."""
+    fg, bg = b.eval(f"""(() => {{ const e = document.querySelector({sel!r});
+        return [getComputedStyle(e).color, getComputedStyle(document.body).backgroundColor]; }})()""")
+    return sum(abs(x - y) for x, y in zip(rgb(fg), rgb(bg)))
+
+# The drum's time in milliseconds (a 30 cm box, the wave speed c), from the simulation's time.
+MS = '(__app.signal.T * 0.3 / __app.state.c * 1000)'
+
 # Live readouts must hold still: every label and every number's slot keeps its place on screen
 # while the numbers in them change.
 PLACES = """[...document.querySelectorAll('#readouts .k, #readouts .slot, #spec-note .slot, #mode-info .slot, #solve-note .slot')]
@@ -69,18 +89,102 @@ def steady(b, what, samples=10, gap=0.3):
     check(not over, f'{what}: every number fits its slot' + ('' if not over else ': ' + ', '.join(over[:4])))
 
 with Browser('drums/index.html', size=(1400, 900)) as b:
+    # ------------------------------------------------------------ the first screen
     with step('start'):
         check(started(b), 'the page starts')
-        check(wait_for(b, '__app.modes', 300), 'the direct solver delivers the exact modes for the default stadium')
+        st = b.eval('({ mode: __app.state.mode, shape: __app.state.shape, speed: __app.state.speed.drum, tool: __app.state.tool })')
+        check(st['mode'] == 'drum' and st['shape'] == 'circle' and st['tool'] == 'act',
+              f"it opens on a drum, the circle, struck (slowed down {0.3 / 100 / st['speed'] and round(1 / (0.3 / 100 * st['speed']))} times)")
+        check(wait_for(b, '__app.modes', 300), 'the direct solver delivers the exact modes for the circle')
         b.sleep(2)
         b.screenshot('build/drums-start.png')
-        st = b.eval('({ n: __app.modes.values.length, norm: __app.sim.norm() / __app.norm0, t: __app.sim.t, bounces: __app.ray && __app.ray.bounces })')
+        st = b.eval('({ n: __app.modes.values.length, drift: __app.sim.energy() / __app.norm0 - 1, t: __app.sim.t })')
         check(st['n'] == 80, f"80 exact modes ({st['n']})")
-        check(abs(st['norm'] - 1) < 1e-10, f"the billiard keeps its norm (drift {st['norm'] - 1:.1e} at t = {st['t']:.3f})")
-        check(st['bounces'] and st['bounces'] > 0, f"the classical particle bounces ({st['bounces']})")
-        steady(b, 'billiard readouts')
+        check(abs(st['drift']) < 1e-10, f"the drum keeps its energy (drift {st['drift']:.1e} at t = {st['t']:.3f})")
+        # The hint under the picture, where the eye is, and the spectrum's own hint.
+        hint = text(b, '#stage-hint')
+        check('Click the drum' in hint and 'click a peak' in hint, f'a hint under the picture says what to click: "{hint}"')
+        g = b.eval("""(() => { const s = document.getElementById('stage').getBoundingClientRect(), h = document.getElementById('stage-hint').getBoundingClientRect();
+            return { below: h.top >= s.bottom - 1 && h.top < s.bottom + 30, visible: h.height > 0 && h.bottom <= innerHeight, contrast: 0 }; })()""")
+        check(g['below'] and g['visible'], 'the hint sits directly under the picture, on screen')
+        check(contrast(b, '#stage-hint') > 150, f"the hint reads against the light background (contrast {contrast(b, '#stage-hint'):.0f})")
+        sh = text(b, '#spec-hint')
+        check(sh.startswith('Click a peak') and b.eval("document.getElementById('spec-hint').classList.contains('hint')"), f'the spectrum carries its own hint: "{sh}"')
+        mi = text(b, '#mode-info')
+        check('appears here' in mi, f'the Mode box says what it will show before anything is clicked: "{mi[:70]}…"')
+        # Every number has words beside it.
+        ro = b.eval("document.getElementById('readouts').innerText")
+        check(all(w in ro for w in ('time', 'slowed down', 'times', 'energy drift (a check)', 'points inside the shape')), f'the readouts have words: "{ro}"')
+        note = text(b, '#solve-note')
+        check(re.match(r'80 exact modes found in [0-9.]+ s', note or ''), f'the stage head says in words what was computed: "{note}"')
+        bare = b.eval("[...document.querySelectorAll('#presets button')].filter((e) => !e.title).map((e) => e.textContent)")
+        check(not bare, 'every shape button has a tooltip' + ('' if not bare else ': none on ' + ', '.join(bare)))
+        glosses = []
+        for tab in ('list', 'weyl', 'spacing'):
+            b.eval(f"document.querySelectorAll('#count-tabs button')[{['list', 'weyl', 'spacing'].index(tab)}].click()")
+            glosses.append(text(b, '#tab-note'))
+        b.eval("document.querySelectorAll('#count-tabs button')[0].click()")
+        check(all(len(g) > 30 for g in glosses), f'each tab under the Mode box has a gloss ({[g[:28] for g in glosses]})')
+        shown = b.eval("[...document.querySelectorAll('.controls details')].map((d) => [d.id || d.querySelector('summary').textContent, d.open])")
+        check(all(not o for _, o in shown), f'the drawing tools and the extra sound tools are folded away at opening ({shown})')
+        steady(b, 'drum readouts')
 
-    # 1. The spectroscopist: a random state in the stadium, run fast; peaks on the exact levels.
+    # ------------------------------------------------------------ 1. the opening experiment
+    with step('exp1'):
+        # The two lowest peaks: the fundamental near 266 Hz, then the (±1, 1) pair near 424 Hz.
+        check(wait_for(b, f'__app.signal && {MS} > 40', 600), 'the run reaches 40 ms')
+        b.eval('__app.state.running = false')
+        b.sleep(0.6)
+        r = b.eval(f"""(() => {{ const a = __app, s = a.computeSpectrum();
+          const big = Math.max(...s.peaks.map((q) => q.amp)), p = s.peaks.filter((q) => q.amp > 0.1 * big).map((q) => a.xOf(q.lambda)).sort((u, v) => u - v);
+          return {{ p: p.slice(0, 2), ms: {MS}, width: a.peakWidth }}; }})()""")
+        check(len(r['p']) == 2 and abs(r['p'][0] - 266) < 8 and abs(r['p'][1] - 424) < 10,
+              f"the lowest peaks are at {[round(v) for v in r['p']]} Hz (help: near 266 and 424 Hz; exact 265.8 and 423.5)")
+        # The width drawn over the spectrum is 1.9/T (73 Hz after 26 ms, as experiment 6 says).
+        prod = r['width'] * r['ms'] / 1000
+        check(abs(prod - 1.904) < 0.04 and abs(1.904 / 0.026 - 73) < 0.5, f"the peak width drawn is {r['width']:.1f} Hz at {r['ms']:.1f} ms: Δf·T = {prod:.3f} (1.904; so 73 Hz at 26 ms)")
+        # Click the lowest peak with the mouse: its mode is built from the motion.
+        fx = b.eval("(() => { const a = __app, f = a.specFrame, s = a.computeSpectrum(); const big = Math.max(...s.peaks.map((q) => q.amp)); const p = s.peaks.filter((q) => q.amp > 0.1 * big).sort((u, v) => u.lambda - v.lambda)[0]; return f.X(a.xOf(p.lambda)) / document.getElementById('spectrum').getBoundingClientRect().width; })()")
+        b.click('#spectrum', (fx, 0.5))
+        b.sleep(0.3)
+        sel = b.eval('__app.selected && __app.selected.kind')
+        check(sel == 'peak' and b.eval('__app.state.running'), f'a click on the peak picks it and the run goes on (selected: {sel})')
+        b.eval('__app.state.fast = true')
+        check(wait_for(b, '__app.filter && __app.filter.T > 15', 600), 'the mode builds over 45 ms of the drum')
+        b.sleep(0.5)
+        info = b.eval("document.getElementById('mode-info').innerText")
+        m = re.search(r'([0-9.]+)% of it is exact mode 1\b', info)
+        check(m and float(m.group(1)) > 95, f'the mode built from the lowest peak is the fundamental: "{info}"')
+        b.screenshot('build/drums-exp1-mode.png')
+        # Pointing at the spectrum shows the frequency there; leaving it brings the hint back.
+        b.mouse('mouseMoved', *b.point('#spectrum', (0.5, 0.5)))
+        b.sleep(0.2)
+        hover = text(b, '#spec-hint')
+        b.mouse('mouseMoved', *b.point('#stage', (0.5, 0.5)))
+        b.sleep(0.2)
+        check(re.search(r'f = +[0-9.]+ Hz', hover) and text(b, '#spec-hint').startswith('Click a peak'), f'pointing at the spectrum reads the frequency ("{hover[:40]}…") and the hint returns')
+        b.eval('__app.state.fast = false')
+
+    # ------------------------------------------------------------ the quantum tab
+    with step('quantum'):
+        b.eval("__app.setMode('quantum')")
+        b.sleep(0.3)
+        hint = text(b, '#stage-hint')
+        check(hint.startswith('Drag on the shape'), f'the hint changes with the tab: "{hint}"')
+        check(text(b, '#restart') == 'Restart' and b.eval("document.getElementById('quantum-controls').hidden === false && document.getElementById('drum-controls').hidden === true"),
+              'the Restart button and the packet panel come with the quantum tab')
+        check(wait_for(b, '__app.ray && __app.ray.bounces > 0', 120), 'the classical particle bounces')
+        st = b.eval('({ norm: __app.sim.norm() / __app.norm0, t: __app.sim.t, bounces: __app.ray.bounces })')
+        check(abs(st['norm'] - 1) < 1e-10, f"the billiard keeps its norm (drift {st['norm'] - 1:.1e} at t = {st['t']:.3f})")
+        ro = b.eval("document.getElementById('readouts').innerText")
+        check(all(w in ro for w in ('time t', 'energy ⟨E⟩ ± spread', "the particle's bounces", 'norm drift (a check)')), f'the billiard readouts have words: "{ro}"')
+        steady(b, 'billiard readouts')
+        b.eval("__app.setMode('drum')")
+        b.sleep(0.2)
+        check(text(b, '#restart') == 'Strike again', 'back on the drum, Restart reads "Strike again"')
+
+    # ------------------------------------------------------------ the experiments
+    # 7. The spectroscopist: a random state in the stadium, run fast; peaks on the exact levels.
     with step('spectroscopy'):
         b.eval('__app.setups.spectroscopy()')
         check(wait_for(b, '__app.modes && __app.signal && __app.signal.T > 2.5', 600), 'spectroscopy: the run reaches t = 2.5')
@@ -104,7 +208,7 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
         check(r['iso'] >= 5 and r['found'] == r['iso'] and r['worst'] < 0.03 and r['amp'] < 0.1,
               f"spectroscopy: all {r['found']} of {r['iso']} isolated, well-populated levels have a peak, within {100 * r['worst']:.1f}% of a width (T = {r['T']:.2f}, width ΔE = {r['fw']:.2f}), as high as |⟨φ_k|ψ(0)⟩|² to {100 * r['amp']:.1f}%")
 
-    # 3. Build a mode from the motion: the overlap with the exact mode climbs.
+    # 8. Build a mode from the motion: the overlap with the exact mode climbs.
     with step('filter'):
         b.eval('__app.setups.filter()')
         check(wait_for(b, '__app.filter && __app.filter.T > 0.3', 600), 'filter: the mode starts to build')
@@ -117,7 +221,7 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
         m = re.search(r'([0-9.]+)% of it is exact mode', info)
         check(m and float(m.group(1)) > 95, f'the filtered mode is the exact mode: "{info}"')
 
-    # 4. The square: grid eigenvalues are the exact products of sines; (1,2) and (2,1) degenerate.
+    # 3. The square: grid eigenvalues are the exact products of sines; (1,2) and (2,1) degenerate.
     with step('square'):
         b.eval('__app.setups.square()')
         check(wait_for(b, '__app.modes && __app.state.shape === "square"', 300), 'square: exact modes arrive')
@@ -128,7 +232,7 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
         check(abs(r['l2'] / r['l3'] - 1) < 1e-9, f"square: modes 2 and 3 are degenerate ({r['l2']:.6f}, {r['l3']:.6f})")
         b.screenshot('build/drums-exp-square.png')
 
-    # 5. The circle against the Bessel zeros.
+    # 4. The circle against the Bessel zeros.
     with step('circle'):
         b.eval('__app.setups.circle()')
         check(wait_for(b, '__app.modes && __app.state.shape === "circle"', 300), 'circle: exact modes arrive')
@@ -137,9 +241,9 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
           let w = 0; for (let k = 0; k < 20; k++) w = Math.max(w, Math.abs(v[k] / ex[k].lambda - 1)); return { w, j01: Math.sqrt(v[0]) * 0.48 }; })()""")
         check(r['w'] < 0.006, f"circle: the 20 lowest eigenvalues match (j_mk/R)² to {100 * r['w']:.2f}% (staircase edge); √λ₁R = {r['j01']:.4f} (j₀₁ = 2.4048)")
         b.screenshot('build/drums-exp-circle.png')
-        steady(b, 'drum readouts')
+        steady(b, 'drum readouts with a mode shown')
 
-    # 6. Struck in the middle: only the m = 0 modes ring.
+    # 2. Struck in the middle: only the m = 0 modes ring.
     with step('strike'):
         b.eval('__app.setups.strike()')
         check(wait_for(b, '__app.modes && __app.state.shape === "circle" && __app.signal && __app.signal.T > 40', 600), 'strike: the run reaches t = 40')
@@ -151,7 +255,7 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
         check(r['n'] >= 2 and r['worst'] < 0.01, f"struck in the middle, the circle's strong peaks are all m = 0 modes (j₀ₖ): {r['n']} peaks, worst {100 * r['worst']:.2f}% off")
         b.screenshot('build/drums-exp-strike.png')
 
-    # 8-10. Counting: Weyl's law, Poisson, Wigner.
+    # 9, 11, 12. Counting: Weyl's law, Poisson, Wigner.
     for name, shape in (('weyl', 'sinai8'), ('poisson', 'rectangle'), ('wigner', 'qstadium')):
         with step(name):
             b.eval(f'__app.setups.{name}()')
@@ -179,7 +283,10 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
                 check(ok and not btn[0] and btn[1].startswith('Count'), f'a new shape whose modes come from the cache can be counted (the button: "{btn[1]}", disabled {btn[0]})')
                 ok = ok and not btn[0]
                 if ok:
+                    # The button is below the fold at 1400 x 900: scroll to it, as a student would.
+                    b.eval("document.getElementById('count-more').scrollIntoView({ block: 'center' })")
                     b.click('#count-more')
+                    b.eval('scrollTo(0, 0)')
                     ok = wait_for(b, '__app.counted && __app.state.shape === "stadium"', 900)
                 b.sleep(0.5)
                 m = re.search(r'below ¼: ([0-9.]+)%', b.eval("document.getElementById('count-note').textContent"))
@@ -187,17 +294,18 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
                 check(ok and whole is not None and 13.5 < whole < 15.5 and whole > 1.8 * frac,
                       f'the whole stadium: {whole}% of spacings below 1/4, against {frac}% for the quarter (help: about 14%, twice as many)')
 
-    # 12. The isospectral pair.
+    # 10. The isospectral pair.
     with step('gww'):
         b.eval('__app.setups.gww()')
         check(wait_for(b, '__app.pinned && __app.modes && __app.state.shape === "gww2"', 600), 'GWW: both drums solved')
         r = b.eval("""(() => { const a = __app.pinned.values, b = __app.modes.values; let w = 0;
           for (let k = 0; k < Math.min(a.length, b.length); k++) w = Math.max(w, Math.abs(a[k] / b[k] - 1)); return { w, n: Math.min(a.length, b.length) }; })()""")
         check(r['w'] < 1e-9, f"GWW: the two drums' {r['n']} lowest eigenvalues agree to {r['w']:.1e}")
+        check(b.eval("document.getElementById('drum-more').open"), 'the experiment opens the "More" panel that holds the pinned drum\'s buttons')
         b.sleep(1)
         b.screenshot('build/drums-exp-gww.png')
 
-    # 11. Scars: the modes this packet excites most are concentrated along the axis: the share
+    # 14. Scars: the modes this packet excites most are concentrated along the axis: the share
     # of |φ|² within 0.04 of it, for the twelve heaviest modes, against the typical mode of the
     # same symmetry.
     with step('scars'):
@@ -230,15 +338,17 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
 
     # The other set-ups, for their pictures.
     with step('pictures'):
-        for name in ('sharpen', 'chladni', 'draw'):
+        for name in ('drum', 'sharpen', 'chladni', 'draw'):
             b.eval(f'__app.setups.{name}()')
             b.sleep(4)
             b.screenshot(f'build/drums-exp-{name}.png')
 
-    # Drawing: paint a blob; the shape becomes "drawn" and its modes are recomputed.
+    # 15. Drawing: paint a blob; the shape becomes "drawn" and its modes are recomputed.
     with step('drawing'):
         b.eval("__app.setups.draw()")
         b.sleep(0.5)
+        hint = text(b, '#stage-hint')
+        check(hint.startswith('Paint on the picture') and b.eval("document.getElementById('draw-panel').open"), f'the pen opens its panel and the hint says to paint: "{hint}"')
         before = b.eval('__app.grid.N')
         b.drag('#stage', (0.1, 0.1), (0.3, 0.2), steps=8)
         b.sleep(0.3)
@@ -276,10 +386,29 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
         check(ok, f"the 96² grid works ({b.eval('__app.grid.N')} free points, {b.eval('__app.modes && __app.modes.values.length')} modes)")
         b.eval("document.getElementById('clear').click()")
         b.sleep(0.3)
+        check(text(b, '#stage-hint').startswith('Paint a shape'), 'with nothing drawn yet, the hint says to paint a shape')
         b.drag('#stage', (0.48, 0.48), (0.53, 0.52), steps=4)
         ok = wait_for(b, '__app.state.shape === "drawn" && __app.modes', 300)
         r = b.eval('({ N: __app.grid.N, m: __app.modes && __app.modes.values.length })')
         check(ok and r['m'] and r['m'] <= r['N'], f"a tiny drawing ({r['N']} free points) gets {r['m']} modes and runs")
+
+    # ------------------------------------------------------------ the drawer
+    with step('drawer'):
+        d = b.eval("""(() => { const dr = document.getElementById('help'), kids = [...dr.children].filter((e) => e.tagName !== 'HEADER');
+          const exps = [...dr.querySelectorAll('.exp')], start = dr.querySelector('section.start'), theory = dr.querySelector('section.theory');
+          return { first: kids[0] === start, h3: start && start.querySelector('h3').textContent, math: start ? start.querySelectorAll('math').length : -1,
+            words: start ? start.textContent.trim().split(/\\s+/).length : 0,
+            firstExp: exps[0] && exps[0].dataset.setup, n: exps.length, buttons: exps.filter((e) => e.querySelector('button.setup')).length,
+            theoryLast: kids[kids.length - 1] === theory, theoryAfter: theory && exps.every((e) => e.compareDocumentPosition(theory) & Node.DOCUMENT_POSITION_FOLLOWING),
+            setups: exps.map((e) => e.dataset.setup).filter((s) => !window.__app.setups[s]), equations: theory ? theory.querySelectorAll('math').length : 0 }; })()""")
+        check(d['first'] and d['h3'] == 'Start here' and d['math'] == 0 and 60 < d['words'] < 200, f"the drawer opens with a Start-here block in plain words ({d['words']} words, no equations)")
+        check(d['firstExp'] == 'drum' and d['n'] == 15 and d['buttons'] == 15 and not d['setups'], f"{d['n']} experiments, the first the opening state, each with a Set-it-up button and a set-up ({d['firstExp']})")
+        check(d['theoryLast'] and d['theoryAfter'] and d['equations'] >= 3, f"the theory comes last, with its equations kept ({d['equations']} displayed)")
+        b.click('#help-button')
+        b.sleep(0.5)
+        b.screenshot('build/drums-help.png')
+        check(b.eval("document.getElementById('help').classList.contains('open')") and contrast(b, '.drawer .start p') > 150, 'the drawer opens and its Start-here block is readable')
+        b.key('Escape')
 
     no_exceptions(b, 'the experiments')
 
@@ -293,14 +422,37 @@ with Browser('drums/index.html#mode=drum&shape=stadium&p=%7B%22r%22%3A0.3%2C%22a
               f'the address restores a set-up ({r})')
         no_exceptions(b, 'restored set-up')
 
-# Phone width.
-with Browser('drums/index.html#setup=circle', size=(400, 850)) as b:
+# The dark theme: the hints and the Start-here block read on it too.
+with Browser('drums/index.html', size=(1400, 900)) as b:
+    with step('dark'):
+        b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
+        check(started(b), 'the dark page starts')
+        check(wait_for(b, '__app.modes', 300), 'dark: the modes arrive')
+        b.sleep(1)
+        bg = rgb(b.eval('getComputedStyle(document.body).backgroundColor'))
+        check(sum(bg) < 200, f'dark: the page follows the dark colour scheme (background {bg})')
+        c1, c2 = contrast(b, '#stage-hint'), contrast(b, '#spec-hint')
+        check(c1 > 150 and c2 > 150, f'dark: both hints read on the dark background (contrast {c1:.0f}, {c2:.0f})')
+        b.screenshot('build/drums-dark.png')
+        b.click('#help-button')
+        b.sleep(0.5)
+        check(contrast(b, '.drawer .start p') > 150, f"dark: the Start-here block reads (contrast {contrast(b, '.drawer .start p'):.0f})")
+        b.screenshot('build/drums-dark-help.png')
+        no_exceptions(b, 'dark')
+
+# Phone width: the hint is on screen with the picture, the panels in order, nothing sideways.
+with Browser('drums/index.html', size=(390, 844)) as b:
     with step('phone'):
         check(started(b), 'the phone layout starts')
         b.sleep(4)
         b.screenshot('build/drums-phone.png')
-        wide = b.eval('document.documentElement.scrollWidth')
-        check(wide <= 402, f'nothing wider than a phone screen ({wide} px)')
+        g = b.eval("""(() => { const r = (id) => document.getElementById(id).getBoundingClientRect();
+          return { scrollY, hintBottom: r('stage-hint').bottom, hintH: r('stage-hint').height, stageBottom: r('stage').bottom,
+            specTop: document.getElementById('spectrum').getBoundingClientRect().top, wide: document.documentElement.scrollWidth,
+            controlsTop: document.querySelector('.controls').getBoundingClientRect().top }; })()""")
+        check(g['scrollY'] == 0 and g['hintH'] > 0 and g['hintBottom'] <= 844 and g['hintBottom'] > g['stageBottom'], f"the hint is under the picture and on screen without scrolling (bottom at {g['hintBottom']:.0f} px of 844)")
+        check(g['stageBottom'] < g['specTop'] < g['controlsTop'], 'the picture, then the spectrum, then the controls')
+        check(g['wide'] <= 392, f"nothing wider than a phone screen ({g['wide']} px)")
         no_exceptions(b, 'phone')
 
 print(f"SUMMARY: {'all passed' if not failures else str(len(failures)) + ' failed'}")

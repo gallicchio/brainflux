@@ -1,5 +1,6 @@
-// Drums and billiards: draw a shape, find its modes from the motion as a spectroscopist would,
-// hear it as a drum, watch it as a quantum billiard.
+// Drums and billiards: strike a drum, hear it, and see that its motion is a sum of modes, each
+// with a peak in the spectrum of the motion (found as a spectroscopist would); then the same
+// shape as a quantum billiard.  Draw your own shape.
 
 import { Grid, Membrane, Billiard, packet, bump, randomState, Signal, findPeaks, ModeFilter, realPart, WINDOW_FWHM, energyStats } from './sim.js';
 import { PRESETS, maskFromSdf, maskFromValues, paintMask, maskGeometry } from './shapes.js';
@@ -16,13 +17,13 @@ const MODES = 80;            // exact modes (with eigenvectors) computed for eve
 const COUNT = 200;           // eigenvalues for Weyl's law and the level statistics
 
 const state = {
-  mode: 'quantum',           // 'quantum' | 'drum'
-  shape: 'stadium',          // a preset id, 'typed' or 'drawn'
+  mode: 'drum',              // 'drum' | 'quantum'
+  shape: 'circle',           // a preset id, 'typed' or 'drawn'
   params: {},                // the preset's parameters
   n: 128,
   tool: 'act',               // 'act' (strike / launch) | 'draw' | 'erase'
   brush: 3,
-  speed: { quantum: 0.02, drum: 0.5 },
+  speed: { quantum: 0.02, drum: 2 },   // simulated time per real second (the drum: 6 ms a second, slowed down 170 times)
   fast: false,
   running: true,
   start: 'packet',           // quantum: 'packet' | 'random' | 'mode'; drum: 'strike' | 'mode'
@@ -133,6 +134,7 @@ function centreOfMass() {
 // ------------------------------------------------------------------ the run
 
 function restart() {
+  updateHint();
   if (!grid || grid.N === 0) { sim = null; signal = null; drawStage(); return; }
   const n = grid.n, N = n * n;
   filter = null;
@@ -343,8 +345,10 @@ function updateSolveNote() {
   const pct = (f) => slot(`${fixed(100 * f, 0, 4)}%`, 5);
   if (solving && solving.key === shapeKey()) {
     note.innerHTML = `${solving.purpose === 'count' ? `counting ${COUNT} modes` : `computing ${MODES} exact modes`}… ${pct(solving.progress)}`;
-  } else if (modes) note.textContent = `${modes.values.length} modes by shift-invert Lanczos (${(modes.ms / 1000).toFixed(1)} s)`;
-  else note.textContent = '';
+  } else if (modes) {
+    note.textContent = `${modes.values.length} exact modes found in ${(modes.ms / 1000).toFixed(1)} s`;
+    note.title = 'The modes found directly (shift-invert Lanczos on the grid, in a background thread): the green ticks under the spectrum, and the list';
+  } else note.textContent = '';
   $('#count-more').disabled = !!(solving && solving.purpose === 'count') || !!counted;
   $('#count-more').innerHTML = counted ? `${counted.values.length} modes counted` : solving && solving.purpose === 'count' ? `Counting… ${pct(solving.progress)}` : `Count ${COUNT} modes`;
 }
@@ -515,7 +519,10 @@ function drawStage() {
   if (!isQ() && state.start === 'strike') {
     const [X, Y] = toCanvas(state.strike.x, state.strike.y, W);
     ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(X, Y, Math.max(4, (2 * state.mallet * W) / (state.n * grid.h)), 0, 2 * Math.PI); ctx.stroke();
+    const r = Math.max(4, (2 * state.mallet * W) / (state.n * grid.h));
+    ctx.beginPath(); ctx.arc(X, Y, r, 0, 2 * Math.PI); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText('struck here', X + r + 4, Y + 4);
   }
   // The launch arrow while dragging.
   if (drag && drag.kind === 'launch') {
@@ -531,9 +538,10 @@ function drawStage() {
     ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(X, Y, ((state.brush + 0.5) * W) / state.n, 0, 2 * Math.PI); ctx.stroke();
   }
   ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '12px system-ui, sans-serif';
-  const label = isQ() ? 'ψ: colour is the phase, brightness |ψ|' : 'u: red up, cyan down';
+  const label = isQ() ? 'the wave ψ: colour is its phase, brightness |ψ|' : 'the membrane u: red up, cyan down';
   ctx.fillText(label, 8, 16);
-  if (grid.N === 0) { ctx.fillText('Draw a shape (choose Draw below the presets).', 8, 34); }
+  if (isQ() && ray && state.ray) ctx.fillText('yellow dot: a classical particle launched the same way', 8, 32);
+  if (grid.N === 0) { ctx.fillText('Nothing here yet: paint a shape with the pen.', 8, 34); }
 }
 
 function arrow(ctx, x0, y0, x1, y1, color) {
@@ -549,7 +557,7 @@ function arrow(ctx, x0, y0, x1, y1, color) {
 // ------------------------------------------------------------------ drawing: the spectrum
 
 const specCanvas = $('#spectrum'), sigCanvas = $('#signal');
-let specFrame = null;
+let specFrame = null, lastWidth = 0;   // lastWidth: the peak width drawn last (for the tests)
 
 function computeSpectrum() {
   if (!sim || !signal || signal.length < 16) { spec = null; return; }
@@ -597,6 +605,13 @@ function drawSpectrum() {
     for (const l of pinned.values) { const X = f.X(xOf(l)); if (X > f.right) break; ctx.moveTo(X, f.top); ctx.lineTo(X, f.top + 9); }
     ctx.stroke();
   }
+  // What the ticks are.
+  if (modes) {
+    ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillStyle = c.good; ctx.fillText('green ticks: the exact modes', f.right - 4, f.top + 20);
+    if (pinned) { ctx.fillStyle = c.warn; ctx.fillText('red ticks: the pinned drum', f.right - 4, f.top + 32); }
+    ctx.textAlign = 'left';
+  }
   // The selected frequency.
   if (selected) {
     const l = selected.kind === 'peak' ? selected.lambda : modes?.values[selected.k];
@@ -613,7 +628,8 @@ function drawSpectrum() {
     const dx = Math.abs(xOf(lambdaOfOmega(Om + dOm / 2)) - xOf(lambdaOfOmega(Math.max(0, Om - dOm / 2))));
     // The label and its number hold still (a fixed-width number in a monospaced font); the bar
     // after them is as long as a peak is wide, on the axis below.
-    const label = `a peak's width ${isQ() ? 'ΔE' : 'Δf'} ≈`, num = fixed(dx, 1, 6) + (isQ() ? '' : ' Hz');
+    lastWidth = dx;
+    const label = `peak width so far ${isQ() ? 'ΔE' : 'Δf'} ≈`, num = fixed(dx, 1, 6) + (isQ() ? '' : ' Hz');
     ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.font = '11px system-ui, sans-serif';
     ctx.fillText(label, f.left, 8);
@@ -628,7 +644,7 @@ function drawSpectrum() {
     ctx.textBaseline = 'alphabetic';
   }
   f.axes({ xlabel: isQ() ? 'energy E  (ħ = m = 1, box side 1)' : 'frequency f (Hz)', ylabel: state.log ? 'log₁₀' : '', yTicks: state.log });
-  $('#spec-note').innerHTML = signal ? (signal.length >= SIGNAL_MAX ? 'the longest run kept, ' : 'run ')
+  $('#spec-note').innerHTML = signal ? (signal.length >= SIGNAL_MAX ? 'the longest run kept, ' : 'run so far ')
     + (isQ() ? `t =${slot(fixed(signal.T, 3, 8), 8)}` : `${slot(fixed((signal.T * L_PHYS) / state.c * 1000, 1, 8), 8)} ms`) : '';
 }
 
@@ -654,7 +670,7 @@ function drawSignal() {
   }
   ctx.stroke();
   ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif';
-  ctx.fillText(isQ() ? '|⟨ψ(0)|ψ(t)⟩|' : 'u under the mallet', left + 4, top + 11);
+  ctx.fillText(isQ() ? 'signal: overlap with the start |⟨ψ(0)|ψ(t)⟩|' : 'signal: the membrane under the mallet', left + 4, top + 11);
   ctx.fillText('0', left, height - 3);
   // The run's length, in a fixed-width monospaced slot at the right end.
   ctx.font = '11px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
@@ -687,8 +703,11 @@ function drawMode() {
   shownMode = m;
   const info = $('#mode-info');
   if (!m) {
-    if (selected) { ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '12px system-ui, sans-serif'; ctx.fillText('building…', 10, 20); }
-    info.innerHTML = selected ? 'building the mode from the motion…' : 'Click a peak of the spectrum to build its mode from the motion, or a mode in the list of exact modes.';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
+    if (selected) ctx.fillText('building…', W / 2, H / 2 + 4);
+    else { ctx.fillText('the mode you pick', W / 2, H / 2 - 5); ctx.fillText('will appear here', W / 2, H / 2 + 11); }
+    ctx.textAlign = 'left';
+    info.innerHTML = selected ? 'building the mode from the motion…' : 'Click a peak of the spectrum, or a row of the list below, and that mode appears here: its pattern, its nodal lines in white, and its frequency.';
     $('#excite').disabled = true; $('#hear-mode').disabled = true;
     return;
   }
@@ -769,7 +788,7 @@ function fillModeList() {
   if (!modes) { list.innerHTML = '<div class="muted small">computing…</div>'; return; }
   const lab = analyticLabels();
   const rows = [];
-  rows.push(`<tr><th>#</th><th>λ</th><th>${isQ() ? 'E' : 'f (Hz)'}</th>${lab ? `<th>exact</th><th>λ exact</th><th>grid</th>` : ''}</tr>`);
+  rows.push(`<tr><th title="The mode's number, lowest first">#</th><th title="Its eigenvalue: −∇²φ = λφ, for a box of side 1">λ</th><th title="${isQ() ? 'Its energy E = λ/2 (ħ = m = 1)' : 'Its frequency, for a 30 cm box'}">${isQ() ? 'E' : 'f (Hz)'}</th>${lab ? `<th title="The mode's numbers in the exact formula">exact</th><th title="The exact eigenvalue, from the formula">λ exact</th><th title="How far the grid's eigenvalue is from the exact one">grid</th>` : ''}</tr>`);
   modes.values.forEach((l, k) => {
     const a = lab && lab[k];
     rows.push(`<tr data-k="${k}" class="${selected && selected.kind === 'exact' && selected.k === k ? 'sel' : ''}"><td>${k + 1}</td><td>${fmt(l, 6)}</td><td>${fmt(xOf(l), 5)}</td>${a ? `<td>${a.label}</td><td>${fmt(a.lambda, 6)}</td><td>${fmt(100 * (l / a.lambda - 1), 2)}%</td>` : lab ? '<td></td><td></td><td></td>' : ''}</tr>`);
@@ -910,21 +929,39 @@ const drift = (v) => expo(v / conserved0 - 1);
 
 function updateReadouts() {
   if (!sim) { $('#readouts').innerHTML = ''; return; }
-  const items = [];
+  const items = [];   // [label, value, tooltip]
+  const CHECK = 'The time stepping conserves this exactly: how much it has changed since the start is a check on the arithmetic (it should stay at rounding error)';
   if (isQ()) {
-    items.push(['t', slot(fixed(sim.t, 3, 8), 8)], ['norm drift', slot(drift(sim.norm()), 8)]);
+    items.push(['time t', slot(fixed(sim.t, 3, 8), 8), 'Time, in units where ħ = m = 1 and the box is 1 wide']);
     const st = energyStats(grid, sim.re, sim.im, 0.5);
-    items.push(['⟨E⟩', `${slot(fixed(st.mean, 1, 7), 7)} ± ${slot(fixed(st.spread, 1, 7), 7)}`]);
-    if (ray) items.push(['bounces', slot(fixed(ray.bounces, 0, 6), 6)]);
+    items.push(['energy ⟨E⟩ ± spread', `${slot(fixed(st.mean, 1, 7), 7)} ± ${slot(fixed(st.spread, 1, 7), 7)}`, 'The mean energy of the wave and the spread of energies in it: its spectrum has its peaks in this range']);
+    if (ray) items.push(['the particle\'s bounces', slot(fixed(ray.bounces, 0, 6), 6), 'How many times the yellow classical particle has hit a wall']);
+    items.push(['norm drift (a check)', slot(drift(sim.norm()), 8), CHECK]);
   } else {
     const ms = (sim.t * L_PHYS) / state.c * 1000;
-    items.push(['t', `${slot(fixed(ms, 2, 10), 10)} ms`]);
-    if (!state.fast) items.push(['slowed down', `${slot(fixed(1 / ((L_PHYS / state.c) * state.speed.drum), 0, 7), 7)} times`]);
-    items.push(['energy drift', slot(drift(sim.energy()), 8)]);
+    items.push(['time', `${slot(fixed(ms, 2, 10), 10)} ms`, 'Time since the strike, for a drum in a 30 cm box']);
+    if (!state.fast) items.push(['slowed down', `${slot(fixed(1 / ((L_PHYS / state.c) * state.speed.drum), 0, 7), 7)} times`, 'Real time divided by the drum\'s time (the speed slider)']);
+    items.push(['energy drift (a check)', slot(drift(sim.energy()), 8), CHECK]);
   }
-  items.push(['grid', `${state.n}² (${grid.N} free points)`]);
-  $('#readouts').innerHTML = items.map(([k, v]) => `<span class="ro"><span class="k">${k}</span> <b>${v}</b></span>`).join('');
+  items.push(['grid', `${state.n}² (${grid.N} points inside the shape)`, 'The wave is computed on these grid points (Display and grid)']);
+  $('#readouts').innerHTML = items.map(([k, v, tip]) => `<span class="ro" title="${tip}"><span class="k">${k}</span> <b>${v}</b></span>`).join('');
 }
+
+// ------------------------------------------------------------------ the hints
+
+/** The one-line hint under the picture: what a click or a drag does right now. */
+function updateHint() {
+  const h = $('#stage-hint');
+  if (!grid || grid.N === 0) h.textContent = 'Paint a shape on the picture (the pen adds membrane); its modes are found when you lift the pen';
+  else if (state.tool === 'draw') h.textContent = 'Paint on the picture to add membrane; lift the pen and the modes are recomputed';
+  else if (state.tool === 'erase') h.textContent = 'Paint on the picture to add wall; lift the pen and the modes are recomputed';
+  else if (isQ()) h.textContent = 'Drag on the shape to launch a packet: from where you press, in the direction and as far as you drag';
+  else h.textContent = 'Click the drum to strike it there (you hear it too); click a peak of the spectrum to see that mode';
+}
+
+const SPEC_HINT = 'Click a peak: the mode behind it appears below';
+const specHint = $('#spec-hint');
+function restoreSpecHint() { specHint.classList.add('hint'); specHint.textContent = SPEC_HINT; }
 
 // ------------------------------------------------------------------ pointer on the stage
 
@@ -1041,7 +1078,7 @@ specCanvas.addEventListener('pointerdown', (e) => {
 specCanvas.addEventListener('pointermove', (e) => {
   if (!specFrame) return;
   const r = specCanvas.getBoundingClientRect(), px = e.clientX - r.left, f = specFrame;
-  if (px < f.left || px > f.right) { $('#spec-hover').textContent = ''; return; }
+  if (px < f.left || px > f.right) { restoreSpecHint(); return; }
   const x = f.invX(px);
   let s = `${isQ() ? 'E' : 'f'} = ${slot(fixed(x, 1, 8), 8)}${isQ() ? '' : ' Hz'}`;
   if (modes) {
@@ -1050,8 +1087,11 @@ specCanvas.addEventListener('pointermove', (e) => {
     modes.values.forEach((v, k) => { if (Math.abs(v - l) < Math.abs(modes.values[best] - l)) best = k; });
     s += ` · nearest exact mode ${slot(fixed(best + 1, 0, 4), 4)} at ${slot(fixed(xOf(modes.values[best]), 1, 8), 8)}`;
   }
-  $('#spec-hover').innerHTML = s;
+  s += ' · click to build the mode at this frequency';
+  specHint.classList.remove('hint');
+  specHint.innerHTML = s;
 });
+specCanvas.addEventListener('pointerleave', restoreSpecHint);
 
 // ------------------------------------------------------------------ controls
 
@@ -1059,6 +1099,15 @@ const playButton = $('#play');
 function setRunning(on) { state.running = on; playButton.textContent = on ? 'Pause' : 'Play'; }
 playButton.addEventListener('click', () => setRunning(!state.running));
 $('#restart').addEventListener('click', () => { restart(); if (!isQ() && state.start === 'strike') strikeSound(); });
+/** The buttons and panels whose words depend on the mode: Restart is "Strike again" for a drum. */
+function setModeLabels() {
+  const drum = !isQ();
+  $('#restart').textContent = drum ? 'Strike again' : 'Restart';
+  $('#restart').title = drum ? 'Strike it again where you last did, and hear it (R)' : 'Start again from the same state (R)';
+  $('#act-label').textContent = drum ? 'Strike' : 'Launch';
+  $('#drum-controls').hidden = !drum;
+  $('#quantum-controls').hidden = drum;
+}
 const fastButton = toggle('Fast', state.fast, (on) => { state.fast = on; }, 'Run as fast as the computer can (for the spectrum), drawing a few times a second (F)');
 $('#run-row').append(fastButton);
 const speedSlider = slider({ label: 'speed', min: 0.001, max: 2, log: true, value: state.speed[state.mode], title: 'Simulated time per second',
@@ -1078,9 +1127,7 @@ function setMode(m) {
   speedSlider.setRange(m === 'drum' ? 0.02 : 0.001, m === 'drum' ? 20 : 2);
   speedSlider.value = state.speed[m];
   if (state.start === 'mode' && startField) { /* keep the mode */ } else state.start = m === 'drum' ? 'strike' : 'packet';
-  $('#drum-controls').hidden = m !== 'drum';
-  $('#quantum-controls').hidden = m !== 'quantum';
-  $('#act-label').textContent = m === 'drum' ? 'Strike' : 'Launch';
+  setModeLabels();
   selected = selected && selected.kind === 'exact' ? selected : null;
   filter = null;
   fillModeList();
@@ -1091,11 +1138,11 @@ function setMode(m) {
 // The shape.
 const presetButtons = {};
 for (const [id, p] of Object.entries(PRESETS)) {
-  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => { selected = null; setShape(id); } }, p.label);
+  const b = el('button', { type: 'button', 'aria-pressed': 'false', title: p.tip || '', onclick: () => { selected = null; setShape(id); } }, p.label);
   $('#presets').append(b);
   presetButtons[id] = b;
 }
-const typedButton = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => { selected = null; setShape('typed'); } }, 'Typed');
+const typedButton = el('button', { type: 'button', 'aria-pressed': 'false', title: 'A shape from a formula you type, in x, y, r and θ', onclick: () => { selected = null; setShape('typed'); } }, 'Typed');
 $('#presets').append(typedButton);
 
 const paramBox = $('#shape-params');
@@ -1138,11 +1185,18 @@ const toolSeg = segmented([
   { value: 'act', html: '<span id="act-label">Launch</span>', title: 'Click (and drag) on the shape: strike the drum, or launch a packet with the momentum you drag' },
   { value: 'draw', label: 'Draw', title: 'Paint free membrane' },
   { value: 'erase', label: 'Erase', title: 'Paint walls' },
-], state.tool, (v) => { state.tool = v; stage.classList.toggle('painting', v !== 'act'); }, { label: 'What a click does' });
+], state.tool, (v) => setTool(v), { label: 'What a click does' });
 $('#tool-seg').append(toolSeg);
+/** What a click on the picture does: 'act' (strike or launch), 'draw' or 'erase'.  The pen's panel opens with the pen. */
+function setTool(v) {
+  state.tool = v; toolSeg.value = v;
+  stage.classList.toggle('painting', v !== 'act');
+  if (v !== 'act') $('#draw-panel').open = true;
+  updateHint();
+}
 const brushSlider = slider({ label: 'brush', min: 1, max: 12, step: 1, value: state.brush, title: 'The radius of the brush, in grid steps', onInput: (v) => { state.brush = v; } });
 $('#brush-box').append(brushSlider);
-$('#clear').addEventListener('click', () => { mask.fill(0); state.tool = 'draw'; toolSeg.value = 'draw'; stage.classList.add('painting'); shapeChangedByPaint(); toast('Draw a shape on the grid.'); });
+$('#clear').addEventListener('click', () => { mask.fill(0); setTool('draw'); shapeChangedByPaint(); toast('Paint a shape on the picture.'); });
 $('#fill').addEventListener('click', () => { const n = state.n; for (let j = 1; j < n - 1; j++) for (let i = 1; i < n - 1; i++) mask[j * n + i] = 1; shapeChangedByPaint(); });
 
 // The drum.
@@ -1153,14 +1207,15 @@ const cSlider = slider({ label: 'c (m/s)', min: 20, max: 300, log: true, value: 
 const ringSlider = slider({ label: 'ring (s)', min: 0.1, max: 5, log: true, value: state.ring, title: 'How long the fundamental rings (higher modes die sooner: every mode lasts the same number of cycles)',
   onInput: (v) => { state.ring = v; } });
 const volSlider = slider({ label: 'volume', min: 0, max: 1, value: state.volume, onInput: (v) => { state.volume = v; } });
-$('#drum-box').append(malletSlider, cSlider, ringSlider, volSlider);
+$('#drum-box').append(malletSlider, cSlider, volSlider);
+$('#drum-more-box').append(ringSlider);
 const soundToggle = toggle('Sound on strike', state.sound, (on) => { state.sound = on; if (!on) stopSound(); }, 'Hear the drum each time you strike it');
 const soundKindSeg = segmented([
   { value: 'strike', label: 'as struck', title: 'Each mode as loud as the strike makes it (the sound under the mallet)' },
   { value: 'spectrum', label: 'every mode', title: 'Every mode equally (∝ 1/f): the spectrum alone, wherever it is struck' },
 ], state.soundKind, (v) => { state.soundKind = v; }, { label: 'Sound' });
-$('#sound-row').append(soundToggle, soundKindSeg);
-$('#strike-again').addEventListener('click', () => { restart(); state.sound = true; soundToggle.on = true; strikeSound(); });
+$('#sound-row').append(soundToggle);
+$('#sound-kind-row').append(el('span', { class: 'small muted' }, 'The sound:'), soundKindSeg);
 $('#pin').addEventListener('click', () => {
   if (!modes) { toast('Wait for the exact modes.'); return; }
   pinned = { label: shapeLabel(), values: Float64Array.from(modes.values) };
@@ -1226,11 +1281,17 @@ $('#mode-tools').append(sandToggle);
 const countSeg = segmented([
   { value: 'list', label: 'Exact modes', title: 'The direct solver\'s eigenvalues (and the exactly known ones, for the square, circle and triangle)' },
   { value: 'weyl', label: 'Weyl\'s law', title: 'The number of modes below λ' },
-  { value: 'spacing', label: 'Spacings', title: 'How the gaps between neighbouring modes are distributed' },
+  { value: 'spacing', label: 'Level spacings', title: 'How the gaps between neighbouring modes are distributed' },
 ], state.countTab, (v) => showTab(v), { label: 'Exact modes and counting' });
 $('#count-tabs').append(countSeg);
+const TAB_NOTES = {
+  list: 'Every mode of this shape, lowest first, found directly by the eigensolver: click one to see it.',
+  weyl: 'How many modes lie below λ: the count climbs at a rate set by the drum\'s area (Weyl, 1911).',
+  spacing: 'The gaps between neighbouring modes, in units of their mean: a regular shape and a chaotic one differ.',
+};
 function showTab(v) {
   state.countTab = v; countSeg.value = v;
+  $('#tab-note').textContent = TAB_NOTES[v];
   $('#list-tab').hidden = v !== 'list';
   $('#count-tab').hidden = v === 'list';
   $('#weyl-tools').hidden = v !== 'weyl';
@@ -1246,7 +1307,7 @@ $('#weyl-tools').append(residToggle);
 // The display.
 $('#bright-box').append(slider({ label: 'brightness', min: -1.5, max: 1.5, value: 0, step: 0.01, onInput: (v) => { state.bright = v; } }));
 const gridSeg = segmented([96, 128, 160].map((n) => ({ value: n, label: `${n}²`, title: n === 160 ? 'Finer: about twice as slow' : n === 96 ? 'Coarser and faster' : 'The default' })),
-  state.n, (n) => { state.n = n; if (state.shape === 'drawn') { state.shape = 'stadium'; state.params = presetParams('stadium'); } selected = null; setShape(state.shape, state.params); }, { label: 'Grid' });
+  state.n, (n) => { state.n = n; if (state.shape === 'drawn') { state.shape = 'circle'; state.params = presetParams('circle'); } selected = null; setShape(state.shape, state.params); }, { label: 'Grid' });
 $('#grid-box').append(gridSeg);
 
 document.addEventListener('keydown', (e) => {
@@ -1306,12 +1367,10 @@ function go({ mode = 'quantum', shape = 'stadium', params = {}, start, seed = 0,
   if (speed) state.speed[mode] = speed;
   state.start = start || (mode === 'drum' ? 'strike' : 'packet');
   startSeg.value = state.start === 'random' ? 'random' : 'packet';
-  $('#drum-controls').hidden = mode !== 'drum';
-  $('#quantum-controls').hidden = mode !== 'quantum';
-  $('#act-label').textContent = mode === 'drum' ? 'Strike' : 'Launch';
+  setModeLabels();
   speedSlider.setRange(mode === 'drum' ? 0.02 : 0.001, mode === 'drum' ? 20 : 2);
   speedSlider.value = state.speed[mode];
-  state.tool = 'act'; toolSeg.value = 'act'; stage.classList.remove('painting');
+  setTool('act');
   showTab(tab || 'list');
   setShape(shape, params);
   setRunning(true);
@@ -1328,6 +1387,7 @@ function whenModes(fn) {
 }
 
 const setups = {
+  drum: () => go({ mode: 'drum', shape: 'circle', strike: { x: 0.17, y: 0.07 }, speed: 2 }),
   spectroscopy: () => go({ shape: 'stadium', start: 'random', seed: 1, fast: true }),
   filter: () => go({ shape: 'stadium', start: 'random', seed: 1, fast: true, peak: 11 }),
   sharpen: () => go({ mode: 'drum', shape: 'circle', strike: { x: 0.11, y: 0.07 }, fast: false, speed: 2 }),
@@ -1340,6 +1400,7 @@ const setups = {
   wigner: () => go({ mode: 'drum', shape: 'qstadium', count: true, tab: 'spacing' }),
   gww: () => {
     go({ mode: 'drum', shape: 'gww1' });
+    $('#drum-more').open = true;
     whenModes(() => {
       $('#pin').click();
       setShape('gww2');
@@ -1347,7 +1408,7 @@ const setups = {
   },
   revival: () => go({ shape: 'square', k: 25, angle: 0.5, sigma: 0.07, launch: { x: -0.2, y: -0.1 }, speed: 0.05 }),
   scars: () => go({ shape: 'stadium', k: 30, angle: 0, sigma: 0.05, launch: { x: -0.3, y: 0 }, fast: true }),
-  draw: () => { go({ mode: 'drum', shape: 'circle' }); state.tool = 'draw'; toolSeg.value = 'draw'; stage.classList.add('painting'); },
+  draw: () => { go({ mode: 'drum', shape: 'circle' }); setTool('draw'); },
 };
 drawer($('#help'), $('#help-button'), setups);
 
@@ -1372,9 +1433,7 @@ drawer($('#help'), $('#help-button'), setups);
     }
     kSlider.value = state.k; angleSlider.value = +(state.angle * 180 / Math.PI).toFixed(1); sigmaSlider.value = state.sigma; malletSlider.value = state.mallet;
     startSeg.value = state.start === 'random' ? 'random' : 'packet';
-    $('#drum-controls').hidden = state.mode !== 'drum';
-    $('#quantum-controls').hidden = state.mode !== 'quantum';
-    $('#act-label').textContent = state.mode === 'drum' ? 'Strike' : 'Launch';
+    setModeLabels();
     speedSlider.setRange(state.mode === 'drum' ? 0.02 : 0.001, state.mode === 'drum' ? 20 : 2);
     speedSlider.value = state.speed[state.mode];
     if (h.shape === 'drawn' && h.mask) {
@@ -1385,10 +1444,10 @@ drawer($('#help'), $('#help-button'), setups);
       typedField.set(h.V || typedField.source, h.p ? JSON.parse(h.p) : {}, false);
       typedExpr = typedField.expr; typedParams = typedField.params;
       setShape('typed');
-    } else setShape(PRESETS[h.shape] ? h.shape : 'stadium', h.p ? JSON.parse(h.p) : undefined);
+    } else setShape(PRESETS[h.shape] ? h.shape : state.shape, h.p ? JSON.parse(h.p) : undefined);
   } catch (err) {
     console.warn('Could not restore the set-up from the address:', err);
-    setShape('stadium');
+    setShape('circle');
   }
 })();
 requestAnimationFrame(loop);
@@ -1398,6 +1457,7 @@ window.__app = {
   get modes() { return modes; }, get counted() { return counted; }, get geo() { return geo; }, get filter() { return filter; },
   get selected() { return selected; }, get ray() { return ray; }, get pinned() { return pinned; }, get mask() { return mask; },
   get norm0() { return conserved0; }, get psi0() { return psi0; }, get probe() { return probe; }, timing,
-  selectPeak, selectExact, restart, setShape, setMode, computeSpectrum: () => { computeSpectrum(); return spec; }, lambdaOfOmega, xOf,
+  get specFrame() { return specFrame; }, get peakWidth() { return lastWidth; },
+  selectPeak, selectExact, restart, setShape, setMode, setTool, computeSpectrum: () => { computeSpectrum(); return spec; }, lambdaOfOmega, xOf,
   ready: true,
 };
