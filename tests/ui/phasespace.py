@@ -185,6 +185,11 @@ with Browser('phasespace/index.html', size=(1400, 900)) as b:
     pred = math.sqrt(i0['sx'] ** 2 + 16 * i0['sp'] ** 2)
     check(abs(i1['sp'] - i0['sp']) < 1e-6 and abs(i1['sx'] - pred) < 1e-4 and i1['minW'] > -1e-6,
           f"free: sigma_p {i0['sp']:.5f} -> {i1['sp']:.5f}, sigma_x {i0['sx']:.4f} -> {i1['sx']:.4f} (predicted {pred:.4f}), W >= 0")
+    # The help: a larger p0 travels faster but shears just the same; a harder squeeze shears faster.
+    b.eval("__app.go('free', { init: { kind: 'squeezed', x0: -5, p0: 3, r: 0.3, theta: 0 }, run: false })"); b.eval(RUN_TO + '(4)'); i3 = b.eval(INFO)
+    b.eval("__app.go('free', { init: { kind: 'squeezed', x0: -5, p0: 1, r: 0.8, theta: 0 }, run: false })"); b.eval(RUN_TO + '(4)'); i8 = b.eval(INFO)
+    check(abs(i3['sx'] - i1['sx']) < 1e-4 and i8['sx'] > 1.5 * i1['sx'],
+          f"free: at t = 4 sigma_x is {i1['sx']:.3f} for p0 = 1 and {i3['sx']:.3f} for p0 = 3 (the same shear), {i8['sx']:.3f} when squeezed harder (r = 0.8)")
     # 7. The anharmonic well: the classical points conserve energy while W grows negative regions.
     b.eval('__app.setups.anharmonic()'); b.eval(RESTART)
     i0 = b.eval(INFO); b.eval(RUN_TO + '(10)'); i1 = b.eval(INFO)
