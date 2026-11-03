@@ -29,12 +29,13 @@ const soft = (role, a) => `rgba(${RGB[role].join(', ')}, ${a})`;
 // --------------------------------------------------------------------------- state
 
 const DEFAULTS = {
-  obj: 'phantom', contrast: 'modified', px: 0.45, py: 0.25,
+  obj: 'disks', contrast: 'modified', px: 0.45, py: 0.25,
   f: '(r < 0.8)*(1 + cos(k*(x cos(a) + y sin(a))))/2', fp: { k: 40, a: 1.0472 },
   na: 180, range: 180, nd: 256, ap: 1,
   noise: false, I0: 1e5, poly: false,
   filter: 'ramlak', cut: 1,
   speed: 40, keep: false,
+  panels: 'basic',                     // 'basic': scanner, sinogram, reconstruction; 'all': the second row too
   view: 'profile', under: false, circles: true, kz: 1,
   lo: null, hi: null,                  // the grey scale; null: chosen for the object
   py0: 0,                              // the profile's height y
@@ -66,7 +67,7 @@ const shapesFor = {
   metal: () => [...sheppLogan('original'), ...[-0.32, 0.32].map((x) => ({ ...disk(x, -0.28, 0.035, 20 - 1.02), metal: true }))],
 };
 const OBJECTS = [
-  { id: 'phantom', label: 'Shepp–Logan', title: 'The Shepp–Logan head phantom: ten ellipses, projected exactly' },
+  { id: 'phantom', label: 'Head', title: 'The Shepp–Logan head phantom (1974): ten ellipses for the skull, the brain, the ventricles and small tumours, projected exactly' },
   { id: 'disks', label: 'Disks', title: 'Three disks, projected exactly: the one in the middle draws a straight band in the sinogram, the others sinusoids' },
   { id: 'point', label: 'Point', title: 'One small Gaussian spot, projected exactly' },
   { id: 'disk', label: 'Disk', title: 'A uniform disk: its projection is the chord length 2√(R² − s²)' },
@@ -413,13 +414,31 @@ function draw() {
   }
   drawScanner();
   drawSinogram(data);
-  drawK();
-  drawRecon($('#bp'), off.bp, 'bp');
   drawRecon($('#fbp'), off.fbp, 'fbp');
-  drawExtra();
-  if (filterPlotStale) drawFilterPlot();
+  // The second row of panels is drawn only while it is unfolded.
+  if (state.panels === 'all') {
+    drawK();
+    drawRecon($('#bp'), off.bp, 'bp');
+    drawExtra();
+  }
+  if (filterPlotStale && morePlot.open) drawFilterPlot();
   updateReadouts(data);
 }
+
+// The second row of panels, folded away when the page opens: Fourier space, the plain
+// back-projection and the profile.  The experiments that need them open it.
+const morePanels = $('#more-panels'), morePlot = $('#filter-more');
+function setPanels(p) {
+  state.panels = p;
+  morePanels.open = p === 'all';
+  dirty = true; updateHash(); schedule();
+}
+morePanels.addEventListener('toggle', () => {
+  const p = morePanels.open ? 'all' : 'basic';
+  if (state.panels !== p) { state.panels = p; updateHash(); }
+  dirty = true; schedule();
+});
+morePlot.addEventListener('toggle', () => { filterPlotStale = true; dirty = true; schedule(); });
 
 function quantile(arr, q) {
   // An estimate from a sample of the pixels inside the circle (fast enough for every frame).
@@ -526,8 +545,9 @@ function drawScanner() {
 
 // The sinogram: s across, theta down.  Bin k (centred on s_k) spans the k-th of M columns; row j
 // is centred on its angle theta_j.  When the rows are more than 4 px apart they are drawn as
-// bands narrower than the spacing, so that the gaps show which angles were measured.
-const SINO_M = { left: 40, right: 10, top: 8, bottom: 20 };
+// bands narrower than the spacing, so that the gaps show which angles were measured.  The line
+// above the picture says what the axes are.
+const SINO_M = { left: 40, right: 10, top: 22, bottom: 20 };
 const sinoImg = { canvas: document.createElement('canvas'), data: null };
 function sinoGeom() {
   const cv = $('#sinogram'), r = cv.getBoundingClientRect();
@@ -581,7 +601,8 @@ function drawSinogram(data) {
     ctx.fillStyle = C.text; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (hh > 16) ctx.fillText('not measured', L0 + g.w / 2, y0 + hh / 2);
   }
-  // Axes: theta down the left, s along the bottom (the end labels inside the ends).
+  // Axes: theta down the left, s along the bottom (the end labels inside the ends), and what
+  // they are, in words, on the line above the picture.
   ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right';
   for (const a of [0, 45, 90, 135, 180]) {
@@ -594,13 +615,17 @@ function drawSinogram(data) {
   for (const s of [-1, -0.5, 0, 0.5, 1]) {
     ctx.textAlign = s === -1 ? 'left' : s === 1 ? 'right' : 'center';
     const x = s === -1 ? L0 : s === 1 ? L0 + g.w : g.X(s);
-    ctx.fillText(s === 0 ? 's = 0' : String(s).replace('-', '−'), x, T0 + g.h + 4);
+    ctx.fillText(String(s).replace('-', '−'), x, T0 + g.h + 4);
   }
+  ctx.fillStyle = C.text;
+  ctx.textAlign = 'left'; ctx.fillText('angle θ ↓', 4, 5);
+  ctx.textAlign = 'right'; ctx.fillText('position on the detector, s →', L0 + g.w, 5);
   // A row: outlined in its colour, with a mark in each margin.
   const markRow = (j, colour) => {
-    const y = g.Y(sc.angle(j)), half = Math.max(1.5, g.band / 2) + 1;
+    // (On whole pixels, so that the one-pixel outline is crisp.)
+    const y = Math.round(g.Y(sc.angle(j))), half = Math.max(2, Math.round(g.band / 2) + 1);
     ctx.strokeStyle = colour; ctx.lineWidth = 1;
-    ctx.strokeRect(L0 - 0.5, y - half, g.w + 1, 2 * half);
+    ctx.strokeRect(L0 - 0.5, y - half + 0.5, g.w + 1, 2 * half - 1);
     ctx.fillStyle = colour;
     ctx.beginPath(); ctx.moveTo(L0 - 1, y); ctx.lineTo(L0 - 7, y - 4); ctx.lineTo(L0 - 7, y + 4); ctx.fill();
     const R = L0 + g.w;
@@ -715,8 +740,8 @@ function drawK() {
     ctx.beginPath(); ctx.moveTo(X(-r * Math.cos(th)), Y(-r * Math.sin(th))); ctx.lineTo(X(r * Math.cos(th)), Y(r * Math.sin(th))); ctx.stroke();
   };
   const now = nowIndex(), ray = shownRay();
-  if (now >= 0 && (!ray || ray.j !== now)) sliceLine(now, soft('now', 0.75), 1.2);
-  if (ray) sliceLine(ray.j, soft('pick', 0.8), 1.2);
+  if (now >= 0 && (!ray || ray.j !== now)) sliceLine(now, soft('now', 0.85), 1.6);
+  if (ray) sliceLine(ray.j, soft('pick', 0.85), 1.6);
   ctx.fillStyle = C.text; ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   subscripted(ctx, 'k', 'x', ' →', size - 40, size / 2 + 4);
   subscripted(ctx, '↑ k', 'y', '', size / 2 + 4, 6);
@@ -780,9 +805,12 @@ function drawSmear(v, which) {
   ctx.restore();
 }
 
+// The profile's line is drawn on the reconstructions only while the profile itself is shown.
+const profileShown = () => state.panels === 'all' && state.view === 'profile';
+
 function overlays(v, which) {
   const { ctx, X, Y } = v;
-  if (state.view === 'profile') {
+  if (profileShown()) {
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1; ctx.setLineDash([6, 5]);
     ctx.beginPath(); ctx.moveTo(X(-1), Y(state.py0)); ctx.lineTo(X(1), Y(state.py0)); ctx.stroke(); ctx.setLineDash([]);
   }
@@ -985,8 +1013,13 @@ function rmsSmooth(img) {
 }
 // The readouts under the pictures: each number in a slot of its own, a fixed number of characters
 // wide with fixed decimals, so that nothing in a readout moves as the numbers change (setSlots).
+// A line that has nothing to show yet says what to point at instead (a hint, with its arrow).
 const XY = (p) => ['x ', { v: p.x, dec: 3, w: 6 }, ', y ', { v: p.y, dec: 3, w: 6 }, ': '];
 const RMS = (v) => (Number.isFinite(v) ? { v, dec: 4, w: 6, tiny: true } : { text: '–', w: 6 });
+function setReadout(e, parts, hint = false) {
+  if (e.classList.contains('hint') !== hint) e.className = hint ? 'readout hint' : 'readout mono small';
+  setSlots(e, parts);
+}
 function updateReadouts(data) {
   const nA = sc.nA;
   // The scanner: under the pointer (or the point pinned there), else a hint.
@@ -994,54 +1027,53 @@ function updateReadouts(data) {
   // (A yellow dot before the values when they are the yellow point's; the same room kept empty
   // otherwise, so that the line does not move.)
   const dot = (yellow) => ({ html: `<span class="dot${yellow ? ' trace' : ''}"></span>` });
-  setSlots($('#scan-readout'), hs ? [dot(state.point && !state.point.pinned), ' ', ...XY(hs), 'attenuation ', { v: pixel(sc.truth, hs.x, hs.y), dec: 3, w: 6 }]
-    : pin ? [dot(true), ' ', ...XY(pin), 'attenuation ', { v: pixel(sc.truth, pin.x, pin.y), dec: 3, w: 6 }]
-      : state.tool === 'look' ? ['Point at the object to see its sinusoid'] : [state.tool === 'brush' ? 'Paint on the object' : 'Erase part of the object']);
+  if (hs) setReadout($('#scan-readout'), [dot(state.point && !state.point.pinned), ' ', ...XY(hs), 'attenuation ', { v: pixel(sc.truth, hs.x, hs.y), dec: 3, w: 6 }]);
+  else if (pin) setReadout($('#scan-readout'), [dot(true), ' ', ...XY(pin), 'attenuation ', { v: pixel(sc.truth, pin.x, pin.y), dec: 3, w: 6 }]);
+  else setReadout($('#scan-readout'), [state.tool === 'look' ? 'Point at the object to trace its shadow' : state.tool === 'brush' ? 'Paint on the object' : 'Erase part of the object'], true);
   // The sinogram.
   const hg = shownRay();
   if (hg && hg.s === null) {
-    setSlots($('#sino-readout'), ['θ ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, sc.measured[hg.j] ? '°: the slice pointed at' : '°: not measured']);
+    setReadout($('#sino-readout'), ['angle ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, sc.measured[hg.j] ? '°: the line pointed at' : '°: not measured']);
   } else if (hg) {
     const k = Math.round(hg.s / sc.ds + sc.M / 2);
     const val = sc.measured[hg.j] && k >= 0 && k < sc.M ? { v: sc.meas[hg.j * sc.M + k], dec: 4, w: 7 } : 'not measured';
-    setSlots($('#sino-readout'), ['θ ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, '°, s ', { v: hg.s, dec: 3, w: 6 }, ': p = ', val]);
-  } else setSlots($('#sino-readout'), ['Point at a row to see its ray']);
-  setSlots($('#sino-note'), [{ v: nA, dec: 0, w: 3 }, nA === 1 ? ' angle × ' : ' angles × ', { v: sc.M, dec: 0, w: 3 }, ' bins']);   // (up to 720 angles)
+    setReadout($('#sino-readout'), ['angle ', { v: sc.angle(hg.j) / DEG, dec: 1, w: 5 }, '°, s ', { v: hg.s, dec: 3, w: 6 }, ': absorption p ', val]);
+  } else setReadout($('#sino-readout'), ['Point at a row: the scanner turns to it'], true);
   // Fourier space.
   const hk = hover.kspace;
   if (hk) {
     const k = Math.hypot(hk.x, hk.y);
-    setSlots($('#k-readout'), ['kx ', { v: hk.x, dec: 1, w: 6 }, ', ky ', { v: hk.y, dec: 1, w: 6 }, ': |k| ', { v: k, dec: 1, w: 5 },
-      ', λ ', k ? { v: TWO_PI / k, dec: 3, w: 6 } : { text: '∞', w: 6 }]);
-  } else setSlots($('#k-readout'), [{ v: sc.count, dec: 0, w: 3 }, sc.count === 1 ? ' slice; ' : ' slices; ', 'detector limit π/Δs = ', { v: Math.PI / sc.ds, dec: 1, w: 5 }]);
-  $('#k-note').textContent = state.under ? 'slices over F(k)' : 'one slice per projection';
+    setReadout($('#k-readout'), ['|k| ', { v: k, dec: 1, w: 5 }, ' at ', { v: Math.atan2(hk.y, hk.x) / DEG, dec: 0, w: 4 }, '°: wavelength ',
+      k ? { v: TWO_PI / k, dec: 3, w: 6 } : { text: '∞', w: 6 }]);
+  } else setReadout($('#k-readout'), [{ v: sc.count, dec: 0, w: 3 }, sc.count === 1 ? ' line; ' : ' lines; ', 'dashed circle: detector limit ', { v: Math.PI / sc.ds, dec: 1, w: 5 }]);
+  $('#k-note').textContent = state.under ? 'the lines over the object’s own transform' : 'each projection fills one line through the centre';
   // The reconstructions.
   const hb = hover.bp;
-  setSlots($('#bp-readout'), hb ? [...XY(hb), { v: pixel(sc.bp, hb.x, hb.y), dec: 3, w: 7 }]
-    : ['black ', { v: state.bpScale[0], dec: 3, w: 6 }, ', white ', { v: state.bpScale[1], dec: 3, w: 6 }, ': its own scale']);
+  setReadout($('#bp-readout'), hb ? [...XY(hb), 'value ', { v: pixel(sc.bp, hb.x, hb.y), dec: 3, w: 7 }]
+    : ['its own grey scale: black ', { v: state.bpScale[0], dec: 3, w: 6 }, ', white ', { v: state.bpScale[1], dec: 3, w: 6 }]);
   if (rmsCache.key !== `${data}:${objVersion}`) {
     rmsCache = { key: `${data}:${objVersion}`, rms: sc.count ? sc.rmsError(sc.fbp) : NaN, smooth: sc.count ? rmsSmooth(sc.fbp) : NaN };
   }
   const hf = hover.fbp, rms = rmsCache.rms, smooth = rmsCache.smooth;
   state.rmsSmooth = smooth;
-  setSlots($('#fbp-readout'), hf ? [...XY(hf), { v: pixel(sc.fbp, hf.x, hf.y), dec: 4, w: 7 }, ', object ', { v: pixel(sc.truth, hf.x, hf.y), dec: 4, w: 7 }]
+  setReadout($('#fbp-readout'), hf ? [...XY(hf), { v: pixel(sc.fbp, hf.x, hf.y), dec: 4, w: 7 }, ' (object ', { v: pixel(sc.truth, hf.x, hf.y), dec: 4, w: 7 }, ')']
     : ['RMS error ', RMS(rms), ...(Number.isFinite(smooth) ? ['; away from edges ', RMS(smooth)] : [])]);
   state.rms = rms;
-  setSlots($('#fbp-note'), [FILTERS[sc.opts.filter].label, ...(sc.opts.cutoff < 1 ? [', cut at ', { v: sc.opts.cutoff, dec: 2, w: 4 }] : [])]);
-  // The sixth panel.
+  setSlots($('#fbp-note'), ['filtered back-projection, ', FILTERS[sc.opts.filter].label, ' filter', ...(sc.opts.cutoff < 1 ? [' cut at ', { v: sc.opts.cutoff, dec: 2, w: 4 }] : [])]);
+  // The last panel.
   const he = hover.extra;
   if (state.view === 'direct') {
     const img = directCache.img, e = img && sc.count ? sc.rmsError(img) : NaN;
     state.rmsDirect = e;
-    setSlots($('#extra-readout'), he ? [...XY(he), { v: pixel(img || sc.fbp, he.x, he.y), dec: 4, w: 7 }] : ['RMS error ', RMS(e)]);
-    $('#extra-note').textContent = 'gridding + FFT';
+    setReadout($('#extra-readout'), he ? [...XY(he), 'value ', { v: pixel(img || sc.fbp, he.x, he.y), dec: 4, w: 7 }] : ['RMS error ', RMS(e)]);
+    $('#extra-note').textContent = 'the lines of Fourier space gridded, one inverse FFT';
   } else if (state.view === 'profile') {
-    setSlots($('#extra-readout'), ['along the dashed line y = ', { v: state.py0, dec: 3, w: 6 }, ' (drag it)']);
-    $('#extra-note').textContent = '';
+    setReadout($('#extra-readout'), ['along the dashed line y = ', { v: state.py0, dec: 3, w: 6 }, ' (drag it)']);
+    $('#extra-note').textContent = 'the object and both reconstructions along a line';
   } else {
     const jr = projRow();
-    setSlots($('#extra-readout'), jr >= 0 ? ['angle ', { v: jr + 1, dec: 0, w: 3 }, ' of ', { v: nA, dec: 0, w: 3 }, ' (point at a row)'] : ['nothing measured yet']);
-    $('#extra-note').textContent = '';
+    setReadout($('#extra-readout'), jr >= 0 ? ['angle ', { v: jr + 1, dec: 0, w: 3 }, ' of ', { v: nA, dec: 0, w: 3 }, ' (point at a row)'] : ['nothing measured yet']);
+    $('#extra-note').textContent = 'one shadow, and the same after the ramp filter';
   }
 }
 
@@ -1170,7 +1202,7 @@ for (const [id, key] of [['#bp', 'bp'], ['#fbp', 'fbp'], ['#extra', 'extra']]) {
     profileSlider.value = +state.py0.toFixed(3);
   };
   cv.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || state.view !== 'profile' || key === 'extra') return;
+    if (e.button !== 0 || !profileShown() || key === 'extra') return;
     cv.setPointerCapture(e.pointerId); down = true;
     setProfile(worldOf(cv, e, 1));
     dirty = true; schedule();
@@ -1394,7 +1426,7 @@ const beamSeg = segmented([
   { value: false, label: 'One energy', title: 'A monochromatic beam' },
   { value: true, label: 'Two energies', title: 'Half the photons soft, half hard: water absorbs the soft ones 1.35 times as strongly as the hard ones, metal 4 times, and the scanner corrects for water only (beam hardening)' },
 ], state.poly, (v) => { state.poly = v; reconfigure({ poly: v }); }, { label: 'Beam' });
-$('#more-box').append(apertureSlider, el('div', { class: 'small muted' }, 'Beam'), beamSeg);
+$('#more-box').append(apertureSlider, el('div', { class: 'small muted' }, 'Beam: one energy, or two (soft photons are absorbed more: beam hardening)'), beamSeg);
 
 // The filter.
 const filterSeg = segmented(Object.entries(FILTERS).map(([value, f]) => ({ value, label: f.label, title: f.title })), state.filter,
@@ -1410,7 +1442,7 @@ const loSlider = slider({ label: 'Black at', min: -0.5, max: 2.5, step: 0.001, v
 const hiSlider = slider({ label: 'White at', min: -0.5, max: 2.5, step: 0.001, value: 1, title: 'The value drawn white',
   onInput: (v) => { state.hi = v; if (state.lo === null) state.lo = window_()[0]; dirty = true; updateHash(); schedule(); } });
 const autoButton = el('button', { type: 'button', title: 'Black at the object’s smallest value, white at its largest', onclick: () => { autoWindow(); updateHash(); } }, 'Whole range');
-$('#window-box').append(loSlider, hiSlider, el('div', { class: 'row' }, autoButton));
+$('#window-box').append(el('div', { class: 'small muted' }, 'Grey scale of the object and the reconstructions (a narrow one shows faint detail)'), loSlider, hiSlider, el('div', { class: 'row' }, autoButton));
 function autoWindow() {
   state.lo = null; state.hi = null;
   syncWindowSliders();
@@ -1423,14 +1455,14 @@ function syncWindowSliders() {
   loSlider.setRange(Math.min(a - 0.25 * span, lo), Math.max(b, hi)); hiSlider.setRange(Math.min(a, lo), Math.max(b + 0.25 * span, hi));
   loSlider.value = +lo.toPrecision(4); hiSlider.value = +hi.toPrecision(4);
 }
-const profileSlider = slider({ label: 'Profile at y', min: -0.99, max: 0.99, step: 0.005, value: state.py0, title: 'The height of the profile in the sixth panel',
+const profileSlider = slider({ label: 'Profile at y', min: -0.99, max: 0.99, step: 0.005, value: state.py0, title: 'The height of the line along which the profile (the last of the More panels) is taken',
   onInput: (v) => { state.py0 = v; dirty = true; updateHash(); schedule(); } });
-$('#window-box').append(profileSlider);
+$('#window-box').append(el('div', { class: 'small muted' }, 'The profile (under More panels) is taken along a horizontal line'), profileSlider);
 const underToggle = toggle('Object’s transform underneath', state.under, (on) => { state.under = on; kStale = true; dirty = true; updateHash(); schedule(); },
-  'Draw the object’s own 2D Fourier transform faintly under the measured slices');
+  'Draw the object’s own 2D Fourier transform faintly under the measured lines');
 const circleToggle = toggle('Circles', state.circles, (on) => { state.circles = on; dirty = true; schedule(); },
-  'In Fourier space: the detector’s Nyquist frequency π/Δs (dashed), and the radius π/(RΔθ) inside which the slices are close enough together to sample the scan circle, of radius R (dotted)');
-$('#show-box').append(underToggle, circleToggle);
+  'In Fourier space: the detector’s Nyquist frequency π/Δs (dashed), and the radius π/(RΔθ) inside which the lines are close enough together to sample the scan circle, of radius R (dotted)');
+$('#show-box').append(el('div', { class: 'small muted' }, 'In Fourier space (under More panels):'), underToggle, circleToggle);
 
 const extraSelect = $('#extra-view');
 for (const [v, label] of [['profile', 'Profile through the pictures'], ['projection', 'One projection, filtered'], ['direct', 'Direct Fourier reconstruction']]) extraSelect.append(el('option', { value: v }, label));
@@ -1465,6 +1497,7 @@ function updateHash() {
     if (state.poly) h.poly = 1;
     put('filter', state.filter); put('cut', state.cut);
     put('speed', +state.speed.toPrecision(3)); if (state.keep) h.keep = 1;
+    put('panels', state.panels);
     put('view', state.view); put('kz', state.kz); if (state.under) h.under = 1; if (!state.circles) h.circles = 0;
     if (state.lo !== null) { h.lo = +state.lo.toPrecision(4); h.hi = +state.hi.toPrecision(4); }
     put('py0', +state.py0.toFixed(3));
@@ -1479,7 +1512,7 @@ async function apply(changes = {}) {
   const s = { ...structuredClone(DEFAULTS), ...changes };
   Object.assign(state, { contrast: s.contrast, px: s.px, py: s.py, f: s.f, fp: s.fp, na: s.na, range: s.range, nd: s.nd, ap: s.ap,
     noise: s.noise, I0: s.I0, poly: s.poly, filter: s.filter, cut: s.cut, speed: s.speed, keep: s.keep, view: s.view, under: s.under,
-    circles: s.circles, py0: s.py0, kz: s.kz });
+    circles: s.circles, py0: s.py0, kz: s.kz, panels: s.panels });
   kZoom.value = s.kz;
   state.pick = null; state.point = s.point || null;
   // The controls.
@@ -1490,7 +1523,11 @@ async function apply(changes = {}) {
   underToggle.on = s.under; circleToggle.on = s.circles; profileSlider.value = s.py0;
   pxSlider.value = s.px; pySlider.value = s.py;
   extraSelect.value = s.view;
+  // The folds: the second row of panels, and the controls a set-up has changed.
+  morePanels.open = s.panels === 'all';
   $('#more').open = s.ap !== 1 || s.poly;
+  morePlot.open = s.cut !== 1;
+  $('#show').open = (s.lo !== null && s.lo !== undefined) || s.under;
   setTool(s.tool || 'look');
   if (s.obj === 'formula') { formulaField.set(s.f, s.fp, false); formulaExpr = formulaField.expr; }
   cancelJobs();
@@ -1505,15 +1542,18 @@ async function apply(changes = {}) {
   updateHash();
 }
 
+// Experiment 1 is the page as it opens.  The ones about back-projection and Fourier space unfold
+// the second row of panels.
 const setups = {
-  sinusoid: () => apply({ obj: 'point', px: 0.45, py: 0.25, speed: 30, view: 'projection' }),
-  smear: () => apply({ obj: 'disks', na: 12, paused: true }),
-  blur: () => apply({ obj: 'point', px: 0.3, py: 0.2, py0: 0.2, na: 360, speed: 120 }),
-  ramp: () => apply({ obj: 'phantom', view: 'projection', speed: 30 }),
-  slice: () => apply({ obj: 'formula', f: FORMULAS[0].f, fp: { k: 40, a: 1.0472 }, na: 36, speed: 12, under: true, kz: 4 }),
-  density: () => apply({ obj: 'phantom', na: 12, speed: 20, view: 'direct' }),
-  streaks: () => apply({ obj: 'phantom', na: 24, speed: 30 }),
-  wedge: () => apply({ obj: 'phantom', range: 110, na: 110, speed: 30, py0: 0.35 }),
+  shadows: () => apply({}),
+  sinusoid: () => apply({ obj: 'point', px: 0.45, py: 0.25, speed: 30 }),
+  smear: () => apply({ obj: 'disks', na: 12, paused: true, panels: 'all' }),
+  blur: () => apply({ obj: 'point', px: 0.3, py: 0.2, py0: 0.2, na: 360, speed: 120, panels: 'all' }),
+  ramp: () => apply({ obj: 'phantom', view: 'projection', speed: 30, panels: 'all' }),
+  slice: () => apply({ obj: 'formula', f: FORMULAS[0].f, fp: { k: 40, a: 1.0472 }, na: 36, speed: 12, under: true, kz: 4, panels: 'all' }),
+  density: () => apply({ obj: 'phantom', na: 12, speed: 20, view: 'direct', panels: 'all' }),
+  streaks: () => apply({ obj: 'phantom', na: 24, speed: 30, panels: 'all' }),
+  wedge: () => apply({ obj: 'phantom', range: 110, na: 110, speed: 30, py0: 0.35, panels: 'all' }),
   noise: () => apply({ obj: 'phantom', contrast: 'original', noise: true, I0: 1e5, lo: 0.95, hi: 1.1, py0: 0.1 }),
   aliasing: () => apply({ obj: 'formula', f: '(r < 0.9)*(1 + cos(k*r^2))/2', fp: { k: 100 }, nd: 64, ap: 0.2, speed: 90 }),
   metal: () => apply({ obj: 'metal', noise: true, I0: 1e5, poly: true, filter: 'hann', lo: 0.9, hi: 1.15, py0: -0.28, speed: 90 }),
@@ -1533,6 +1573,7 @@ function fromHash(h) {
     noise: h.noise === '1', I0: num(h.I0, DEFAULTS.I0), poly: h.poly === '1',
     filter: FILTERS[h.filter] ? h.filter : DEFAULTS.filter, cut: num(h.cut, DEFAULTS.cut),
     speed: num(h.speed, DEFAULTS.speed), keep: h.keep === '1',
+    panels: h.panels === 'all' ? 'all' : 'basic',
     view: ['profile', 'projection', 'direct'].includes(h.view) ? h.view : DEFAULTS.view,
     under: h.under === '1', circles: h.circles !== '0', py0: num(h.py0, DEFAULTS.py0), kz: [1, 2, 4].includes(+h.kz) ? +h.kz : 1,
     lo: h.lo !== undefined ? +h.lo : null, hi: h.hi !== undefined ? +h.hi : null,
@@ -1553,7 +1594,7 @@ const ready = setups[hash.setup] ? setups[hash.setup]().then(() => help.open()) 
 
 // For the tests (tools/cdp.py), and for curious students with the console open.
 window.__app = {
-  Scanner, state, sc, setups, setObject, reconfigure, finishScan, restartScan, stepScan, setView, setWindow, setTool,
+  Scanner, state, sc, setups, setObject, reconfigure, finishScan, restartScan, stepScan, setView, setWindow, setTool, setPanels,
   get nowIndex() { return nowIndex(); }, get hardwareIndex() { return hardwareIndex(); },
   get idle() { return !jobs.flight && !jobs.target && !rescanSoon; }, get workers() { return workers ? workers.length : 0; },
   get rms() { return state.rms; }, get rmsSmooth() { return state.rmsSmooth; }, get rmsDirect() { return state.rmsDirect; }, directImage, draw, ready: false,
