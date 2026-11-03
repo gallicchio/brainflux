@@ -542,9 +542,17 @@ export function preparePotential2D(V, n, dx, { kc = 0.75 * Math.PI / dx, delta =
  * Exact partial waves of a radially symmetric potential, from the time-independent radial
  * equation: with psi = R(r) e^{im theta} and u = sqrt(r) R,
  *     u'' = [2m(V(r) - E) + (m^2 - 1/4)/r^2] u      (hbar = mass = 1, E = k^2/2),
- * integrated outwards by Numerov's method from u ~ r^{|m|+1/2}, and matched beyond the
- * potential to sqrt(r) [A J_m(kr) + B Y_m(kr)]: tan delta_m = -B/A.  Returns [{m, Sre, Sim}]
- * for m = -mmax ... mmax (delta_{-m} = delta_m).  V is a function of an array of radii.
+ * integrated outwards by Numerov's method and matched beyond the potential to
+ * sqrt(r) [A J_m(kr) + B Y_m(kr)]: tan delta_m = -B/A.  Returns [{m, Sre, Sim}] for
+ * m = -mmax ... mmax (delta_{-m} = delta_m).  V is a function of an array of radii.
+ *
+ * Near the origin the centrifugal term is singular, and there the equation is scale-free
+ * (u'' = -u/4r^2 for m = 0, solutions sqrt(r) and sqrt(r) ln r): Numerov's error in the first
+ * few steps is the same fraction whatever h is, and started from u ~ r^{|m|+1/2} it seeded an
+ * admixture of the irregular solution that read delta_0 = +0.005 for no potential at all.  So
+ * the first stretch, to r0 = n0 h, is integrated for the smooth S = R / r^m,
+ *     S'' = -((2m+1)/r) S' - (k^2 - 2V) S,   S(0) = 1, S'(0) = 0,
+ * by fourth-order Runge-Kutta, and Numerov takes over from u = r^{m+1/2} S there.
  */
 export function radialWaves(V, k, mmax = 24, { h = 0.005, rmax } = {}) {
   // Where does the potential end?  Out to where |V| < 1e-8 of its largest value (at most 80).
@@ -558,13 +566,28 @@ export function radialWaves(V, k, mmax = 24, { h = 0.005, rmax } = {}) {
   }
   const N = Math.ceil(rmax / h), r = Float64Array.from({ length: N + 1 }, (_, i) => (i + 1) * h);
   const Vr = V(r), out = [], k2 = k * k;
+  // The first stretch, r <= n0 h, by Runge-Kutta: V on the half grid r = 0, h/2, h, ...
+  const n0 = Math.min(40, N - 10), Vh = V(Float64Array.from({ length: 2 * n0 + 3 }, (_, j) => (j * h) / 2));
   const r1 = r[N - 8], r2 = r[N];
   const J1 = besselJ(mmax, k * r1), Y1 = besselY(mmax, k * r1), J2 = besselJ(mmax, k * r2), Y2 = besselY(mmax, k * r2);
   for (let m = 0; m <= mmax; m++) {
     const c = m * m - 0.25, f = (i) => 2 * Vr[i] - k2 + c / (r[i] * r[i]), w = (h * h) / 12;
-    let u0 = Math.pow(r[0], m + 0.5), u1 = Math.pow(r[1], m + 0.5);
-    let f0 = f(0), f1 = f(1), ua = 0;
-    for (let i = 1; i < N; i++) {
+    // S'' at r = j h/2 (at r = 0 its limit: the first term is -(2m+1) S''(0) there).
+    const acc = (j, S, Sp) => (j === 0 ? (-(k2 - 2 * Vh[0]) * S) / (2 * m + 2) : (-((2 * m + 1) / ((j * h) / 2))) * Sp - (k2 - 2 * Vh[j]) * S);
+    let S = 1, Sp = 0, u0 = 0, u1 = 0;
+    for (let n = 0; n <= n0; n++) {
+      // From r = n h to (n + 1) h.
+      const a1 = acc(2 * n, S, Sp);
+      const S2 = S + (h / 2) * Sp, P2 = Sp + (h / 2) * a1, a2 = acc(2 * n + 1, S2, P2);
+      const S3 = S + (h / 2) * P2, P3 = Sp + (h / 2) * a2, a3 = acc(2 * n + 1, S3, P3);
+      const S4 = S + h * P3, P4 = Sp + h * a3, a4 = acc(2 * n + 2, S4, P4);
+      S += (h / 6) * (Sp + 2 * P2 + 2 * P3 + P4);
+      Sp += (h / 6) * (a1 + 2 * a2 + 2 * a3 + a4);
+      if (n === n0 - 1) u0 = Math.pow((n + 1) * h, m + 0.5) * S;   // u at r = n0 h, index n0 - 1
+      if (n === n0) u1 = Math.pow((n + 1) * h, m + 0.5) * S;       // and at (n0 + 1) h, index n0
+    }
+    let f0 = f(n0 - 1), f1 = f(n0), ua = 0;
+    for (let i = n0; i < N; i++) {
       const f2 = f(i + 1);
       const u2 = (2 * u1 * (1 + 5 * w * f1) - u0 * (1 - w * f0)) / (1 - w * f2);
       u0 = u1; u1 = u2; f0 = f1; f1 = f2;

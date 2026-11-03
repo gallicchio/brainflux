@@ -213,7 +213,7 @@ function loop(now) {
     while (sim.t < target && performance.now() - t0 < 11) {
       sim.step(dt);
       detector.record(sim, packet, dt);
-      if (sim.t >= tEnd) { finished = true; setRunning(false); break; }
+      if (hasGone()) { finished = true; setRunning(false); break; }
     }
     frames++;
     // The partial waves come from time Fourier transforms over the whole collision: only once
@@ -231,6 +231,15 @@ function setRunning(on) {
   $('#play').textContent = on ? 'Pause' : finished ? 'Done' : 'Play';
   kick();
 }
+
+/**
+ * Done when the slowest part of the packet has had time to pass the detector (tEnd) and the
+ * box has emptied, less than 0.2% of the packet left: a resonance holds part of the wave back
+ * and leaks it out late, and the partial waves need all of it (a time Fourier transform cut
+ * short reads |S_m| < 1: 0.95 for the resonance stopped at tEnd, 0.997 once the well has
+ * emptied).  At the latest, half as long again (the slow packet's tail).
+ */
+function hasGone() { return sim.t >= tEnd && (sim.t >= 1.5 * tEnd || boxNorm() < 0.002); }
 
 function analyse() {
   // A wall that runs out past the detector is not a localised target: no cross section.  And
@@ -252,7 +261,7 @@ function runUntil(t = Infinity) {
   while (!finished && sim.t < t) {
     sim.step(dt);
     detector.record(sim, packet, dt);
-    if (sim.t >= tEnd) finished = true;
+    if (hasGone()) finished = true;
   }
   if (finished) analyse();
   setRunning(false);
@@ -368,7 +377,7 @@ function drawMomentum() {
   }
   ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '11px system-ui, sans-serif';
   ctx.fillText('kx →', width - 34, cy - 4); ctx.fillText('ky ↑', cx + 4, 12);
-  ctx.fillText(`|k| = k₀ = ${fmt(state.k0, 3)}`, 6, height - 6);
+  ctx.fillText(`dashed: |k| = k₀ = ${fmt(state.k0, 3)}, the packet's energy`, 6, height - 6);
 }
 
 const COLORS = { flux: null, pw: '#e07b39', born: '#8a8b91', exact: '#2e9e5b', fraunhofer: '#e07b39' };
@@ -509,14 +518,15 @@ function updateReadouts() {
   const inBox = boxNorm();
   // Each number in a slot of its own width, with fixed decimals: nothing moves as they change.
   $('#readouts').innerHTML = [
-    ['t', sim.t.toFixed(2), 6], ['k₀', state.k0.toFixed(3), 5], ['λ', ((2 * Math.PI) / state.k0).toFixed(3), 6],
-    ['E', packet.energy.toFixed(3), 6], ['in the box', inBox.toFixed(4), 6], ['time step', dt.toFixed(4), 6],
+    ['time t', sim.t.toFixed(2), 6], ['momentum k₀', state.k0.toFixed(3), 5], ['wavelength λ', ((2 * Math.PI) / state.k0).toFixed(3), 6],
+    ['energy E', packet.energy.toFixed(3), 6], ['probability in the box', inBox.toFixed(4), 6], ['time step', dt.toFixed(4), 6],
   ].map(([k, v, w]) => `<span class="ro">${k} <b style="width:${w}ch">${v}</b></span>`).join('')
     + `<span class="ro status">${finished ? '<b>done</b>: the packet has gone' : ''}</span>`
     + (warning ? `<span class="warning">${warning}</span>` : '');
   // Bragg's condition for the crystal's rows (turned by alpha from the beam) and columns.
   const lat = crystalLattice(), lam = (2 * Math.PI) / state.k0;
-  $('#mom-note').textContent = lat ? `2c sin α/λ = ${(Math.abs(2 * lat.c * Math.sin(lat.a)) / lam).toFixed(2)} (rows), 2c cos α/λ = ${(Math.abs(2 * lat.c * Math.cos(lat.a)) / lam).toFixed(2)} (columns)` : '';
+  $('#mom-note').textContent = lat ? `2c sin α/λ = ${(Math.abs(2 * lat.c * Math.sin(lat.a)) / lam).toFixed(2)} (rows), 2c cos α/λ = ${(Math.abs(2 * lat.c * Math.cos(lat.a)) / lam).toFixed(2)} (columns)`
+    : 'the wave sorted by momentum ħk';
   // The table of total cross sections: the same rows from start to end (values to come shown
   // as such), so that nothing jumps as the measurements arrive.
   const dth = (2 * Math.PI) / detector.M, tot = detector.totals(), lit = detector.fluence > 1e-6;
@@ -544,8 +554,8 @@ function updateReadouts() {
     + (rows.length ? '<tr><td colspan="2" class="muted">σ is a length in 2D'
       + (wideTarget && !state.target.extended ? '; the beam lights only part of this target, so its totals depend on the beam' : '') + '</td></tr>' : '');
   const legend = state.target.extended ? [['flux', 'measured'], ['fraunhofer', 'Fraunhofer']]
-    : [['flux', 'measured'], ...(round ? [['pw', '|f|² at k₀']] : []), ['born', 'Born']];
-  if (exact) legend.push(['exact', 'exact (stationary)']);
+    : [['flux', 'measured'], ...(round ? [['pw', 'partial waves at k₀']] : []), ['born', 'Born']];
+  if (exact) legend.push(['exact', 'exact at k₀']);
   $('#xs-legend').innerHTML = legend.filter(([k]) => k !== 'born' || born).map(([k, l]) => `<span><i style="border-color:${COLORS[k] || themeColors().accent}${k === 'flux' ? '' : ';border-top-style:dashed'}"></i>${l}</span>`).join('');
 }
 
@@ -683,7 +693,7 @@ const setups = {
   shadow: () => go('disk', { view: 'scattered' }),
   born: () => go('bump'),
   ring: () => go('bump', { view: 'scattered' }),
-  swave: () => go('disk', { k0: 0.8, sx: 3, sy: 8, L: 112, params: { a: 1, w: 0.2 } }),
+  swave: () => go('disk', { k0: 0.8, sx: 3, sy: 8, L: 112, params: { a: 1, w: 0.2 }, speed: 6 }),
   resonance: () => go('well', { k0: 1.2, sx: 3, sy: 7 }),
   coulomb: () => go('coulomb', { k0: 2 }),
   two: () => go('two', { sy: 8 }),
@@ -710,5 +720,6 @@ else {
   } catch { chooseTarget(t, { run: true }); }
 }
 
-window.__app = { state, get sim() { return sim; }, get detector() { return detector; }, get pw() { return pwResult; }, get born() { return born; },
-  get slit() { return slit; }, get finished() { return finished; }, get tEnd() { return tEnd; }, setups, restart, runUntil, ready: true, parse };
+window.__app = { state, get sim() { return sim; }, get detector() { return detector; }, get packet() { return packet; }, get pw() { return pwResult; },
+  get waves() { return waves; }, get exact() { return exact; }, get born() { return born; }, get slit() { return slit; }, get finished() { return finished; },
+  get tEnd() { return tEnd; }, get dt() { return dt; }, setups, restart, runUntil, ready: true, parse };
