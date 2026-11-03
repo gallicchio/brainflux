@@ -1028,7 +1028,10 @@ No physics changed; the quoted numbers were re-measured by the tests as before. 
 things on the way: `tools/cdp.py` crashed in a fresh checkout (no `build/` folder), and the
 beams cavity test is now seeded.
 
-**Tests.**  Each branch passed its demo's UI test and the 315 unit tests before merging; the full run of `tools/test_all.sh` on the merged `main` is in progress.
+**Tests.**  `tools/test_all.sh` passes on the merged `main`: the 315 unit tests in Chromium and
+the scripted run of all 19 demos, whose UI tests grew from 777 to 1,083 checks for the hints,
+the Start-here blocks, the glosses, the folded panels, both themes and the phone's first
+screen.  (Firefox isn't installed here, so that second unit-test run was skipped.)
 
 **Left.**  `lib/style.css` gives every canvas `touch-action: none`, so on a phone a finger can't
 scroll the page from over a picture that fills the width; several demos set `pan-y` on the
