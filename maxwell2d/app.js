@@ -895,7 +895,7 @@ function setBrush(key) {
   brushNSlider.hidden = state.brush !== 'typed';
   updateHint();
 }
-const brushNSlider = slider({ label: 'n', min: 1, max: 4, step: 0.01, value: state.brushN, title: 'The index of the n = … brush', onInput: (v) => { state.brushN = Math.max(1, Math.min(6, v)); } });
+const brushNSlider = slider({ label: 'index n', min: 1, max: 4, step: 0.01, value: state.brushN, title: 'The refractive index of the n = … brush', onInput: (v) => { state.brushN = Math.max(1, Math.min(6, v)); } });
 brushNSlider.hidden = true;
 $('#n-box').append(brushNSlider);
 $('#brush-box').append(
@@ -953,7 +953,7 @@ function presetOf(setup, shape) {
   return (PRESETS.find((p) => p.shape === shape && p.fromShape !== false) || {}).setup || null;
 }
 const shapeP = slider({ label: 'size', min: 0, max: 1, value: 0, onInput: (v) => { state.p = v; rebuildMaterials(); } });
-const shapeN = slider({ label: 'n', min: 1, max: 4, step: 0.01, value: 1.5, title: 'The shape\'s refractive index', onInput: (v) => { state.n = Math.max(1, Math.min(6, v)); rebuildMaterials(); } });
+const shapeN = slider({ label: 'index n', min: 1, max: 4, step: 0.01, value: 1.5, title: 'The shape\'s refractive index: light goes at c/n inside it', onInput: (v) => { state.n = Math.max(1, Math.min(6, v)); rebuildMaterials(); } });
 $('#shape-box').append(shapeP, shapeN);
 function showShapeControls() {
   const sh = state.shape && SHAPES[state.shape];
