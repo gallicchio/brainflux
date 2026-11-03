@@ -354,10 +354,19 @@ export class Sim1D {
     return Math.min(0.02, 0.33 / scale, this.sharpStep ?? Infinity);
   }
 
-  /** Probability to the left of x0 (and the rest is to the right). */
+  /**
+   * Probability to the left of x0 (and the rest is to the right).  Each grid point stands for
+   * the cell of width dx around it; a cell that x0 cuts counts by the fraction of it on the
+   * left, so that a state symmetric about x0 gives exactly one half (counting the point at
+   * x0 wholly on one side made the finite well's ground state read 0.489 against 0.511).
+   */
   probabilityLeftOf(x0) {
     let s = 0;
-    for (let j = 0; j < this.n && this.x[j] < x0; j++) s += this.re[j] ** 2 + this.im[j] ** 2;
+    for (let j = 0; j < this.n; j++) {
+      const lo = this.x[j] - this.dx / 2;
+      if (lo >= x0) break;
+      s += Math.min(1, (x0 - lo) / this.dx) * (this.re[j] ** 2 + this.im[j] ** 2);
+    }
     return s * this.dx;
   }
 }
