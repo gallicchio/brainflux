@@ -15,6 +15,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // ----------------------------------------------------------------------------- state
 
 const state = {
+  name: '',                    // the preset the stack is (its key in setups), or '' once edited
   inc: { mat: 'air' },
   layers: [{ mat: 'water', d: 400 }],
   sub: { mat: 'air' },
@@ -519,9 +520,14 @@ function drawStack(now) {
     ctx.strokeStyle = series.field; ctx.lineWidth = 2; ctx.beginPath();
     for (let i = 0; i < zs.length; i++) { const x = f.X(zs[i]), y = f.Y(fl.E2[i]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
     ctx.stroke();
-    // The incoming wave's level.
+    // The incoming wave's level, named: |E|² is in units of it.
     ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(f.left, f.Y(1)); ctx.lineTo(f.right, f.Y(1)); ctx.stroke(); ctx.setLineDash([]);
+    // (At the right, past the last layer's handle, if there is room there; else at the left.)
+    ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = c.ink3; ctx.textBaseline = 'bottom';
+    const label = 'incoming wave: |E|² = 1', lw = ctx.measureText(label).width;
+    if (f.right - f.X(starts[L]) > lw + 16) { ctx.textAlign = 'right'; ctx.fillText(label, f.right - 4, f.Y(1) - 2); }
+    else { ctx.textAlign = 'left'; ctx.fillText(label, f.left + 4, f.Y(1) - 2); }
   }
   // Boundaries.
   ctx.strokeStyle = c.ink2; ctx.lineWidth = 1;
@@ -554,13 +560,35 @@ function drawStack(now) {
     ctx.fillStyle = j === state.sel ? c.accent : c.ink2;
     fillSlots(ctx, text, clamp((xa + xb) / 2, f.left + tw / 2, f.right - tw / 2), f.top - 9);
   }
+  // The handle on each layer's right-hand edge: a grip tab at mid-height (a bigger, accented
+  // one on the selected layer, so that it is plainly there to drag), and the edge itself in the
+  // accent colour while it is held or pointed at.
   for (let j = 0; j < L; j++) {
-    const x = f.X(starts[j + 1]);
-    ctx.fillStyle = dragging === j ? c.accent : hoverHandle === j ? c.accent : c.ink3;
-    roundRect(ctx, x - 3, f.top - 6, 6, 14, 2); ctx.fill();
+    const x = Math.round(f.X(starts[j + 1])) + 0.5, active = dragging === j || hoverHandle === j, sel = j === state.sel;
+    if (x < f.left - 1 || x > f.right + 1) continue;
+    if (active) { ctx.strokeStyle = c.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); ctx.stroke(); }
+    const w = sel ? 12 : 8, h = sel ? 30 : 18, y = f.top + f.h / 2 - h / 2;
+    ctx.fillStyle = active || sel ? c.accent : c.ink3;
+    roundRect(ctx, x - w / 2, y, w, h, 3); ctx.fill();
+    // The grip: two short lines.
+    ctx.strokeStyle = c.panel; ctx.lineWidth = 1;
+    for (const dx of [-2, 2]) { ctx.beginPath(); ctx.moveTo(x + dx, y + 6); ctx.lineTo(x + dx, y + h - 6); ctx.stroke(); }
   }
   ctx.restore();
 }
+
+const STACK_NAMES = {
+  soap: 'A soap film', fresnel: 'Bare glass', brewster: 'Bare glass', tir: 'Inside glass, going out', ftir: 'An air gap between two glass blocks',
+  oil: 'Oil on water', ar: 'A coated lens', bragg: 'A Bragg mirror', filter: 'A narrow-band filter', etalon: 'A Fabry–Pérot etalon',
+  silver: 'A silver mirror', gold: 'A gold film', spr: 'A gold film on a prism',
+};
+/** The stack picture's title says what the stack is: the preset's name, or "Your stack" once edited. */
+function syncStackTitle() {
+  const name = STACK_NAMES[state.name] || 'Your stack';
+  setText('#stack-title', `${name}: the layers, and the light in them`);
+}
+/** Anything that changes the materials or the layers makes the stack the reader's own. */
+function edited() { state.name = ''; syncStackTitle(); }
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
@@ -699,6 +727,18 @@ function angleMarks(ctx, f) {
   }
 }
 
+// The plots' titles name what is drawn: "Reflected fraction R against wavelength".
+function plottedWhat() {
+  const names = { R: 'reflected', T: 'transmitted', A: 'absorbed' };
+  const qs = ['R', 'T', 'A'].filter((q) => state.show[q] && (q !== 'A' || comp.spec.A.s.some((v) => v > 1e-5) || comp.spec.A.p.some((v) => v > 1e-5)));
+  if (!qs.length) return '';
+  if (qs.length === 1) return `${names[qs[0]][0].toUpperCase()}${names[qs[0]].slice(1)} fraction ${qs[0]}`;
+  const parts = qs.map((q) => `${names[q]} ${q}`);
+  const s = `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return s[0].toUpperCase() + s.slice(1);
+}
+function setText(sel, text) { const e = $(sel); if (e.textContent !== text) e.textContent = text; }
+
 function drawPlots() {
   const sp = comp.spec;
   comp.specWidth = $('#spec').getBoundingClientRect().width;
@@ -710,7 +750,16 @@ function drawPlots() {
   } else {
     frames.ang = drawCurves($('#ang'), comp.x2, { x0: 0, x1: 90, xlabel: 'angle of incidence (°)', marker: state.theta, markerParts: thetaParts(), kind: 'angle' });
   }
-  $('#x2-title').textContent = comp.x2kind === 'thickness' ? 'Against thickness' : 'Against angle';
+  // The wavelength plot's title names the quantities in words; the second plot's, beside its
+  // angle/thickness switch, has room only for their letters.
+  const what = plottedWhat(), letters = ['R', 'T', 'A'].filter((q) => state.show[q] && (q !== 'A' || what.includes('absorbed')));
+  setText('#spec-title', what ? `${what} against wavelength` : 'Against wavelength');
+  const short = letters.length > 1 ? `${letters.slice(0, -1).join(', ')} and ${letters[letters.length - 1]}` : letters[0] || '';
+  const x2what = comp.x2kind === 'thickness' ? `the thickness of layer ${state.sel + 1}` : 'the angle of incidence';
+  setText('#x2-title', short ? `${short} against ${x2what}` : `Against ${x2what}`);
+  setText('#ang-hint', comp.x2kind === 'thickness' ? `Drag on the plot to change the thickness of layer ${state.sel + 1}` : 'Drag on the plot to change the angle of incidence');
+  setText('#stack-hint', nLayers() ? "Drag the layer's right edge (or the thickness slider) to change its thickness; click a layer to select it"
+    : 'Two media and no layer between them: drag on the right-hand plot to change the angle (+ layer adds a layer)');
   x2Seg.value = comp.x2kind;
   setSlots($('#spec-note'), state.theta ? ['at ', ...thetaParts()] : ['at normal incidence']);
 }
@@ -770,14 +819,18 @@ function drawFilm() {
     const yb = (25 / state.film.hBottom) ** 2;
     if (yb * fh > 14) { ctx.fillStyle = '#999'; ctx.textAlign = 'center'; ctx.fillText('black film', fx + fw / 2, fy + Math.min(yb * fh / 2, fh / 2)); }
   }
-  // The probe: where the selected layer's present thickness is.
+  // The marker: where the selected layer's present thickness is.  A dashed line with a dark
+  // shadow, so that it shows on any colour, and a triangle on the scale to take hold of.
   const d = state.layers[filmJ()].d, y = filmHeightOf(d);
   if (y !== null) {
-    const py = fy + y * fh;
-    ctx.strokeStyle = view === 'T' ? '#000' : '#fff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+    const py = Math.round(fy + y * fh) + 0.5, fg = view === 'T' ? '#000' : '#fff', bg = view === 'T' ? '#fff' : '#000';
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = bg; ctx.lineWidth = 4; ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.moveTo(fx, py); ctx.lineTo(fx + fw, py); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = fg; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(fx, py); ctx.lineTo(fx + fw, py); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = view === 'T' ? '#000' : '#fff';
-    ctx.beginPath(); ctx.moveTo(fx + fw, py); ctx.lineTo(fx + fw + 7, py - 5); ctx.lineTo(fx + fw + 7, py + 5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = fg; ctx.strokeStyle = bg; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(fx + fw - 1, py); ctx.lineTo(fx + fw + 9, py - 7); ctx.lineTo(fx + fw + 9, py + 7); ctx.closePath(); ctx.fill(); ctx.stroke();
   }
 }
 function wrapText(ctx, text, x, y, w, lh) {
@@ -825,19 +878,21 @@ function drawSwatches() {
 // nothing in the row moves as the numbers change (only when the words do).
 function readouts() {
   const v = comp.point, s = v.s, p = v.p, items = [];
-  const pair = (q, a, b) => [q, ' ', pctPart(a, true), ...(Math.abs(a - b) > 5e-5 ? [' s, ', pctPart(b, true), ' p'] : [])];
-  items.push(pair('R', s.R, p.R));
-  items.push(pair('T', s.T, p.T));
-  if (s.A > 1e-5 || p.A > 1e-5) items.push(pair('A', s.A, p.A));
+  // "reflected R 4.20%", or "reflected R 4.20% s, 3.10% p" when the polarisations differ.
+  const pair = (word, q, a, b) => [`${word} ${q} `, pctPart(a, true), ...(Math.abs(a - b) > 5e-5 ? [' s, ', pctPart(b, true), ' p'] : [])];
+  items.push(['Of the light at ', ...lambdaParts(), ', ', ...thetaParts(), ':']);
+  items.push(pair('reflected', 'R', s.R, p.R));
+  items.push(pair('transmitted', 'T', s.T, p.T));
+  if (s.A > 1e-5 || p.A > 1e-5) items.push(pair('absorbed', 'A', s.A, p.A));
   const tc = criticalAngle(), tb = brewsterAngle();
-  if (tc !== null) items.push(['θ', { html: '<sub>c</sub>' }, ' = ', { v: tc, dec: 1, w: 4 }, '°']);
-  if (tb !== null) items.push(['θ', { html: '<sub>B</sub>' }, ' = ', { v: tb, dec: 2, w: 5 }, '°']);
+  if (tc !== null) items.push(['critical angle θ', { html: '<sub>c</sub>' }, ' = ', { v: tc, dec: 1, w: 4 }, '°']);
+  if (tb !== null) items.push(['Brewster angle θ', { html: '<sub>B</sub>' }, ' = ', { v: tb, dec: 2, w: 5 }, '°']);
   // The evanescent wave in the substrate.
   const { st, beta } = v;
   if (st.ns[1] < 1e-9 && beta > st.ns[0]) {
     const decay = state.lambda / (2 * Math.PI * Math.sqrt(beta * beta - st.ns[0] ** 2));
-    items.push(['evanescent: |E| falls by 1/e in ', boldPart(decay, 0, 5, ' nm')]);
-    if (nLayers() === 0) items.push(['phase s − p ', boldPart(phaseDifference(s, p), 1, 6, '°')]);
+    items.push(['evanescent wave beyond the surface: |E| falls by 1/e in ', boldPart(decay, 0, 5, ' nm')]);
+    if (nLayers() === 0) items.push(['the reflected s and p waves differ in phase by ', boldPart(phaseDifference(s, p), 1, 6, '°')]);
   }
   if (comp.rpMin && tb === null && comp.x2kind === 'angle') items.push(['R', { html: '<sub>p</sub>' }, ' least at ', boldPart(comp.rpMin.theta, 2, 5, '°'), ' (', pctPart(comp.rpMin.R), ')']);
   if (comp.finesse) {
@@ -889,8 +944,8 @@ function frame(now) {
 
 // ------------------------------------------------------------------------- controls
 
-const lambdaSlider = slider({ label: 'λ (nm)', min: 250, max: 1500, value: state.lambda, title: 'The vacuum wavelength', onInput: (v) => { state.lambda = v; kick(); } });
-const thetaSlider = slider({ label: 'θ (°)', min: 0, max: 89.9, value: state.theta, title: 'The angle of incidence, in the incident medium', onInput: (v) => { state.theta = clamp(v, 0, 89.99); kick(); } });
+const lambdaSlider = slider({ label: 'wavelength λ (nm)', min: 250, max: 1500, value: state.lambda, title: 'The vacuum wavelength', onInput: (v) => { state.lambda = v; kick(); } });
+const thetaSlider = slider({ label: 'angle θ (°)', min: 0, max: 89.9, value: state.theta, title: 'The angle of incidence, from the normal, in the incident medium', onInput: (v) => { state.theta = clamp(v, 0, 89.99); kick(); } });
 $('#light-box').append(lambdaSlider, thetaSlider);
 const polSeg = segmented([
   { value: 'sp', label: 's and p', title: 's: E parallel to the surface (solid lines); p: E in the plane of incidence (dashed)' },
@@ -919,8 +974,18 @@ function niceUp(v) { const p = 10 ** Math.floor(Math.log10(v)), f = v / p; retur
 
 // Presets (the experiments' stacks).
 const PRESETS = [
-  ['Soap film', 'soap'], ['Glass', 'fresnel'], ['Inside glass', 'tir'], ['Air gap', 'ftir'], ['Oil on water', 'oil'], ['Coated lens', 'ar'],
-  ['Bragg mirror', 'bragg'], ['Filter', 'filter'], ['Etalon', 'etalon'], ['Silver', 'silver'], ['Gold', 'gold'], ['Plasmon', 'spr'],
+  ['Soap film', 'soap', 'A film of water in air, draining: the colours of a soap bubble'],
+  ['Glass', 'fresnel', 'Bare glass in air: 4% reflected head-on, more at a glancing angle, none of p light at Brewster\'s angle'],
+  ['Inside glass', 'tir', 'Light inside glass going out into air: total internal reflection, and the wave that leaks out anyway'],
+  ['Air gap', 'ftir', 'A thin air gap between two glass blocks: light tunnels across it'],
+  ['Oil on water', 'oil', 'A film of oil on water, thickening like a wedge: paler colours than a soap film\'s'],
+  ['Coated lens', 'ar', 'A quarter-wave antireflection coating on glass: the purple sheen of a camera lens'],
+  ['Bragg mirror', 'bragg', 'Many quarter-wave layers of two materials: a mirror for one band of colour'],
+  ['Filter', 'filter', 'Two Bragg mirrors with a spacer between them: one sharp line gets through'],
+  ['Etalon', 'etalon', 'Two silver films with air between them: a comb of transmission peaks (a Fabry–Pérot etalon)'],
+  ['Silver', 'silver', 'Bulk silver: a white mirror, until the ultraviolet'],
+  ['Gold', 'gold', 'A thin gold film: gold in reflection, green-blue in transmission'],
+  ['Plasmon', 'spr', 'A gold film on a glass prism that swallows light at one angle: a surface plasmon'],
 ];
 
 // The editor of the selected medium.
@@ -930,7 +995,7 @@ matSelect.addEventListener('change', () => {
   const m = medium(state.sel), id = matSelect.value;
   m.mat = id;
   if (id === 'typed' && !m.src) { const [n, k] = index1({ mat: state.layers[state.sel]?.mat || 'silica' }, state.lambda); m.src = k > 1e-6 ? 'n + i kappa' : 'n'; m.params = { n: +n.toFixed(3), kappa: +k.toFixed(3) }; }
-  designLive = false;
+  designLive = false; edited();
   refreshEditor(); fitThicknessRange(); kick();
 });
 const typedField = exprField({
@@ -944,11 +1009,11 @@ const typedField = exprField({
   },
 });
 const typedPresets = el('div', { class: 'row' }, TYPED_PRESETS.map((t) => el('button', { type: 'button', title: t.title, onclick: () => {
-  const m = medium(state.sel); m.mat = 'typed'; m.src = t.src; m.params = { ...t.params }; m.hints = null; refreshEditor(); kick();
+  const m = medium(state.sel); m.mat = 'typed'; m.src = t.src; m.params = { ...t.params }; m.hints = null; edited(); refreshEditor(); kick();
 } }, t.label)));
 $('#typed-box').append(typedField, typedPresets, el('div', { class: 'note' }, 'λ in µm; i is √−1, and κ > 0 absorbs.'));
 
-const thickSlider = slider({ label: 'd (nm)', min: 0, max: 2000, value: 400, title: "The selected layer's thickness", onInput: (v) => setThickness(state.sel, Math.max(0, v)) });
+const thickSlider = slider({ label: 'thickness d (nm)', min: 0, max: 2000, value: 400, title: "The selected layer's thickness", onInput: (v) => setThickness(state.sel, Math.max(0, v)) });
 $('#thick-box').append(thickSlider);
 function setThickness(j, d, { fromFilm = false } = {}) {
   if (!isLayer(j)) return;
@@ -986,13 +1051,13 @@ function insertLayer() {
   // A quarter wave of a dielectric; 30 nm of a metal (a quarter wave would be opaque).
   const n = index1({ ...like, mat }, state.lambda)[0], metal = MATERIALS[mat]?.kind === 'metal';
   state.layers.splice(at, 0, { ...JSON.parse(JSON.stringify(like)), mat, d: metal ? 30 : +(state.lambda / (4 * Math.max(n, 1))).toFixed(1) });
-  designLive = false;
+  designLive = false; edited();
   selectMedium(at); kick();
 }
 function deleteLayer() {
   if (!isLayer(state.sel)) return;
   state.layers.splice(state.sel, 1);
-  designLive = false;
+  designLive = false; edited();
   // The layer that took its place, or the one before it, or the substrate if none are left.
   selectMedium(nLayers() ? Math.min(state.sel, nLayers() - 1) : 0); kick();
 }
@@ -1019,7 +1084,7 @@ function refreshEditor() {
     typedField.setHints({ ...DEFAULT_HINTS, ...(m.hints || {}) });
     typedField.set(m.src, m.params || {}, false);
   }
-  $('#thick-box').hidden = !isLayer(i); qBtn.hidden = hBtn.hidden = !isLayer(i);
+  $('#thick-box').hidden = !isLayer(i); qBtn.hidden = hBtn.hidden = !isLayer(i); $('#wave-note').hidden = !isLayer(i);
   deleteBtn.disabled = !isLayer(i);
   if (isLayer(i)) {
     const metal = MATERIALS[m.mat]?.kind === 'metal';
@@ -1082,18 +1147,20 @@ function buildDesign() {
   refreshEditor();
   kick();
 }
-$('#design-text').addEventListener('input', () => { if (syncDesignSliders() && designLive) buildDesign(); });
-for (const s of Object.values(designSelects)) s.addEventListener('change', () => { if (designLive) buildDesign(); });
-$('#design-build').addEventListener('click', buildDesign);
+// A new formula or new materials make the stack the reader's own; sliding N or λ₀ keeps the
+// preset's name (a Bragg mirror with more pairs is still a Bragg mirror).
+$('#design-text').addEventListener('input', () => { if (syncDesignSliders() && designLive) { edited(); buildDesign(); } });
+for (const s of Object.values(designSelects)) s.addEventListener('change', () => { if (designLive) { edited(); buildDesign(); } });
+$('#design-build').addEventListener('click', () => { edited(); buildDesign(); });
 syncDesignSliders();
 
 // Show.
 const showToggles = {
-  R: toggle('R', state.show.R, (on) => { state.show.R = on; kick(); }, 'Reflectance'),
-  T: toggle('T', state.show.T, (on) => { state.show.T = on; kick(); }, 'Transmittance (into the substrate)'),
-  A: toggle('A', state.show.A, (on) => { state.show.A = on; kick(); }, 'Absorptance (shown when something absorbs)'),
+  R: toggle('R reflected', state.show.R, (on) => { state.show.R = on; kick(); }, 'The fraction of the light reflected (blue)'),
+  T: toggle('T transmitted', state.show.T, (on) => { state.show.T = on; kick(); }, 'The fraction transmitted into the last medium (orange)'),
+  A: toggle('A absorbed', state.show.A, (on) => { state.show.A = on; kick(); }, 'The fraction absorbed, 1 − R − T (green; drawn when something absorbs)'),
   log: toggle('log scale', state.show.log, (on) => { state.show.log = on; kick(); }, 'Plot R, T and A on a logarithmic scale, from 0.0001 to 1'),
-  film: toggle('white light', state.show.film, (on) => { setFilmShown(on); }, 'The colours of the stack in white light'),
+  film: toggle('colour column', state.show.film, (on) => { setFilmShown(on); }, 'The colours of the stack in white light, as the selected layer\'s thickness grows'),
 };
 $('#show-box').append(...Object.values(showToggles));
 function setFilmShown(on) {
@@ -1240,6 +1307,7 @@ window.addEventListener('resize', () => kick());
 const A = (mat, d) => ({ mat, d });
 const nAt = (mat, nm) => MATERIALS[mat].index(nm)[0];
 function apply(o) {
+  state.name = '';
   state.inc = o.inc || { mat: 'air' };
   state.layers = (o.layers || []).map((m) => ({ ...m }));
   state.sub = o.sub || { mat: 'air' };
@@ -1271,6 +1339,7 @@ function apply(o) {
   setFilmShown(o.filmShown ?? false);
   if (state.film.running && filmJ() >= 0) state.layers[filmJ()].d = drainingThickness(state.film.probe, state.film.hBottom);
   refreshEditor();
+  syncStackTitle();
   exposureKey = '';
   kick();
 }
@@ -1298,7 +1367,9 @@ const setups = {
   spr: () => apply({ inc: { mat: 'bk7' }, layers: [A('gold', 50)], sub: { mat: 'typed', label: 'water', src: 'n', params: { n: 1.333 }, hints: { n: { min: 1.3, max: 1.4, value: 1.333 } } },
     lambda: 633, theta: 74.8, fieldPol: 'p', sel: 1, lrange: [450, 900] }),
 };
-const presetButtons = PRESETS.map(([label, name]) => el('button', { type: 'button', onclick: () => setups[name]() }, label));
+// Each set-up names the stack it builds (the title of the stack picture) until the reader edits it.
+for (const [name, f] of Object.entries(setups)) setups[name] = () => { f(); state.name = name; syncStackTitle(); };
+const presetButtons = PRESETS.map(([label, name, title]) => el('button', { type: 'button', title, onclick: () => setups[name]() }, label));
 $('#presets').append(...presetButtons);
 drawer($('#help'), $('#help-button'), setups);
 
@@ -1336,6 +1407,7 @@ function updateHash() {
     lr: state.lrange[0] === 380 && state.lrange[1] === 780 ? undefined : state.lrange.join(','),
     ill: state.illum === 'd65' ? undefined : state.illum,
     dmax: state.x2 === 'thickness' ? state.dmaxPlot : undefined,
+    nm: state.name || undefined,
   });
 }
 function fromHash(h) {
@@ -1364,6 +1436,7 @@ function fromHash(h) {
     apply(o);
     if (h.ill === 'e') { state.illum = 'e'; illumSeg.value = 'e'; }
     if (o.film?.profile === 'drain') syncProbe();
+    if (STACK_NAMES[h.nm]) { state.name = h.nm; syncStackTitle(); }
     return true;
   } catch { return false; }
 }
