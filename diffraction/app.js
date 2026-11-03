@@ -29,7 +29,11 @@ const state = {
   size: 200,              // the preset's characteristic size, um (for the zone plate and the lens, f in mm)
 };
 
-const ap = { re: new Float64Array(N * N), im: new Float64Array(N * N) };
+// The aperture's field, and its phase unwrapped (0 where it has none): the thickness of glass
+// that the lens and the rough glass stand for, which the other colours of white light see scaled
+// (apertureAt).  Paint sets the phase to 0 where it goes.
+const ap = { re: new Float64Array(N * N), im: new Float64Array(N * N), phase: new Float64Array(N * N) };
+const scratch = new Float64Array(N * N);   // the imaginary part the paint tools want when painting ap.phase
 
 // --------------------------------------------------------------------- presets
 
@@ -69,8 +73,8 @@ function loadPreset(id, size) {
   const p = PRESETS[id];
   state.preset = id;
   if (size !== undefined) state.size = size;
-  const [re, im] = sampleAperture(N, DX, (x, y) => p.f(x, y, state.size, state.lambda), { phase: !!p.phase });
-  ap.re.set(re); ap.im.set(im);
+  const [re, im, ph] = sampleAperture(N, DX, (x, y) => p.f(x, y, state.size, state.lambda), { phase: !!p.phase });
+  ap.re.set(re); ap.im.set(im); ap.phase.set(ph);
   apertureChanged();
   for (const [k, b] of Object.entries(presetButtons)) b.setAttribute('aria-pressed', String(k === id));
   sizeSlider.hidden = !p.size[1];
@@ -112,18 +116,50 @@ let sideData = null;  // the side view: {z, rows: per wavelength {I, lam, rgb}}
 // The aperture's angular spectrum at each wavelength, kept while the aperture stays the same:
 // moving the screen then costs one transform per frame.
 let spectra = new Map();
-function apertureChanged() { spectra = new Map(); }
+// The aperture as each colour of white light meets it (apertureAt), kept likewise.
+let apAt = new Map();
+let phased = false;   // the aperture carries a phase: the lens, the rough glass, or paint over them
+function apertureChanged() {
+  spectra = new Map(); apAt = new Map();
+  phased = ap.phase.some((v) => v !== 0);
+}
+
+/**
+ * The aperture as light of wavelength lam meets it.  A phase on it (the lens, the rough glass)
+ * is the phase at the slider's wavelength, from a thickness of glass: another wavelength, in
+ * white light, sees the same thickness as a phase lambda_0 / lam times as large.  So the lens
+ * keeps its focus for every colour, as a glass lens does (unlike the zone plate, an amplitude
+ * mask, which focuses red nearer than blue).  A mask without phase is the same for every colour.
+ * The phase scaled is the unwrapped one (ap.phase): the field's own phase is known only modulo
+ * 2 pi, and scaling that would make a diffractive lens, whose foci move as 1 / lambda.
+ */
+function apertureAt(lam) {
+  if (lam === state.lambda || !phased) return ap;
+  let a = apAt.get(lam);
+  if (!a) {
+    const re = new Float64Array(N * N), im = new Float64Array(N * N), s = state.lambda / lam;
+    for (let o = 0; o < N * N; o++) {
+      const p = ap.phase[o];
+      if (p === 0) { re[o] = ap.re[o]; im[o] = ap.im[o]; continue; }
+      const m = Math.hypot(ap.re[o], ap.im[o]);
+      re[o] = m * Math.cos(p * s); im[o] = m * Math.sin(p * s);
+    }
+    apAt.set(lam, a = { re, im });
+  }
+  return a;
+}
 
 function update() {
   const old = spectra;
   spectra = new Map();
   fields = wavelengths().map(([lam, rgb]) => {
+    const a = apertureAt(lam);
     let sp = old.get(lam);
-    if (!sp && state.z <= criticalDistance(N, DX, lam)) sp = spectrumOf(ap.re, ap.im, N);
+    if (!sp && state.z <= criticalDistance(N, DX, lam)) sp = spectrumOf(a.re, a.im, N);
     if (sp) spectra.set(lam, sp);
     // Without the curvature of the spherical wave: past z_c its phase turns faster than the
     // pixels, and the intensity doesn't need it.
-    const f = diffract(ap.re, ap.im, N, DX, lam, state.z, { curvature: false, spectrum: sp });
+    const f = diffract(a.re, a.im, N, DX, lam, state.z, { curvature: false, spectrum: sp });
     return { ...f, rgb, lam };
   });
   drawAperture(); drawField(); updateNotes();
@@ -135,7 +171,7 @@ function scheduleSide() {
   clearTimeout(sideTimer);
   sideTimer = setTimeout(() => {
     const z = state.z, zs = Array.from({ length: NZ }, (_, a) => ((a + 0.5) / NZ) * 2 * z);
-    sideData = { z, rows: wavelengths().map(([lam, rgb]) => ({ I: sideView(ap.re, ap.im, N, DX, lam, zs), lam, rgb })) };
+    sideData = { z, rows: wavelengths().map(([lam, rgb]) => { const a = apertureAt(lam); return { I: sideView(a.re, a.im, N, DX, lam, zs), lam, rgb }; }) };
     drawSide();
   }, 120);
 }
@@ -187,8 +223,13 @@ const zParts = (z) => (z >= 1e6 ? [{ v: z / 1e6, dec: 2, w: 5 }, '\u00a0m'] : z 
 function scaleBar(ctx, w, h, span, z = 0) {
   const dpr = window.devicePixelRatio || 1;
   let len, parts;
-  if (z) { const mrad = round125((span / z) * 250); len = (mrad / 1000) * z; parts = [{ v: mrad, dec: 0, w: 3, tiny: true }, '\u00a0mrad (', ...lenParts(len), ')']; }
-  else { len = round125(span / 4); parts = lenParts(len); }
+  if (z) {
+    // The angle is a round number (1, 2, 5...) that stays as z moves; the length it is at z
+    // is the live number, in a slot (up to 50.00 mm: 5 mrad at 10 m).
+    const mrad = round125((span / z) * 250); len = (mrad / 1000) * z;
+    const angle = mrad >= 1 ? `${mrad} mrad` : `${Math.round(mrad * 1000)} µrad`;
+    parts = [`${angle} = `, ...(len < 100 ? [{ v: len, dec: 1, w: 4 }, '\u00a0µm'] : [{ v: len / 1000, dec: 2, w: 5 }, '\u00a0mm'])];
+  } else { len = round125(span / 4); parts = lenParts(len); }
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fillRect(10 * dpr, h - 14 * dpr, (len / span) * w, 3 * dpr);
   ctx.font = `${11 * dpr}px system-ui, sans-serif`;
@@ -356,22 +397,32 @@ function updateNotes() {
     ...(far ? [', ±', { v: (span / 2 / state.z) * 1000, dec: 2, w: 5 }, '\u00a0mrad'] : []),
     state.z >= ZMAX ? ', the far field' : '']);
   const p = PRESETS[state.preset];   // undefined when painted by hand
-  const lam = state.white ? 0.55 : state.lambda, z = state.z;
+  // The zone plate and the lens were made for the slider's wavelength (lam0); in white light the
+  // other readouts are for green, the middle of the three colours.
+  const lam0 = state.lambda, lam = state.white ? 0.55 : state.lambda, z = state.z, green = state.white ? ' (green)' : '';
   // Words and numbers, each number in a slot of its own (setSlots).
   let text = [];
   if (p?.fz) {
     const f = state.size * 1000;
     if (state.preset === 'zone') {
-      const M = zones(f, lam), R = Math.sqrt(M * lam * f);
+      const M = zones(f, lam0), R = Math.sqrt(M * lam0 * f);
       text = ['Focus at f = ', { v: state.size, dec: 1, w: 5 }, '\u00a0mm (and f/3, f/5...): ', { v: Math.ceil(M / 2), dec: 0, w: 3 }, '\u00a0open rings out to r = ',
-        { v: R / 1000, dec: 2, w: 4 }, '\u00a0mm, the outermost ', { v: R - Math.sqrt((M - 1) * lam * f), dec: 1, w: 4 }, '\u00a0µm wide'];
-    } else text = ['Focus at f = ', { v: state.size, dec: 1, w: 5 }, '\u00a0mm; the lens is ', { v: (2 * lensRadius(f, lam)) / 1000, dec: 2, w: 4 }, '\u00a0mm across'];
-  } else if (state.preset === 'grating') text = ['Talbot length 2d²/λ = ', ...zParts((2 * state.size * state.size) / lam)];
-  else if (state.preset === 'edge') text = ['Fringes about √(λz) = ', ...lenParts(Math.sqrt(lam * z)), ' apart'];
-  else if (p?.size[1] && !p.phase) {
-    const a = state.size / 2, NF = (a * a) / (lam * z);
-    text = ['Fresnel number a²/λz = ', { v: NF, dec: 3, w: 7, tiny: true }, ' (a = ', { v: a, dec: 1, w: 5 }, '\u00a0µm): ',
-      NF > 3 ? 'near field, a sharp shadow' : NF > 0.3 ? 'in between' : 'far field: the pattern is the Fourier transform'];
+        { v: R / 1000, dec: 2, w: 4 }, '\u00a0mm, the outermost ', { v: R - Math.sqrt((M - 1) * lam0 * f), dec: 1, w: 4 }, '\u00a0µm wide'];
+    } else text = ['Focus at f = ', { v: state.size, dec: 1, w: 5 }, '\u00a0mm; the lens is ', { v: (2 * lensRadius(f, lam0)) / 1000, dec: 2, w: 4 }, '\u00a0mm across'];
+  } else if (state.preset === 'grating') text = [`Talbot length 2d²/λ${green} = `, ...zParts((2 * state.size * state.size) / lam)];
+  else if (state.preset === 'edge') {
+    // The Fresnel edge: maxima at x = 1.217, 2.345, 3.082... times sqrt(lambda z / 2), the first
+    // 1.37 times the open beam; at the geometrical edge a quarter of it.
+    text = [`First bright fringe 0.86 √(λz)${green} = `, ...lenParts(0.86 * Math.sqrt(lam * z)), ' outside the edge, 1.37× the open beam; the next ones closer and closer'];
+  } else if (p?.size[1] && !p.phase) {
+    // a: the half width of what is lit (for the two slits, of the pair, each slit d/4 wide).
+    const a = state.preset === 'double' ? (5 * state.size) / 8 : state.size / 2, NF = (a * a) / (lam * z);
+    // The slit, square and hole are within 5% of their Fourier transform at N_F = 0.3, within
+    // 1% at 0.1 (see the tests).  A disk's shadow fills in as its N_F falls below 1.
+    const words = state.preset === 'disk'
+      ? (NF > 3 ? 'near field: a sharp shadow, with the spot in it' : NF > 0.3 ? 'the shadow is filling in' : 'far field: hardly any shadow is left')
+      : NF > 3 ? 'near field: a sharp shadow, fringed at its edges' : NF > 0.3 ? 'in between' : NF > 0.1 ? 'nearly the far field' : 'far field: the pattern is the Fourier transform (to 1%)';
+    text = [`Fresnel number a²/λz${green} = `, { v: NF, dec: 3, w: 7, tiny: true }, ' (a = ', { v: a, dec: 1, w: 5 }, '\u00a0µm): ', words];
   }
   if (far && state.display === 'complex' && !state.white) text.push(`${text.length ? '. ' : ''}The phase is shown relative to a spherical wave from the aperture`);
   setSlots($('#fresnel'), text);
@@ -391,6 +442,7 @@ apCanvas.addEventListener('pointerdown', (e) => {
   painting = true;
   const [i, j] = apPixel(e);
   paint(ap.re, ap.im, N, i, j, { shape: 'round', size: state.brush }, state.tool === 'open' ? 1 : 0, 0);
+  paint(ap.phase, scratch, N, i, j, { shape: 'round', size: state.brush }, 0, 0);
   last = [i, j];
   state.preset = 'custom';
   for (const b of Object.values(presetButtons)) b.setAttribute('aria-pressed', 'false');
@@ -401,6 +453,7 @@ apCanvas.addEventListener('pointermove', (e) => {
   if (!painting) return;
   const [i, j] = apPixel(e);
   paintStroke(ap.re, ap.im, N, last[0], last[1], i, j, { shape: 'round', size: state.brush }, state.tool === 'open' ? 1 : 0, 0);
+  paintStroke(ap.phase, scratch, N, last[0], last[1], i, j, { shape: 'round', size: state.brush }, 0, 0);
   last = [i, j];
   apertureChanged();
   requestUpdate();
@@ -422,8 +475,12 @@ $('#z-box').append(zSlider);
 $('#far-box').append(el('button', { type: 'button', onclick: () => setZ(ZMAX),
   title: 'Move the screen to the end of the range, 10 m away, where the pattern is the Fraunhofer pattern (the Fourier transform of the aperture) to within about 1%' }, 'Far field'));
 
-const lambdaSlider = slider({ label: 'λ (nm)', min: 400, max: 700, step: 1, value: state.lambda * 1000,
-  onInput: (v) => { state.lambda = v / 1000; if (PRESETS[state.preset]?.fz || PRESETS[state.preset]?.phase) loadPreset(state.preset); else requestUpdate(); } });
+const lambdaSlider = slider({ label: 'λ (nm)', min: 400, max: 700, step: 1, value: state.lambda * 1000, title: 'The wavelength λ of the light, 400 to 700 nm',
+  onInput: (v) => {
+    state.lambda = v / 1000;
+    if (PRESETS[state.preset]?.fz || PRESETS[state.preset]?.phase) loadPreset(state.preset);   // made for this wavelength
+    else { if (phased) apertureChanged(); requestUpdate(); }   // a painted phase: the other colours see it anew
+  } });
 $('#lambda-box').append(lambdaSlider);
 const whiteToggle = toggle('White light', state.white, (on) => { state.white = on; requestUpdate(); }, 'Red, green and blue at once (650, 550 and 450 nm)');
 $('#light-box').append(whiteToggle);
@@ -439,7 +496,7 @@ $('#preset-size').append(sizeSlider);
 const toolSeg = segmented([
   { value: 'open', label: 'Open', title: 'Paint light through' }, { value: 'close', label: 'Close', title: 'Paint darkness' },
 ], state.tool, (v) => { state.tool = v; }, { label: 'Tool' });
-$('#tool-box').append(toolSeg, el('button', { type: 'button', onclick: () => { ap.re.fill(0); ap.im.fill(0); state.preset = 'custom'; for (const b of Object.values(presetButtons)) b.setAttribute('aria-pressed', 'false'); apertureChanged(); update(); } }, 'Close all'));
+$('#tool-box').append(toolSeg, el('button', { type: 'button', onclick: () => { ap.re.fill(0); ap.im.fill(0); ap.phase.fill(0); state.preset = 'custom'; for (const b of Object.values(presetButtons)) b.setAttribute('aria-pressed', 'false'); apertureChanged(); update(); } }, 'Close all'));
 $('#brush-box').append(slider({ label: 'brush', min: 1, max: 40, step: 1, value: state.brush, onInput: (v) => { state.brush = Math.round(v); } }));
 
 const displaySeg = segmented([
@@ -475,7 +532,7 @@ const setups = {
   talbot: () => go('grating', { z: (2 * 48 * 48) / 0.55 / 2, size: 48 }),
   zone: () => go('zone', { z: 50000, size: 50, scale: 'linear', zoom: 4 }),
   lens: () => go('lens', { z: 50000, size: 50, scale: 'linear', zoom: 4 }),
-  white: () => go('grating', { z: 60000, size: 48, white: true }),
+  white: () => go('grating', { z: 1e6, size: 48, white: true }),   // at 1 m the orders have come apart
   speckle: () => go('random', { z: 200000, size: 24 }),
 };
 drawer($('#help'), $('#help-button'), setups);

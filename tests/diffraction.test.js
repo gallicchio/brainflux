@@ -227,13 +227,13 @@ function ringsFraunhofer(rings, z) {
 test('at the end of the slider (10 m) the pattern is the Fraunhofer pattern: slit, hole, zone plate', () => {
   const z = 1e7, sinc = (t) => (t === 0 ? 1 : Math.sin(Math.PI * t) / (Math.PI * t)), out = [];
   const slit = aperture((x, y) => +(Math.abs(x) < 100 && Math.abs(y) < 700));
-  const eSlit = compare(diffract(...slit, N, DX, LAM, z), (x, y) => ((200 * 1400 * sinc((200 * x) / z / LAM) * sinc((1400 * y) / z / LAM)) / (LAM * z)) ** 2);
+  const eSlit = compare(diffract(slit[0], slit[1], N, DX, LAM, z), (x, y) => ((200 * 1400 * sinc((200 * x) / z / LAM) * sinc((1400 * y) / z / LAM)) / (LAM * z)) ** 2);
   const hole = aperture((x, y) => +(x * x + y * y < 150 * 150));
-  const eHole = compare(diffract(...hole, N, DX, LAM, z), ringsFraunhofer([[0, 150]], z));
+  const eHole = compare(diffract(hole[0], hole[1], N, DX, LAM, z), ringsFraunhofer([[0, 150]], z));
   const f = 50000, M = zoneCount(f, LAM, DX), r = (m) => Math.sqrt(m * LAM * f), rings = [];
   for (let m = 0; m < M; m += 2) rings.push([r(m), r(m + 1)]);
   const zone = aperture((x, y) => { const q = (x * x + y * y) / (LAM * f); return +(q < M && Math.floor(q) % 2 === 0); });
-  const eZone = compare(diffract(...zone, N, DX, LAM, z), ringsFraunhofer(rings, z));
+  const eZone = compare(diffract(zone[0], zone[1], N, DX, LAM, z), ringsFraunhofer(rings, z));
   assert(eSlit < 0.012 && eHole < 0.005 && eZone < 0.02, `slit ${eSlit}, hole ${eHole}, zone plate ${eZone}`);
   return `rel. L2 error over the view: slit ${pct(eSlit)}, hole ${pct(eHole)}, zone plate ${pct(eZone)}`;
 });
@@ -281,10 +281,135 @@ test('the zone plate focuses at f, f/3 and f/5, with the focal spot of the conti
   return out.join('; ');
 });
 
+test('a lens for 550 nm in 650 nm light: the unwrapped phase scaled by 550/650 keeps the focus at f, the wrapped one moves it to 550/650 f', () => {
+  const f = 50000, R = 600, lam0 = 0.55, lam = 0.65;
+  const [re, im, ph] = aperture((x, y) => { const r2 = x * x + y * y; return r2 > R * R ? NaN : (-(2 * Math.PI) / lam0) * r2 / (2 * f); }, { phase: true });
+  const brightest = (r, i) => {   // the brightest point on the axis, from the side view between 0.6 f and 1.3 f
+    const zs = Array.from({ length: 141 }, (_, a) => f * (0.6 + a * 0.005)), sv = sideView(r, i, N, DX, lam, zs);
+    let best = 0; for (let a = 1; a < zs.length; a++) if (sv[a * N + N / 2] > sv[best * N + N / 2]) best = a;
+    return zs[best] / f;
+  };
+  const s = lam0 / lam, glass = [new Float64Array(N * N), new Float64Array(N * N)], blazed = [new Float64Array(N * N), new Float64Array(N * N)];
+  for (let o = 0; o < N * N; o++) {
+    const m = Math.hypot(re[o], im[o]);
+    glass[0][o] = m * Math.cos(ph[o] * s); glass[1][o] = m * Math.sin(ph[o] * s);
+    const w = Math.atan2(im[o], re[o]) * s;   // the phase modulo 2 pi, scaled: a re-blazed diffractive lens
+    blazed[0][o] = m * Math.cos(w); blazed[1][o] = m * Math.sin(w);
+  }
+  const zG = brightest(...glass), zB = brightest(...blazed), zAs = brightest(re, im);
+  // (A lens of Fresnel number R^2 / lambda f = 11 has its brightest point 1% short of f: the focal shift.)
+  close(zG, 1, 0.02, 'glass: the focus stays at f');
+  close(zB, s, 0.02, 'the wrapped phase scaled: a diffractive lens, f x 550/650');
+  close(zAs, s, 0.02, 'the phase as it is: a diffractive lens, f x 550/650');
+  return `in 650 nm light the focus is at ${zG.toFixed(3)} f with the thickness scaled, ${zAs.toFixed(3)} f with the phase as made for 550 nm, ${zB.toFixed(3)} f with the wrapped phase scaled (550/650 = ${s.toFixed(3)})`;
+});
+
 test('area sampling: a 300 um square lets 300^2 um^2 through, a 300 um hole pi 150^2', () => {
   const area = (t) => { const [re] = aperture(t); let s = 0; for (const v of re) s += v; return s * DX * DX; };
   const sq = area((x, y) => +(Math.abs(x) < 150 && Math.abs(y) < 150)), hole = area((x, y) => +(x * x + y * y < 150 * 150));
   close(sq / 90000, 1, 1e-9, 'square');
   close(hole / (Math.PI * 22500), 1, 2e-3, 'hole');
   return `square ${sq.toFixed(0)}, hole ${hole.toFixed(0)} (${(Math.PI * 22500).toFixed(0)})`;
+});
+
+// ------------------------------------------------- the numbers the help quotes, re-measured
+//
+// At the demo's sampling, with the presets as app.js makes them (the "open everywhere"
+// apertures sit in its soft-edged 3.3 mm beam).
+
+const centreRow = (f) => { const I = new Float64Array(N); for (let i = 0; i < N; i++) { const o = (N / 2) * N + i; I[i] = f.re[o] ** 2 + f.im[o] ** 2; } return I; };
+// The intensity at x (um) on the middle row, the field read between its samples (band-limited;
+// past z_c only without the spherical wave's chirp, which is finer than the pixels there).
+const rowAt = (f, x) => { let sr = 0, si = 0; const u = x / f.pitch + N / 2; for (let i = 0; i < N; i++) { const t = u - i, w = t === 0 ? 1 : Math.sin(Math.PI * t) / (Math.PI * t); sr += w * f.re[(N / 2) * N + i]; si += w * f.im[(N / 2) * N + i]; } return sr * sr + si * si; };
+const beamT = (x, y) => { const r = Math.hypot(x, y), R = (N / 2) * DX, edge = 0.8 * R; return r < edge ? 1 : r < R ? Math.cos(((r - edge) / (R - edge)) * (Math.PI / 2)) : 0; };
+const openBeam = (z) => { const [re, im] = aperture(beamT), b = diffract(re, im, N, DX, LAM, z), o = (N / 2) * N + N / 2; return b.re[o] ** 2 + b.im[o] ** 2; };
+
+test('a straight edge: 1.37 times the open beam at 0.86 sqrt(lambda z) outside the edge, a quarter of it at the edge, fringes closer and closer', () => {
+  const z = 20000, [re, im] = aperture((x, y) => +(x > 0) * beamT(x, y)), I = centreRow(diffract(re, im, N, DX, LAM, z)), B = openBeam(z);
+  const peaks = []; for (let i = N / 2; i < N / 2 + 60; i++) if (I[i] > I[i - 1] && I[i] >= I[i + 1]) peaks.push(i);
+  const s = Math.sqrt(LAM * z), x1 = (peaks[0] - N / 2) * DX, gaps = peaks.slice(1, 4).map((q, a) => (q - peaks[a]) * DX);
+  close(I[peaks[0]] / B, 1.37, 0.02, 'the first maximum');
+  close(x1 / s, 0.86, 0.1, 'its place');   // to a pixel: 8 um of 90
+  assert(gaps[0] > gaps[1] && gaps[1] >= gaps[2], `fringes closer and closer: ${gaps}`);
+  close(I[N / 2] / B, 0.25, 0.005, 'at the edge');
+  return `first maximum ${(I[peaks[0]] / B).toFixed(3)} at ${x1} um (0.86 sqrt(lambda z) = ${(0.86 * s).toFixed(1)}), then fringes ${gaps.join(', ')} um apart; at the edge ${(I[N / 2] / B).toFixed(3)}`;
+});
+
+test('the spot of Arago: as bright as the beam with no disk, in a shadow that is dark around it', () => {
+  const z = 150000, a = 250, [re, im] = aperture((x, y) => +(x * x + y * y > a * a) * beamT(x, y));
+  const f = diffract(re, im, N, DX, LAM, z), I = centreRow(f), spot = I[N / 2], open = openBeam(z);
+  let dark = Infinity; for (let i = N / 2 + 1; (i - N / 2) * f.pitch < a; i++) dark = Math.min(dark, I[i]);
+  close(spot / open, 1, 0.02, 'the spot against the open beam');
+  assert(dark < 0.1 * open, `the shadow: ${dark / open}`);
+  return `the spot ${(spot / open).toFixed(3)} of the open beam; the shadow ${(dark / open).toFixed(3)} of it at its darkest`;
+});
+
+test('a round hole 10 m away: the Airy pattern, its first dark ring at 1.22 lambda z / D', () => {
+  const D = 300, z = 1e7, [re, im] = aperture((x, y) => +(x * x + y * y < (D / 2) ** 2));
+  const f = diffract(re, im, N, DX, LAM, z, { curvature: false }), step = 0.02 * f.pitch;
+  let prev = rowAt(f, 0), x0 = NaN;
+  for (let x = step; x < 50 * f.pitch; x += step) { const v = rowAt(f, x); if (v > prev) { x0 = x - step; break; } prev = v; }
+  close(x0 / ((1.22 * LAM * z) / D), 1, 0.005, 'the first zero');
+  return `first zero at ${(x0 / 1000).toFixed(2)} mm; 1.22 lambda z / D = ${((1.22 * LAM * z) / D / 1000).toFixed(2)} mm`;
+});
+
+test('two slits: dark fringes at lambda / 2d, the fourth bright fringe missing under the envelope', () => {
+  const d = 250, [re, im] = aperture((x, y) => +((Math.abs(x - d / 2) < d / 8 || Math.abs(x + d / 2) < d / 8) && Math.abs(y) < 700)), out = [];
+  for (const z of [80000, 1e7]) {
+    const f = diffract(re, im, N, DX, LAM, z, { curvature: false }), peak = rowAt(f, 0), s = (LAM * z) / d;
+    let dark = Infinity, at = 0; for (let x = 0.3 * s; x < 0.7 * s; x += 0.002 * s) { const v = rowAt(f, x); if (v < dark) { dark = v; at = x; } }
+    close(at / (s / 2), 1, 0.01, `the first dark fringe at ${z} um`);
+    assert(dark < 0.01 * peak, `dark: ${dark / peak}`);
+    const third = rowAt(f, 3 * s) / peak, fourth = rowAt(f, 4 * s) / peak;
+    assert(third > 0.05 && fourth < 0.005, `the third fringe ${third}, the fourth ${fourth}`);
+    out.push(`${z / 1000} mm: dark at ${(at / s).toFixed(3)} lambda z / d (${(dark / peak).toExponential(1)} of the peak); the third fringe ${third.toFixed(3)} of the peak, the fourth ${fourth.toExponential(1)}`);
+  }
+  return out.join('; ');
+});
+
+test("the slit is within 5% of its Fraunhofer sinc^2 at N_F = 0.3 and within 1% at N_F = 0.1 (the readout's words)", () => {
+  const a = 100, [re, im] = aperture((x, y) => +(Math.abs(x) < a && Math.abs(y) < 700)), sinc = (t) => (t === 0 ? 1 : Math.sin(Math.PI * t) / (Math.PI * t)), out = [];
+  for (const [NF, tol] of [[0.3, 0.06], [0.1, 0.01]]) {
+    const z = (a * a) / (LAM * NF), f = diffract(re, im, N, DX, LAM, z), I = centreRow(f), peak = I[N / 2];
+    let d = 0, s = 0; for (let i = N / 4; i < (3 * N) / 4; i++) { const v = peak * sinc((2 * a * (i - N / 2) * f.pitch) / z / LAM) ** 2; d += (I[i] - v) ** 2; s += v * v; }
+    const e = Math.sqrt(d / s);
+    assert(e < tol, `N_F = ${NF}: ${pct(e)}`);
+    out.push(`N_F = ${NF} (z = ${(z / 1000).toFixed(0)} mm): ${pct(e)}`);
+  }
+  return out.join(', ');
+});
+
+test("the sine grating's Talbot carpet: the image shifted by d/2 at z_T/2, half the period at z_T/4", () => {
+  const d = 48, zT = (2 * d * d) / LAM, g = (x, y) => (0.5 + 0.5 * Math.cos((2 * Math.PI * x) / d)) * +(Math.abs(x) < 750 && Math.abs(y) < 750);
+  const [re, im] = aperture(g), [rs, is] = aperture((x, y) => g(x + d / 2, y));
+  const I0 = centreRow({ re, im }), Is = centreRow({ re: rs, im: is });
+  const corr = (A, B) => { let ab = 0, aa = 0, bb = 0; for (let i = N / 2 - 80; i < N / 2 + 80; i++) { ab += A[i] * B[i]; aa += A[i] ** 2; bb += B[i] ** 2; } return ab / Math.sqrt(aa * bb); };
+  // The strength of a period in the middle ten periods of the row, read between the samples.
+  const harmonic = (f, period) => { let cr = 0, ci = 0; const n = 480; for (let q = 0; q < n; q++) { const x = (q / n - 0.5) * 10 * period, v = rowAt(f, x); cr += v * Math.cos((2 * Math.PI * x) / period); ci += v * Math.sin((2 * Math.PI * x) / period); } return Math.hypot(cr, ci) / n; };
+  const f0 = diffract(re, im, N, DX, LAM, 1), fQ = diffract(re, im, N, DX, LAM, zT / 4);
+  const cT = corr(centreRow(diffract(re, im, N, DX, LAM, zT)), I0), cH = corr(centreRow(diffract(re, im, N, DX, LAM, zT / 2)), Is);
+  const h1 = harmonic(fQ, d) / harmonic(f0, d), h2 = harmonic(fQ, d / 2) / harmonic(f0, d);
+  assert(cT > 0.999 && cH > 0.999, `the images: ${cT}, ${cH}`);
+  assert(h1 < 0.02 && h2 > 0.1, `at z_T/4 the period d is ${h1} of the grating's, the period d/2 ${h2}`);
+  return `self-image ${cT.toFixed(4)}, shifted image at z_T/2 ${cH.toFixed(4)}; at z_T/4 the period d has ${(100 * h1).toFixed(1)}% of the grating's strength, the period d/2 ${(100 * h2).toFixed(0)}%`;
+});
+
+test('speckle from rough glass: contrast 1, grains about lambda z / D across', () => {
+  const z = 200000, s = 24, D = 1000;
+  const [re, im] = aperture((x, y) => {
+    if (x * x + y * y > (D / 2) ** 2) return NaN;
+    const cx = Math.floor(x / s), cy = Math.floor(y / s);
+    let h = (cx * 73856093) ^ (cy * 19349663); h = (h ^ (h >>> 13)) * 1274126177;
+    return (((h >>> 0) % 1000) / 1000) * 2 * Math.PI;
+  }, { phase: true });
+  // The middle +-1 mm, well inside the grains' own sinc envelope (first zero at lambda z / s = 4.6 mm).
+  const f = diffract(re, im, N, DX, LAM, z), W = 36, lo = N / 2 - W, hi = N / 2 + W;
+  const I = (i, j) => f.re[j * N + i] ** 2 + f.im[j * N + i] ** 2;
+  let mean = 0, n = 0; for (let j = lo; j < hi; j++) for (let i = lo; i < hi; i++) { mean += I(i, j); n++; } mean /= n;
+  const ac = (sx) => { let a = 0, c = 0; for (let j = lo; j < hi; j++) for (let i = lo; i < hi - sx; i++) { a += I(i, j) * I(i + sx, j); c++; } return a / c / (mean * mean) - 1; };
+  const a0 = ac(0); let half = NaN, prev = a0; for (let t = 1; t < 30; t++) { const v = ac(t); if (v < a0 / 2) { half = t - 1 + (prev - a0 / 2) / (prev - v); break; } prev = v; }
+  const fwhm = 2 * half * f.pitch, airy = (1.03 * LAM * z) / D;   // the intensity autocorrelation of a round patch is the Airy pattern
+  close(Math.sqrt(a0), 1, 0.1, 'the contrast');
+  close(fwhm / airy, 1, 0.2, 'the grain size');
+  return `contrast ${Math.sqrt(a0).toFixed(2)}; grains ${fwhm.toFixed(0)} um wide (the Airy width 1.03 lambda z / D = ${airy.toFixed(0)} um)`;
 });
