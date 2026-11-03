@@ -7,6 +7,8 @@
 .stage-wrap { width: 100%; max-width: calc(100vh - 150px); aspect-ratio: 1; margin: 0 auto; background: #000; border-radius: var(--radius); overflow: hidden; }
 .stage-wrap canvas { width: 100%; height: 100%; cursor: crosshair; }
 .stage-wrap canvas.painting { cursor: cell; }
+/* The one-line hint under the picture, as wide as the picture. */
+.stage-col .hint { max-width: calc(100vh - 150px); margin: 0 auto; width: 100%; }
 .readouts { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--ink-2); max-width: calc(100vh - 150px); margin: 0 auto; width: 100%; }
 .readouts b { color: var(--ink); font-weight: 600; }
 /* A live number: a fixed width, right-aligned, monospaced, so nothing around it moves. */
@@ -22,7 +24,8 @@
 .spec-row { flex-wrap: nowrap; }
 .spec-row .grow { flex: 1; min-width: 0; }
 .spec-row .slider { grid-template-columns: 3.2em 1fr 4.6em; }
-#spec-hover { min-height: 1.4em; }
+/* The spectrum's hint; while the pointer is on the plot it shows the frequency there instead. */
+#spec-hint { font-size: 13px; min-height: 1.4em; }
 
 .mode-row { display: grid; grid-template-columns: minmax(130px, 44%) 1fr; gap: 8px; align-items: start; }
 .mode-wrap { aspect-ratio: 1; background: #000; border-radius: 6px; overflow: hidden; }
@@ -30,7 +33,8 @@
 .mode-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 #mode-info { color: var(--ink-2); line-height: 1.35; min-height: 4em; }
 #mode-info b { color: var(--ink); }
-.modes-list { height: 214px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+#tab-note { min-height: 1.4em; }
+.modes-list { height: 200px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
 table.modes { border-collapse: collapse; width: 100%; }
 table.modes th, table.modes td { padding: 1px 6px; text-align: right; white-space: nowrap; }
 table.modes th { position: sticky; top: 0; background: var(--panel-2); color: var(--ink-2); font-weight: 600; }
@@ -49,7 +53,8 @@ table.modes tr.sel { background: var(--accent-soft); outline: 1px solid var(--ac
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
-details.panel summary { cursor: pointer; }
+details summary { cursor: pointer; }
+details > .stack { margin-top: 6px; }
 #mode-seg .seg button { font-weight: 600; }
 
 @media (max-width: 1300px) {
@@ -59,6 +64,6 @@ details.panel summary { cursor: pointer; }
 }
 @media (max-width: 800px) {
   .drums { grid-template-columns: minmax(0, 1fr); padding: 8px; }
-  .stage-wrap, .readouts, .stage-head { max-width: 100%; }
+  .stage-wrap, .readouts, .stage-head, .stage-col .hint { max-width: 100%; }
   .analysis { display: flex; }
 }
