@@ -246,6 +246,9 @@ function presetPotential(sim, p) {
   const v = e.evaluate({ x: xs, t: 0, m: 1, ...p.params }, xs.length).re;
   const V = new Float64Array(sim.n);
   for (let j = 0; j < sim.n; j++) { let a = 0; for (let s = 0; s < sub; s++) a += v[j * sub + s]; V[j] = a / sub; }
+  // As the demo decides it: jumps in the fine samples (or a preset that asks, the delta) are made
+  // fit for the method; a smooth V, however steep its walls, is used exactly as typed.
+  if (!(hasJumps(v) || p.kc)) { V.jumps = false; V.step = Infinity; return V; }
   return prepareSharpPotential(V, sim.dx, { kc: p.kc || 16 });
 }
 
@@ -312,4 +315,90 @@ test('every potential has named starts, and a typed start that is smooth (its <T
     notes.push(`${p.id} ${T[0].toFixed(3)}`);
   }
   return `<T>: ${notes.join(', ')}`;
+});
+
+test('the probability either side of a point: a symmetric state gives one half, with the point on the grid or off it', () => {
+  // The finite well's ground state, as the demo makes it; x = 0 is a grid point here, and
+  // counting it wholly on one side read P(x < 0) = 0.489 against 0.511.
+  const p = preset('well');
+  const sim = new Sim1D({ n: p.n, xmin: p.domain[0], xmax: p.domain[1], boundary: p.boundary });
+  const V = presetPotential(sim, p);
+  sim.setPotential(V);
+  const bound = eigenstates(V, sim.dx, 1, 6, { first: 0, last: sim.n - 1 }).filter((s) => s.E < 0);
+  assert(bound.length === 3, `${bound.length} bound states (the help says three)`);
+  sim.setPsi(bound[0].psi, null); sim.normalize();
+  assert(Math.abs(sim.x[sim.n / 2]) < 1e-12, 'x = 0 is on the grid');
+  close(sim.probabilityLeftOf(0), 0.5, 1e-6, 'ground state: P(x < 0)');
+  // A packet centred a third of a cell past a grid point.
+  const x0 = sim.x[700] + sim.dx / 3;
+  gaussianPacket(sim, x0, 1, 0);
+  close(sim.probabilityLeftOf(x0), 0.5, 1e-4, 'packet: P(x < x0)');
+  close(sim.probabilityLeftOf(x0 + 10), 1, 1e-9, 'all of it left of x0 + 10');
+  close(sim.probabilityLeftOf(x0 - 10), 0, 1e-9, 'none of it left of x0 - 10');
+  return `well levels ${bound.map((s) => s.E.toFixed(3)).join(', ')}`;
+});
+
+test('the quantum bouncer: levels at the Airy zeros, and the variational guess x e^(-bx) is least at b = 1.145', () => {
+  const p = preset('bouncer'), g = p.params.g;
+  const sim = new Sim1D({ n: p.n, xmin: p.domain[0], xmax: p.domain[1], boundary: p.boundary });
+  const V = sim.x.map((x) => g * x);
+  sim.setPotential(V);
+  const st = eigenstates(V, sim.dx, 1, 4, { first: 1, last: sim.n - 1 });
+  // E_n = (hbar^2 g^2 / 2m)^(1/3) a_n, with -a_n the zeros of Ai.
+  const airy = [2.33810741, 4.08794944, 5.52055983, 6.78670809];
+  for (let i = 0; i < 4; i++) close(st[i].E, airy[i] * Math.cbrt((g * g) / 2), 1e-5, `n = ${i + 1}`);
+  const e = parse(p.typed.psi, { variables: ['x'] });
+  const E = (b) => { const v = e.evaluate({ x: sim.x, b }, sim.n); sim.setPsi(v.re, v.im); sim.normalize(); return sim.observables().E; };
+  // <E> = hbar^2 b^2 / 2m + 3g / 2b, least at b = (3g/2)^(1/3) = 1.145: 1.966, above E_1 = 1.856.
+  close(E(1.145), 1.145 ** 2 / 2 + (1.5 * g) / 1.145, 1e-3, '<E> at b = 1.145');
+  assert(E(1.145) < E(1.0) && E(1.145) < E(1.3) && E(1.145) > st[0].E, 'least near b = 1.145, above the true ground state');
+  return `E_1 = ${st[0].E.toFixed(4)} (Airy ${(airy[0] * Math.cbrt((g * g) / 2)).toFixed(4)}), <E>(b = 1.145) = ${E(1.145).toFixed(4)}`;
+});
+
+test('the double well: the two lowest levels split by 0.112, and the left-well state crosses over in half of 2 pi / dE', () => {
+  const p = preset('double');
+  const sim = new Sim1D({ n: p.n, xmin: p.domain[0], xmax: p.domain[1], boundary: p.boundary });
+  const V = presetPotential(sim, p);
+  assert(!V.jumps, 'smooth: used exactly as typed');
+  sim.setPotential(V);
+  const [a, b] = eigenstates(V, sim.dx, 1, 2, { first: 1, last: sim.n - 1 });
+  const dE = b.E - a.E, period = (2 * Math.PI) / dE;
+  close(dE, 0.1118, 1e-3, 'splitting');
+  const re = new Float64Array(sim.n);
+  for (let j = 0; j < sim.n; j++) re[j] = (a.psi[j] + b.psi[j]) / Math.SQRT2;
+  sim.setPsi(re, null); sim.normalize();
+  const x0 = sim.observables().x;
+  assert(x0 < -1, `starts in the left well (<x> = ${x0})`);
+  const steps = 1400;
+  sim.step(period / 2 / steps, steps);
+  close(sim.observables().x, -x0, 0.02, '<x> after half a period');
+  return `E_0 = ${a.E.toFixed(5)}, dE = ${dE.toFixed(4)}, period ${period.toFixed(1)}; <x> ${x0.toFixed(3)} -> ${sim.observables().x.toFixed(3)}`;
+});
+
+test('the delta preset: a Gaussian well of area alpha binds at -0.465, a little above the delta\'s -alpha^2/2', () => {
+  const p = preset('delta');
+  const sim = new Sim1D({ n: p.n, xmin: p.domain[0], xmax: p.domain[1], boundary: p.boundary });
+  const V = presetPotential(sim, p);
+  assert(V.jumps, 'the spike is made fit for the method');
+  const bound = eigenstates(V, sim.dx, 1, 2, { first: 0, last: sim.n - 1 }).filter((s) => s.E < 0);
+  assert(bound.length === 1, `${bound.length} bound states`);
+  close(bound[0].E, -0.465, 0.002, 'the level the help quotes');
+  assert(bound[0].E > -0.5, 'above -alpha^2/2 = -0.5');
+  return `E = ${bound[0].E.toFixed(4)}`;
+});
+
+test('Bloch oscillations: in the lattice with a force, <x> is far out at half of 2 pi hbar / F a and back at the whole', () => {
+  const p = preset('lattice'), { F, a } = p.params, TB = (2 * Math.PI) / (F * a);
+  const sim = new Sim1D({ n: p.n, xmin: p.domain[0], xmax: p.domain[1], boundary: p.boundary });
+  sim.setPotential(presetPotential(sim, p));
+  const { x0, sigma, k0 } = start('lattice', 'Wide').params;
+  gaussianPacket(sim, x0, sigma, k0);
+  const dt = 0.02, half = Math.round(TB / 2 / dt);
+  sim.step(dt, half);
+  const xHalf = sim.observables().x;
+  sim.step(dt, Math.round(TB / dt) - half);
+  const xFull = sim.observables().x;
+  assert(xHalf < -10, `far out (to the left: the force is -F) at T_B / 2: <x> = ${xHalf}`);
+  assert(Math.abs(xFull) < 1.5, `back near the start at T_B: <x> = ${xFull}`);
+  return `<x> = ${xHalf.toFixed(2)} at T_B / 2, ${xFull.toFixed(2)} at T_B = ${TB.toFixed(2)}`;
 });

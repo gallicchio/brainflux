@@ -5,7 +5,9 @@
 .plots { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
 .plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .plot-wrap canvas { width: 100%; height: 100%; }
-.main-wrap { height: max(300px, calc(55vh - 40px)); }
+/* (22px shorter than before the hint under it, so that the three pictures still fit the window) */
+.main-wrap { height: max(300px, calc(55vh - 62px)); }
+.s1d .hint { margin: -2px 0 -2px 4px; }
 .mom-wrap { height: max(120px, 17vh); }
 .carpet-wrap { height: max(110px, 18vh); }
 .readouts {
@@ -37,6 +39,8 @@
 .plot-key .level { width: 14px; border-top: 1px solid var(--ink-3); }
 .plot-key .cn { width: 10px; height: 4px; background: var(--accent); }
 .plot-key .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
+.plot-key .jr, .plot-key .jl { width: 12px; height: 8px; background: var(--accent); }
+.plot-key .jl { background: var(--warn); }
 .plot-key.dark { background: rgba(0, 0, 0, 0.55); color: rgba(255, 255, 255, 0.7); }
 .plot-key.dark b { color: #fff; }
 
