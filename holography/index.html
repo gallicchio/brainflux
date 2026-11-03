@@ -22,6 +22,7 @@
     <div class="pane" id="pane-rec">
       <div class="pane-head"><h2><span class="step">1</span>Record</h2><span class="note small muted">the object's light $O$ and the reference $R$ meet on the plate</span></div>
       <div class="side-wrap"><canvas id="rec" aria-label="Side view of the recording: the object behind the plate sends its light to the plate, and the reference beam arrives at an angle. Drag the points (and a point-source reference)."></canvas></div>
+      <div class="hint" id="rec-hint">Drag the point (the dot) nearer or farther, up or down; sideways in the front view.  The hologram and the view through it follow.</div>
     </div>
     <div class="pane" id="pane-front">
       <div class="pane-head"><h2>The object from the front</h2></div>
@@ -30,6 +31,7 @@
     <div class="pane" id="pane-play">
       <div class="pane-head"><h2><span class="step">2</span>Relight</h2><span class="note small muted" id="play-note">the developed plate, lit by $R$ alone, sends on three beams</span></div>
       <div class="side-wrap"><canvas id="play" aria-label="Side view of the playback: the reference lights the plate, and three beams leave it: the zero order, the image and the twin. Click or drag to focus the camera at that depth."></canvas></div>
+      <div class="hint" id="play-hint">Click anywhere here to focus the camera (the eye) at that depth; click an image to focus on it.</div>
     </div>
     <div class="pane" id="pane-terms">
       <div class="terms" id="terms" aria-live="polite"></div>
@@ -93,6 +95,9 @@
     <div class="panel">
       <div class="label">Light the plate with</div>
       <div class="row" id="relight-box"></div>
+      <div class="small muted" id="relight-note"><i>R</i>*: the reference tilted the other way, which at the plate is the complex
+      conjugate of <i>R</i>.  It sends the object's wave on with its curvature reversed, to a real image in front of the plate,
+      where a screen would catch it.</div>
       <div id="lambda2-box" class="stack"></div>
     </div>
   </aside>
@@ -100,35 +105,20 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>A hologram is a photograph of interference.  It is made in two steps, and the page shows
-  both, top to bottom.</p>
-  <p><strong>1. Record.</strong>  Light from the object, $O$, and a <em>reference</em> beam from
-  the same laser, $R$, fall together on a plate.  (Here the plate is a camera sensor, 256 × 256
-  pixels of 5 µm, so $L$ = 1.28 mm across, and the laser is red, $\lambda$ = 633 nm.)  The plate
-  records only the brightness,
-  $$H=|O+R|^2=|O|^2+|R|^2+OR^*+O^*R.$$
-  The last two terms add up to $2|O||R|\cos(\phi_O-\phi_R)$: fringes, bright where the two
-  waves arrive in step and dark where they arrive out of step.  Where the fringes fall records
-  the phase of $O$, which an ordinary photograph throws away.</p>
-  <p><strong>2. Relight.</strong>  Develop the plate so that it lets light through in proportion
-  to $H$, take the object away, and light the plate with $R$ alone.  It passes on
-  $$HR=(|R|^2+|O|^2)\,R+|R|^2\,O+R^2\,O^*.$$
-  The first term goes straight on: the <em>zero order</em>.  The second is the object's own
-  wave, $O$, as it was: look through the plate and the object is there, behind it, in depth.
-  That is a <em>virtual image</em>: the light only seems to come from there.  The third is the
-  complex conjugate, $O^*$, whose curvature is reversed: where $O$ spread out from the object,
-  $O^*$ converges, to a <em>real image</em> in front of the plate, the <em>twin</em>.  Tilt the
-  reference and the three beams leave in three directions.</p>
-  <p><strong>What is on the page.</strong>  The side views stretch the heights (by the factor in
-  their corner), or the plate would be a speck.  Beside the Relight view are the three terms
-  and where each one's light goes.  <em>The hologram</em> is the recorded brightness; zoom in to
-  see its fringes.  <em>Its Fourier transform</em> sorts the fringes by spacing and direction:
-  fringes of period $\Lambda$ bend light by $\sin\theta=\lambda/\Lambda$, so each island of the
-  transform is one of the three beams.  <em>Looking through it</em> is what a camera held
-  against the lit plate sees, focused at a distance $d$: behind the plate ($d>0$), where a
-  virtual image is, or in front ($d<0$), where a screen would catch a real one.  It is drawn in
-  angles, $x/d$, so the picture keeps its size as you focus.  Click in the Relight view to focus
-  at that depth; click an image or a twin to focus on it.</p>
+  <section class="start"><h3>Start here</h3>
+  <p>A hologram is a photograph of interference.  The plate records the fringes that light from an
+  object makes with a second beam from the same laser, the <em>reference</em>; lit again by that
+  beam, the plate sends the object's light on as it was, and the object is there behind it, in
+  depth.  The page shows the two steps, Record above and Relight below, for one bright point 60 mm
+  behind the plate.</p>
+  <p><b>Drag the point</b> in the Record view (nearer or farther, up or down) or in the front view
+  (sideways): the hologram's rings, their Fourier transform and the view through the plate follow.
+  <b>Click in the Relight view</b> to focus the camera at that depth, or click the twin to focus
+  on it.</p>
+  <p>Look for the three beams the lit plate sends on, each in its own colour: the zero order
+  straight on, the image where the point was, and the twin converging in front of the plate; and
+  in the transform, one island of fringes for each.</p>
+  </section>
 
   <article class="exp" data-setup="zone">
     <h3>1. One point: the hologram is a zone plate</h3>
@@ -302,6 +292,36 @@
     and watch the outer rings turn into a moiré.</p>
   </article>
 
+  <section id="how">
+  <h3>How it works</h3>
+  <p><strong>1. Record.</strong>  Light from the object, $O$, and a <em>reference</em> beam from
+  the same laser, $R$, fall together on a plate.  (Here the plate is a camera sensor, 256 × 256
+  pixels of 5 µm, so $L$ = 1.28 mm across, and the laser is red, $\lambda$ = 633 nm.)  The plate
+  records only the brightness,
+  $$H=|O+R|^2=|O|^2+|R|^2+OR^*+O^*R.$$
+  The last two terms add up to $2|O||R|\cos(\phi_O-\phi_R)$: fringes, bright where the two
+  waves arrive in step and dark where they arrive out of step.  Where the fringes fall records
+  the phase of $O$, which an ordinary photograph throws away.</p>
+  <p><strong>2. Relight.</strong>  Develop the plate so that it lets light through in proportion
+  to $H$, take the object away, and light the plate with $R$ alone.  It passes on
+  $$HR=(|R|^2+|O|^2)\,R+|R|^2\,O+R^2\,O^*.$$
+  The first term goes straight on: the <em>zero order</em>.  The second is the object's own
+  wave, $O$, as it was: look through the plate and the object is there, behind it, in depth.
+  That is a <em>virtual image</em>: the light only seems to come from there.  The third is the
+  complex conjugate, $O^*$, whose curvature is reversed: where $O$ spread out from the object,
+  $O^*$ converges, to a <em>real image</em> in front of the plate, the <em>twin</em>.  Tilt the
+  reference and the three beams leave in three directions.</p>
+  <p><strong>What is on the page.</strong>  The side views stretch the heights (by the factor in
+  their corner), or the plate would be a speck.  Beside the Relight view are the three terms
+  and where each one's light goes.  <em>The hologram</em> is the recorded brightness; zoom in to
+  see its fringes.  <em>Its Fourier transform</em> sorts the fringes by spacing and direction:
+  fringes of period $\Lambda$ bend light by $\sin\theta=\lambda/\Lambda$, so each island of the
+  transform is one of the three beams.  <em>Looking through it</em> is what a camera held
+  against the lit plate sees, focused at a distance $d$: behind the plate ($d>0$), where a
+  virtual image is, or in front ($d<0$), where a screen would catch a real one.  It is drawn in
+  angles, $x/d$, so the picture keeps its size as you focus.  Click in the Relight view to focus
+  at that depth; click an image or a twin to focus on it.</p>
+
   <h3>How it is computed</h3>
   <ul>
     <li>The points' light is exact spherical waves, $e^{ikr}/r$, with $r$ the distance to each
@@ -324,8 +344,10 @@
     curvature and a tilt, and the plate adds and subtracts them.  The tests check them against
     the computed images.</li>
   </ul>
+
   <p class="small muted">New in 2026 for BrainFlux.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+  </section>
 </aside>
 
 <script type="module" src="app.js"></script>

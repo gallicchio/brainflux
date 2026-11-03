@@ -556,7 +556,7 @@ function drawBench(ctx, g, c, left) {
   ctx.fillText('in front', g.X(0) + 8, 3);
   // How much the heights are stretched: the scales of height and depth, in a slot of its own.
   ctx.textAlign = 'right';
-  fillSlots(ctx, [{ v: g.sy / g.sx, dec: 0, w: 3 }, '× taller than to scale'], width - 6, 3);
+  fillSlots(ctx, ['heights stretched ', { v: g.sy / g.sx, dec: 0, w: 3 }, '×'], width - 6, 3);
 }
 
 /** The plate, and the window in it. */
@@ -630,7 +630,7 @@ function drawRecord() {
   drawPlate(ctx, g, c);
   // What the plate records.
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText('records |O + R|²', plateX + 8, Math.max(g.mt + 8, top - 2));
+  ctx.fillText('records the brightness |O + R|²', plateX + 8, Math.max(g.mt + 8, top - 2));
   // The object.
   if (state.object === 'points') {
     state.points.forEach((pt, k) => {
@@ -833,14 +833,14 @@ const mathHTML = (tex) => ({ html: texToMathML(tex) });
 // decimals, so that nothing in a note moves as the numbers change (setSlots).
 function updateNotes() {
   const p = state.pitch, sMax = sinMax();
-  setSlots($('#holo-note'), ['|O + R|², recorded on pixels ', { v: p, dec: 1, w: 4 }, ' µm apart']);
-  setSlots($('#spec-note'), ['fringes by spacing and direction, to ±', { v: sMax * 1000, dec: 0, w: 3 }, ' mrad']);
+  setSlots($('#holo-note'), ['the brightness |O + R|² the camera recorded, on pixels ', { v: p, dec: 1, w: 4 }, ' µm apart']);
+  setSlots($('#spec-note'), ['the fringes sorted by spacing and direction, out to ±', { v: sMax * 1000, dec: 0, w: 3 }, ' mrad: one island per beam']);
   const d = state.focus, F = focusPoint(), T = terms(F);
   // Which image the camera is on, if any (within the depth of focus of the plate).
   const sharp = T.slice(1).filter((t) => { const f = focusOf(t.wave); return Number.isFinite(f.R) && Math.abs(1 / f.R - 1 / d) * plateL() < 2 * dU(); });
   const on = sharp.length ? `, on the ${sharp.map((t) => t.name).join(' and the ')}` : '';
   const cjWords = state.ref === 'plane' ? ' (R tilted the other way)' : ' (converging to the mirror point)';
-  setSlots($('#play-note'), ['lit by ', mathHTML(conj() ? 'R^*' : 'R'), conj() ? cjWords : ' alone', ', the plate sends on three beams; click to focus there']);
+  setSlots($('#play-note'), ['lit by ', mathHTML(conj() ? 'R^*' : 'R'), conj() ? cjWords : ' alone', ', the plate sends on three beams']);
   setSlots($('#recon-note'), ['focus: ', { v: Math.abs(d) / MM, dec: 1, w: 5 }, ` mm ${d >= 0 ? 'behind' : 'in front'}${on}`]);
   // The fringes, under the hologram.
   let fr;
@@ -887,12 +887,12 @@ function updateTerms(F, T) {
   let zero;
   if (C.c === 0) {
     const a = Math.asin(Math.max(-1, Math.min(1, -C.ty))) / DEG;
-    zero = Math.abs(a) < 1e-6 ? [': straight on, along the axis'] : [': straight on, ', { v: Math.abs(a), dec: 2, w: 4 }, `° ${a > 0 ? 'up' : 'down'}`];
-  } else zero = where(C, ': straight on, converging ', ': straight on, as if from ');
+    zero = Math.abs(a) < 1e-6 ? [': the lighting beam itself, unbent: along the axis'] : [': the lighting beam itself, unbent: ', { v: Math.abs(a), dec: 2, w: 4 }, `° ${a > 0 ? 'up' : 'down'}`];
+  } else zero = where(C, ': the lighting beam itself, converging ', ': the lighting beam itself, as if from ');
   const rows = [
     ['zero', T[0], zero],
     ['img', T[1], where(T[1].wave, cj ? ': converging ' : ', the object’s own wave: converging ', cj ? ': as if from ' : ', the object’s own wave: as if from ')],
-    ['twin', T[2], where(T[2].wave, cj ? ', the conjugate wave: converging ' : ', its conjugate: converging ', cj ? ', the conjugate wave: as if from ' : ', its conjugate: as if from ')],
+    ['twin', T[2], where(T[2].wave, cj ? ', the conjugate wave (curvature reversed): converging ' : ', its conjugate (curvature reversed): converging ', cj ? ', the conjugate wave (curvature reversed): as if from ' : ', its conjugate (curvature reversed): as if from ')],
   ];
   const key = [cj, state.sameColour, rows.map((r) => r[1].name).join()].join('|');
   if (box._key !== key) {

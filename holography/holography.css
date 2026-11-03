@@ -21,7 +21,9 @@
 .pane-head h2 { font-size: 15px; margin: 0; white-space: nowrap; display: flex; align-items: center; }
 .pane-head .note { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pane-head select { font-size: 13px; padding: 2px 4px; min-height: 26px; flex: 0 0 auto; margin-left: auto; }
-.pane-sub { min-height: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane-sub { min-height: 2.9em; }
+/* The hint under a side view (lib/style.css: .hint). */
+.pane > .hint { margin-top: -1px; }
 .pane-foot { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
 .step {
   display: inline-flex; align-items: center; justify-content: center; width: 1.4em; height: 1.4em;
@@ -79,7 +81,6 @@ details.panel[open] summary { margin-bottom: 6px; }
   .step-head { margin: 0; grid-column: 1 / -1; }
   /* The three terms under the Relight view, across, where they have room. */
   .stage { grid-template-areas: "rec rec rec" "play play play" "front terms terms" "holo spec recon"; }
-  .pane-sub { white-space: normal; min-height: 2.9em; }
   #pane-terms { padding-top: 0; }
   .terms { min-height: 0; }
 }

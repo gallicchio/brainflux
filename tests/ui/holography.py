@@ -81,6 +81,16 @@ window.T = {
 true
 """
 
+def theme_colors(b):
+    """The luminance (0 black, 1 white) of the page's background, the first hint's text, and the
+    Start-here block's text and background, with the drawer open."""
+    b.eval("document.querySelector('#help').classList.add('open')")
+    out = b.eval("""(() => { const cs = (e) => getComputedStyle(e), h = document.querySelector('#rec-hint'), s = document.querySelector('#help .start');
+      const lum = (c) => { const m = c.match(/\\d+(\\.\\d+)?/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
+      return { page: lum(cs(document.body).backgroundColor), hint: lum(cs(h).color), start: lum(cs(s).color), start_bg: lum(cs(s).backgroundColor) }; })()""")
+    b.eval("document.querySelector('#help').classList.remove('open')")
+    return out
+
 def edges(profile, frac=0.25, lo=0, hi=N):
     """The edges of the patch of light in profile[lo:hi], to a fraction of a pixel: where it
     crosses frac of its plateau (the mean over the middle half of where it is above half its
@@ -113,6 +123,27 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     check('60.0 mm behind, on the image' in note, f'... and says so: {note!r}')
     check('1.00° up' in terms and 'as if from 60.0 mm behind (virtual)' in terms and 'converging 60.0 mm in front (real)' in terms,
           f'the three terms say where their light goes: {terms!r}')
+
+    # The first screen: hints directly under the Record and Relight views say what to drag and
+    # click; the zero order, the twin, the conjugate and the transform are glossed where they appear.
+    hints = S("""['#rec-hint', '#play-hint'].map((s, k) => { const h = document.querySelector(s), r = h.getBoundingClientRect();
+      return [h.className, h.textContent.slice(0, 32), r.height > 0, r.top - document.querySelector(['#rec', '#play'][k]).getBoundingClientRect().bottom]; })""")
+    check(hints[0][0] == 'hint' and hints[0][1].startswith('Drag the point') and hints[0][2] and 0 <= hints[0][3] < 12
+          and hints[1][0] == 'hint' and hints[1][1].startswith('Click') and hints[1][2] and 0 <= hints[1][3] < 12,
+          f'hints under the Record and Relight views say what to drag and click: {hints[0][1]!r}, {hints[1][1]!r}')
+    glosses = S("T.text('#terms') + ' | ' + T.text('#relight-note') + ' | ' + T.text('#spec-note') + ' | ' + T.text('#holo-note')")
+    check('lighting beam itself' in glosses and 'curvature reversed' in glosses and 'tilted the other way' in glosses and 'one island per beam' in glosses and 'brightness' in glosses,
+          'the zero order, the twin, the conjugate and the transform are glossed where they appear')
+    cols = theme_colors(b)
+    check(cols['page'] > 0.8 and cols['hint'] < 0.5 and cols['start'] < 0.3 and cols['start_bg'] > 0.8,
+          f"light theme: the hint and the Start-here block read (luminances: page {cols['page']:.2f}, hint {cols['hint']:.2f}, block {cols['start']:.2f} on {cols['start_bg']:.2f})")
+    first = S("(() => { const s = [...document.querySelector('#help').children].filter((e) => e.tagName !== 'HEADER')[0]; return [s.className, s.querySelector('h3')?.textContent, !!s.querySelector('math'), s.textContent.length]; })()")
+    check(first[0] == 'start' and first[1] == 'Start here' and not first[2] and 300 < first[3] < 1600, f'the drawer starts with a "Start here" block in plain words ({first[3]} characters, no equations)')
+    order = S("[...document.querySelector('#help').children].map((e) => e.tagName + (e.id ? '#' + e.id : '') + (e.dataset.setup ? '=' + e.dataset.setup : ''))")
+    last_exp = max(i for i, x in enumerate(order) if '=' in x)
+    check(order.index('SECTION#how') > last_exp and order[2] == 'ARTICLE=zone', f'the theory ("How it works") comes after the experiments ({order[2]} first)')
+    hows = S("document.querySelectorAll('#how math').length")
+    check(hows >= 10, f'"How it works" keeps the equations ({hows} formulas)')
 
     # Every experiment in the drawer has a set-up, and the other way round; the old names work.
     arts = S("[...document.querySelectorAll('#help .exp')].map((a) => a.dataset.setup)")
@@ -478,6 +509,9 @@ with Browser('holography/index.html#setup=offaxis', size=(1400, 900)) as b:
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
     b.wait('window.__app && __app.ready'); b.sleep(1.2)
     b.screenshot('build/holo-dark.png')
+    cols = theme_colors(b)
+    check(cols['page'] < 0.2 and cols['hint'] > 0.5 and cols['start'] > 0.7 and cols['start_bg'] < 0.3,
+          f"dark theme: the hint and the Start-here block read (luminances: page {cols['page']:.2f}, hint {cols['hint']:.2f}, block {cols['start']:.2f} on {cols['start_bg']:.2f})")
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'dark theme: no exceptions')
 with Browser('holography/index.html', size=(390, 844)) as b:
@@ -486,6 +520,8 @@ with Browser('holography/index.html', size=(390, 844)) as b:
     check(wide <= 390, f'at phone width nothing sticks out sideways (page {wide} px wide)')
     order = b.eval("[...document.querySelectorAll('.stage > .pane')].map((e) => [e.id, Math.round(e.getBoundingClientRect().top)]).sort((a, b) => a[1] - b[1]).map((e) => e[0])")
     check(order[:4] == ['pane-rec', 'pane-front', 'pane-holo', 'pane-play'], f'on a phone the panes come in the order of the story: {order}')
+    ph = b.eval("(() => { const r = document.querySelector('#rec-hint').getBoundingClientRect(); return [r.top, r.bottom, innerHeight, scrollY]; })()")
+    check(ph[3] == 0 and ph[0] > 0 and ph[1] <= ph[2], f'phone: the hint is on the first screen, under the Record view (its bottom at {ph[1]:.0f} of {ph[2]} px)')
     b.screenshot('build/holo-phone.png')
     b.eval("document.querySelector('#pane-recon').scrollIntoView()"); b.sleep(0.5)
     b.screenshot('build/holo-phone-view.png')
