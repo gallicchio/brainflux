@@ -144,6 +144,25 @@ Then superposition (standing waves, fringes) and a 1D packet with a chosen dispe
 - Fourier series with sound (the old SoundFourier/InstrumentFourier applets): harmonics on
   sliders, heard through Web Audio.
 
+### TODO: `quantumoptics/`, squeezed light and LIGO (not started)
+
+Continuous-variable quantum optics, worked up to LIGO's use of squeezed states.  The story:
+one mode of the field has two quadratures, X and P, with ΔX ΔP ≥ ½; a coherent state is the
+classical limit, a circle of noise in the quadrature plane (the same picture as the
+phase-space demo's Wigner function, which it should reuse) turning at the optical frequency;
+a squeezed state is the ellipse, narrower in one quadrature and wider in the other, the
+product kept; homodyne detection beats the field against a local oscillator and the
+oscillator's phase chooses which quadrature is read, so the measured noise shrinks and grows
+as the phase turns; a measurement of a phase with each kind of state, with its
+signal-to-noise and the standard quantum limit; then LIGO: an interferometer's arm length
+read as a phase at the dark port, the shot noise of the coherent light, the squeezed vacuum
+injected at the dark port (the 2019 result, about 3 dB of improvement), the trade against
+radiation-pressure noise at low frequency, and the frequency-dependent squeezing of 2023.
+Live pictures: the quadrature plane with the state's noise cloud and the homodyne axis;
+the photocurrent's noise against the local oscillator's phase; the interferometer's
+strain sensitivity curve with and without squeezing.  A placeholder card is on the landing
+page.
+
 ## Shared library (`lib/`)
 
 | file | contents |

@@ -26,6 +26,14 @@
     font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--warn); border: 1px solid currentColor; border-radius: 999px; }
   .beta-note { color: var(--warn); font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.06em; }
+  /* A demo that is planned but not written: a card with no link and no picture. */
+  .card.planned { cursor: default; color: inherit; }
+  .card.planned:hover { border-color: var(--line); }
+  .card.planned .picture { aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center;
+    background: var(--panel-2); color: var(--ink-3); font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .card .planned-tag { display: inline-block; vertical-align: 2px; margin-left: 6px; padding: 1px 7px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-3); border: 1px solid currentColor; border-radius: 999px; }
   footer { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; color: var(--ink-3); font-size: 13px; }
 </style>
 </head>
@@ -239,6 +247,18 @@
         <span class="tag">classical mechanics · Lagrangians</span>
       </div>
     </a>
+    <div class="card planned" id="quantumoptics">
+      <div class="picture">not written yet</div>
+      <div class="body">
+        <h2>Quantum optics: squeezed light and LIGO<span class="planned-tag">planned</span></h2>
+        <p>One mode of the field in phase space: coherent states and their circle of noise,
+        squeezed states and their ellipse, homodyne detection choosing the quadrature with the
+        local oscillator's phase, and a measurement made with each; then LIGO, reading an arm
+        length as a phase against shot noise, and the squeezed vacuum at its dark port that
+        takes the noise below the shot-noise limit.</p>
+        <span class="tag">quantum optics · measurement</span>
+      </div>
+    </div>
   </div>
 </main>
 <footer>
