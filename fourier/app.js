@@ -141,7 +141,7 @@ function drawWave() {
   ctx.restore();
   // The period in a slot of its own, and the count of harmonics: nothing moves as they change.
   f.axes({ xlabel: ['t / T  (one period, T = 1/f₁ = ', { v: 1000 / state.f1, dec: 2, w: 5 }, ' ms)'] });
-  setSlots($('#wave-note'), ['drawn with the first ', { v: state.terms, dec: 0, w: 2 }, ` harmonic${state.terms > 1 ? 's' : ''}; draw on it`]);
+  setSlots($('#wave-note'), ['Draw one period on it; the blue curve is the sum of the first ', { v: state.terms, dec: 0, w: 2 }, ` harmonic${state.terms > 1 ? 's' : ''}`]);
 }
 
 function drawSpectrum() {
@@ -274,4 +274,4 @@ const hash = readHash();
 if (setups[hash.setup]) setups[hash.setup]();
 else loadPreset(PRESETS[hash.preset] ? hash.preset : 'square');
 
-window.__app = { state, setups, waveform, analyse, ready: true };
+window.__app = { state, setups, waveform, analyse, ready: true, audio: () => audio, NMAX, M };

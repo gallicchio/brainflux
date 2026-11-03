@@ -54,12 +54,28 @@ function phaseAt(x, y, k, omega, phi, t) {
   return cv.s * (k[0] * x + k[1] * y) + cv.w * omega * t + phi;
 }
 
+/** The waves on the picture, each as [k, |A|, arg A, omega]. */
+function wavesNow() {
+  const waves = [[state.k1, state.A1, state.phi1, omegaOf(state.k1, 1)]];
+  if (state.mode === 'two') waves.push([state.k2, state.A2, state.phi2, omegaOf(state.k2, 2)]);
+  return waves;
+}
+
+/** psi at (x, y, t): the sum of the waves, as [re, im]. */
+function psiAt(x, y, t) {
+  let re = 0, im = 0;
+  for (const [k, A, phi, omega] of wavesNow()) {
+    const p = phaseAt(x, y, k, omega, phi, t);
+    re += A * Math.cos(p); im += A * Math.sin(p);
+  }
+  return [re, im];
+}
+
 function drawWave() {
   const { ctx, width, height } = fitCanvas(waveCanvas);
   if (!off) { off = document.createElement('canvas'); off.width = off.height = RES; offImg = off.getContext('2d').createImageData(RES, RES); }
   const t = state.t, cv = CONVENTIONS[state.conv];
-  const waves = [[state.k1, state.A1, state.phi1, omegaOf(state.k1, 1)]];
-  if (state.mode === 'two') waves.push([state.k2, state.A2, state.phi2, omegaOf(state.k2, 2)]);
+  const waves = wavesNow();
   // The wave on a RES x RES grid; e^{i s k.r} = e^{i s kx x} e^{i s ky y}: one row and one
   // column of phases per wave, then a complex product per pixel.
   const re = new Float64Array(RES * RES), im = new Float64Array(RES * RES);
@@ -132,11 +148,8 @@ function drawWave() {
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.arc(ox, oy, R + 8, 0, 2 * Math.PI); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(ox, oy, R, 0, 2 * Math.PI); ctx.moveTo(ox - R, oy); ctx.lineTo(ox + R, oy); ctx.moveTo(ox, oy - R); ctx.lineTo(ox, oy + R); ctx.stroke();
-    let zr = 0, zi = 0, amax = 0;
-    for (const [k, A, phi, omega] of waves) {
-      const p = phaseAt(0, 0, k, omega, phi, t);
-      zr += A * Math.cos(p); zi += A * Math.sin(p); amax += A;
-    }
+    const [zr, zi] = psiAt(0, 0, t);
+    const amax = waves.reduce((s, w) => s + w[1], 0);
     const s = R / Math.max(amax, 1e-6);
     ctx.strokeStyle = `rgb(${colorOf(zr, zi, 1).join(',')})`; ctx.lineWidth = 3;
     line(ctx, ox, oy, ox + zr * s, oy - zi * s);
@@ -320,7 +333,7 @@ function updateFormula() {
   }
   if (packet) {
     const { vp, vg } = velocities();
-    setSlots(formulaNote, ['red dot: a crest, at ', { v: vp, dec: 3, w: 6 }, '; blue triangle: the group, at ', { v: vg, dec: 3, w: 6 }]);
+    setSlots(formulaNote, ['red dot: a crest, moving at ', { v: vp, dec: 3, w: 6 }, '; blue triangle: the packet, moving at ', { v: vg, dec: 3, w: 6 }]);
     return;
   }
   const k = state.k1, kk = Math.hypot(k[0], k[1]);
@@ -360,6 +373,12 @@ function setMode(m) {
   $('#packet-panel').hidden = m !== 'packet';
   omegaSlider.hidden = m !== 'one';
   cSlider.hidden = m !== 'two';
+  // The hint under the picture says what to drag in this mode.
+  $('#hint').textContent = {
+    one: 'Drag the arrow’s tip (or click anywhere) to set the wavevector k; the white dot rides one crest',
+    two: 'Drag either arrow’s tip to set its wavevector; the yellow arrow is the second wave',
+    packet: 'The red dot rides a crest, the blue triangle marks the packet: choose a dispersion relation ω(k) on the right, or type one',
+  }[m];
   state.t = 0;
   writeHash({ mode: m === 'one' ? undefined : m });
   kick();
@@ -485,4 +504,6 @@ kick();
 window.__app = { state, setups, setMode, ready: true, parse,
   // For the tests: where the packet's probability is centred at time t, and the velocities.
   centroid(t) { if (!packetData) preparePacket(); const { re, im } = packetAt(t); let s = 0, m = 0; for (let i = 0; i < NP; i++) { let x = i * LP / NP; if (x > LP / 2) x -= LP; const p = re[i] ** 2 + im[i] ** 2; s += p; m += p * x; } return m / s; },
-  velocities };
+  velocities, psiAt, conventions: CONVENTIONS,
+  // Draw the present mode at time t, now (the animation loop, if running, carries on from there).
+  draw(t) { state.t = t; if (state.mode === 'packet') { drawPacket(); drawDispersion(); } else drawWave(); updateFormula(); } };

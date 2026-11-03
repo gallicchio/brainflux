@@ -4,7 +4,8 @@
 }
 .stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
 .mode-row { justify-content: center; }
-.wave-wrap { width: 100%; max-width: calc(100vh - 190px); aspect-ratio: 1; margin: 0 auto; background: #000; border-radius: var(--radius); overflow: hidden; }
+.wave-wrap { width: 100%; max-width: calc(100vh - 215px); aspect-ratio: 1; margin: 0 auto; background: #000; border-radius: var(--radius); overflow: hidden; }
+.stage .hint { text-align: center; }
 .wave-wrap canvas { width: 100%; height: 100%; cursor: crosshair; }
 .packet-wrap { display: flex; flex-direction: column; gap: 8px; }
 .plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }

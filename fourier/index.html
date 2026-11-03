@@ -19,9 +19,9 @@
 
 <main class="fs">
   <section class="plots">
-    <div class="panel-head"><span class="label">One period of the wave</span><span class="small muted" id="wave-note">draw on it</span></div>
+    <div class="panel-head"><span class="label">One period of the wave</span><span class="hint" id="wave-note">Draw one period on it</span></div>
     <div class="plot-wrap wave"><canvas id="wave" tabindex="0" aria-label="One period of the wave: draw on it"></canvas></div>
-    <div class="panel-head"><span class="label">Its harmonics</span><span class="small muted">height: amplitude; colour: phase; drag the bars</span></div>
+    <div class="panel-head"><span class="label">Its harmonics</span><span class="hint" id="spectrum-note">Drag a bar up or down: its height is that harmonic's amplitude, its colour the phase</span></div>
     <div class="plot-wrap spec"><canvas id="spectrum" tabindex="0" aria-label="The harmonics: drag a bar to change its amplitude"></canvas></div>
   </section>
 
@@ -39,6 +39,9 @@
     </div>
     <div class="panel">
       <div class="label">Harmonics</div>
+      <div class="small muted" id="harmonics-gloss">Harmonic n is a pure tone at n × f₁, with an amplitude (how loud) and a phase
+      (how it is timed).  Harmonic 1 is the fundamental, and its frequency f₁ is the pitch of the
+      note; the bars together are the spectrum.</div>
       <div id="terms-box"></div>
       <div class="row">
         <button type="button" id="scramble" title="Give every harmonic a random phase, keeping its amplitude">Scramble phases</button>
@@ -53,57 +56,101 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>Any periodic wave of period $T$ is a sum of sines and cosines at whole multiples of the
-  fundamental frequency $f_1=1/T$:
-  $$f(t)=\sum_{n=1}^{N}A_n\cos(2\pi nf_1t-\varphi_n).$$
-  The top plot is one period; the bars below are the harmonics, their height the amplitude
-  $A_n$ and their colour the phase $\varphi_n$ (the colour wheel of the other demos).  Draw on the
-  wave and the bars follow; drag the bars and the wave follows.  Press <em>Play sound</em> to
-  hear it at $f_1$ (use headphones, at a low volume).</p>
+  <section class="start">
+    <h3>Start here</h3>
+    <p>The top plot is one period of a sound wave, repeated for ever; the bars under it are its
+    harmonics, the pure tones that add up to it.  Bar <b>n</b> is a tone at <b>n</b> times the
+    fundamental frequency <b>f₁</b>, its height how loud that tone is (its amplitude) and its
+    colour how it is timed (its phase).  Draw on the top plot and the bars follow; drag a bar up
+    or down and the wave follows; press <b>Play sound</b> to hear what is drawn (headphones, at a
+    low volume).</p>
+    <p>Look for this: the first few bars fix the shape of the wave and the pitch you hear; the
+    higher ones sharpen its corners and make the sound brighter; and the colours (the phases)
+    change the shape of the wave but not the sound.</p>
+  </section>
 
   <article class="exp" data-setup="square">
     <h3>1. Building a square wave</h3>
-    <p>A square wave has only odd harmonics, with amplitudes $4/\pi n$.  Lower the number of
-    terms to 1: a pure tone.  Raise it one term at a time: the corners sharpen and the sound
-    gets brighter and buzzier.  The bump next to each jump never goes away: it shrinks in width
-    but stays 9% high (the Gibbs phenomenon).</p>
+    <p>A square wave has only odd harmonics, with amplitudes $4/\pi n$ (the even ones are
+    zero).  Lower the number of terms to 1: a pure tone.  Raise it: with every odd harmonic
+    added the corners sharpen and the sound gets brighter and buzzier.  The bump beside each
+    jump never goes away: it gets narrower, but it overshoots by about 9% of the jump however
+    many terms you add (9.4% with 5 terms, 9.0% with 15: the Gibbs phenomenon).</p>
   </article>
 
   <article class="exp" data-setup="phases">
     <h3>2. The ear doesn't hear phase</h3>
     <p>Press <em>Scramble phases</em>, several times.  The wave changes beyond recognition, but
-    the sound hardly changes at all: the ear hears the amplitudes of the harmonics, not how they
-    line up (Ohm's acoustic law).  Contrast the 2D Fourier demo, where the phases carry the
-    picture.</p>
+    the sound hardly changes at all: the bars keep their heights, and the ear hears the
+    amplitudes of the harmonics, not how they line up (Ohm's acoustic law).  <em>Align
+    phases</em> makes every harmonic a cosine (all the bars red).  Contrast the 2D Fourier demo,
+    where the phases carry the picture.</p>
   </article>
 
   <article class="exp" data-setup="saw">
     <h3>3. Brightness is the high harmonics</h3>
-    <p>A sawtooth has every harmonic, falling as $1/n$; a triangle only the odd ones, falling as
-    $1/n^2$.  The sawtooth sounds bright, the triangle mellow, close to a pure tone.  Press
-    <em>Remove the top half</em> (a low-pass filter) and listen to the sound grow duller.</p>
+    <p>A sawtooth has every harmonic, falling as $1/n$ (amplitudes $2/\pi n$); a triangle only the
+    odd ones, falling as $1/n^2$ (amplitudes $8/\pi^2n^2$: press <em>Triangle</em> to compare).
+    The sawtooth sounds bright, the triangle mellow, close to a pure tone.  Press <em>Remove the
+    top half</em> (a low-pass filter) and listen to the sound grow duller.</p>
   </article>
 
   <article class="exp" data-setup="draw">
     <h3>4. Draw your own</h3>
     <p>Draw a period of any shape you like on the top plot and listen to it.  Smooth shapes have
     few harmonics and sound pure; jumps and corners add high harmonics and sound harsh.  (A jump
-    makes the amplitudes fall as $1/n$, a corner as $1/n^2$, a smooth curve faster.)</p>
+    makes the amplitudes fall as $1/n$, a corner as $1/n^2$, a smooth curve faster.)  The period
+    repeats, so if your curve ends at a different height from where it began, that is a jump
+    too.  What you drew stays in grey; the blue curve is its first 30 harmonics, with the
+    average left out (a constant is not a sound).</p>
   </article>
 
   <article class="exp" data-setup="pulse">
     <h3>5. A train of pulses</h3>
-    <p>Narrow pulses have harmonics of nearly equal strength up to about $1/\text{width}$: the
-    narrower the pulse, the wider its spectrum (the uncertainty principle again).  The
-    envelope of the bars is a sinc.</p>
+    <p>Narrow pulses have harmonics of nearly equal strength up to about
+    $n=T/\text{width}$: here each pulse lasts 0.08 of the period, so the bars first vanish near
+    $n=1/0.08=12.5$.  The narrower the pulse, the wider its spectrum (the uncertainty principle
+    again).  The envelope of the bars is a sinc, $\sin(\pi n\,d)/\pi n\,d$ for a pulse of
+    width $d\,T$; the cyan bars are its negative lobes.</p>
   </article>
 
   <article class="exp" data-setup="missing">
     <h3>6. The missing fundamental</h3>
-    <p>Harmonics 2 to 6 at $f_1=150$ Hz, and no harmonic 1 at all.  Yet the pitch you hear is
-    still 150 Hz: the ear works out the fundamental from the spacing of the harmonics.  (Small
-    loudspeakers rely on this: they can't play the bass notes, but you hear them.)</p>
+    <p>Harmonics 2 to 6 of $f_1=150$ Hz (300, 450, 600, 750 and 900 Hz), and no harmonic 1 at
+    all.  Yet the pitch you hear is still 150 Hz, their common difference: the ear works out the
+    fundamental from the spacing of the harmonics.  (Small loudspeakers rely on this: they can't
+    play the bass notes, but you hear them.)</p>
   </article>
+
+  <section class="theory">
+    <h3>How it works</h3>
+    <p>Any periodic wave of period $T$ is a sum of sines and cosines at whole multiples of the
+    fundamental frequency $f_1=1/T$:
+    $$f(t)=\sum_{n=1}^{N}A_n\cos(2\pi nf_1t-\varphi_n).$$
+    The top plot is one period; the bars below are the harmonics, their height the amplitude
+    $A_n$ and their colour the phase $\varphi_n$ (the colour wheel of the other demos).  Draw on
+    the wave and the bars follow; drag the bars and the wave follows.  Press <em>Play sound</em>
+    to hear it at $f_1$ (use headphones, at a low volume).</p>
+    <p><b>Amplitude and phase, or sine and cosine.</b>  Each harmonic can be written either way:
+    $A_n\cos(2\pi nf_1t-\varphi_n)=a_n\cos(2\pi nf_1t)+b_n\sin(2\pi nf_1t)$ with
+    $a_n=A_n\cos\varphi_n$ and $b_n=A_n\sin\varphi_n$, so $A_n=\sqrt{a_n^2+b_n^2}$ and
+    $\varphi_n$ is the angle of $a_n+ib_n$ in the complex plane, which is the bar's colour: a
+    cosine is red, a sine yellow-green, a minus cosine cyan.  Dragging a bar changes $A_n$ and
+    keeps $\varphi_n$; <em>Scramble</em> and <em>Align</em> change $\varphi_n$ and keep $A_n$.
+    The constant term $a_0$ (the average of the wave) is left out everywhere: it is not a
+    sound.</p>
+    <p><b>Analysis and synthesis.</b>  A period you draw is sampled at 512 points and analysed by
+    an FFT; the first 48 harmonics are kept and the rest dropped.  The blue curve is the sum of
+    the first $N$ harmonics (the <em>terms</em> slider) and the faint grey curve what you
+    drew.  The presets use the closed forms: square $b_n=4/\pi n$ (odd $n$), sawtooth
+    $b_n=(-1)^{n+1}\,2/\pi n$, triangle $b_n=(-1)^{(n-1)/2}\,8/\pi^2n^2$ (odd $n$), pulses
+    $a_n=(2h/\pi n)\sin(\pi nd)$ with height $h=2.5$ and width $d=0.08$.</p>
+    <p><b>The sound.</b>  The same first $N$ harmonics, with these $a_n$ and $b_n$, are played by
+    the browser's Web Audio oscillator as a periodic wave at $f_1$.  Its loudness is set from the
+    power of the wave, $\sum A_n^2/2$ (the mean square), not from its peak, so that changing the
+    phases changes the shape and not the loudness; a compressor catches the odd peak.  Browsers
+    allow sound only after a click, which is why the button is needed.</p>
+  </section>
 
   <p class="small muted">The idea of the BrainFlux SoundFourier applet, finished in 2026.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
