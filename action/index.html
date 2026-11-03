@@ -23,6 +23,7 @@
     <div class="plot-wrap path-wrap" id="path-wrap">
       <div class="plot-key cap" id="path-key"></div>
       <canvas id="path" tabindex="0" aria-label="The path.  Drag a knot up or down to change where the path goes, sideways to change when it gets there.  Keyboard: [ and ] choose a knot, the arrow keys move it, R puts the path back on the true path."></canvas>
+      <div class="hint" id="path-hint">Drag a knot ○ up or down and watch S go up</div>
     </div>
     <div class="plot-wrap record-wrap">
       <div class="cap"><b>The action of every path you try</b></div>
@@ -43,12 +44,6 @@
   </section>
 
   <aside class="controls">
-    <div class="panel" id="panel-system">
-      <div class="label">System</div>
-      <div id="systems" class="button-grid"></div>
-      <div id="typed"></div>
-      <div id="params" class="stack"></div>
-    </div>
     <div class="panel" id="panel-path">
       <div class="label">Your path</div>
       <div id="howto" class="small"></div>
@@ -60,23 +55,34 @@
         <button type="button" id="straight" title="A straight line between the end points: constant speed">Straight line</button>
         <button type="button" id="rush" title="Reach every knot sooner, and dawdle afterwards: the same places at the wrong times">Rush, then dawdle</button>
       </div>
-      <button type="button" id="roll" aria-pressed="false" title="Let every knot slide downhill in the action, up or down and in time, steepest first">Roll downhill</button>
+      <button type="button" id="roll" aria-pressed="false" title="Let every knot slide up or down towards less action, until the path settles on a true path (or runs away from a saddle)">Roll downhill</button>
+      <div class="small muted" id="roll-note">lets the path slide, knot by knot, towards less action</div>
       <div id="knot-box"></div>
       <div id="mode-box" class="stack"></div>
+    </div>
+    <div class="panel" id="panel-system">
+      <div class="label">System</div>
+      <div id="systems" class="button-grid"></div>
+      <div id="typed"></div>
+      <div id="params" class="stack"></div>
     </div>
   </aside>
 </main>
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>Between two events, a start $(t_1,x_1)$ and an end <span class="nobr">$(t_2,x_2)$,</span> a particle could go along
-  any path <span class="nobr">$x(t)$.</span>  Every path has an <em>action</em>, the kinetic energy less the potential
-  energy added up along the way:
-  $$S[x]=\int_{t_1}^{t_2}L(x,\dot x,t)\,dt,\qquad L=\tfrac12 m\dot x^2-V(x).$$
-  The path the particle really takes makes $S$ <em>stationary</em>: change it a little, any
-  way you like, and $S$ changes only at second order.  That is the Euler-Lagrange equation,
-  <span class="nobr">$\frac{d}{dt}\frac{\partial L}{\partial\dot x}=\frac{\partial L}{\partial x}$,</span> which for this
-  $L$ is Newton's <span class="nobr">$m\ddot x=-dV/dx$.</span>  Here you draw the paths and see their action.</p>
+  <section class="start">
+    <h3>Start here</h3>
+    <p>The blue curve is a path a particle could take between two fixed events: where it is,
+    up the plot, against time, across.  The table above scores it by its <b>action</b> S,
+    beside the true path's, the path the particle really takes.</p>
+    <p><b>Drag a knot ○ up or down</b> and watch S go up; drag it sideways to change
+    <em>when</em> the particle passes there.  <b>Try a wrong path</b> bends the whole path in
+    one click, and <b>Back to the true path</b> returns.</p>
+    <p>Look for this: nothing you draw gets below the true path's S (until the experiments
+    about saddles), and the record beside the path keeps every value you tried.  The theory is
+    at the end, under <em>How it works</em>.</p>
+  </section>
   <p><strong>Drawing a path.</strong>  The path runs through <em>knots</em> (○), and each knot
   is an event: a place and a time.  Drag a knot up or down to change where the particle is
   then; drag it sideways to change <em>when</em> it gets there.  A drag moves the knot one way
@@ -95,12 +101,26 @@
   the wrong times), and <em>Back to the true path</em> returns.  Under the path, choose what
   else to see: the path in phase space, its energy, or Feynman's arrows.</p>
   <p>Every experiment starts on the true path (dashed, under yours until you move it), so
-  whatever you do shows what it costs.  A few knots can only approximate a curved true path,
-  so the best path through them may have a little more action than the true one; the table
-  says when that is all the difference is.</p>
+  whatever you do shows what it costs.</p>
+
+  <article class="exp" data-setup="throw">
+    <h3>1. Throw and catch: the parabola is a balance</h3>
+    <p>This is the opening set-up.  A ball thrown straight up and caught where it was thrown, $T=2$ s later, follows
+    <span class="nobr">$x=\tfrac12 gt(T-t)$,</span> with $S=-mg^2T^3/24=-33.333$ <span class="nobr">($m=1$, <span class="nobr">$g=10$,</span> <span class="nobr">$V=mgx$)</span></span>.  The table
+    splits it: $\int\tfrac12 m\dot x^2dt=33.333$ and <span class="nobr">$-\int V\,dt=-66.667$.</span>  Drag the top
+    knot up a little: $S$ goes up, and so does its kinetic part.  Then press
+    <em>Bend ↑</em>: the ball goes higher, and spends longer high up, so $-\int V\,dt$ falls
+    to <span class="nobr">$-85.04$,</span> which lowers <span class="nobr">$S$;</span> but it must move faster, and $\int\tfrac12 m\dot x^2dt$
+    rises to 54.27.  <span class="nobr">$S=-30.77$:</span> higher than the true path.  Go back and press
+    <em>Bend ↓</em>: now the kinetic part falls to 17.52, but the potential part rises to
+    <span class="nobr">$-48.29$,</span> and again <span class="nobr">$S=-30.77$.</span>  The potential part changed by <span class="nobr">$\mp18.38$,</span> and the kinetic
+    part by the same $\pm18.38$ plus 2.56 both times: the first-order changes cancel, and what
+    is left is second order, the same either way.  That is what <em>stationary</em> means.
+    <em>Straight line</em> keeps the ball on the ground: <span class="nobr">$S=0$.</span></p>
+  </article>
 
   <article class="exp" data-setup="find">
-    <h3>1. Try to beat the straight line</h3>
+    <h3>2. Try to beat the straight line</h3>
     <p>A free particle <span class="nobr">($V=0$, <span class="nobr">$m=1$)</span></span> must get from $x=0$ to $x=4$ in $T=2$ s.  The true path
     is a straight line at constant speed, with <span class="nobr">$S=m(\Delta x)^2/2T=4$.</span>  Try to beat it.  Drag
     the middle knot up from $x=2$ to <span class="nobr">$x=3$:</span> <span class="nobr">$S=8.13$.</span>  Drag it sideways instead, from $t=1$ to
@@ -113,24 +133,9 @@
     of it.</p>
   </article>
 
-  <article class="exp" data-setup="throw">
-    <h3>2. Throw and catch</h3>
-    <p>A ball thrown straight up and caught where it was thrown, $T=2$ s later, follows
-    <span class="nobr">$x=\tfrac12 gt(T-t)$,</span> with $S=-mg^2T^3/24=-33.333$ <span class="nobr">($m=1$, <span class="nobr">$g=10$,</span> <span class="nobr">$V=mgx$)</span></span>.  The table
-    splits it: $\int\tfrac12 m\dot x^2dt=33.333$ and <span class="nobr">$-\int V\,dt=-66.667$.</span>  Press
-    <em>Bend ↑</em>: the ball goes higher, and spends longer high up, so $-\int V\,dt$ falls
-    to <span class="nobr">$-85.04$,</span> which lowers <span class="nobr">$S$;</span> but it must move faster, and $\int\tfrac12 m\dot x^2dt$
-    rises to 54.27.  <span class="nobr">$S=-30.77$:</span> higher than the true path.  Go back and press
-    <em>Bend ↓</em>: now the kinetic part falls to 17.52, but the potential part rises to
-    <span class="nobr">$-48.29$,</span> and again <span class="nobr">$S=-30.77$.</span>  The potential part changed by <span class="nobr">$\mp18.38$,</span> and the kinetic
-    part by the same $\pm18.38$ plus 2.56 both times: the first-order changes cancel, and what
-    is left is second order, the same either way.  That is what stationary means.
-    <em>Straight line</em> keeps the ball on the ground: <span class="nobr">$S=0$.</span></p>
-  </article>
-
   <article class="exp" data-setup="hints">
     <h3>3. Which way is downhill?</h3>
-    <p>This time the path starts bent (<em>Bend ↓</em>, 7 knots, <span class="nobr">$S=-30.775$)</span>.  The arrows
+    <p>The throw again, but the path starts bent (<em>Bend ↓</em>, 7 knots, <span class="nobr">$S=-30.775$)</span>.  The arrows
     show which way each knot should go to lower $S$ fastest, up or down and sooner or later.
     Follow them by hand, or press <em>Roll downhill</em>: every knot slides up or down by its
     own slope, and the roll stops, after 253 steps, on the true path again, <span class="nobr">$S=-33.333$.</span>  The arrows'
@@ -160,7 +165,7 @@
   </article>
 
   <article class="exp" data-setup="phase">
-    <h3>5. Phase space</h3>
+    <h3>5. Phase space: the true path keeps to one energy</h3>
     <p>A harmonic oscillator, <span class="nobr">$L=\tfrac12 m\dot x^2-\tfrac12 m\omega^2x^2$,</span> from $x=1$ to
     $x=0.5$ in <span class="nobr">$T=2$:</span> <span class="nobr">$S=\frac{m\omega}{2\sin\omega T}\left[(x_1^2+x_2^2)\cos\omega T-2x_1x_2\right]=-0.8359$.</span>
     The view draws your path in phase space, $(x,p)$ with <span class="nobr">$p=\partial L/\partial\dot x=m\dot x$,</span>
@@ -274,7 +279,7 @@
   </article>
 
   <article class="exp" data-setup="segments">
-    <h3>12. Straight segments</h3>
+    <h3>12. Straight segments: more knots, less action</h3>
     <p>Feynman's way of thinking, and E. F. Taylor's way of teaching: a path of straight
     segments, at constant speed along each.  Here the throw again, through 4 knots.  The path
     starts as the best one through them: its knots lie exactly on the parabola, every segment
@@ -285,7 +290,7 @@
   </article>
 
   <article class="exp" data-setup="feynman">
-    <h3>13. Feynman's arrows</h3>
+    <h3>13. Feynman's arrows: why the classical path</h3>
     <p>In quantum mechanics every path contributes to the amplitude to get from one event to
     the other, each with an arrow <span class="nobr">$e^{iS/\hbar}$:</span> length 1, turned by <span class="nobr">$S/\hbar$.</span>  The view
     takes one knot (ringed: click a knot to choose it) and lets it be at every height while
@@ -322,6 +327,27 @@
     back), 11.02 and 30.40 (index 2) and 67.92 (index 3).  The path starts on the one of
     least action.  A potential that depends on $t$ does not conserve energy.</p>
   </article>
+
+  <section class="exp theory">
+    <h3>How it works</h3>
+    <p>Between two events, a start $(t_1,x_1)$ and an end <span class="nobr">$(t_2,x_2)$,</span> a particle could go along
+    any path <span class="nobr">$x(t)$.</span>  Every path has an <em>action</em>, the kinetic energy less the potential
+    energy added up along the way:
+    $$S[x]=\int_{t_1}^{t_2}L(x,\dot x,t)\,dt,\qquad L=\tfrac12 m\dot x^2-V(x).$$
+    The path the particle really takes makes $S$ <em>stationary</em>: change it a little, any
+    way you like, and $S$ changes only at second order.  That is the Euler-Lagrange equation,
+    <span class="nobr">$\frac{d}{dt}\frac{\partial L}{\partial\dot x}=\frac{\partial L}{\partial x}$,</span> which for this
+    $L$ is Newton's <span class="nobr">$m\ddot x=-dV/dx$.</span>  Usually the true path has the <em>least</em> action of all
+    the paths near it (a minimum); over a long enough trip it can be a <em>saddle</em>, with some
+    nearby paths below it, and the Morse index counts how many independent ways down there are
+    (experiment 7).</p>
+    <p>What is computed: the path is a cubic spline (or straight segments) through the knots,
+    and $S$ is its integral by Gauss quadrature between the knots; the true paths are found by
+    shooting, trying every starting velocity and keeping those that arrive, and their actions
+    are checked against the closed forms where there are any.  A few knots can only approximate
+    a curved true path, so the best path through them may have a little more action than the
+    true one; the table says when that is all the difference is.</p>
+  </section>
 
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
