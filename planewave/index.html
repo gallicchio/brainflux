@@ -25,6 +25,7 @@
       <div class="plot-wrap tall"><canvas id="packet" aria-label="A wave packet: its real part and its envelope"></canvas></div>
       <div class="plot-wrap short"><canvas id="dispersion" aria-label="The dispersion relation omega(k), with the phase and group velocities as slopes"></canvas></div>
     </div>
+    <div class="hint" id="hint">Drag the arrow's tip (or click anywhere) to set the wavevector k; the white dot rides one crest</div>
     <div class="formula" id="formula" aria-live="polite"></div>
   </section>
 
@@ -48,6 +49,9 @@
     </div>
     <div class="panel" id="packet-panel" hidden>
       <div class="label">Dispersion</div>
+      <div class="small muted" id="dispersion-gloss">ω(k) says how fast a wave of wavenumber k = 2π/λ oscillates.  Crests move at
+      the phase velocity ω/k, the packet as a whole at the group velocity dω/dk; when the two
+      differ the waves are dispersive and the packet spreads.</div>
       <div class="button-grid" id="dispersions"></div>
       <div id="omega-field"></div>
       <div id="packet-box" class="stack"></div>
@@ -61,88 +65,136 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>A plane wave $\psi(\vec r,t)=A\,e^{i(\vec k\cdot\vec r-\omega t)}$ has the same value all along
-  each line perpendicular to $\vec k$, and its phase advances by $2\pi$ every wavelength
-  $\lambda=2\pi/|\vec k|$ along $\vec k$.  The colours are its phase (red is positive real, cyan
-  negative); drag the arrow's tip to change $\vec k$.  This is the BrainFlux <em>PlaneWave</em>
-  applet, with more to do.</p>
+  <section class="start">
+    <h3>Start here</h3>
+    <p>The picture is a plane wave: the colour is its phase (red where it is real and positive,
+    cyan where negative) and the stripes are its crests, one wavelength apart, sliding across the
+    screen.  The white arrow is the wavevector <b>k</b>: drag its tip (or click anywhere) and the
+    stripes turn to stay square to it, and get finer as it gets longer.  The white dot rides one
+    crest; the dial at the bottom left is the wave at the centre of the picture going round the
+    complex plane.</p>
+    <p>Try the four buttons under <b>The wave</b>: the same stripes, travelling along the arrow or
+    against it.  Then <b>Two waves</b> (standing waves, fringes, beats) and <b>A packet:
+    dispersion</b>, where the red dot rides a crest and the blue triangle marks the packet, and
+    the two go at different speeds.</p>
+  </section>
 
   <article class="exp" data-setup="direction">
     <h3>1. Which way does it go?</h3>
     <p>Choose each of the four forms in turn and watch the crests (the white dot rides one).
     $e^{i(\vec k\cdot\vec r-\omega t)}$ and $e^{-i(\vec k\cdot\vec r-\omega t)}$ both travel along
     $\vec k$: they are complex conjugates, the same wave with its colours turning the other way
-    (physicists write the first, electrical engineers, with $j=-i$, the second).  When
-    $\vec k\cdot\vec r$ and $\omega t$ have the same sign, the wave travels against $\vec k$.  What
-    matters is the relative sign: a crest is where the phase is constant, $\vec k\cdot\vec r=\omega t$.</p>
+    (physicists write the first; electrical engineers write $e^{j(\omega t-\vec k\cdot\vec r)}$,
+    which is the second).  When $\vec k\cdot\vec r$ and $\omega t$ have the same sign, the wave
+    travels against $\vec k$.  What matters is the relative sign: a crest is where the phase is
+    constant, $\vec k\cdot\vec r=\omega t$, and that moves along $\vec k$ as $t$ grows.</p>
   </article>
 
   <article class="exp" data-setup="phasor">
     <h3>2. At one point, the phase goes round</h3>
     <p>The little complex plane shows $\psi$ at the centre of the picture: an arrow going round
-    the circle, $\omega/2\pi$ times a second.  With $e^{-i\omega t}$ it turns clockwise: that is the
-    sign quantum mechanics fixes, $e^{-iEt/\hbar}$ for energy $E>0$.  Change the phase of $A$
-    and every crest shifts sideways: a phase is a position.</p>
+    the circle, $\omega/2\pi$ times a second (at speed 1).  With $e^{-i\omega t}$ it turns
+    clockwise: that is the sign quantum mechanics fixes, $e^{-iEt/\hbar}$ for energy $E>0$; the
+    two forms with $e^{+i\omega t}$ turn it anticlockwise.  Change the phase of $A$ (the slider
+    $\arg A_1$) and every crest shifts sideways: a phase is a position.</p>
   </article>
 
   <article class="exp" data-setup="real">
     <h3>3. The real part is what a ripple tank shows</h3>
     <p>Only $\mathrm{Re}\,\psi=|A|\cos(\vec k\cdot\vec r-\omega t+\varphi)$, in grey: crests light,
-    troughs dark.  A real wave needs both $e^{i(\vec k\cdot\vec r-\omega t)}$ and its conjugate; the
-    complex wave carries the direction of travel in its phase alone.</p>
+    troughs dark.  A real wave needs both $e^{i(\vec k\cdot\vec r-\omega t)}$ and its conjugate.
+    A snapshot of the real part cannot tell you which way the wave is going; a snapshot of the
+    complex wave can, once the sign convention is agreed: with $e^{-i\omega t}$ the wave moves
+    towards the side where its phase increases (red, yellow-green, cyan, violet, red again).</p>
   </article>
 
   <article class="exp" data-setup="standing">
     <h3>4. Standing waves</h3>
     <p>Two equal waves travelling in opposite directions, $\vec k_2=-\vec k_1$.  The sum
-    $2\cos(\vec k\cdot\vec r)\,e^{-i\omega t}$ does not travel at all: its nodes (black) stay put
-    and between them the whole region changes colour together.  This is a string, an organ
-    pipe, a particle in a box.</p>
+    $2\cos(\vec k\cdot\vec r)\,e^{-i\omega t}$ does not travel at all: its nodes (black lines,
+    half a wavelength apart: $\lambda/2=2.09$ here) stay put, and between them the whole region
+    changes colour together.  This is a string, an organ pipe, a particle in a box.</p>
   </article>
 
   <article class="exp" data-setup="crossed">
     <h3>5. Crossed beams make fringes</h3>
-    <p>Two waves crossing at an angle.  Where they are in step the sum is bright, out of step
-    dark: fringes along $\vec k_1+\vec k_2$, spaced by $2\pi/|\vec k_1-\vec k_2|$.  Drag either
-    arrow to change the angle: the wider it is, the finer the fringes.  This is how a hologram is
-    recorded.</p>
+    <p>Two waves of the same wavelength crossing at an angle (60° here).  Where they are in step
+    the sum is bright, out of step dark: fringes perpendicular to $\vec k_1-\vec k_2$ (along
+    $\vec k_1+\vec k_2$), spaced by $2\pi/|\vec k_1-\vec k_2|$, which is 4.05 here: at 60° the
+    fringes are as far apart as the crests ($\lambda=4.05$).  Drag either arrow to change the
+    angle: the wider it is, the finer the fringes.  This is how a hologram is recorded.</p>
   </article>
 
   <article class="exp" data-setup="beats">
     <h3>6. Beats</h3>
-    <p>Two waves in the same direction with slightly different $|\vec k|$ (and so, for light,
-    different $\omega$).  The sum is a fast wave inside a slow envelope that drifts along: the
-    first step towards a wave packet.</p>
+    <p>Two waves in the same direction with different $|\vec k|$ (1.20 and 1.74 here) and so,
+    with $\omega=c|\vec k|$ as for light, different $\omega$.  The sum is a fast wave inside a
+    slowly beating envelope, whose dark bands are $2\pi/\Delta k=11.6$ apart.  The envelope
+    moves at $\Delta\omega/\Delta k$ and the crests at $\omega/k$; for light both are $c$, so
+    here the whole pattern slides along together.  That is the first step towards a wave packet,
+    where the next mode lets the two speeds differ.</p>
   </article>
 
   <article class="exp" data-setup="schrodinger">
     <h3>7. Phase velocity and group velocity</h3>
-    <p>A packet of waves near $k_0$, for a free quantum particle, $\omega=\hbar k^2/2m$.  The crests
-    (dot) move at the phase velocity $\omega/k$; the packet (triangle) at the group velocity
-    $d\omega/dk$, twice as fast: the packet overtakes its crests, so they are born at its front and
-    die at its back.  (The packet also spreads: each wavelength has its own speed.)  On the
-    $\omega(k)$ plot the two velocities are slopes: of the line from the origin, and of the
-    tangent.</p>
+    <p>A packet of waves near $k_0$, for a free quantum particle, $\omega=\hbar k^2/2m$ (with
+    $\hbar=m=1$).  The crests (red dot) move at the phase velocity $\omega/k=k_0/2=0.75$; the
+    packet (blue triangle) at the group velocity $d\omega/dk=k_0=1.5$, twice as fast: the packet
+    overtakes its crests, so they are born at its front and die at its back.  (The packet also
+    spreads: each wavelength has its own speed.)  On the $\omega(k)$ plot the two velocities are
+    slopes: of the line from the origin to the dot (the red chord), and of the tangent there (the
+    blue line).</p>
   </article>
 
   <article class="exp" data-setup="water">
     <h3>8. Deep water waves</h3>
-    <p>$\omega=\sqrt{gk}$: now the group moves at half the phase velocity, and crests run forward
-    through the packet and vanish at its front, as you can see behind a boat or a duck.</p>
+    <p>$\omega=\sqrt{gk}$: now the group moves at half the phase velocity (0.82 against 1.63),
+    and crests run forward through the packet and vanish at its front, as you can see behind a
+    boat or a duck.</p>
   </article>
 
   <article class="exp" data-setup="light">
     <h3>9. Light in vacuum</h3>
-    <p>$\omega=c|k|$: every wavelength moves at the same speed, so the packet keeps its shape
-    and crests ride along with it.  No dispersion.</p>
+    <p>$\omega=c|k|$: every wavelength moves at the same speed $c$, so the packet keeps its shape
+    and crests ride along with it (both velocities read 1.000).  No dispersion.</p>
   </article>
 
   <article class="exp" data-setup="relativistic">
     <h3>10. Faster than light, harmlessly</h3>
-    <p>$\omega=\sqrt{c^2k^2+\mu^2}$, a relativistic particle (or light in a waveguide, or in a
-    plasma).  The crests move faster than $c=1$; the packet, which carries the energy and the
-    information, slower; and $v_\text{phase}\,v_\text{group}=c^2$.</p>
+    <p>$\omega=\sqrt{c^2k^2+\mu^2}$ with $c=1$: a relativistic particle ($\mu=mc^2/\hbar$), or
+    light in a waveguide or in a plasma ($\mu$ the cut-off or the plasma frequency).  The crests
+    move faster than light, at 1.41; the packet, which carries the energy and the information,
+    slower, at 0.71; and $v_\text{phase}\,v_\text{group}=c^2$ (1.41 × 0.71 = 1).</p>
   </article>
+
+  <section class="theory">
+    <h3>How it works</h3>
+    <p>A plane wave $\psi(\vec r,t)=A\,e^{i(\vec k\cdot\vec r-\omega t)}$ has the same value all along
+    each line perpendicular to $\vec k$, and its phase advances by $2\pi$ every wavelength
+    $\lambda=2\pi/|\vec k|$ along $\vec k$.  The colours are its phase (red is positive real,
+    yellow-green $+i$, cyan negative real, violet $-i$); the line under the picture gives
+    $|\vec k|$, $\lambda$, $\omega$ (the angular frequency, $2\pi$ times the frequency) and the
+    speed of the crests.  The complex amplitude $A=|A|e^{i\varphi}$ sets the height of the wave
+    and where its crests sit.  This is the BrainFlux <em>PlaneWave</em> applet, with more to do.</p>
+    <p><b>The four forms.</b>  The phase is $\pm\vec k\cdot\vec r\pm\omega t$.  A crest is where
+    the phase stays constant, so it moves along $\vec k$ when the two signs differ and against
+    $\vec k$ when they agree; $e^{i(\ldots)}$ and $e^{-i(\ldots)}$ are complex conjugates, the
+    same wave with the colours turning the other way.  Physicists write
+    $e^{i(\vec k\cdot\vec r-\omega t)}$, whose phasor turns clockwise; electrical engineers
+    $e^{j(\omega t-\vec k\cdot\vec r)}$.</p>
+    <p><b>Phase velocity, group velocity, dispersion.</b>  Crests move at the phase velocity
+    $v_p=\omega/|\vec k|$.  A packet, a sum of waves with wavenumbers near $k_0$, moves as a whole
+    at the group velocity $v_g=d\omega/dk$ at $k_0$.  On a plot of $\omega(k)$, $v_p$ is the slope
+    of the chord from the origin to $(k_0,\omega_0)$ and $v_g$ the slope of the tangent there.
+    They are equal only when $\omega$ is proportional to $k$ (light in vacuum); otherwise the
+    waves are <em>dispersive</em>: each wavelength has its own speed and the packet spreads.</p>
+    <p><b>What is computed.</b>  With two waves both have $\omega=c|\vec k|$, as for light, so a
+    standing wave needs equal and opposite $\vec k$.  The packet is
+    $\psi(x,t)=\int\tilde\psi(k)\,e^{i(kx-\omega(k)t)}\,dk$ with $\tilde\psi$ a Gaussian about
+    $k_0$ ($|\tilde\psi|^2$ has standard deviation $\Delta k$), summed over 2048 wavenumbers by an
+    FFT; each component runs at $\omega(|k|)$, so the part with $k<0$ goes left.  Units:
+    $\hbar=m=1$ for the Schrödinger relation, $c=1$ for light and the relativistic one.</p>
+  </section>
 
   <p class="small muted">Rewritten in 2026 from the BrainFlux PlaneWave Java applet.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>,
