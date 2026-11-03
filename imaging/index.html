@@ -27,6 +27,7 @@
         <div class="side-head"><h2>Object</h2><span class="small muted" id="obj-sub">t = a e<sup>iφ</sup></span><span class="spacer"></span><div id="obj-view"></div></div>
         <div class="sq"><canvas id="object" aria-label="The object: its transmission. Paint on it to add or remove ink."></canvas></div>
         <div class="foot">
+          <div class="hint" id="obj-hint">Paint on the object with Add ink</div>
           <div class="tools" id="obj-tools"></div>
           <div class="readout small mono" id="obj-read">&nbsp;</div>
         </div>
@@ -35,6 +36,7 @@
         <div class="side-head"><h2>Fourier plane</h2><span class="spacer"></span><div id="fp-view" class="row"></div></div>
         <div class="sq"><canvas id="fourier" aria-label="The Fourier plane, the objective's back focal plane: the light from the object sorted by direction, with the pupil drawn over it. Paint on the pupil, or drag the light with the Tilt tool."></canvas></div>
         <div class="foot">
+          <div class="hint" id="fp-hint">Paint on the Fourier plane: Block an order (a numbered dot) and watch the image</div>
           <div class="tools" id="fp-tools"></div>
           <div class="readout small mono" id="fp-read">&nbsp;</div>
         </div>
@@ -49,7 +51,7 @@
       </div>
     </div>
     <div class="profile-box">
-      <div class="side-head"><h2>Profile</h2><span class="small muted" id="profile-note">along the dashed line; drag on the image to move it</span></div>
+      <div class="side-head"><h2>Profile</h2><span class="small muted" id="profile-note">the image's brightness along the dashed line (solid) against the object's (dashed); drag on the image to move the line</span></div>
       <div class="profile-wrap"><canvas id="profile" aria-label="The image intensity along the dashed line, with the object for comparison"></canvas></div>
     </div>
   </section>
@@ -68,6 +70,7 @@
     <div class="panel" id="p-objective">
       <div class="label"><span class="step">3</span>Objective lens</div>
       <div id="objective" class="stack"></div>
+      <div class="note">NA, the numerical aperture: how wide a cone of light the lens accepts (the white circle in the Fourier plane).</div>
       <div id="limit" class="small"></div>
     </div>
     <div class="panel" id="p-filter">
@@ -79,40 +82,36 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>A microscope is two Fourier transforms; the sketch at the top of the page shows it from
-  the side.  Light of wavelength $\lambda$ (panel 1) passes through the object (2), whose
-  transmission $t(x,y)=a\,e^{i\varphi}$ can dim the light (the amplitude $a$) or delay it (the
-  phase $\varphi$).  The objective lens (3) sorts the light by direction: in its back focal
-  plane, the <em>Fourier plane</em> (4), light that left the object at angle $\theta$ to the
-  axis arrives a distance $F\sin\theta$ from the axis ($F$ is the lens's focal length),
-  whichever point of the object it came from.  So each point of that plane is one direction, a spatial frequency
-  $f_x=\sin\theta/\lambda$, and the plane holds the object's Fourier transform $T(f)$.  The
-  light that goes straight through, the <em>zero order</em>, is focused to the middle.  The
-  lens's aperture is a circle there, of radius $\mathrm{NA}/\lambda$ in frequency (the numerical aperture
-  $\mathrm{NA}=n\sin\theta_\text{max}$, with $n$ the index between the lens and the object):
-  light outside it never reaches the image.  The tube lens transforms back:
-  $$E(x,y)=\mathcal{F}^{-1}\left[P(f)\,T(f)\right],\qquad I=|E|^2,$$
-  where the pupil $P$ is 1 inside the aperture and 0 outside, times whatever you put in the
-  plane (panel 4) or paint on it.</p>
-  <p>In the Fourier plane the colour is the phase of $T$ (red real and positive, yellow-green
-  $+i$, cyan negative, violet $-i$) and the brightness its size; what the pupil blocks is
-  dimmed.  The object is drawn as its transmitted intensity $|t|^2$ in grey, or as its phase
-  delay $\varphi$ in colour.  Waves go as $e^{i(kz-\omega t)}$, so a positive $\varphi$ is a
-  delay: light through a thicker or denser part of a cell arrives later.  The field of view
-  is $25.6~\mu\mathrm{m}$ across, on 256 × 256 points.</p>
+  <section class="start">
+    <h3>Start here</h3>
+    <p>A microscope, taken apart: the light that leaves the <b>object</b> (left) is sorted by
+    direction in the <b>Fourier plane</b> (middle), where the lens's aperture and whatever you
+    put there decide what goes on to make the <b>image</b> (right).  The sketch at the top
+    shows the same from the side.</p>
+    <p>Paint on the Fourier plane with <b>Block</b> over one of the numbered dots (the
+    grating's orders) and watch the image; slide the <b>NA</b> in panel 3 to open and close
+    the aperture; paint on the object with <b>Add ink</b>; drag on the image to move the
+    profile line.</p>
+    <p>Look for this: the image is made by the orders that get through, not copied from the
+    object.  Take away the first orders and the grating is gone; take away the zero order
+    (the one in the middle) and it has twice as many lines.</p>
+  </section>
 
   <article class="exp" data-setup="abbe">
-    <h3>1. Abbe's experiment: no first orders, no image</h3>
-    <p>A grating of period $d=1.28~\mu\mathrm{m}$ sends its light in a few directions only,
-    $\sin\theta=m\lambda/d$: the <em>orders</em>, single points in the Fourier plane (ringed
-    and numbered: white ones get through the aperture, red ones are blocked; the sketch shows
-    the same).  At NA 0.35 only the zero order gets through, and the image is an even grey:
-    $I=0.250$ everywhere, the square of the grating's average transmission, ½.  The light is
-    all there; the grating is not.  Slide the NA (panel 3) past $\lambda/d=0.43$: the $\pm1$ orders come
-    in and the grating appears, as a sinusoid of period $d$.  Past $3\lambda/d=1.29$ the
-    $\pm3$ orders come in too (equal bars and gaps have no even orders) and the bars get
-    sharper edges.  This is Abbe's rule (1873): with the light along the axis, a period shows
-    only if its first orders get in, $d\ge\lambda/\mathrm{NA}$.</p>
+    <h3>1. Abbe's experiment: the image is made of the orders that get in</h3>
+    <p>A grating of period $d=1.28~\mu\mathrm{m}$ in bright field (nothing in the Fourier
+    plane but the aperture, NA 0.5).  It sends its light in a few directions only,
+    $\sin\theta=m\lambda/d$: the <em>orders</em>, single points in the Fourier plane, ringed
+    and numbered (white ones get through the aperture, red ones are blocked; the sketch shows
+    the same).  The zero order, $m=0$, is the light that went straight through; the orders
+    $\pm1$ get in too, and the image is a sinusoid of period $d$, which the profile shows
+    against the square bars of the object.  Slide the NA (panel 3) down past $\lambda/d=0.43$:
+    the $\pm1$ orders turn red, and the image is an even grey, $I=0.250$ everywhere, the square
+    of the grating's average transmission, ½.  The light is all there; the grating is not.
+    Slide it up past $3\lambda/d=1.29$ and the $\pm3$ orders come in too (equal bars and gaps
+    have no even orders): the bars get sharper edges.  This is Abbe's rule (1873): with the
+    light along the axis, a period shows only if its first orders get in,
+    $d\ge\lambda/\mathrm{NA}$.</p>
   </article>
 
   <article class="exp" data-setup="zero">
@@ -257,7 +256,8 @@
     by 19% (try <em>Edge</em>: $I$ peaks at 1.190); between close bars the ripples add, and
     the image reaches $I=1.664$ (see the readout), though nothing in the object transmits more
     than 1.  Choose <em>Incoherent</em>: now intensities add, not fields, and the transfer
-    function is the pupil's autocorrelation (the OTF view), reaching twice as far, to
+    function is the pupil's autocorrelation (the OTF, the optical transfer function: choose
+    <em>show the OTF</em> over the Fourier plane), reaching twice as far, to
     $\lambda/2\mathrm{NA}=0.55~\mu\mathrm{m}$, but falling off gradually.  The 0.79 and 0.63 µm
     groups come back, with 16.5% and 11.8% of their contrast; the 0.5 µm group, finer than that,
     stays grey.  Nothing overshoots ($I$ peaks at 0.997): an incoherent image is never
@@ -290,6 +290,30 @@
     Coherent resolution depends on the object's phase.</p>
   </article>
 
+  <section class="theory">
+  <h3>How it works</h3>
+  <p>A microscope is two Fourier transforms; the sketch at the top of the page shows it from
+  the side.  Light of wavelength $\lambda$ (panel 1) passes through the object (2), whose
+  transmission $t(x,y)=a\,e^{i\varphi}$ can dim the light (the amplitude $a$) or delay it (the
+  phase $\varphi$).  The objective lens (3) sorts the light by direction: in its back focal
+  plane, the <em>Fourier plane</em> (4), light that left the object at angle $\theta$ to the
+  axis arrives a distance $F\sin\theta$ from the axis ($F$ is the lens's focal length),
+  whichever point of the object it came from.  So each point of that plane is one direction, a spatial frequency
+  $f_x=\sin\theta/\lambda$, and the plane holds the object's Fourier transform $T(f)$.  The
+  light that goes straight through, the <em>zero order</em>, is focused to the middle.  The
+  lens's aperture is a circle there, of radius $\mathrm{NA}/\lambda$ in frequency (the numerical aperture
+  $\mathrm{NA}=n\sin\theta_\text{max}$, with $n$ the index between the lens and the object):
+  light outside it never reaches the image.  The tube lens transforms back:
+  $$E(x,y)=\mathcal{F}^{-1}\left[P(f)\,T(f)\right],\qquad I=|E|^2,$$
+  where the <em>pupil</em> $P$ (the aperture and whatever is in it) is 1 inside the aperture
+  and 0 outside, times whatever you put in the plane (panel 4) or paint on it.</p>
+  <p>In the Fourier plane the colour is the phase of $T$ (red real and positive, yellow-green
+  $+i$, cyan negative, violet $-i$) and the brightness its size; what the pupil blocks is
+  dimmed.  The object is drawn as its transmitted intensity $|t|^2$ in grey, or as its phase
+  delay $\varphi$ in colour.  Waves go as $e^{i(kz-\omega t)}$, so a positive $\varphi$ is a
+  delay: light through a thicker or denser part of a cell arrives later.  The field of view
+  is $25.6~\mu\mathrm{m}$ across, on 256 × 256 points.</p>
+
   <h3>Things to know</h3>
   <ul>
     <li>Scalar, thin-object, paraxial optics with perfect lenses: the object is a mask, the light
@@ -320,6 +344,7 @@
     <em>Unpaint</em> goes back to what panel 4 sets.  <em>Mirror</em> paints the opposite point
     too.</li>
   </ul>
+  </section>
   <p class="small muted">New in 2026 for BrainFlux.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
 </aside>
