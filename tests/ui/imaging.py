@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Drive the imaging demo: every experiment, with the physics checked as it goes and every number
-the help quotes measured; the sketch of the microscope against the pupil; painting; the address;
-screenshots at desktop and phone sizes, light and dark."""
+"""Drive the imaging demo: the opening (experiment 1), the hints under the pictures and what they
+say to do, the drawer's Start-here block and its order; every experiment, with the physics
+checked as it goes and every number the help quotes measured; the sketch of the microscope
+against the pupil; painting; the address; screenshots at desktop and phone sizes, light and
+dark."""
 import json, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
@@ -85,11 +87,57 @@ def full_page(b, path):
 with Browser('imaging/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready', timeout=30); settle(b)
     b.screenshot('build/imaging-start.png')
+    # The opening is experiment 1: a grating in bright field, its orders 0 and +-1 inside the aperture.
     st = stats(b)
-    check(st['contrast'] > 0.3 and b.eval('__app.state.filter') == 'dot' and b.eval('__app.state.dotPhase') == -90,
-          f"opens on cells in positive phase contrast (a -90 degree dot; image contrast {st['contrast']:.2f})")
-    note = b.eval("document.querySelector('#filter-note').textContent")
-    check('advances' in note and 'dark' in note and 'positive phase contrast' in note, f'the note says what the -90 degree dot does: "{note}"')
+    s = b.eval('[__app.state.preset, __app.state.filter, __app.state.NA, __app.orders(), __app.state.exposure]')
+    check(s == ['grating', 'open', 0.5, [-1, 0, 1], 'fixed'] and st['contrast'] > 0.9,
+          f"opens on experiment 1: the grating in bright field at NA 0.5 with orders -1, 0, +1 through (contrast {st['contrast']:.2f})")
+    # Two hints where the eye is, each directly under its picture, in plain words.
+    HINTS = """[...document.querySelectorAll('.hint')].map((e) => { const r = e.getBoundingClientRect(), c = e.closest('.side').querySelector('canvas').getBoundingClientRect();
+        return { text: e.textContent, visible: r.height > 0, under: r.top >= c.bottom - 1 && r.top < c.bottom + 12, top: r.top, bottom: r.bottom }; })"""
+    h = b.eval(HINTS)
+    check(len(h) == 2 and all(x['visible'] and x['under'] for x in h) and 'Add ink' in h[0]['text'] and h[1]['text'].startswith('Paint on the Fourier plane: Block an order'),
+          f"two hints, each right under its picture: {[x['text'] for x in h]}")
+    # Do what the hint says: paint Block over the +1 order (a numbered dot), then over the zero order.
+    fx, fy = b.eval('__app.orderFrac(1)')
+    b.drag('#fourier', (fx, fy), (fx + 0.005, fy), steps=2); settle(b)
+    o1, c1 = b.eval('__app.orders()'), b.eval('__app.stats().contrast')
+    check(o1 == [-1, 0] and 0.8 < c1 < 0.95 and b.eval('__app.profilePeriod') == 1.28,
+          f'Block over the +1 order: orders {o1} are left, the fringes keep their period and lose contrast ({c1:.2f})')
+    remove_paint = "[...document.querySelectorAll('#fp-tools button')].find((e) => e.textContent === 'Remove paint')"
+    b.eval(f'{remove_paint}.click()'); settle(b)
+    fx, fy = b.eval('__app.orderFrac(0)')
+    b.drag('#fourier', (fx, fy), (fx + 0.005, fy), steps=2); settle(b)
+    o0, p0 = b.eval('__app.orders()'), b.eval('__app.profilePeriod')
+    check(o0 == [-1, 1] and near(p0, 0.640, 3), f'Block over the zero order: orders {o0}, and the image has twice as many lines (period {p0} um)')
+    b.eval(f'{remove_paint}.click()'); settle(b)
+    check(b.eval('__app.orders()') == [-1, 0, 1] and b.eval(f'{remove_paint}.disabled'), 'Remove paint puts the orders back and goes grey again')
+    # The brush's size and mirror and the picture's brightness are folded under More.
+    folded = b.eval("[...document.querySelectorAll('#fp-tools details .slider label, #fp-tools details button')].map((e) => e.textContent)")
+    check(not b.eval("document.querySelector('#fp-tools details').open") and folded == ['size', 'Mirror', 'brightness', 'log'],
+          f'brush size, Mirror, brightness and log are folded under More: {folded}')
+    # The drawer: Start here first, in plain words without equations; the experiments; the theory last.
+    kinds = b.eval("[...document.querySelectorAll('#help > *')].map((e) => e.tagName.toLowerCase() + (e.className ? '.' + e.className.split(' ')[0] : ''))")
+    start = b.eval("""(() => { const s = document.querySelector('#help section.start'); return { h: s?.querySelector('h3')?.textContent,
+        math: s?.querySelectorAll('math').length, sentences: (s?.textContent.match(/[.!?](\\s|$)/g) || []).length }; })()""")
+    check(kinds[:2] == ['header', 'section.start'] and start['h'] == 'Start here' and start['math'] == 0 and 3 <= start['sentences'] <= 7,
+          f"the drawer begins with a Start here block ({start['sentences']} sentences, no equations)")
+    exps = [i for i, k in enumerate(kinds) if k == 'article.exp']
+    theory = kinds.index('section.theory') if 'section.theory' in kinds else -1
+    how = b.eval("document.querySelector('#help section.theory h3')?.textContent")
+    check(len(exps) == 14 and theory > exps[-1] and how == 'How it works', f'then {len(exps)} experiments, then the theory under "{how}"')
+    # The glosses: NA, the tilt, the kind of light, and the four things to put in the Fourier plane.
+    glosses = b.eval("""({ na: document.querySelector('#p-objective .note').textContent, tilt: [...document.querySelectorAll('#illum .note')].map((e) => e.textContent).join(' '),
+        light: document.querySelector('#illum-note').textContent, filters: [...document.querySelectorAll('.filters button small')].map((e) => e.textContent) })""")
+    check('how wide a cone' in glosses['na'] and 'angle' in glosses['tilt'] and 'plane wave' in glosses['light'] and glosses['filters'] == ['bright field', 'dark field', 'phase contrast', 'schlieren'],
+          'NA, the tilt, the light and the four things in the Fourier plane are glossed in plain words')
+    # The hints and the Start-here block stand out from their backgrounds (here in the light theme, below in the dark).
+    CONTRAST = """((sel) => { const e = document.querySelector(sel);
+        const lum = (c) => { const [r, g, b] = c.match(/\\d+/g).map((v) => { v = v / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+        let bg = 'rgba(0, 0, 0, 0)', p = e; while (p && /rgba\\(0, 0, 0, 0\\)|transparent/.test(bg)) { bg = getComputedStyle(p).backgroundColor; p = p.parentElement; }
+        const a = lum(getComputedStyle(e).color), c = lum(bg); return (Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05); })"""
+    ratios = [b.eval(f'{CONTRAST}({json.dumps(s)})') for s in ('#obj-hint', '#fp-hint', '#help section.start p')]
+    check(all(r > 4.5 for r in ratios), f'light theme: the hints and the Start-here text stand out from their backgrounds (contrast {[round(r, 1) for r in ratios]})')
 
     # The sketch lines up with the pictures under it: the object, the Fourier plane and the image.
     xs = b.eval('__app.sketchX()')
@@ -102,10 +150,14 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     check([l[0] for l in labels] == ['1', '2', '3', '4'] and 'Light' in labels[0] and 'Object' in labels[1] and 'Objective' in labels[2] and 'Fourier' in labels[3],
           f'the side panel goes along the light: {labels}')
 
-    # A student's first clicks, on the buttons themselves: the four things to put in the Fourier
-    # plane, the sign of the dot, the light, an object, the NA slider.
+    # A student's first clicks, on the buttons themselves, with the cells under the lens (experiment
+    # 8): the four things to put in the Fourier plane, the sign of the dot, the light, an object,
+    # the NA slider.
     def click_text(sel, text):
         b.eval(f"[...document.querySelectorAll({json.dumps(sel)})].find((e) => e.textContent.includes({json.dumps(text)})).click()"); settle(b)
+    setup(b, 'zernike')
+    note = b.eval("document.querySelector('#filter-note').textContent")
+    check('advances' in note and 'dark' in note and 'positive phase contrast' in note, f'the note says what the -90 degree dot does: "{note}"')
     click_text('.filters button', 'Open')
     c, note = b.eval('__app.stats().contrast'), b.eval("document.querySelector('#filter-note').textContent")
     check(b.eval('__app.state.filter') == 'open' and c < 0.01 and 'barely shows' in note, f'Open: the cells all but vanish (contrast {c:.4f}), and the note says why')
@@ -140,20 +192,21 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
         setup(b, name)
         b.screenshot(f'build/imaging-exp-{name}.png')
 
-    # 1. Abbe: nothing but the zero order, no image; the first orders make a sinusoid of period d.
+    # 1. Abbe: the orders 0 and +-1 make a sinusoid of period d; below lambda/d only the zero order
+    # gets in, and there is no image.
     setup(b, 'abbe')
+    c, period = b.eval('__app.stats().contrast'), b.eval('__app.profilePeriod')
+    check(b.eval('__app.orders()') == [-1, 0, 1] and c > 0.9 and abs(period - 1.28) < 1e-9 and b.eval(f'{SIDE_PASS}(0.55 / 1.28)'),
+          f'NA 0.5: orders -1, 0, +1 pass (in the sketch too), contrast {c:.3f}, period {period} um')
+    put(b, NA=0.35)
     st = stats(b)
     check(b.eval('__app.orders()') == [0] and st['contrast'] < 1e-9 and near(st['mean'], 0.250, 3),
           f"NA 0.35 < lambda/d = 0.43: only the zero order passes and the image is an even I = {st['mean']:.3f} (contrast {st['contrast']:.1e})")
     check(b.eval(f'{SIDE_PASS}(0)') and not b.eval(f'{SIDE_PASS}(0.55 / 1.28)') and not b.eval(f'{SIDE_PASS}(-0.55 / 1.28)'),
           'the sketch agrees: the zero order passes, the first orders stop at the aperture')
-    put(b, NA=0.45)
-    c, period = b.eval('__app.stats().contrast'), b.eval('__app.profilePeriod')
-    check(b.eval('__app.orders()') == [-1, 0, 1] and c > 0.9 and abs(period - 1.28) < 1e-9 and b.eval(f'{SIDE_PASS}(0.55 / 1.28)'),
-          f'NA 0.45: orders -1, 0, +1 pass (in the sketch too), contrast {c:.3f}, period {period} um')
     put(b, NA=1.3)
     check(b.eval('__app.orders()') == [-3, -1, 0, 1, 3], 'NA 1.3 > 3 lambda/d = 1.289: the third orders pass (no second orders for equal bars)')
-    quoted(b, 'abbe', '1.28', '0.35', '0.250', '0.43', '1.29')
+    quoted(b, 'abbe', '1.28', '0.5', '0.43', '0.250', '1.29')
     b.screenshot('build/imaging-abbe-1.3.png')
 
     # 2. Block the zero order: the period halves.
@@ -395,6 +448,9 @@ with Browser('imaging/index.html', size=(390, 844)) as b:
     order = ['.sketch-box', '#side-obj', '#p-light', '#p-object', '#p-objective', '#side-fp', '#p-filter', '#side-img', '.profile-box']
     tops = b.eval(f"{json.dumps(order)}.map((s) => document.querySelector(s).getBoundingClientRect().top)")
     check(all(a < c for a, c in zip(tops, tops[1:])), 'on a phone, each numbered panel comes by the picture it acts on, along the light: ' + ' < '.join(s.lstrip('#.') for s in order))
+    h = b.eval(HINTS)
+    check(len(h) == 2 and all(x['visible'] and x['under'] for x in h) and h[0]['bottom'] <= 844,
+          f"on a phone the hints are under their pictures, the first inside the first screen (its bottom at {h[0]['bottom']:.0f} px of 844)")
     setup(b, 'abbe')
     full_page(b, 'build/imaging-phone-abbe.png')
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
@@ -402,6 +458,12 @@ with Browser('imaging/index.html', size=(390, 844)) as b:
 with Browser('imaging/index.html', size=(1400, 900)) as b:
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
     b.wait('window.__app && __app.ready', timeout=30); settle(b)
+    b.screenshot('build/imaging-dark-start.png')
+    b.eval("document.querySelector('#help-button').click()"); b.sleep(0.3)
+    ratios = [b.eval(f'{CONTRAST}({json.dumps(s)})') for s in ('#obj-hint', '#fp-hint', '#help section.start p')]
+    check(all(r > 4.5 for r in ratios), f'dark theme: the hints and the Start-here text stand out from their backgrounds (contrast {[round(r, 1) for r in ratios]})')
+    b.screenshot('build/imaging-help-dark.png')
+    b.key('Escape')
     setup(b, 'coherence')
     b.screenshot('build/imaging-dark.png')
     b.eval("document.querySelector('#help-button').click()"); b.sleep(0.5)

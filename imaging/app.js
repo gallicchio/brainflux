@@ -5,6 +5,9 @@
 // The page, along the light: a sketch of the microscope from the side, then the object, the
 // Fourier plane (the objective's back focal plane) and the image, and beside them the controls
 // in the same order: 1 the light, 2 the object, 3 the objective, 4 what is in the Fourier plane.
+// It opens on experiment 1 (setups.abbe): a grating in bright field with its orders 0 and ±1
+// inside the aperture, the simplest case, with a hint under the Fourier plane to paint over an
+// order; the cells in phase contrast (setups.zernike) are the landing page's thumbnail.
 
 import { spectrum, pupil as makePupil, shifted, coherentImage, otf, intensitySpectrum, incoherentImage,
   sourcePoints, PartialImage, stats, throughput, pxPerNA, sideView } from './optics.js';
@@ -25,16 +28,16 @@ const SPOKES = 18;         // the Siemens star's dark spokes (and as many clear)
 // ------------------------------------------------------------------------------- state
 
 const DEFAULTS = {
-  preset: 'cells',
+  preset: 'grating',
   d: 1.28, profile: 'bars',          // grating
   spacing: 0.6,                      // diatom pores
   sep: 0.6, pphase: 0,               // two points: separation (um) and phase (degrees)
-  enc: 'phase', absorb: 1, phi0: 0.3,
-  objView: 'phase',
+  enc: 'amplitude', absorb: 1, phi0: 0.3,
+  objView: 'amplitude',
   NA: 0.5, lambda: 0.55, z: 0,
-  filter: 'dot', stopNA: 0.02, dotPhase: -90, dotNA: 0.02, dotAmp: 1, knifeNA: 0, knifeAngle: 0,
+  filter: 'open', stopNA: 0.02, dotPhase: -90, dotNA: 0.02, dotAmp: 1, knifeNA: 0, knifeAngle: 0,
   illum: 'coherent', condNA: 0.25, tiltNA: 0, tiltDir: 0,
-  fpView: 'light', zoom: 4, fpBright: 0, fpLog: false, xzoom: 1,
+  fpView: 'light', zoom: 2, fpBright: 0, fpLog: false, xzoom: 1,
   exposure: 'auto', imgBright: 0,
   row: C,
   formula: 'exp(i a (r < R))',
@@ -112,8 +115,8 @@ const PRESETS = {
 
 let loadToken = 0, loading = 0;   // (loading: objects still being made, for __app.busy)
 async function loadPreset(id, opts = {}) {
-  const token = ++loadToken, p = PRESETS[id] || PRESETS.cells;
-  state.preset = PRESETS[id] ? id : 'cells';
+  const token = ++loadToken, p = PRESETS[id] || PRESETS[DEFAULTS.preset];
+  state.preset = PRESETS[id] ? id : DEFAULTS.preset;
   groups = null;
   loading++;
   let made;
@@ -685,7 +688,7 @@ function drawProfile() {
   for (let q = 1; q < N / 2; q++) { const p = re[C + q] ** 2 + im[C + q] ** 2; total += p; if (p > best) { best = p; kb = q; } }
   // Only when one period dominates the line (a grating, not a cell).
   profilePeriod = ['grating', 'formula'].includes(state.preset) && kb && best > 0.6 * total && mean > 0 && Math.sqrt(2 * best / N) > 0.01 * mean ? L / kb : null;
-  show('#profile-note', ['along the dashed line; drag on the image to move it',
+  show('#profile-note', ['the image’s brightness along the dashed line (solid) against the object’s (dashed); drag on the image to move the line',
     ...(profilePeriod ? ['·', [{ html: '<b>strongest period along the line:</b> ' }, { v: profilePeriod, dec: 3, w: 5, class: 'b' }, { html: '<b> µm</b>' }]] : [])]);
 }
 
@@ -824,7 +827,7 @@ function drawSketch() {
   step(1, 'light', narrow ? 26 : Math.max(30, (xL + xo) / 2 - 6), yb);
   step(2, 'object', xo, yb);
   step(3, narrow ? 'objective' : 'objective lens', x1, yt);
-  step(4, narrow ? 'Fourier plane' : 'Fourier plane (back focal plane)', xF, yb);
+  step(4, narrow ? 'Fourier plane' : 'Fourier plane (back focal plane): the light sorted by direction', xF, yb);
   text('tube lens', x2, yt);
   text(narrow ? 'image' : 'image (camera)', xI, yb);
   // Each a focal length from the next: a 4f system.
@@ -925,8 +928,8 @@ function readouts() {
   let obj;
   if (state.preset === 'grating') {
     const g = snapPeriod(state.d, N, DX);
-    obj = [['period d = ', n3(g.d), ' µm'], ['(', { v: g.m, dec: 0, w: 3 }, ' across);'], 'orders at', ['sin θ = ', n3(state.lambda / g.d), ' × m']];
-  } else if (state.preset === 'diatom') obj = ['pore rows', [n3(state.spacing * Math.sqrt(3) / 2), ' µm apart:'], 'first orders at', ['sin θ = ', n3(state.lambda / (state.spacing * Math.sqrt(3) / 2))]];
+    obj = [['period d = ', n3(g.d), ' µm'], ['(', { v: g.m, dec: 0, w: 3 }, ' across);'], 'its orders leave at', ['sin θ = m × ', n3(state.lambda / g.d)]];
+  } else if (state.preset === 'diatom') obj = ['pore rows', [n3(state.spacing * Math.sqrt(3) / 2), ' µm apart:'], 'their first orders leave at', ['sin θ = ', n3(state.lambda / (state.spacing * Math.sqrt(3) / 2))]];
   else if (state.preset === 'points') obj = [[{ v: Math.round(state.sep / DX) * DX, dec: 1, w: 4 }, ' µm apart'], ['= ', n3(Math.round(state.sep / DX) * DX * state.NA / state.lambda, 6), ' λ/NA']];
   else if (state.preset === 'bars') obj = ['bar periods in µm (orange)'];
   else if (state.objView === 'phase') { const [lo, hi] = phaseRange(); obj = ['phase φ', ['from ', n3(lo, 6)], ['to ', n3(hi, 6), ' rad']]; }
@@ -941,9 +944,9 @@ function readouts() {
   const orders = gratingOrders();
   let fp;
   if (state.illum === 'incoherent') fp = ['the OTF reaches', ['2NA/λ = ', n3((2 * state.NA) / state.lambda), ' cycles/µm']];
-  else if (orders) fp = [`orders through the pupil: ${orders.length ? orders.map(orderName).join(', ') : 'none'}`];
-  else if (state.preset === 'diatom') fp = [`pore orders (rings) through the pupil: ${poreOrderList().filter((o) => o.pass).length} of 6`];
-  else fp = ['light through the pupil:', [{ v: 100 * throughput(Ts, P, N), dec: 2, w: 6, tiny: true }, '%']];
+  else if (orders) fp = [`orders that get through: ${orders.length ? orders.map(orderName).join(', ') : 'none'}`];
+  else if (state.preset === 'diatom') fp = [`pore orders (dashed rings) that get through: ${poreOrderList().filter((o) => o.pass).length} of 6`];
+  else fp = ['light that gets through:', [{ v: 100 * throughput(Ts, P, N), dec: 2, w: 6, tiny: true }, '%']];
   fpNote = fp;
   if (!hover.fp) show('#fp-read', fp);
   // The image.
@@ -990,6 +993,16 @@ function notes() {
     knife: 'The edge blocks one side of the plane but keeps the zero order: slopes of the phase become brightness, as if lit from the side.',
   }[state.filter];
   $('#filter-note').innerHTML = fil;
+  // The hint under the Fourier plane: what a drag there does with the tool chosen.
+  const order = state.preset === 'grating' ? 'an order (a numbered dot)' : state.preset === 'diatom' ? 'an order (the zero order, or a dashed ring)' : 'the zero order (the ring)';
+  $('#fp-hint').textContent = {
+    tilt: 'Drag on the Fourier plane: the light tilts, and the whole pattern slides with its zero order',
+    block: `Paint on the Fourier plane: Block ${order} and watch the image`,
+    open: 'Paint on the Fourier plane: Pass lets light through, even outside the aperture',
+    minus: 'Paint on the Fourier plane: a −90° dab on the zero order is a phase dot of your own',
+    plus: 'Paint on the Fourier plane: a +90° dab on the zero order is a phase dot of your own',
+    erase: 'Paint on the Fourier plane: Unpaint takes your paint off (Remove paint takes it all off)',
+  }[state.fpTool];
 }
 
 // ------------------------------------------------------------------------------ pointers
@@ -1139,7 +1152,8 @@ ctl.lambda = slider({ label: 'λ (nm)', min: 400, max: 700, step: 1, value: stat
 S_('condNA', { label: 'condenser NA', min: 0.01, max: 1.4, step: 0.01, title: 'The condenser’s numerical aperture: how wide a cone of directions lights the object' }, 'image');
 S_('tiltNA', { label: 'tilt sin θ', min: 0, max: 1.4, step: 0.005, title: 'Oblique light: the illumination arrives at sin θ to the axis, and the zero order moves sin θ across the Fourier plane (or drag it there with Tilt)' }, 'image');
 S_('tiltDir', { label: 'direction (°)', min: -180, max: 180, step: 1, title: 'Which way the light is tilted: where the zero order moves in the Fourier plane (0°: right, 90°: up)' }, 'image');
-const tiltBox = el('div', { class: 'stack' }, ctl.tiltNA, ctl.tiltDir);
+const tiltBox = el('div', { class: 'stack' }, ctl.tiltNA, ctl.tiltDir,
+  el('div', { class: 'note' }, 'tilt: the light comes in at angle θ to the axis (0: straight along it); or drag it in the Fourier plane with Tilt the light.'));
 $('#illum').append(ctl.illum, note('illum-note'), ctl.lambda, ctl.condNA, tiltBox);
 
 // 2. The object.
@@ -1251,7 +1265,7 @@ const logToggle = toggle('log', state.fpLog, (on) => { state.fpLog = on; changed
 $('#fp-view').append(fpView, zoomSel);
 // What a drag on the Fourier plane does: tilt the light, or paint the pupil with one of the
 // brushes.  Two groups, one choice between them.
-const setFpTool = (v) => { state.fpTool = v; tiltTool.value = v; fpTool.value = v; fpCanvas.classList.toggle('tilt', v === 'tilt'); };
+const setFpTool = (v) => { state.fpTool = v; tiltTool.value = v; fpTool.value = v; fpCanvas.classList.toggle('tilt', v === 'tilt'); if (ready) notes(); };
 const tiltTool = segmented([{ value: 'tilt', label: 'Tilt the light', title: 'Drag the light: where you press is where the zero order goes (oblique illumination)' }],
   state.fpTool, setFpTool, { label: 'Drag to tilt the light' });
 const fpTool = segmented([
@@ -1266,8 +1280,12 @@ const mirrorToggle = toggle('Mirror', state.fpMirror, (on) => { state.fpMirror =
 const clearPaintButton = el('button', { type: 'button', title: 'Remove all paint from the pupil', disabled: true, onclick: () => { clearPaint(); clearPaintButton.disabled = true; changed('pupil'); } }, 'Remove paint');
 ctl.fpBright = slider({ label: 'brightness', min: -3, max: 3, step: 0.01, value: 0, title: 'How bright to draw the Fourier plane (factors of 10)', onInput: (v) => { state.fpBright = v; changed('fp'); } });
 const line = (...kids) => el('div', { class: 'line' }, ...kids);
+// The brush's size and mirror, and the picture's brightness, are folded away: the tools a
+// student needs first are the brushes and Remove paint.
+const more = el('details', { class: 'more' }, el('summary', { title: 'The brush size, painting the opposite point too, and how bright to draw the Fourier plane' }, 'More: brush, brightness'),
+  line(ctl.fpBrush, mirrorToggle), line(ctl.fpBright, logToggle));
 $('#fp-tools').append(line(el('span', { class: 'note' }, 'Drag to:'), tiltTool, el('span', { class: 'note' }, 'or paint:'), fpTool),
-  line(ctl.fpBrush, mirrorToggle, clearPaintButton), line(ctl.fpBright, logToggle));
+  el('div', { class: 'line tail' }, clearPaintButton, more));
 const xzoomSel = el('select', { 'aria-label': 'Magnify the object and the image', title: 'Magnify the middle of the object and the image' },
   ...[1, 2, 4].map((z) => el('option', { value: z }, `${z}×`)));
 xzoomSel.value = state.xzoom;
@@ -1330,7 +1348,7 @@ function fromHash(h) {
     const d = DEFAULTS[k];
     state[k] = typeof d === 'number' ? (Number.isFinite(+h[k]) ? +h[k] : d) : typeof d === 'boolean' ? h[k] === 'true' : h[k];
   }
-  if (!PRESETS[state.preset]) state.preset = 'cells';
+  if (!PRESETS[state.preset]) state.preset = DEFAULTS.preset;
   if (h.formula) {
     const params = {};
     for (const [k, v] of Object.entries(h)) if (k.startsWith('p_') && Number.isFinite(+v)) params[k.slice(2)] = +v;
@@ -1353,17 +1371,18 @@ async function configure(cfg) {
 }
 
 const setups = {
-  abbe: () => configure({ preset: 'grating', d: 1.28, NA: 0.35, filter: 'open', zoom: 2, exposure: 'fixed' }),
+  // Experiment 1 is the opening state: the orders 0 and ±1 inside the aperture, ±3 outside.
+  abbe: () => configure({ preset: 'grating', d: 1.28, NA: 0.5, filter: 'open', zoom: 2, exposure: 'fixed' }),
   zero: () => configure({ preset: 'grating', d: 1.28, NA: 0.6, filter: 'stop', stopNA: 0.02, zoom: 2 }),
   oblique: () => configure({ preset: 'grating', d: 0.8, NA: 0.4, filter: 'open', tiltNA: 0.35, tiltDir: 180, zoom: 2, fpTool: 'tilt' }),
   diatom: () => configure({ preset: 'diatom', NA: 0.65, filter: 'open', zoom: 2, xzoom: 2 }),
   invisible: () => configure({ preset: 'cells', NA: 1.4, filter: 'open', zoom: 1 }),
   defocus: () => configure({ preset: 'cells', NA: 0.5, filter: 'open', z: 1, zoom: 4 }),
-  darkfield: () => configure({ preset: 'letters', NA: 0.5, filter: 'stop', stopNA: 0.08 }),
+  darkfield: () => configure({ preset: 'letters', NA: 0.5, filter: 'stop', stopNA: 0.08, zoom: 4 }),
   zernike: () => configure({ preset: 'cells', NA: 0.5, filter: 'dot', dotPhase: -90, dotNA: 0.02, phi0: 0.3, zoom: 4 }),
   halo: () => configure({ preset: 'cells', NA: 0.5, filter: 'dot', dotPhase: -90, dotNA: 0.1, phi0: 0.3, zoom: 4 }),
   schlieren: () => configure({ preset: 'cells', NA: 0.5, filter: 'knife', knifeNA: 0, knifeAngle: 0, zoom: 4 }),
-  portrait: () => configure({ preset: 'portrait', enc: 'phase', phi0: 0.3, NA: 0.5, filter: 'open', objView: 'phase' }),
+  portrait: () => configure({ preset: 'portrait', enc: 'phase', phi0: 0.3, NA: 0.5, filter: 'open', objView: 'phase', zoom: 4 }),
   coherence: () => configure({ preset: 'bars', NA: 0.5, filter: 'open', zoom: 1 }),
   star: () => configure({ preset: 'star', NA: 0.5, filter: 'open', zoom: 1 }),
   rayleigh: () => configure({ preset: 'points', sep: 0.6, NA: 0.56, filter: 'open', illum: 'incoherent', fpView: 'otf', zoom: 1, xzoom: 4 }),
@@ -1381,11 +1400,11 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', (
 const hash = readHash();
 const started = (async () => {
   if (setups[hash.setup]) await setups[hash.setup]();
-  else {
+  else if (Object.keys(hash).length) {
     fromHash(hash);
     syncControls();
     await loadPreset(state.preset, { row: hash.row === undefined });
-  }
+  } else await setups.abbe();   // no address: experiment 1
   ready = true;
   notes();
   frame();
@@ -1402,6 +1421,13 @@ window.__app = {
   get busy() { return loading > 0 || raf !== 0 || dirty.object || dirty.pupil || dirty.image || (state.illum === 'condenser' && !partial.done); },
   get profilePeriod() { return profilePeriod; },
   orders: () => gratingOrders(),
+  /** Where a grating's order q is drawn on the Fourier plane, as fractions of its width (for a test to paint there). */
+  orderFrac: (q) => {
+    const o = (gratingOrderList() || []).find((x) => x.q === q);
+    if (!o) return null;
+    const v = N / state.zoom, off = (N - v) / 2;
+    return [(C + 0.5 + o.u - off) / v, (C + 0.5 - o.v - off) / v];
+  },
   poreOrders: () => poreOrderList().filter((o) => o.pass).length,
   timing,
   frameNow(what) { for (const w of what) if (w in dirty) dirty[w] = true; else need[w] = true; frame(); return { ...timing }; },

@@ -25,10 +25,21 @@
 .foot .tools { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .foot .tools .seg > button { padding: 2px 7px; min-height: 26px; font-size: 13px; }
 .foot .tools > button { padding: 2px 8px; min-height: 26px; font-size: 13px; }
-/* The Fourier plane's tools: what a drag does (tilt the light, or paint), the brush, the view. */
+/* A one-line hint under a picture (lib/style.css: .hint), the first thing in its foot. */
+.foot .hint { line-height: 1.3; }
+/* The Fourier plane's tools: what a drag does (tilt the light, or paint), Remove paint, and
+   under "More" the brush's size and mirror and the picture's brightness. */
 #fp-tools { flex-direction: column; align-items: stretch; gap: 4px; }
 #fp-tools .line { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+#fp-tools .line.tail { align-items: flex-start; }
 #fp-tools .seg { flex-wrap: nowrap; }
+#fp-tools details.more { flex: 1 1 auto; min-width: 0; }
+#fp-tools details.more > summary { cursor: pointer; color: var(--ink-3); font-size: 12px; min-height: 26px; display: flex; align-items: center; gap: 4px; }
+#fp-tools details.more > summary::before { content: "▸"; font-size: 11px; }
+#fp-tools details.more[open] > summary::before { content: "▾"; }
+#fp-tools details.more > summary::-webkit-details-marker { display: none; }
+#fp-tools details.more > summary { list-style: none; }
+#fp-tools details.more > .line { margin-top: 4px; }
 .foot .slider { grid-template-columns: auto minmax(40px, 1fr) 3.6em; flex: 1 1 140px; min-width: 120px; }
 .foot .note { color: var(--ink-3); font-size: 12px; }
 .foot .slider input[type="number"] { font-size: 12px; }
