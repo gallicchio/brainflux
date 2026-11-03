@@ -166,6 +166,9 @@ with Browser('fft2d/index.html', size=(1400, 950)) as b:
     for name in b.eval("Object.keys(__app.setups)"):
         b.eval(f"__app.setups[{json.dumps(name)}]()"); b.sleep(0.5)
         b.screenshot(f'build/fft2d-exp-{name}.png')
+        if name in ('lowpass', 'highpass'):   # the mask's hint follows the set-up's keep-inside/outside
+            t = b.eval("document.querySelector('#hint-k').textContent")
+            check(('picture blurs' if name == 'lowpass' else 'only edges stay') in t, f'{name}: the hint under the transform says what this mask does ({t!r})')
         if name == 'comb':
             check(b.eval("Math.max(...__app.sides.x.re)") > 0, 'the comb experiment starts with a mark painted')
             on, off = b.eval("""(() => { const {k} = __app.sides, n = __app.state.n; let on = 0, off = 0; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {

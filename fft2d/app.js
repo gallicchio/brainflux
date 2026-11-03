@@ -772,12 +772,12 @@ const setups = {
   },
   async lowpass() {
     reset({ tool: 'mask' });
-    state.maskKeep = 'inside'; maskKeepSeg.value = 'inside';
+    state.maskKeep = 'inside'; maskKeepSeg.value = 'inside'; updateHints();
     await loadPreset('portrait');
   },
   async highpass() {
     reset({ tool: 'mask' });
-    state.maskKeep = 'outside'; maskKeepSeg.value = 'outside';
+    state.maskKeep = 'outside'; maskKeepSeg.value = 'outside'; updateHints();
     await loadPreset('portrait');
   },
   async gaussian() { reset(); await loadPreset('gaussian'); },
