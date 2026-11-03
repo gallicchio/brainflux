@@ -69,11 +69,49 @@ def steady_readouts(b, where, frames=20):
           f'{where}: {n} read-out labels and slots stay put over {frames} frames while {len(texts)} different sets of numbers show'
           + ('' if len(pos) == 1 else ' (the HTML read-outs moved)') + ('' if len(canvas) == 1 else ' (the canvas labels moved)'))
 
+# The contrast ratio (WCAG) of an element's text against the first opaque background behind it:
+# the hint and the Start-here block must read in both themes.
+CONTRAST = '''((sel) => { const e = document.querySelector(sel); if (!e) return null;
+  const lum = (c) => { const m = c.match(/\\d+(\\.\\d+)?/g).map(Number);
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+  let bg = null;
+  for (let p = e; p && !bg; p = p.parentElement) { const c = getComputedStyle(p).backgroundColor; if (c && c !== 'transparent' && !/^rgba\\(.*, 0\\)$/.test(c)) bg = c; }
+  const a = lum(getComputedStyle(e).color), b = lum(bg || 'rgb(255, 255, 255)');
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); })'''
+
+def first_screen(b, where):
+    """The hint sits directly under the picture, and it and the Start-here block read (contrast >= 3)."""
+    hint = b.eval("document.querySelector('#hint').textContent")
+    gap = b.eval("(() => { const h = document.querySelector('#hint').getBoundingClientRect(), f = document.querySelector('#field').getBoundingClientRect(); return h.top - f.bottom; })()")
+    ch, cs = b.eval(CONTRAST + '("#hint")'), b.eval(CONTRAST + '("#help .start p")')
+    check(hint.startswith('Drag anywhere on the picture') and 0 <= gap < 12 and ch >= 3 and cs >= 3,
+          f"{where}: the hint under the picture ('{hint[:40]}...', {gap:.0f} px below it) and the Start here block read (contrast {ch:.1f}, {cs:.1f})")
+
 def desktop(b):
     ready(b); run_for(b, 1.5)
     b.screenshot('build/rad-start.png')
     n = len(b.eval('__app.lines'))
     check(b.eval('__app.state.preset') == 'shuttle' and n == 24, f'it opens on the start-and-stop motion with {n} field lines')
+    # The first screen: a hint under the picture, words beside every number, glosses on the
+    # controls, and a drawer that starts with "Start here" and ends with the formula.
+    first_screen(b, 'light theme')
+    labs = b.eval("[...document.querySelectorAll('#readout .lab')].filter((e) => e.offsetParent).map((e) => e.textContent)")
+    words = ['speed β = v/c', 'Lorentz factor γ', 'acceleration |a|', 'radiated power P/PLarmor']
+    check(len(labs) == 6 and all(any(l.startswith(w) for l in labs) for w in words) and 'units/s²' in labs, f'every number in the read-out has words beside it: {labs}')
+    glosses = b.eval("[...document.querySelectorAll('.controls .small.muted')].map((e) => e.textContent)")
+    check(any(g.startswith('Velocity part:') for g in glosses) and any('Energy flux:' in g for g in glosses) and any(g.startswith('Probe:') for g in glosses),
+          f'the Show panel glosses Velocity part, Energy flux and Probe ({len(glosses)} notes)')
+    first = b.eval("document.querySelector('#help header + *').className")
+    h3 = b.eval("[...document.querySelectorAll('#help h3')].map((e) => e.textContent)")
+    check(first == 'start' and h3[0] == 'Start here' and not b.eval("document.querySelector('#help .start math')"), 'the drawer opens with a Start here block, without equations')
+    check(h3[1].startswith('1. Start and stop') and h3[-1] == 'How it works' and b.eval("!!document.querySelector('#help .theory math[display=block]')"),
+          f'experiment 1 is the opening set-up and the Liénard–Wiechert formula comes last ({h3[1]!r} ... {h3[-1]!r})')
+    b.eval('__app.setups.kink()'); k = b.eval('__app.state.preset')
+    b.eval('__app.setups.stop()'); s = b.eval('__app.state.preset')
+    check(k == 'shuttle' and s == 'stop', f'#setup=kink is the opening motion ({k}); #setup=stop one stop at a time ({s})')
+    ta = b.eval("['#polar', '#power'].map((s) => getComputedStyle(document.querySelector(s)).touchAction)")
+    check(ta == ['pan-y', 'pan-y'], f'a finger over the plots scrolls the page (touch-action {ta})')
 
 def drag(b):
     # From rest at the centre, a fast drag to the right.  Far away, nothing has heard yet: the
@@ -110,9 +148,27 @@ def every_setup(b):
 def readouts(b):
     # Everything changing at once: a fast oscillation (β, γ, |a| and P/P_Larmor all vary, and a
     # passes through zero) with the probe on.
-    b.eval('__app.setups.fastdipole()'); b.eval('__app.state.probe = true'); b.eval('__app.setProbe(-6, 4)')
+    b.eval('__app.setups.fastdipole()')
+    pos0 = b.rects('#readout .lab, #readout .num')
+    b.eval("[...document.querySelectorAll('#extras button')].find((e) => e.textContent === 'Probe').click()")
+    b.eval('__app.setProbe(-6, 4)')
     run_for(b, 0.5)
+    pos1 = b.rects('#readout .lab, #readout .num')
+    hint = b.eval("document.querySelector('#hint').textContent")
+    labs = b.eval("[...document.querySelectorAll('#readout .lab')].filter((e) => e.offsetParent).map((e) => e.textContent)")
+    check(b.eval('__app.state.probe') and 'yellow dot' in hint and any(l.startswith('at the probe') for l in labs) and pos1[:len(pos0)] == pos0,
+          f"the Probe button shows the probe's read-outs ({len(labs)} labels) and the hint says to drag the yellow dot; the other read-outs stay put")
     steady_readouts(b, 'fast dipole with the probe')
+    # Dragging the probe where the hint says: from where it is drawn (the view is centred on the
+    # origin for this motion) 60 px right and 40 px down.
+    x, y, w, h = b.box('#field')
+    s = min(w, h) / 20
+    px, py = b.eval('__app.state.probeAt')
+    fx, fy = (w / 2 + px * s) / w, (h / 2 - py * s) / h
+    b.drag('#field', (fx, fy), (fx + 60 / w, fy + 40 / h), steps=8)
+    qx, qy = b.eval('__app.state.probeAt')
+    check(abs(qx - (px + 60 / s)) < 0.15 and abs(qy - (py - 40 / s)) < 0.15 and b.eval('__app.mode') == 'preset',
+          f'dragging the yellow dot moves the probe ({px:.2f}, {py:.2f}) -> ({qx:.2f}, {qy:.2f}) and leaves the charge on its motion')
 
 def coulomb_heaviside(b):
     b.eval('__app.setups.coulomb()'); run_for(b, 0.3)
@@ -224,6 +280,9 @@ def phone(b):
     b.screenshot('build/rad-phone.png')
     wide = b.eval('document.documentElement.scrollWidth')
     check(wide <= 400, f'nothing sticks out sideways at phone width ({wide} px)')
+    hb = b.eval("document.querySelector('#hint').getBoundingClientRect().bottom")
+    check(hb <= 850 and b.eval('scrollY') == 0 and b.eval("document.querySelector('#hint').textContent").startswith('Drag the yellow dot'),
+          f'the hint is on the first screen (its bottom at {hb:.0f} px of 850), and with the probe on it says how to place it')
     steady_readouts(b, 'at phone width, a circle with the probe')
     b.eval('window.scrollTo(0, 700)'); b.sleep(0.3)
     b.screenshot('build/rad-phone-controls.png')
@@ -231,8 +290,17 @@ def phone(b):
     b.eval("window.__old = true; location.hash = 'setup=synchrotron'; location.reload()")
     ready(b); run_for(b, 1.5)
     check(b.eval('__app.state.preset') == 'circle' and b.eval('__app.values.circle.beta') == 0.9, '#setup=synchrotron opens that experiment')
+    first_screen(b, 'phone')
     b.click('#help-button'); b.sleep(0.5)
     b.screenshot('build/rad-phone-help.png')
+
+def dark(b):
+    b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
+    ready(b); run_for(b, 1.0)
+    first_screen(b, 'dark theme')
+    b.screenshot('build/rad-dark.png')
+    b.click('#help-button'); b.sleep(0.5)
+    b.screenshot('build/rad-dark-help.png')
 
 try:
     with Browser('radiation/index.html', size=(1400, 900)) as b:
@@ -250,6 +318,12 @@ try:
         no_errors(b, 'at 1400 x 900')
 except Exception as e:
     check(False, f'the desktop browser: {type(e).__name__}: {e}')
+try:
+    with Browser('radiation/index.html', size=(1400, 900)) as b:
+        section('dark theme', dark, b)
+        no_errors(b, 'in the dark theme')
+except Exception as e:
+    check(False, f'the dark-theme browser: {type(e).__name__}: {e}')
 try:
     with Browser('radiation/index.html#m=circle&c=6&p_beta=0.5&p_radius=1.5&map=flux&n=12&probe=3.00,4.00', size=(400, 850)) as b:
         section('phone width', phone, b)

@@ -22,8 +22,8 @@
     <div class="readout" id="readout"></div>
     <div class="field-wrap">
       <canvas id="field" tabindex="0" aria-label="The electric field of the charge, in the plane it moves in: drag anywhere and the charge follows (arrow keys move it too)"></canvas>
-      <div class="hint" id="hint">Drag anywhere: the charge follows, never faster than 0.98 c</div>
     </div>
+    <div class="hint" id="hint">Drag anywhere on the picture: the charge follows (never faster than 0.98 c).  Stop, and watch the kink run out.</div>
     <div class="row2">
       <div class="plot-wrap"><canvas id="polar" aria-label="Polar plot of the power radiated per unit solid angle, in the plane of motion, for the charge's present motion"></canvas></div>
       <div class="plot-wrap"><canvas id="power" aria-label="The radiated power over the last ten seconds: Liénard's formula and Larmor's"></canvas></div>
@@ -45,54 +45,57 @@
     <div class="panel">
       <div class="label">Light</div>
       <div id="c-box"></div>
-      <div class="small muted">The view is 20 units across (its shorter side).</div>
+      <div class="small muted">Light is slow here, so your hand can move the charge at nearly c.  The view is 20 units across (its shorter side).</div>
     </div>
     <div class="panel">
       <div class="label">Show</div>
       <div class="row" id="lines-box"></div>
+      <div class="small muted">Velocity part: the 1/R² (Coulomb-like) part of the field alone, which carries no radiation.</div>
       <div id="count-box"></div>
       <div class="row" id="map-box"></div>
+      <div class="small muted">Radiation field: the 1/R part, which runs out as a kink.  Energy flux: its square, how much radiation is passing.</div>
       <div id="bright-box"></div>
       <div class="row" id="extras"></div>
+      <div class="small muted">Probe: a yellow dot you drag about; the read-out gives the two parts of the field there.</div>
     </div>
   </aside>
 </main>
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
-  <p>A point charge $q$ moves in the plane of the screen, and you see its electric field in that
-  plane, computed exactly.  News of the charge travels at $c$, so the field at $\vec r$ now
-  depends on where the charge was at the <em>retarded time</em> $t_r$, when it sent out the light
-  arriving now: $|\vec r-\vec w(t_r)|=c(t-t_r)$.  Liénard (1898) and Wiechert (1900) found
-  $$\vec E=\frac{q}{4\pi\epsilon_0}\,\frac{(\hat n-\vec\beta)(1-\beta^2)}{\kappa^3R^2}+\frac{q}{4\pi\epsilon_0}\,\frac{\hat n\times((\hat n-\vec\beta)\times\dot{\vec\beta})}{c\,\kappa^3R}$$
-  with everything on the right taken at $t_r$: $R=|\vec r-\vec w(t_r)|$, $\hat n$ the
-  direction from that retarded position, $\vec\beta=\vec v/c$ and
-  $\kappa=1-\hat n\cdot\vec\beta$.  The first term, the
-  <em>velocity field</em>, falls off as $1/R^2$.  The second, the <em>acceleration field</em>,
-  falls off only as $1/R$ and is perpendicular to $\hat n$: it is the radiation.</p>
-  <p>Light is slow here: $c$ is a slider, in units per second (the view is 20 units across its
-  shorter side), and the bar at the bottom left shows how far light goes in a second.  So your
-  hand can move the charge near $c$: drag anywhere and it follows, smoothed and never faster
-  than $0.98c$.  The field lines leave the charge evenly spaced in angle in its own rest frame.
-  They are a slice through a three-dimensional field, so their spacing is only a rough guide to
-  its strength.  Below the picture: how the charge is radiating now, by direction, and its
-  power over the last ten seconds.</p>
-
-  <article class="exp" data-setup="coulomb">
-    <h3>1. At rest: Coulomb</h3>
-    <p>The field lines go straight out, evenly spaced: Coulomb's field.  Drag the charge slowly,
-    much slower than light, and the lines keep up with it, nearly straight.  A slow charge
-    carries its Coulomb field along.</p>
-  </article>
+  <section class="start">
+    <h3>Start here</h3>
+    <p>A charge (the red dot) moves in the plane of the screen, and the white lines are its
+    electric field, worked out exactly from how it has moved.  Light is slow here: the bar at
+    the bottom left of the picture shows how far it goes in a second.</p>
+    <p><b>Drag anywhere on the picture</b> and the charge follows your pointer, at up to 0.98
+    of the speed of light.  Then <b>stop</b>.  Or pick a motion from the side panel and let it
+    run.</p>
+    <p>Look for the kink: every change of speed sends a ring out at the speed of light, and the
+    sideways field in that ring (coloured orange and blue) is the radiation.  Below the
+    picture: which way the charge is radiating now, and how much.  The formula is at the end,
+    under <em>How it works</em>.</p>
+  </section>
 
   <article class="exp" data-setup="kink">
-    <h3>2. Stop it: the kink</h3>
-    <p>The charge coasts in from the left at $\beta=0.6$ and stops in 0.15 s.  The news that it
-    stopped spreads out at $c$, as a shell.  Inside the shell, the lines are those of a charge at
-    rest where it stopped.  Outside, nothing has heard yet: the lines still point from where the
-    charge would be had it kept going.  Field lines cannot break, so in the shell they run
-    sideways to join up, and that sideways field is the radiation: J. J. Thomson's picture of
-    1904.  Then make kinks of your own: drag the charge and stop it.</p>
+    <h3>1. Start and stop: the kink is the radiation</h3>
+    <p>The opening set-up.  The charge waits a second, speeds up to $\beta=v/c=0.6$ in 0.15 s,
+    coasts 10 units, stops in 0.15 s, waits, and comes back.  Each change of speed sends a
+    shell out at $c$ (the ring of orange and blue: watch it grow by one scale bar a second).
+    Inside the shell, the lines are those of the charge as it moves now.  Outside, nothing has
+    heard yet: the lines still point from where the charge would be had it kept its old
+    velocity.  Field lines cannot break, so in the shell they run sideways to join up, and that
+    sideways field is the radiation: J. J. Thomson's picture of 1904.  Make kinks of your own:
+    drag the charge and stop it; or press <em>Sudden stop</em> for one stop at a time, the charge
+    coasting in from the left and stopping in the middle.</p>
+  </article>
+
+  <article class="exp" data-setup="coulomb">
+    <h3>2. At rest, or slow: Coulomb's field keeps up</h3>
+    <p>The field lines go straight out, evenly spaced: Coulomb's field.  Drag the charge slowly,
+    much slower than light, and the lines keep up with it, nearly straight: a slow charge
+    carries its Coulomb field along, and radiates almost nothing (the strip chart stays near
+    zero).  Flick it, and the kink is back.</p>
   </article>
 
   <article class="exp" data-setup="inside">
@@ -155,8 +158,9 @@
     <h3>8. A fast dipole leans forward</h3>
     <p>Now up to $\beta=0.8$, with a period of 2 s.  The lobes of the polar plot lean towards the
     velocity, up while the charge rises and down as it falls: the $1/\kappa^5$ in $dP/d\Omega$
-    throws the radiation forward.  The waves are no longer sine waves.  Liénard's power (the
-    strip chart) climbs far above Larmor's: for motion along a line the ratio is $\gamma^6$,
+    throws the radiation forward.  The waves are no longer sine waves.  The exact radiated
+    power, Liénard's formula (the strip chart's solid line), climbs far above Larmor's
+    slow-charge formula (dashed): for motion along a line the ratio is $\gamma^6$,
     shown in the read-out as P/P<sub>Larmor</sub>.</p>
   </article>
 
@@ -222,16 +226,38 @@
     arrow keys move it too.</p>
   </article>
 
-  <h3>What is exact, and what is not</h3>
-  <p>The fields are the exact Liénard–Wiechert fields of the path the charge follows.  The path
-  is stored 240 times a second, with quintics between the samples that match their positions,
-  velocities and accelerations.  Your hand's motion is smoothed into such a path.  The colours
-  are computed on a grid coarser than the screen, and when the field is very busy (after wild
-  shaking) the field lines are cut short so that the picture keeps moving.  $dP/d\Omega$ is the
-  power per unit solid angle per unit of the charge's time; a distant observer whom the charge
-  approaches receives it in less time, and so sees it brighter still.  The numbers are in units
-  where $q=1$ and $1/4\pi\epsilon_0=1$ (so the Coulomb field is $1/R^2$), with lengths in units
-  and times in seconds.</p>
+  <section class="exp theory">
+    <h3>How it works</h3>
+    <p>A point charge $q$ moves in the plane of the screen, and you see its electric field in
+    that plane, computed exactly.  News of the charge travels at $c$, so the field at $\vec r$
+    now depends on where the charge was at the <em>retarded time</em> $t_r$, when it sent out
+    the light arriving now: $|\vec r-\vec w(t_r)|=c(t-t_r)$.  Liénard (1898) and Wiechert
+    (1900) found the exact field of a point charge on any path:
+    $$\vec E=\frac{q}{4\pi\epsilon_0}\,\frac{(\hat n-\vec\beta)(1-\beta^2)}{\kappa^3R^2}+\frac{q}{4\pi\epsilon_0}\,\frac{\hat n\times((\hat n-\vec\beta)\times\dot{\vec\beta})}{c\,\kappa^3R}$$
+    with everything on the right taken at $t_r$: $R=|\vec r-\vec w(t_r)|$, $\hat n$ the
+    direction from that retarded position, $\vec\beta=\vec v/c$ and
+    $\kappa=1-\hat n\cdot\vec\beta$.  The first term, the
+    <em>velocity field</em>, falls off as $1/R^2$.  The second, the <em>acceleration field</em>,
+    falls off only as $1/R$ and is perpendicular to $\hat n$: it is the radiation, and it is
+    what the colour shows (or its square, the energy flux).</p>
+    <p>$c$ is a slider, in units per second (the view is 20 units across its shorter side), and
+    the charge your hand drags is smoothed and held below $0.98c$.  The field lines leave the
+    charge evenly spaced in angle in its own rest frame.  They are a slice through a
+    three-dimensional field, so their spacing is only a rough guide to its strength.  The polar
+    plot under the picture is $dP/d\Omega$, the power radiated per unit solid angle, by
+    direction in the plane; the strip chart is the total power by Liénard's formula (solid) and
+    Larmor's (dashed), see experiment 10.</p>
+    <p><strong>What is exact, and what is not.</strong>  The fields are the exact
+    Liénard–Wiechert fields of the path the charge follows.  The path
+    is stored 240 times a second, with quintics between the samples that match their positions,
+    velocities and accelerations.  Your hand's motion is smoothed into such a path.  The colours
+    are computed on a grid coarser than the screen, and when the field is very busy (after wild
+    shaking) the field lines are cut short so that the picture keeps moving.  $dP/d\Omega$ is the
+    power per unit solid angle per unit of the charge's time; a distant observer whom the charge
+    approaches receives it in less time, and so sees it brighter still.  The numbers are in units
+    where $q=1$ and $1/4\pi\epsilon_0=1$ (so the Coulomb field is $1/R^2$), with lengths in units
+    and times in seconds.</p>
+  </section>
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
 </aside>

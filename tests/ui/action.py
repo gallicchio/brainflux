@@ -20,6 +20,24 @@ NEWTON = '''(() => { const a = __app, d = a.downhill(a.path(), false); let w = 0
   return w / (a.state.sys.qrange[1] - a.state.sys.qrange[0]); })()'''
 SCORE = '''(() => { const a = __app, c = a.current, t = a.ref;
   return { S: c.S, K: c.kinetic, St: t && t.S, note: document.querySelector('#score .note').textContent, on: a.state.onTrue }; })()'''
+# The contrast ratio (WCAG) of an element's text against the first opaque background behind it:
+# the hint and the Start-here block must read in both themes.
+CONTRAST = '''((sel) => { const e = document.querySelector(sel); if (!e) return null;
+  const lum = (c) => { const m = c.match(/\\d+(\\.\\d+)?/g).map(Number);
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+  let bg = null;
+  for (let p = e; p && !bg; p = p.parentElement) { const c = getComputedStyle(p).backgroundColor; if (c && c !== 'transparent' && !/^rgba\\(.*, 0\\)$/.test(c)) bg = c; }
+  const a = lum(getComputedStyle(e).color), b = lum(bg || 'rgb(255, 255, 255)');
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); })'''
+
+
+def first_screen(b, where):
+    """The hint under the path plot and the Start-here block exist and read (contrast >= 3)."""
+    hint = b.eval("document.querySelector('#path-hint').textContent")
+    ch, cs = b.eval(CONTRAST + '("#path-hint")'), b.eval(CONTRAST + '("#help .start p")')
+    check(hint.startswith('Drag a knot ○ up or down') and ch >= 3 and cs >= 3,
+          f"{where}: the hint under the path plot ('{hint}') and the Start here block read (contrast {ch:.1f}, {cs:.1f})")
 
 
 def settle(b):
@@ -82,14 +100,31 @@ with Browser('action/index.html', size=(1400, 900)) as b:
           f"opens on the throw's true path: S = {s['S']:.6f} = -mg^2T^3/24, kinetic part {s['K']:.4f}, '{s['note']}'")
     check(b.eval('__app.history.length') == 1, 'the record starts with one point')
 
+    # ---- the first screen: a hint under the picture, words beside the numbers, glosses, and a
+    # drawer that starts with "Start here" and ends with the theory
+    first_screen(b, 'light theme')
+    heads = b.eval("[...document.querySelectorAll('#score .h')].map((e) => e.textContent)")
+    check(any('kinetic part' in h for h in heads) and any('potential part' in h for h in heads), f"the score table's headings carry words: {heads}")
+    panels = b.eval("[...document.querySelectorAll('.controls .panel .label')].map((e) => e.textContent)")
+    check(panels[0] == 'Your path', f"the path's own controls come first in the side panel ({panels})")
+    note, tabs = b.eval("document.querySelector('#roll-note').textContent"), b.eval("[...document.querySelectorAll('#view-tabs button')].map((e) => e.textContent)")
+    check('less action' in note and any('quantum' in t for t in tabs), f"Roll downhill has a gloss ('{note}') and Feynman's tab says it is the quantum view ({tabs[-1]})")
+    first = b.eval("document.querySelector('#help header + *').className")
+    h3 = b.eval("[...document.querySelectorAll('#help h3')].map((e) => e.textContent)")
+    check(first == 'start' and h3[0] == 'Start here' and not b.eval("document.querySelector('#help .start math')"), 'the drawer opens with a Start here block, without equations')
+    check(h3[1].startswith('1. Throw and catch') and h3[-1] == 'How it works' and b.eval("!!document.querySelector('#help .theory math[display=block]')"),
+          f'experiment 1 is the opening set-up and the equations come last ({h3[1]!r} ... {h3[-1]!r})')
+
     # Every set-up starts on its true path (no knot would move on its own), with the action the
-    # experiment quotes.
+    # experiment quotes; and the hint under the plot names what to drag there.
     quoted = {'find': 4, 'throw': -33.333, 'energy': -33.333, 'phase': -0.8359, 'orbit': 6.689, 'saddle': 1.2005,
               'pendulum': -1.924, 'twin': -10, 'light': 13.955, 'mirage': 9.893, 'brach': 3.1416, 'segments': -33.333,
               'feynman': -33.333, 'damped': -1.2748, 'typed': 1.368, 'hints': -33.333}
+    hints = {}
     for name in b.eval('Object.keys(__app.setups)'):
         run(b, f'__app.setups[{json.dumps(name)}]()')
         n, on, w, St = b.eval('__app.truths.length'), b.eval('__app.state.onTrue'), b.eval(NEWTON), b.eval('__app.ref.S')
+        hints[name] = b.eval("document.querySelector('#path-hint').textContent")
         b.screenshot(f'build/act-exp-{name}.png')
         q = quoted.get(name)
         digits = 10 ** -(len(str(q).split('.')[1]) if '.' in str(q) else 0) / 2 if q is not None else 0
@@ -98,6 +133,9 @@ with Browser('action/index.html', size=(1400, 900)) as b:
             check(not on and w > 1e-3 and ok_q, f'{name}: starts bent, for the arrows (Newton step {w:.2g} of the range); true S {St:.4f}')
         else:
             check(n >= 1 and on and w < 1e-6 and ok_q, f'{name}: {n} true path(s), S_true = {St:.5f} (the help: {q}); starts on it (Newton step {w:.1e})')
+    check(hints['throw'].endswith('watch S go up') and 'event' in hints['twin'] and 'optical path' in hints['light'] and 'time' in hints['brach']
+          and 'saddle' in hints['saddle'] and 'orbit' in hints['orbit'] and 'saddle' in hints['damped'],
+          f"the hint names the knot and what to watch for each system: {hints['twin']!r}, {hints['light']!r}, {hints['saddle']!r}")
 
     # ---- dragging: one way only, chosen by the start of the drag
     run(b, '__app.setups.throw()')
@@ -372,6 +410,10 @@ with Browser('action/index.html', size=(1400, 900)) as b:
 with Browser('action/index.html', size=(1400, 900)) as b:
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
     b.wait('window.__app && __app.ready'); settle(b)
+    first_screen(b, 'dark theme')
+    b.click('#help-button'); settle(b)
+    b.screenshot('build/act-dark-help.png')
+    b.key('Escape')
     for name in ('throw', 'orbit', 'twin', 'feynman', 'brach'):
         run(b, f'__app.setups.{name}()')
         b.screenshot(f'build/act-dark-{name}.png')
@@ -388,6 +430,11 @@ with Browser('action/index.html', size=(390, 844)) as b:
     check(w[0] <= w[1], f'phone: no sideways scrolling ({w[0]} <= {w[1]})')
     order = b.eval("['#score', '#path-wrap', '.record-wrap', '#panel-path', '.view-wrap', '#panel-system'].map((s) => document.querySelector(s).getBoundingClientRect().top)")
     check(order == sorted(order), f'phone: the score, the path, its record, the path buttons, the view, the systems, top to bottom ({[round(o) for o in order]})')
+    first_screen(b, 'phone')
+    hb = b.eval("document.querySelector('#path-hint').getBoundingClientRect().bottom")
+    check(hb <= 844 and b.eval('scrollY') == 0, f'phone: the hint under the path plot is on the first screen (its bottom at {hb:.0f} px of 844)')
+    ta = b.eval("['#record', '#view'].map((s) => getComputedStyle(document.querySelector(s)).touchAction)")
+    check(ta == ['pan-y', 'pan-y'], f'phone: a finger over the record or the view scrolls the page (touch-action {ta})')
 
     def touch(kind, x, y):
         pts = [] if kind == 'touchEnd' else [{'x': x, 'y': y, 'radiusX': 5, 'radiusY': 5, 'force': 1, 'id': 1}]

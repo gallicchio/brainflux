@@ -271,6 +271,20 @@ function setKey() {
     : state.sys.lockStart ? `<span><i class="end"></i>${w.end}</span>` : `<span><i class="end"></i>end: ${w.end}</span>`;
   $('#path-key').innerHTML = `<span><i class="you"></i>your path</span>${state.show.truth ? `<span><i class="true"></i>${truth}<span class="under"></span></span>` : ''}`
     + `<span><i class="knot"></i>${w.knot}: ${w.move}</span>${endText}`;
+  setHint();
+}
+
+/** The one-line hint under the path plot: what to drag, and what to watch. */
+function setHint() {
+  const d = state.sys, t = ref || truths[0];
+  const saddle = t && (t.closed || t.index > 0);
+  const text = d.vertical ? `Drag an event ○ sideways and watch S go up (the traveller's clock runs slower)`
+    : d.id === 'brachistochrone' ? 'Drag a point ○ up or down and watch the time grow'
+      : d.s === 'x' ? 'Drag a point ○ up or down and watch the optical path grow'
+        : saddle ? `Drag a knot ○ up or down and watch S change: this ${t.closed ? 'orbit' : 'true path'} is a saddle, not a minimum`
+          : 'Drag a knot ○ up or down and watch S go up';
+  const e = $('#path-hint');
+  if (e.textContent !== text) e.textContent = text;
 }
 
 /**
@@ -582,7 +596,7 @@ $('#shows').append(...Object.values(showToggles));
 const VIEWS = [
   { value: 'phase', label: 'Phase space', title: 'The path in (q, p), over the contours of the energy' },
   { value: 'energy', label: 'Energy', title: 'The energy along the path' },
-  { value: 'phasor', label: "Feynman's arrows", title: 'The sum of exp(iS/ħ) over the heights of one knot' },
+  { value: 'phasor', label: "Feynman's arrows (quantum)", title: "Quantum mechanics: every path has an arrow exp(iS/ħ), and the view adds them up over one knot's heights.  Near the true path they line up; elsewhere they cancel." },
 ];
 const viewSeg = segmented(VIEWS, state.view, (v) => setView(v), { label: 'View' });
 $('#view-tabs').append(viewSeg);
@@ -625,6 +639,7 @@ function truthWord(t) {
 function showTruthList() {
   const box = $('#truth');
   box.replaceChildren();
+  setHint();
   if (!state.show.truth) return;
   const d = state.sys;
   if (!truths.length) {
@@ -1230,7 +1245,7 @@ function scoreColumns() {
   const d = state.sys;
   if (d.id === 'twin') return [['tau', 'proper time τ'], ['S', 'S = −mc²τ']];
   if (d.s === 'x') return [['S', d.id === 'brachistochrone' ? 'time ∫ds/v' : 'optical path ∫n ds']];
-  if (L?.kinetic) return [['S', 'action S'], ['K', d.q === 'θ' ? '∫ ½θ̇² dt' : '∫ ½mẋ² dt'], ['V', '− ∫ V dt']];
+  if (L?.kinetic) return [['S', 'action S'], ['K', `kinetic part<br>${d.q === 'θ' ? '∫ ½θ̇² dt' : '∫ ½mẋ² dt'}`], ['V', '− potential part<br>− ∫ V dt']];
   return [['S', 'action S']];
 }
 
@@ -1241,7 +1256,7 @@ function layoutScore() {
   const grid = el('div', { class: 'score-grid', style: { gridTemplateColumns: `auto repeat(${cols.length}, auto)` } });
   slots = { decimals, width, sys: d, ends: state.ends, cols, you: {}, tru: {} };
   grid.append(el('span'));
-  for (const [, label] of cols) grid.append(el('span', { class: 'h' }, label));
+  for (const [, label] of cols) { const h = el('span', { class: 'h' }); h.innerHTML = label; grid.append(h); }
   const row = (cls, name) => {
     slots[cls].label = el('span', { class: `rl ${cls}` }, name);
     grid.append(slots[cls].label);
