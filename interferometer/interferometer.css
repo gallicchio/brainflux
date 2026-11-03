@@ -31,12 +31,16 @@
 /* The counter's two halves each keep together (setGroups); on a narrow screen they take two lines. */
 .counter-row #counter-readout { white-space: normal; }
 
+/* The hint under a picture (lib/style.css: .hint), and a panel that folds away (the spectrometer). */
+.cell > .hint { margin: 0 2px; }
+details.panel summary { cursor: pointer; }
+details.panel[open] summary { margin-bottom: 2px; }
 .box { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .box canvas { width: 100%; height: 100%; }
 .plot-box { flex: 1; min-height: 190px; }
 .plot-box canvas { position: absolute; inset: 0; }
 .schem-box { aspect-ratio: 100 / 64; background: #1b1d22; border-color: #2a2c33; }
-.screen-box { aspect-ratio: 1; width: 100%; max-width: max(240px, calc(100vh - 486px)); margin: 0 auto; background: #000; border-color: #000; }
+.screen-box { aspect-ratio: 1; width: 100%; max-width: max(240px, calc(100vh - 536px)); margin: 0 auto; background: #000; border-color: #000; }
 .st-schem-box { aspect-ratio: 100 / 64; background: #0d1020; border-color: #20243a; }
 .sky-box { flex: 1; min-height: 200px; background: #000; border-color: #000; }
 .sky-box canvas, .fringe-box canvas { position: absolute; inset: 0; }

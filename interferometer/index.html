@@ -21,15 +21,16 @@
 <main class="ifm">
   <section class="stage" id="michelson" aria-label="The Michelson interferometer">
     <div class="cell schem-cell">
-      <div class="head"><h2>Michelson interferometer</h2><span class="small muted">drag M2, its knob (fine) or its top (tilt)</span></div>
+      <div class="head"><h2>Michelson interferometer</h2><span class="small muted">seen from above</span></div>
       <div class="box schem-box"><canvas id="schematic" tabindex="0" aria-label="The interferometer from above: drag the mirror M2 to change the path difference, its knob for fine steps, its top end to tilt it"></canvas></div>
+      <div class="hint" id="schem-hint">Drag the mirror M2 along its beam (its knob: nanometres; its yellow top: tilt). The screen and the trace follow.</div>
       <div class="foot">
         <div class="mono small" id="mirror-readout" aria-live="off"></div>
         <div class="row small counter-row"><span class="mono" id="counter-readout"></span><button type="button" id="counter-reset" class="small-btn" title="Start counting again from here">Reset</button></div>
       </div>
     </div>
     <div class="cell screen-cell">
-      <div class="head"><h2>What you see</h2><span class="small muted" id="screen-note"></span></div>
+      <div class="head"><h2>What you see</h2><span class="small muted" id="screen-note" title="Visibility: the contrast of the fringes round the detector, (Imax − Imin)/(Imax + Imin): 1 for a laser, 0 where the colours have got out of step and the fringes are gone"></span></div>
       <div class="box screen-box"><canvas id="screen" aria-label="The fringes, in their true colours, as you see them looking into the interferometer; the cross marks the detector"></canvas></div>
     </div>
     <div class="cell spec-cell">
@@ -45,19 +46,20 @@
 
   <section class="stage" id="stellar" aria-label="The stellar interferometer" hidden>
     <div class="cell st-schem-cell">
-      <div class="head"><h2>Michelson's stellar interferometer</h2><span class="small muted">drag an outer mirror to change the baseline</span></div>
+      <div class="head"><h2>Michelson's stellar interferometer</h2><span class="small muted">on a beam across a telescope</span></div>
       <div class="box st-schem-box"><canvas id="st-schematic" tabindex="0" aria-label="The interferometer on its beam across the telescope: drag an outer mirror to change the baseline B"></canvas></div>
+      <div class="hint" id="st-hint">Drag an outer mirror (yellow) in or out along the beam: the fringes below fade and return as the baseline B grows.</div>
     </div>
     <div class="cell sky-cell">
       <div class="head"><h2>The star</h2><span class="small muted" id="sky-note"></span></div>
       <div class="box sky-box"><canvas id="sky" aria-label="The star on the sky, magnified, with the interferometer's fringe pattern projected on it"></canvas></div>
     </div>
     <div class="cell fringe-cell">
-      <div class="head"><h2>The fringes at the focus</h2><span class="small muted" id="fringe-note"></span></div>
+      <div class="head"><h2>The fringes at the focus</h2><span class="small muted" id="fringe-note" title="Visibility: the contrast of the fringes, (Imax − Imin)/(Imax + Imin): 1 for a point star, 0 when they are gone"></span></div>
       <div class="box fringe-box"><canvas id="fringes" aria-label="The fringes seen at the telescope's focus, in true colour, with their brightness across the middle"></canvas></div>
     </div>
     <div class="cell vis-cell">
-      <div class="head"><h2>Visibility against baseline</h2><span class="small muted" id="vis-note"></span></div>
+      <div class="head"><h2>Visibility <span class="fn">|V|</span> against baseline</h2><span class="small muted" id="vis-note"></span></div>
       <div class="box plot-box"><canvas id="visibility" tabindex="0" aria-label="The fringe visibility against the baseline: click or drag to set the baseline"></canvas></div>
     </div>
   </section>
@@ -76,13 +78,17 @@
       <div id="speed-box"></div>
       <div class="small muted" id="motor-note"></div>
     </div>
-    <div class="panel">
-      <div class="label">Fourier-transform spectrometer</div>
+    <details class="panel" id="fts-panel">
+      <summary class="label">Fourier-transform spectrometer</summary>
+      <div class="small muted">For experiments 8 to 12.  Steps the mirror through the interferogram, taking a sample at
+      every step, and transforms the samples back into the spectrum (drawn in blue over the light's own).</div>
       <div id="fts-box" class="stack"></div>
       <div class="row sides-row"><span class="small muted">Scan</span><span id="sides-box"></span></div>
       <div class="row"><button type="button" id="scan" class="primary" title="Move the mirror through the scan, recording a sample at every step">Scan</button><span id="apod-box"></span><button type="button" id="undraw" hidden title="Forget your drawing and go back to the light source's interferogram">Undo drawing</button></div>
+      <div class="small muted" id="fts-gloss"><b>Zero error ε</b>: the sample the spectrometer takes as zero path is ε off the true one.
+      <b>Apodize</b>: taper the samples to zero at the ends of the scan (no ripples beside the lines, but wider lines).</div>
       <div class="small mono" id="fts-readout"></div>
-    </div>
+    </details>
   </aside>
 
   <aside class="controls" id="s-controls" hidden>
@@ -105,24 +111,39 @@
 
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
+  <section class="start"><h3>Start here</h3>
   <p>A Michelson interferometer splits light in two, sends the halves to two mirrors and brings
-  them back together.  Moving the mirror M2 a distance $d$ from where the two paths are equal
-  changes the path difference by $\Delta=2d$ (the light goes there and back); $d$ and $\Delta$
-  are negative when M2 is nearer the beam splitter than that.  Light of wavenumber
-  $\sigma=1/\lambda$ comes back with a phase difference $2\pi\sigma\Delta$, and light with the
-  spectrum $S(\sigma)$ gives the detector the signal
-  $$I(\Delta)=\int S(\sigma)\,[1+\cos 2\pi\sigma\Delta]\,d\sigma .$$
-  The cosine is even, so $I(-\Delta)=I(\Delta)$: the interferogram is the same on both sides of
-  zero path.  Apart from the constant, it is the Fourier (cosine) transform of the spectrum: they
-  are a Fourier pair, and you can change either one here.  The dashed line on the interferogram is
-  the level with no interference, half the signal at zero path.  The screen shows what you would
-  see looking into the instrument, in true colour; over it, the visibility is the contrast
-  $(I_\text{max}-I_\text{min})/(I_\text{max}+I_\text{min})$ of the fringes around the present
-  $\Delta$: 1 for a laser, smaller where the wavelengths in the light have got out of step.  Scroll
-  over the spectrum or the interferogram to zoom; the buttons above them set their ranges.</p>
+  them back together; the screen shows the fringes they make, in true colour.  The page opens
+  with white light and the motor sweeping the mirror M2 back and forth through equal paths.</p>
+  <p><b>Drag the mirror M2</b> on the drawing (or stop the motor, ■, and turn M2's knob for
+  nanometre steps; drag its yellow top to tilt it): the screen and the detector's trace follow.
+  Press a light source on the right, or <b>draw on the spectrum</b> to make your own light.</p>
+  <p>Look for how far from equal paths the fringes last: a few micrometres for white light, the
+  whole travel for a laser.  That reach is the light's coherence, and the trace and the spectrum
+  are each other's Fourier transform.  <b>Stellar</b>, at the top, switches to Michelson's
+  stellar interferometer, which measures a star's size the same way.</p>
+  </section>
+
+  <article class="exp" data-setup="white">
+    <h3>1. White light: fringes only near equal paths</h3>
+    <p>What the page opens with: white light, M2 tilted a little so that the fringes are straight
+    bands (experiment 3), and the motor sweeping it back and forth through equal paths.  Stop the
+    motor (■) and drag M2 yourself, or click on the trace to put it where you like.  The fringes
+    appear only within two or three micrometres of equal paths (the visibility is 1/2 at
+    $\Delta=0.44$ μm and below 0.1 beyond 2.5 μm): every wavelength makes fringes of its own
+    spacing, and they are all in step only at $\Delta=0$.  The detector's record is the same on
+    both sides of the central bright fringe, which is white; next to it the fringes are coloured,
+    and a few fringes away the colours have mixed back into white.  These are the interference colours that soap films show
+    too (a soap film's start from black, because one of its two reflections gains half a wave; so
+    can a beam splitter's, and then the colours are the complementary ones).  On a real instrument
+    nothing tells you where equal paths are: you find them by hunting for these fringes.  The
+    compensating plate gives both beams the same thickness of glass; without it, glass's dispersion
+    would put each colour's zero path at a different place, and the pattern would be spread out
+    and lopsided.  Try the hot filament too, and change its temperature.</p>
+  </article>
 
   <article class="exp" data-setup="count">
-    <h3>1. Count the fringes: the laser's wavelength</h3>
+    <h3>2. Count the fringes: the laser's wavelength</h3>
     <p>A helium-neon laser.  The motor moves M2 at 0.5 μm/s; each time it moves $\lambda/2$, the
     path changes by $\lambda$ and one more ring is born at the centre of the screen.  The counter
     under the drawing counts the bright fringes passing the detector (the cross).  When the mirror
@@ -134,7 +155,7 @@
   </article>
 
   <article class="exp" data-setup="tilt">
-    <h3>2. Straight fringes and rings</h3>
+    <h3>3. Straight fringes and rings</h3>
     <p>Tilting M2 by $\alpha$ makes a thin wedge of air between M1 and the image of M2: the path
     difference grows by $2\alpha$ per unit length across the mirror and the fringes are straight,
     $\lambda/2\alpha$ apart.  Here $\alpha=150$ μrad and the screen shows 12 mm of mirror: about six
@@ -148,7 +169,7 @@
   </article>
 
   <article class="exp" data-setup="sodium">
-    <h3>3. The sodium doublet: fringes that fade and return</h3>
+    <h3>4. The sodium doublet: fringes that fade and return</h3>
     <p>A sodium lamp's yellow light is two lines, 588.995 and 589.592 nm.  Each makes its own
     fringes; where the bright fringes of one fall on the dark ones of the other the fringes fade,
     and they come back in step every
@@ -161,23 +182,6 @@
     fringes fade only to a visibility $(2-1)/(2+1)=1/3$: drag the dot on the weaker line (the
     spectrum is zoomed in on the pair) up to the height of the other and the fringes vanish
     completely at the minima.</p>
-  </article>
-
-  <article class="exp" data-setup="white">
-    <h3>4. White light: finding zero path</h3>
-    <p>What the page opens with.  With white light the fringes appear only within two or three
-    micrometres of equal paths (the visibility is 1/2 at $\Delta=0.44$ μm and below 0.1 beyond
-    2.5 μm): every wavelength makes fringes of its own spacing, and they are all in step only at
-    $\Delta=0$.  M2 is tilted, so the screen shows straight fringes, and the motor sweeps it back
-    and forth through equal paths.  The detector's record is the same on both sides of the central
-    bright fringe, which is white; next to it the fringes are coloured, and a few fringes away the
-    colours have mixed back into white.  These are the interference colours that soap films show
-    too (a soap film's start from black, because one of its two reflections gains half a wave; so
-    can a beam splitter's, and then the colours are the complementary ones).  On a real instrument
-    nothing tells you where equal paths are: you find them by hunting for these fringes.  The
-    compensating plate gives both beams the same thickness of glass; without it, glass's dispersion
-    would put each colour's zero path at a different place, and the pattern would be spread out
-    and lopsided.  Try the hot filament too, and change its temperature.</p>
   </article>
 
   <article class="exp" data-setup="coherence">
@@ -284,14 +288,9 @@
   </article>
 
   <h3>The stellar interferometer</h3>
-  <p>Light from a single point far away arrives as plane waves, and two mirrors anywhere in it
-  give perfect fringes.  A star of angular size $\theta$ is many points, each making its own
-  fringes, shifted according to its direction; with the mirrors a distance $B$ apart these get
-  out of step once $B\theta$ is about $\lambda$.  The fringe visibility against baseline is the
-  Fourier transform of the star's brightness, at spatial frequency $B/\lambda$ (the van
-  Cittert–Zernike theorem).  In Michelson's design the inner mirrors are fixed, so the fringes keep
-  their spacing while the outer mirrors set $B$; with two slits instead, the fringes would also get
-  finer as $B$ grows.</p>
+  <p>Press <b>Stellar</b> at the top of the page.  Two mirrors on a beam across a telescope
+  collect a star's light, and the fringes at the focus fade as the mirrors are moved apart: how
+  soon they fade tells the star's size.  Drag an outer mirror, or let the baseline sweep.</p>
 
   <article class="exp" data-setup="star">
     <h3>13. Measure a star</h3>
@@ -332,6 +331,31 @@
     stars too close together for any telescope to show apart.</p>
   </article>
 
+  <section id="how">
+  <h3>How it works</h3>
+  <p>Moving the mirror M2 a distance $d$ from where the two paths are equal
+  changes the path difference by $\Delta=2d$ (the light goes there and back); $d$ and $\Delta$
+  are negative when M2 is nearer the beam splitter than that.  Light of wavenumber
+  $\sigma=1/\lambda$ comes back with a phase difference $2\pi\sigma\Delta$, and light with the
+  spectrum $S(\sigma)$ gives the detector the signal
+  $$I(\Delta)=\int S(\sigma)\,[1+\cos 2\pi\sigma\Delta]\,d\sigma .$$
+  The cosine is even, so $I(-\Delta)=I(\Delta)$: the interferogram is the same on both sides of
+  zero path.  Apart from the constant, it is the Fourier (cosine) transform of the spectrum: they
+  are a Fourier pair, and you can change either one here.  The dashed line on the interferogram is
+  the level with no interference, half the signal at zero path.  The screen shows what you would
+  see looking into the instrument, in true colour; over it, the visibility is the contrast
+  $(I_\text{max}-I_\text{min})/(I_\text{max}+I_\text{min})$ of the fringes around the present
+  $\Delta$: 1 for a laser, smaller where the wavelengths in the light have got out of step.  Scroll
+  over the spectrum or the interferogram to zoom; the buttons above them set their ranges.</p>
+  <p><em>The stellar interferometer.</em>  Light from a single point far away arrives as plane waves, and two mirrors anywhere in it
+  give perfect fringes.  A star of angular size $\theta$ is many points, each making its own
+  fringes, shifted according to its direction; with the mirrors a distance $B$ apart these get
+  out of step once $B\theta$ is about $\lambda$.  The fringe visibility against baseline is the
+  Fourier transform of the star's brightness, at spatial frequency $B/\lambda$ (the van
+  Cittert–Zernike theorem).  In Michelson's design the inner mirrors are fixed, so the fringes keep
+  their spacing while the outer mirrors set $B$; with two slits instead, the fringes would also get
+  finer as $B$ grows.</p>
+
   <h3>What is approximate</h3>
   <p class="small">Colours come from the CIE 1931 colour matching functions (the analytic fit of
   Wyman, Sloan and Shirley, 2013) and are shown in sRGB; pure spectral colours lie outside what a
@@ -346,6 +370,7 @@
   wavelength of the band), without the blurring of the image by the air.</p>
   <p class="small muted">New in 2026 for BrainFlux.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+  </section>
 </aside>
 
 <script type="module" src="app.js"></script>

@@ -15,6 +15,16 @@ def check(cond, msg):
 def frac(p, pt):
     return (pt[0] / p['w'], pt[1] / p['h'])
 
+def theme_colors(b):
+    """The luminance (0 black, 1 white) of the page's background, the hint's text, and the
+    Start-here block's text and background, with the drawer open."""
+    b.eval("document.querySelector('#help').classList.add('open')")
+    out = b.eval("""(() => { const cs = (e) => getComputedStyle(e), h = document.querySelector('#schem-hint'), s = document.querySelector('#help .start');
+      const lum = (c) => { const m = c.match(/\\d+(\\.\\d+)?/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
+      return { page: lum(cs(document.body).backgroundColor), hint: lum(cs(h).color), start: lum(cs(s).color), start_bg: lum(cs(s).backgroundColor) }; })()""")
+    b.eval("document.querySelector('#help').classList.remove('open')")
+    return out
+
 # Run a scan to its end, 0.05 s at a time.
 FINISH_SCAN = '(() => { let i = 0; while (__app.fts().scanning && i < 100000) { __app.M.tick(0.05); i++; } return i; })()'
 # The recovered spectrum at a wavenumber (between the bins), and its peaks in a range.
@@ -48,6 +58,23 @@ with Browser('interferometer/index.html', size=(1400, 900)) as b:
           f'the detector\'s record of white light is the same on both sides of zero path (columns differ by {sym:.1e} from their mirror images; peak {max(tc["hi"]):.3f})')
     sm = b.eval('Math.max(...[0.13, 0.5, 1.07, 2.2, 3.9, 47.3].map((D) => Math.abs(__app.intensity(D) - __app.intensity(-D))))')
     check(sm < 1e-12, f'I(Δ) = I(−Δ) for white light (largest difference {sm:.1e})')
+
+    # The first screen: a hint under the schematic says what to drag; the readouts say in words
+    # what their numbers are; the spectrometer's panel is folded away until something needs it.
+    hint = b.eval("(() => { const h = document.querySelector('#schem-hint'), r = h.getBoundingClientRect(); return [h.className, h.textContent, r.width > 0 && r.height > 0, r.top, document.querySelector('#schematic').getBoundingClientRect().bottom]; })()")
+    check(hint[0] == 'hint' and hint[1].startswith('Drag the mirror M2') and hint[2] and abs(hint[3] - hint[4]) < 12,
+          f'a hint directly under the schematic says what to drag: {hint[1][:44]!r}')
+    words = b.eval("['#mirror-readout', '#counter-readout', '#screen-note'].map((s) => document.querySelector(s).textContent).join(' | ')")
+    check('from equal paths' in words and 'path difference' in words and 'Fringes counted' in words and 'fringe contrast (visibility)' in words,
+          f'the readouts say what their numbers are: {words[:90]!r}...')
+    check(not b.eval("document.querySelector('#fts-panel').open"), "the spectrometer's panel is folded away at opening")
+    n_vis = b.eval("[...document.querySelectorAll('#m-controls input[type=range], #m-controls button')].filter((e) => e.getClientRects().length).length")
+    print(f'      {n_vis} sliders and buttons visible at opening')
+    b.click('#plot-box button:nth-child(2)'); frame_passed()
+    check(b.eval("document.querySelector('#fts-panel').open") and b.eval('__app.state.michelson.plot') == 'fts', 'pressing Spectrometer above the interferogram unfolds it')
+    hint_cols = theme_colors(b)
+    check(hint_cols['page'] > 0.8 and hint_cols['hint'] < 0.5 and hint_cols['start'] < 0.3 and hint_cols['start_bg'] > 0.8,
+          f"light theme: the hint and the Start-here block read (luminances: page {hint_cols['page']:.2f}, hint {hint_cols['hint']:.2f}, block {hint_cols['start']:.2f} on {hint_cols['start_bg']:.2f})")
 
     # The fringe counter: 10 μm of mirror travel with the laser is 2 x 10 / 0.6328 = 31.6 fringes,
     # on one side of equal paths or straddling them.
@@ -210,6 +237,10 @@ with Browser('interferometer/index.html', size=(1400, 900)) as b:
 
     # The stellar interferometer.
     b.eval('__app.setups.betelgeuse()'); b.sleep(0.5)
+    sth = b.eval("(() => { const h = document.querySelector('#st-hint'), r = h.getBoundingClientRect(); return [h.className, h.textContent, r.height > 0, r.top, document.querySelector('#st-schematic').getBoundingClientRect().bottom]; })()")
+    check(sth[0] == 'hint' and sth[1].startswith('Drag an outer mirror') and sth[2] and abs(sth[3] - sth[4]) < 12, 'the stellar view has its own hint, under its schematic')
+    st_words = b.eval("document.querySelector('#st-readout').textContent + ' | ' + document.querySelector('#fringe-note').textContent")
+    check('fringe contrast |V|' in st_words and 'first vanish at' in st_words and 'contrast (visibility)' in st_words, f'the stellar readouts say what their numbers are: {st_words[:70]!r}...')
     B0 = b.eval('__app.firstNull()')
     check(abs(B0 - 3.078) < 0.005, f'Betelgeuse: 47 mas at 575 nm, first null at B = {B0:.3f} m (1.22 λ/θ = 3.078)')
     p = b.eval('__app.S.handlePoints()')
@@ -280,6 +311,13 @@ with Browser('interferometer/index.html', size=(1400, 900)) as b:
     for name in b.eval('Object.keys(__app.setups)'):
         b.eval(f'__app.setups[{json.dumps(name)}]()'); b.sleep(2.5 if name in ('fts', 'sides', 'resolution') else 1.2)
         b.screenshot(f'build/ifm-exp-{name}.png')
+    first = b.eval("(() => { const s = [...document.querySelector('#help').children].filter((e) => e.tagName !== 'HEADER')[0]; return [s.className, s.querySelector('h3')?.textContent, !!s.querySelector('math'), s.textContent.length]; })()")
+    check(first[0] == 'start' and first[1] == 'Start here' and not first[2] and 300 < first[3] < 1600, f'the drawer starts with a "Start here" block in plain words ({first[3]} characters, no equations)')
+    order = b.eval("[...document.querySelector('#help').children].map((e) => e.tagName + (e.id ? '#' + e.id : '') + (e.dataset.setup ? '=' + e.dataset.setup : ''))")
+    last_exp = max(i for i, x in enumerate(order) if '=' in x)
+    check(order.index('SECTION#how') > last_exp and order[2] == 'ARTICLE=white', f'the theory ("How it works") comes after the experiments, and the opening state is experiment 1 ({order[2]})')
+    hows = b.eval("document.querySelectorAll('#how math').length")
+    check(hows >= 6, f'"How it works" keeps the equations ({hows} formulas)')
     n_exp = b.eval("document.querySelectorAll('#help .exp[data-setup]').length")
     check(n_exp == len(b.eval('Object.keys(__app.setups)')) and 8 <= n_exp <= 16, f'{n_exp} experiments in the drawer, one set-up each')
     missing = b.eval("[...document.querySelectorAll('#help .exp[data-setup]')].map((a) => a.dataset.setup).filter((n) => !__app.setups[n])")
@@ -306,17 +344,31 @@ with Browser('interferometer/index.html', size=(1400, 900)) as b:
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 
-# The phone layout: everything stacks under the stage.
+# The dark theme: the hint and the Start-here block read.
+with Browser('interferometer/index.html', size=(1400, 900)) as b:
+    b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
+    b.wait('window.__app && __app.ready'); b.sleep(1)
+    cols = theme_colors(b)
+    check(cols['page'] < 0.2 and cols['hint'] > 0.5 and cols['start'] > 0.7 and cols['start_bg'] < 0.3,
+          f"dark theme: the hint and the Start-here block read (luminances: page {cols['page']:.2f}, hint {cols['hint']:.2f}, block {cols['start']:.2f} on {cols['start_bg']:.2f})")
+    b.screenshot('build/ifm-dark.png')
+    errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
+    check(not errors, 'dark theme: no exceptions')
+
+# The phone layout: everything stacks under the stage, the hint on the first screen.
 with Browser('interferometer/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1.2)
     b.screenshot('build/ifm-phone.png')
     over = b.eval('document.documentElement.scrollWidth > window.innerWidth + 1')
     check(not over, 'phone width: no sideways scrolling')
+    ph = b.eval("(() => { const r = document.querySelector('#schem-hint').getBoundingClientRect(); return [r.top, r.bottom, innerHeight, scrollY]; })()")
+    check(ph[3] == 0 and ph[0] > 0 and ph[1] <= ph[2], f'phone: the hint is on the first screen, under the schematic (its bottom at {ph[1]:.0f} of {ph[2]} px)')
     b.eval('__app.setups.sides()'); b.sleep(0.5)
     over = b.eval('document.documentElement.scrollWidth > window.innerWidth + 1')
     check(not over, 'phone width, the spectrometer: no sideways scrolling')
     b.eval('__app.setups.star()'); b.sleep(1)
     b.screenshot('build/ifm-phone-star.png')
+    check(b.eval("document.querySelector('#st-hint').getBoundingClientRect().height > 0"), 'phone, stellar: its hint is shown')
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'phone: no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 print(f"SUMMARY: {'all passed' if not failures else str(len(failures)) + ' failed'}")

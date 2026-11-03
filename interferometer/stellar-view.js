@@ -271,7 +271,7 @@ function drawFringes() {
   ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillText('brightness across the middle', f.left + 2, imgH + 4);
   const V = Math.hypot(...currentV());
-  setGroups($('#fringe-note'), [['visibility ', { v: V, dec: 3, w: 5 }], ...(state.bw > 0 ? [['over ', { v: state.bw, dec: 0, w: 3 }, ' nm']] : [])]);
+  setGroups($('#fringe-note'), [['contrast (visibility) ', { v: V, dec: 3, w: 5 }], ...(state.bw > 0 ? [['over ', { v: state.bw, dec: 0, w: 3 }, ' nm']] : [])]);
 }
 
 // --------------------------------------------------------------------- visibility plot
@@ -314,7 +314,7 @@ function drawVisibility() {
   ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
   ctx.fillStyle = c.accent; fillSlots(ctx, ['at λ = ', { v: state.lam, dec: 0, w: 3 }, ' nm'], f.right - 6, f.top + 4);
   if (state.bw > 0) { ctx.fillStyle = c.ink2; fillSlots(ctx, ['- - over ', { v: state.bw, dec: 0, w: 3 }, ' nm'], f.right - 6, f.top + 18); }
-  $('#vis-note').textContent = 'click or drag to set the baseline';
+  $('#vis-note').textContent = '|V|: the fringes\' contrast; click or drag to set the baseline';
 }
 function visPointer(e) { const r = visCanvas.getBoundingClientRect(); return visFrame.invX(e.clientX - r.left); }
 visCanvas.addEventListener('pointerdown', (e) => { if (!visFrame) return; visCanvas.setPointerCapture(e.pointerId); visDrag = true; setSweep(false); setB(Math.max(0, Math.min(xmax, visPointer(e)))); });
@@ -328,12 +328,12 @@ visCanvas.addEventListener('pointercancel', () => { visDrag = false; });
 const stLines = [];
 function updateReadout() {
   const V = currentV(), lam = state.lam * 1e-9, B1 = firstNullB();
-  const lines = [[['|V| = ', { v: Math.hypot(...V), dec: 3, w: 5 }], ['at B = ', { v: state.B, dec: 3, w: 6 }, ' m']]];
-  if (Number.isFinite(B1)) lines.push(['first null of one star:', ['B = ', { v: B1, dec: 3, w: 7 }, ' m']]);
-  if (state.B > 0) lines.push(['fringes on the sky', ['λ/B = ', { v: lam / state.B / MAS, dec: 1, w: 7 }, ' mas']]);
+  const lines = [[['fringe contrast |V| = ', { v: Math.hypot(...V), dec: 3, w: 5 }], ['at baseline B = ', { v: state.B, dec: 3, w: 6 }, ' m']]];
+  if (Number.isFinite(B1)) lines.push(['one star\'s fringes first vanish at', ['B = ', { v: B1, dec: 3, w: 7 }, ' m']]);
+  if (state.B > 0) lines.push(['fringes projected on the sky:', ['λ/B = ', { v: lam / state.B / MAS, dec: 1, w: 7 }, ' mas apart']]);
   if (state.kind === 'binary') {
     const proj = state.rho * Math.cos((state.pa * Math.PI) / 180);
-    if (Math.abs(proj) > 1e-6) lines.push(['beat period', ['λ/(ρ cos φ) = ', { v: lam / (Math.abs(proj) * MAS), dec: 3, w: 7 }, ' m']]);
+    if (Math.abs(proj) > 1e-6) lines.push(['the two stars\' fringes beat every', ['λ/(ρ cos φ) = ', { v: lam / (Math.abs(proj) * MAS), dec: 3, w: 7 }, ' m']]);
   }
   const box = $('#st-readout');
   while (stLines.length < lines.length) stLines.push(el('div'));
