@@ -151,11 +151,25 @@ input.bad, textarea.bad { border-color: var(--warn); }
 .drawer math[display="block"] { margin: 8px 0; }
 .drawer figure { margin: 8px 0; }
 .drawer figure img { max-width: 100%; border-radius: 4px; }
+/* "Start here": the first thing in the drawer, in plain words: what the page shows, what to
+   drag or click, what to look for.  The theory goes at the end of the drawer, under "How it
+   works". */
+.drawer .start {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 14px; margin: 10px 0 14px;
+}
+.drawer .start h3 { margin: 0 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
+.drawer .start p { margin: 6px 0; }
+.drawer .start p:last-child { margin-bottom: 0; }
+.drawer .start kbd, .drawer .start b { font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
 
 /* ------------------------------------------------------------------- misc */
 
 canvas { display: block; touch-action: none; }
+/* A one-line hint on or under the main picture: what to drag or click, visible on opening. */
+.hint { font-size: 13px; color: var(--ink-2); }
+.hint::before { content: "\2192\00a0"; color: var(--accent); }
 .pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
 kbd { font-family: var(--mono); font-size: 0.9em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel-2); }
 .toast {
