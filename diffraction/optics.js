@@ -211,13 +211,18 @@ export function sideView(re0, im0, n, dx, lambda, zs) {
  * square comes out 296 um wide, and a zone plate's fine rings alias, sending light to foci and
  * directions a real plate doesn't.  t(x, y) is the amplitude transmission; with phase = true,
  * it is the phase instead, NaN where the aperture is opaque.  Pixels whose four corners and
- * centre agree are taken as uniform.  Returns [re, im].
+ * centre agree are taken as uniform.  Returns [re, im, ph]: ph is the mean of the phase over
+ * each pixel's open part (0 where there is none, and without phase), unwrapped as t gives it,
+ * so that it can be scaled like the thickness of glass it stands for: at another wavelength
+ * the same glass is the phase times lambda_0 / lambda.  (The field re + i im keeps the phase
+ * only modulo 2 pi, and scaling that would only re-blaze a diffractive lens.)
  */
 export function sampleAperture(n, dx, t, { phase = false, sub = 4 } = {}) {
-  const re = new Float64Array(n * n), im = new Float64Array(n * n);
+  const re = new Float64Array(n * n), im = new Float64Array(n * n), ph = new Float64Array(n * n);
+  let sum = 0, cnt = 0;   // the phase over a pixel's open sub-samples
   const add = (v, o, w) => {
     if (!phase) re[o] += v * w;
-    else if (v === v) { re[o] += Math.cos(v) * w; im[o] += Math.sin(v) * w; } // NaN: opaque
+    else if (v === v) { re[o] += Math.cos(v) * w; im[o] += Math.sin(v) * w; sum += v; cnt++; } // NaN: opaque
   };
   // The corners, (n + 1)^2 of them, shared by neighbouring pixels.
   const m = n + 1, corner = new Float64Array(m * m);
@@ -227,14 +232,20 @@ export function sampleAperture(n, dx, t, { phase = false, sub = 4 } = {}) {
     for (let i = 0; i < n; i++) {
       const o = j * n + i, x = (i - n / 2) * dx, y = (n / 2 - j) * dx, v = t(x, y);
       const c = j * m + i;
-      if (same(v, corner[c]) && same(v, corner[c + 1]) && same(v, corner[c + m]) && same(v, corner[c + m + 1])) { add(v, o, 1); continue; }
+      if (same(v, corner[c]) && same(v, corner[c + 1]) && same(v, corner[c + m]) && same(v, corner[c + m + 1])) {
+        add(v, o, 1);
+        if (phase && v === v) ph[o] = v;
+        continue;
+      }
       const w = 1 / (sub * sub);
+      sum = 0; cnt = 0;
       for (let b = 0; b < sub; b++) {
         for (let a = 0; a < sub; a++) add(t(x + ((a + 0.5) / sub - 0.5) * dx, y - ((b + 0.5) / sub - 0.5) * dx), o, w);
       }
+      if (phase && cnt) ph[o] = sum / cnt;
     }
   }
-  return [re, im];
+  return [re, im, ph];
 }
 
 /**
