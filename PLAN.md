@@ -252,3 +252,29 @@ Left for later, besides the list above:
   `touch-action: none` on every canvas, so a swipe over a plot doesn't scroll a phone's page.
 - Imaging: a hollow-cone condenser with a matching phase ring (the real phase-contrast
   microscope).  Interferometer: dispersion in an uncompensated arm.
+
+## Status, 2026-11-03
+
+The author's second look (Prompt 14): "from the moment the apps are opened, someone who has a
+little exposure to the concepts understands how to play with them".  One standard for all
+thirteen beta demos, in `CLAUDE_CODE_CHAT.md` (Response 14) and in two shared styles:
+
+- `.hint`: a one-line hint on or directly under the main picture saying what to drag or click,
+  visible on opening, at phone width too.
+- `.drawer .start`: the drawer opens with "Start here", in plain words and without equations;
+  the theory and the conventions go at the end under "How it works".
+- Readouts carry words, not bare symbols; the opening is the simplest instance of the idea and
+  is experiment 1; jargon gets a gloss under its control; the obscure controls fold under
+  "More".
+
+Openings changed: imaging (Abbe's grating in bright field), phase space (the coherent state
+circling in the harmonic well), tomography (three disks, three panels), drums (a struck drum).
+The cards keep the pictures that look best, by `#setup=` addresses in `tools/thumbs.py`.
+
+Left for later, besides the lists above:
+
+- `lib/style.css` gives every canvas `touch-action: none`.  On a phone a finger can't scroll
+  the page from over a picture that fills the width.  Some demos set `pan-y` on canvases that
+  take no drag; the rest would need `none` only while a drag is in progress.
+- The six finished demos (FFT, 1D and 2D Schrödinger, plane waves, diffraction, Fourier
+  series) haven't had the same first-minute pass; their drawers still open with the theory.
