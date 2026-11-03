@@ -50,12 +50,50 @@ def press(b, sel, fx, fy=0.5):
     b.mouse('mouseMoved', x, y); b.mouse('mousePressed', x, y, 1, 'left'); b.mouse('mouseReleased', x, y, 0, 'left')
     b.eval('__app.step(0, 1)')
 
+def visible_hints(b):
+    """The hint lines on or under the pictures that are shown, with their text."""
+    return b.eval("[...document.querySelectorAll('.hint')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).map((e) => e.textContent.trim())")
+
+def first_screen(b, where):
+    """What a cold reader needs on the first screen: a hint under the top plot saying what to
+    drag, the two small pictures captioned in words, the read-out in words."""
+    hints = visible_hints(b)
+    check(len(hints) == 1 and hints[0].startswith('Drag the square handle') and 'line' in hints[0], f'{where}: one hint under the top plot says what to drag ({hints})')
+    ro = b.eval("document.querySelector('#readout').innerText")
+    check(ro.startswith('The light at') and 'n =' in ro and 'κ =' in ro, f'{where}: the read-out has words ({ro[:50]}...)')
+
 with Browser('dispersion/index.html', size=(1400, 900)) as b:
     b.wait('window.__app && __app.ready', timeout=90)
     b.eval('__app.hold(true)')
     b.screenshot('build/dsp-start.png')
     s = b.eval('__app.state')
     check(s['view'] == 'medium' and s['sweep'] and s['medium'] == 'one', f"opens on the medium view, the light's frequency sweeping (ω = {s['probe']:.3f})")
+    first_screen(b, 'opening')
+    # Each view has its own hint where the eye is.
+    b.eval("__app.setView('kk')"); hk = visible_hints(b)
+    b.eval("__app.setView('pulse')"); hp = visible_hints(b)
+    b.eval("__app.setView('medium')")
+    check(len(hk) == 1 and hk[0].startswith('Draw on this plot') and len(hp) == 1 and 'carrier' in hp[0] and 'detector' in hp[0],
+          f'the Kramers–Kronig view says to draw, the pulse view what to drag ({hk[0][:30]}... | {hp[0][:30]}...)')
+    # Plain words on the side panel: every medium preset has a tooltip, so do the chips and buttons.
+    titles = b.eval("[...document.querySelectorAll('#media button')].map((e) => e.title)")
+    check(all(len(t) > 30 for t in titles) and any('metal' in t for t in titles) and any('AM radio' in t for t in titles), f'every medium preset has a tooltip in plain words ({len(titles)})')
+    chips = b.eval("[...document.querySelectorAll('#osc-chips button')].map((e) => [e.textContent.trim(), e.title])")
+    check(any(t == '+ free' and 'no spring' in title and 'metal' in title for t, title in chips) and any(t == '1' and 'spring' in title for t, title in chips)
+          and 'no spring' in b.eval("document.getElementById('osc-note').textContent"),
+          'the chips say what a line and free electrons are ("free: no spring, as in a metal")')
+    labels = b.eval("[...document.querySelectorAll('#osc-sliders .slider label, #light-box .slider label')].map((e) => e.textContent.trim())")
+    check(any(l.startswith('resonance') for l in labels) and any(l.startswith('width') for l in labels) and any(l.startswith('strength') for l in labels) and any(l.startswith('frequency') for l in labels),
+          f'the sliders say what their symbols are {labels}')
+    # The drawer: Start here first, in plain words without equations; the theory at the end.
+    order = b.eval("[...document.querySelectorAll('#help > section, #help > article')].map((e) => e.className)")
+    start = b.eval("document.querySelector('#help .start').innerText")
+    check(order[0] == 'start' and order[-1] == 'theory' and 'math' not in b.eval("document.querySelector('#help .start').innerHTML")
+          and 'Drag' in start and 'Kramers–Kronig' in start and len(start) < 1500, f'the drawer opens with Start here and ends with How it works ({len(order)} parts)')
+    # The small pictures: captioned in words, with the charge's lag and swing in words.
+    b.eval('__app.step(0, 1)')
+    titles = b.eval("[...document.querySelectorAll('#pics canvas')].map((c) => c.getAttribute('aria-label'))")
+    check(len(titles) == 2 and 'spring' in titles[0] and 'wave' in titles[1], 'the two small pictures say what they are')
     w0 = b.eval('__app.state.probe')
     for _ in range(20): b.eval('__app.step(0.25, 1)')
     w1 = b.eval('__app.state.probe')
@@ -110,7 +148,7 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     # same); Play and Pause leave the button beside them where it was.
     RO = '#readout > div, #readout .fixnum'
     tap = lambda sel, fx: (lambda: press(b, sel, fx))
-    depth = lambda v: (lambda: set_slider(b, '#pulse-box', 'z', v))
+    depth = lambda v: (lambda: set_slider(b, '#pulse-box', 'detector z', v))
     for name, steps in (('one', [lambda: b.eval('__app.step(0.4, 1)')] * 12),
                         ('glass', [tap('#resp', f) for f in (0.08, 0.15, 0.4, 0.75, 0.97)]),
                         ('wave', [tap('#refl', f) for f in (0.12, 0.3, 0.47, 0.5, 0.53, 0.7, 0.93)]),
@@ -153,7 +191,7 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     run(b, 'reststrahlen')
     o = b.eval('__app.optics(6.2)')
     check(o['R'] > 0.9, f"rock salt reflects {o['R'] * 100:.0f}% at 6.2 THz, between ω_TO and ω_LO")
-    set_slider(b, '#osc-sliders', 'γ', 0.5)
+    set_slider(b, '#osc-sliders', 'width γ', 0.5)
     o = b.eval('__app.optics(6.2)')
     check(abs(o['R'] - 0.75) < 0.01, f"with γ = 0.5 THz it reflects {o['R'] * 100:.1f}% there")
     run(b, 'metal')
@@ -291,10 +329,18 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     for name in ('one', 'sliver', 'delay'):
         run(b, name); b.screenshot(f'build/dsp-dark-{name}.png')
     check(b.eval("getComputedStyle(document.body).backgroundColor") != 'rgb(244, 243, 239)', 'dark: the page follows the dark colour scheme')
+    run(b, 'one'); first_screen(b, 'dark')
+    hint_ink, bg = b.eval("[getComputedStyle(document.getElementById('resp-hint')).color, getComputedStyle(document.body).backgroundColor]")
+    start_ink, start_bg = b.eval("(() => { const s = document.querySelector('#help .start'); const c = getComputedStyle(s); return [c.color, c.backgroundColor]; })()")
+    lum = lambda css: sum(int(v) for v in re.findall(r'\d+', css)[:3]) / 3
+    check(lum(hint_ink) - lum(bg) > 80 and lum(start_ink) - lum(start_bg) > 80, f'dark: the hint ({hint_ink} on {bg}) and the Start-here block ({start_ink} on {start_bg}) read')
 
 with Browser('dispersion/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready', timeout=90); b.eval('__app.hold(true)')
     b.screenshot('build/dsp-phone-start.png')
+    first_screen(b, 'phone')
+    hint = b.box('#resp-hint'); plot = b.box('#resp-wrap')
+    check(hint[1] >= plot[1] + plot[3] - 1 and hint[1] + hint[3] <= 844, f'on a phone the hint sits right under the top plot, in view without scrolling (bottom at {hint[1] + hint[3]:.0f} px)')
     wide = []
     for name in ('one', 'metal', 'sliver', 'delay', 'precursors'):
         run(b, name)
