@@ -1038,3 +1038,256 @@ isn't installed here, so that second unit-test run was skipped.)
 scroll the page from over a picture that fills the width; several demos set `pan-y` on the
 canvases that take no drag, and the rest would need it only while dragging.  Still pictures
 per experiment.
+
+## Prompt 15
+
+> Keep going with the six finished demos. Make sure the physics is correct and understandable.
+> Be a bit more conservative in your user interface changes with these. The original versions
+> of the 1D Schrodinger and 2DFFT were quite popular and I'd hate to mess them up by either
+> adding too many features or dumbing them down to make them less interesting to use. The 2D
+> Schrodinger is newer and its "Born Approximation" and "Partial Wave" physics and pedagogy
+> should be checked for correctness and understandability.
+>
+> The phased array demo is good, but the radio interferometer tab is not an obvious mode, and
+> it's much less obvious what's going on once you're in that mode.
+>
+> The radio interferometer should be broken out to its own app. Check out how I currently
+> teach it at https://github.com/HMC-AdLab/radio_interferometer_lab for some inspiration (if
+> this is not public, you should have access through my github login). More scaffolding
+> should be used to build up intuition in steps:
+> * one incoherent point source's correlation (with various amounts of band limiting on a
+>   slider, which you show in time and in frequency before you do anything spatial).
+> * Two incoherent point sources, where you can drag the sources around and a pair of
+>   detectors around and watch the "live" simulated timestreams and live spectra of the
+>   sources and detectors, watch live time streams of the auto correlation and self
+>   correlation and auto spectra and self spectra of the pair of detectors. The students need
+>   to think about complex magnitude and phase and what negative frequencies mean if you show
+>   that.
+> * Then have a few incoherent point sources that you can drag around along with a pair of
+>   detectors that you can drag around on a 2D UV plane (labeled in both distance between
+>   antennas in meters and in some understandable version of u and v units, given the central
+>   wavelength). Here (like the 2DFFT demo) have an image plane on the left with a few (say
+>   1-6) incoherent point sources arranged in as tips of a Pentagon or whatever, but with
+>   sliders to change various things. On the right is the uv plane, shown in the same way as
+>   in the 2DFFT app: default to showing magnitude as lightness and phase as hue with a pull
+>   down menu for other options. There would be two draggable dots on the uv plane
+>   representing two receivers. I think it's cleaner if dragging one also drags the other
+>   symmetrically around the origin. As you drag, you see the live time and frequency plots
+>   from both receivers and their correlation. It should be obvious to the students from the
+>   "live" time-varying 1D plots, that the time average correlation's magnitude and phase
+>   becomes the magnitude and phase of the point on the uv plane where you are dragging the
+>   receivers. (Maybe show a complex plane inset, with the hue-value color scheme, under a
+>   live-updating scatter plot of the last hundred or so time-averaged correlations. As you
+>   drag sources or detectors around, everything updates live.)
+> * Eventually when students understand what's going on with a few point sources, they can
+>   move to sources like a disk and a galaxy-looking thing and the drawing of Fourier, all
+>   initially with just a pair of antennas that can be dragged around to map out the 2D uv
+>   plane. (Or at least they'd drag them around on an already mapped out 2D uv plane to see
+>   how such a uv plane could be populated with enough pairs at enough different separations
+>   and angles.)
+> * The step after that is either to turn on earth rotation for the pair or to turn on a whole
+>   array (eventually turning on both). If you turn on a whole array of antennas (with
+>   arrangements you can select, like the Y-shape or a random array), their O(n^2) points in
+>   the uv plane would show up. Independently, you can turn on earth rotation to show whole
+>   paths of antenna pairs as the earth rotates. Once you're in the "earth rotation" or "lots
+>   of pairs" mode, it would turn on a second row of 2D plots. Under the "ideal" or "expected"
+>   uv plane would be the "measured" or "sampled" uv plane of wherever the antenna pairs
+>   actually (and probably sparsely) measure (instantaneously or where they sweep as the earth
+>   rotates). Then to the left of that and under the 2D plot of the sources themselves is the
+>   reconstruction. (Make sure there is an arrow that points left toward this, so that the
+>   flow of information or flow of processing steps is obvious to the students.) Then there
+>   can be a checkbox to turn CLEAN on and off or a menu of different such algorithms. I've
+>   thought less about how to demonstrate this.
+>
+> I want students to understand how incoherent sources still give rise to things that look
+> like interference fringes because you're looking at the *correlation* between two
+> receivers. Where the "fringes" come from. Intuitively, why are the 2D set of correlations
+> the 2D fourier transform of the source? Even though this is all about correlations and
+> fringes, why does this work for incoherent sources, but would fail (or have to be modified)
+> if the sources were coherent. (This last one is a very stretch goal.) I don't know if the
+> following should be its own app or if some ideas should be incorporated into the radio
+> interferometry lab, but check out this idea that I want to build in our Junior-level optics
+> lab: https://github.com/gallicchio/fourier-etch-a-sketch
+
+Then, while the work ran: the lab repository was moved to
+`github.com/gallicchio/radio_interferometer_lab` so this session could read it, and "keep
+going on all of this until 2pm or until you run out of credits for this week."
+
+### Response 15 (2026-11-03)
+
+**The lab materials.**  I read the handout (the delay τ = D sin θ / c, multiply and average,
+⟨v₁v₂⟩ = I cos 2πθδ with δ = D/λ: a fringe in the *separation*), the 54 slides (one dish sums
+the wave across its aperture; two dishes; the correlations of two sources add, with the
+"to the board!" caveat that fields add but the square-and-average does not; the electronic
+delay to a reference direction; few antennas, many baselines; the Y and Earth rotation; then
+white noise, a bandpass, narrow-band noise whose amplitude holds for 1/Δf, auto- and
+cross-correlation, "spatially incoherent sources make coherent fields far away"), the
+notebook (complex Gaussian noise per source, receivers moved symmetrically about the origin,
+correlation = mean(A* B), phase as hue and magnitude as brightness, the 2D FFT back to the
+image, and the near-field plots against ΔX and the mean X), the GNU Radio flowgraph
+(multiply-conjugate, a single-pole IIR, a constellation sink) and the Fourier Etch-a-Sketch
+(intensity correlations give |V|², the phase problem; the live display paints the uv plane as
+the knobs move a collector, and the inverse transform of what has been painted so far).
+
+**The six finished demos**, reviewed conservatively (no features added, nothing removed; a
+hint on the picture, a Start-here block, words beside symbols, and the physics checked claim
+by claim against the running page):
+
+- **Plane waves**: the code was right (every form's direction, the phasor's sense, the
+  crest tracker, the standing wave's λ/2, the fringes of crossed beams, the beats, the
+  packet's group velocity for all four dispersion relations, the k < 0 fix of Response 1).
+  The help was not: "engineers write j = −i" (they write e^{j(ωt − k·r)}); "the complex wave
+  carries the direction in its phase alone" (only once the sign convention is agreed); the
+  beats' envelope "drifts" (for light it moves at c with the crests, so the pattern slides
+  whole).  Every experiment now quotes the demo's numbers.
+- **Fourier series**: the code was right (every preset's coefficients, the Gibbs overshoot
+  9.4% with 5 terms and 9.0% with 15, the Web Audio graph's harmonics and gain, no preset
+  clips).  "It shrinks in width but stays 9% high" became "overshoots by about 9% of the jump
+  however many terms you add"; the drawn period's analysis (512 samples, 48 harmonics, the
+  average dropped) is now said.
+- **1D Schrödinger**: one error in the code.  The P(x<0) / P(x>0) readout counted the grid
+  point at x = 0 wholly on the right, so the finite well's symmetric ground state read 0.489
+  / 0.511; a cut cell now counts by its fraction (0.500 / 0.500), with a unit test.
+  Everything else was measured and holds: the box levels n²π²/2L² (numbered from 1), the
+  harmonic n + ½ (from 0), the delta's −0.4650 and T = 0.513, the step's 0.0941 (the
+  plane-wave R at k₀ = 2.4 is 0.083; the packet's spread raises it, now said), the barrier's
+  0.388 against 0.39, the resonances 0.985 / 0.312, the double well's period 56.2 (the log's
+  55.2 was the pre-fix softened value), the bouncer's Airy zeros, the Bloch period 25.13, the
+  revival at 127.3, σxσp = 0.500 for every Gaussian, ∫j dx = ⟨p⟩/m.  Readouts got words
+  ("mean ⟨x⟩", "spread σx", "energy ⟨E⟩") in the same slots; the stationary-state note states
+  the numbering; a hint under the plot; Start here, with the intro kept after it.
+- **2D Fourier transform**: no errors in the physics (the centring, Hermitian symmetry,
+  the colours of ±1 and ±i, the shift theorem's sign, the plane wave's direction, σ_k =
+  N/2πσ_x, the sinc, Airy and J₀ zeros, the fringes, the brick wall's missing spots, Parseval,
+  the phase graft).  Four sentences were wrong: "equal colours mean equal values on both
+  sides" (each side has its own brightness); the readout's "(the average)" at k = 0 (it is
+  N × the average); "the symmetric part of an image makes the real part of its transform"
+  (only for a real image); the low-pass experiment's "drag back out and it sharpens" (the
+  drag starts where everything is zeroed).  The Stripes preset had a non-integer wavevector
+  (10, 7.5), so its two "points" were smears; it is (8, 6) now, three exact pixels.  A hint
+  under each picture that follows the tool; units in tooltips; Start here, the intro with
+  the colour wheel kept after it.
+- **Diffraction**: one error in the code.  The lens was a phase fixed in radians, so in white
+  light it focused red at 42 mm and blue at 61 mm, a zone plate's chromatics and the
+  opposite of glass; the aperture now carries its unwrapped phase as a thickness, scaled by
+  λ₀/λ for the other colours, and the lens focuses all three at 49.5 mm while the zone plate
+  (an amplitude mask) stays chromatic, 42 / 50 / 61 mm.  Help claims corrected after
+  measuring: the straight edge's fringes are not "√(λz) apart" but at 0.86√(λz) and then
+  closer and closer, and the edge sits at exactly ¼ of the open beam; the Talbot carpet of
+  the sinusoidal grating has no "finer and finer patterns", only the half-period image at
+  z_T/4; "far field" now means N_F < 0.1 (within 1% of the transform; at 0.3 the slit is
+  5.5% off); the disk's readout speaks of its shadow filling in, not of a transform; the
+  white-light experiment opened where the grating's orders still overlapped and now opens at
+  1 m; the far-field scale bar read "5e−1 mrad".  Eight new unit tests, one of which shows
+  why scaling the wrapped phase would not have worked.
+- **Scattering in 2D**, the one the author singled out.  Every 2D formula was re-derived in
+  the demo's convention ψ → e^{ikx} + f(θ)e^{ikr}/√r and found right in the code and the
+  help: the Born amplitude with its e^{+iπ/4} and Ṽ(q), dσ/dθ = m²|Ṽ(q)|²/(2πħ⁴k), f from
+  S_m, σ = (4/k)Σ sin²δ_m, the optical theorem's phase factor, the hard disk's tan δ_m, the
+  Hankel extraction and the beam's partial-wave content; two unit tests now pin Born and the
+  optical theorem to closed forms.  Two errors in the code: the "exact" radial solver, started
+  from r^{m+½} at the first grid point, seeded an h-independent √r ln r admixture that gave
+  δ₀ = +0.005 for no potential at all (a weak bump's δ₀/V₀ wandered from −0.64 to +0.19 as V₀
+  shrank, against Born's −0.650; it is −0.651 now, after RK4 for the first steps); and a run
+  ended at its nominal time with probability still in the box, cutting the time transforms
+  short (the resonance's |S₃| read 0.95; it waits for the packet to leave now and reads
+  1.00).  Numbers re-measured: Born 6% high at V₀ = 1 (not 7%), 65% at V₀ = 2 (not 60%); the
+  slow packet's m = ±1 add a quarter (not "only m = 0"); the double slit's ±70° dark fringe
+  does not exist in either curve and is no longer promised; the Coulomb forward peak's
+  shortfall is the potential's tail still in the near field at the detector, now said.
+  The drawer tells it in the order a junior needs: what is incident, what scatters, what
+  dσ/dθ counts, then Born as the transform at the momentum transfer (with the validity
+  parameter V₀a/ħv), then partial waves as each angular momentum's own phase shift; every
+  term glossed on first use; the theory last, in three parts (what is measured, what is
+  computed from it, why they should agree).  Not built, suggested: Born's |Ṽ(k − k₀)|² drawn
+  on the momentum circle and the classical dσ/dθ on the cross-section plot, which PLAN.md
+  promised and the demo never drew.
+
+**Antenna arrays** is the phased array alone now: the "Aperture synthesis" tab, its six
+panels, its five experiments and its three modules are gone from `arrays/`.  The old
+addresses (`#setup=rotation`, `eht`, `clean`, ... and saved `mode=synth` states) redirect to
+the new app with their hash kept, so links in old homework still work.  The drawer ends with
+"Radio interferometers": a radio telescope array is this demo run backwards, and a link.
+
+**Radio interferometry** (`radiointerferometer/`): being built by its agent from a brief in
+four numbered views (one source's noise, its band-limited time stream, spectrum and
+autocorrelation; two sources and two antennas with live time streams, spectra and the running
+complex correlation; the uv plane with 1–6 draggable sources or a picture on the left and the
+ideal V(u, v) in the FFT demo's colours on the right, two receiver dots moved symmetrically,
+the complex-plane inset where the running average lands on the colour under the dots, and the
+Etch-a-Sketch painting of what has been measured; a whole array and Earth rotation turning on
+the second row: the sampled uv plane and, under the sky with an arrow pointing left to it, the
+reconstruction, with CLEAN), plus the stretch experiments (coherent sources breaking it;
+intensity correlations losing the phase).  **Paused before it was finished**: the session's
+credits ran out with the physics modules committed and the views in progress.  The
+`arrays/` branch (the phased array alone, with redirects to this app) is merged only when
+this app lands, so no link on the live site breaks in between.
+
+**Tests.**  Each merged branch passed the 315–323 unit tests and its demo's UI test before
+merging (the UI tests of the six finished demos grew from about 192 to 379 checks between
+them); the full `tools/test_all.sh` run on the merged `main` is still to do after the new apps
+land.
+
+## Prompt 16
+
+> More tasks to start: I want an Block Sphere and NMR app, where you can send in the various
+> pulses and watch what happens to a single spin and (with a checkbox) and ensemble of spins.
+> The user should have control over the pulses. You should be able to turn on and off (or
+> slide with a slider) effects like thermal noise and "settling". I am building an Earth-field
+> NMR as a printed circuit board (https://github.com/gallicchio/earth-nmr-pcb) and we have the
+> Teach Spin NMR demo that works around 5 MHz, so the app should be applicable to at least
+> those two things. It should help the students visualize and ultimately understand the
+> effects that they see in these experiments.
+>
+> Then, I want you to make an MRI demo app. Show, among other things, how a gradient gives
+> you information along one axis. Show how you get the information for the other axes. By the
+> end of exploring this one, a student who has a sense for the NMR concepts like pi pulses and
+> pi/2 pulses should understand how these can be used to form an image.
+
+## Prompt 17
+
+> I also want you to start an optical coherence tomography app. It can draw on the background
+> knowledge from some of the other apps, but should be relatively self contained. For someone
+> who understands the coherence app, this should be "how do you start there and use it to
+> form a 3D image of something".
+
+### Response 16 and 17 (2026-11-03)
+
+Three agents, one app each, from briefs the lead wrote (`nmr/`, `mri/`, `oct/`); the NMR
+brief carries the Earth's-field board's numbers from its README and handbook (46.0 µT and
+1960 Hz in Claremont; 1.5 A for 0.2–4.7 s, off in 0.4 ms against a 0.51 ms Larmor period; a
+microvolt for a second or two; T₁ by the polarizing time, T₂* by the envelope) and the
+TeachSpin's pulsed sequences at 5 MHz.
+
+**NMR** (`nmr/`), **MRI** (`mri/`) and **OCT** (`oct/`): being built by their agents from
+briefs (NMR: one spin on the Bloch sphere in the lab and rotating frames, pulses of any angle
+and phase, the ensemble with T₁, T₂ and the field spread, noise and averaging, pulse
+sequences, and the Earth's-field board's polarize–switch-off–listen with sudden against
+adiabatic switch-off and the FID heard; MRI: one axis by frequency encoding, the slice by a
+shaped pulse under G_z, the second axis by phase encoding filling k-space line by line with
+the image forming, then contrast, aliasing, and Lauterbur's projections; OCT: fringes from a
+layer within the coherence length, the A-scan by scanning the mirror, the B-scan and the
+volume by scanning the beam, and Fourier-domain OCT from the spectrum).  **Paused before they
+were finished**: the session's credits ran out.
+
+
+## Prompt 18
+
+> Also add a placeholder and a TODO item (but don't start writing it) for a continuous quantum
+> optics demo that covers Homodyne detection, coherent states, squeezed states, making
+> measurements with these.... ultimately working the students up to a visualization and
+> demonstration of how LIGO can get more accurate measurements by using squeezed states.
+
+### Response 18 (2026-11-03)
+
+A placeholder card on the landing page ("Quantum optics: squeezed light and LIGO", marked
+*planned*, no link) and a TODO in `PLAN.md` under "The demos" with the story the author
+gave: the quadratures of one mode of the field, coherent states as the classical limit
+(the circle of noise in phase space, the same picture as the phase-space demo's), squeezed
+states (the ellipse; the uncertainty product kept), homodyne detection (beat the field
+against a local oscillator, choose the quadrature by the oscillator's phase, see the noise
+shrink and grow as the phase turns), a measurement with each (the signal-to-noise of a
+phase measurement; the standard quantum limit), and LIGO: an interferometer's arm length
+read out as a phase, the shot noise of a coherent state, the squeezed vacuum fed into the
+dark port and the noise falling below the shot-noise limit (the 2019 result, ~3 dB), with
+the trade against radiation-pressure noise and the frequency-dependent squeezing of 2023.

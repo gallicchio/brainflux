@@ -297,3 +297,18 @@ Left for later, besides the lists above:
   take no drag; the rest would need `none` only while a drag is in progress.
 - The six finished demos (FFT, 1D and 2D Schrödinger, plane waves, diffraction, Fourier
   series) haven't had the same first-minute pass; their drawers still open with the theory.
+
+## Status, 2026-11-03 (afternoon): paused
+
+The six finished demos were reviewed conservatively (Prompt 15): three errors in the code
+fixed (the 1D demo's cell at x = 0, the diffraction lens's chromatics, the 2D scattering
+radial solver's start and runs that ended with probability still in the box), many help
+claims corrected after measuring, a hint and a Start-here block on each, nothing added or
+removed.  `arrays/` lost its aperture-synthesis view (on a branch, merged with the new app).
+
+Four new demos were being built when the session's credits ran out, each on its own
+worktree branch, unmerged: `radiointerferometer/` (physics modules committed, views in
+progress), `nmr/`, `mri/`, `oct/` (briefs in the chat log, Response 15–17).  To resume:
+merge or continue each branch, register its test file in `tests/index.html`'s list, add its
+card to the landing page and its line to `README.md` and `tools/thumbs.py`, run
+`tools/test_all.sh`.  Then the quantum-optics demo (the TODO above).
