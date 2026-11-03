@@ -46,7 +46,7 @@ export const PRESETS = {
   stop: {
     label: 'Sudden stop',
     params: {
-      beta: { label: 'β before', min: 0.05, max: 0.95, value: 0.6, title: 'The speed before the stop, as a fraction of c' },
+      beta: { label: 'speed β before', min: 0.05, max: 0.95, value: 0.6, title: 'The speed before the stop, as a fraction of c' },
       tau: { label: 'stop time (s)', min: 0.02, max: 1, value: 0.15, log: true, title: 'How long the stop takes' },
     },
     make(P, c) {
@@ -68,7 +68,7 @@ export const PRESETS = {
   shuttle: {
     label: 'Start & stop',
     params: {
-      beta: { label: 'β top', min: 0.05, max: 0.95, value: 0.6, title: 'The top speed, as a fraction of c' },
+      beta: { label: 'top speed β', min: 0.05, max: 0.95, value: 0.6, title: 'The top speed, as a fraction of c' },
       tau: { label: 'speed-up (s)', min: 0.02, max: 1, value: 0.15, log: true, title: 'How long starting (and stopping) takes' },
       dist: { label: 'distance', min: 1, max: 20, value: 10, title: 'How far it goes each time' },
       rest: { label: 'rest (s)', min: 0, max: 5, value: 1, title: 'How long it waits at each end' },
@@ -99,7 +99,7 @@ export const PRESETS = {
 
   uniform: {
     label: 'Uniform motion',
-    params: { beta: { label: 'β', min: 0, max: 0.98, value: 0.8, title: 'The speed, as a fraction of c' } },
+    params: { beta: { label: 'speed β', min: 0, max: 0.98, value: 0.8, title: 'The speed, as a fraction of c' } },
     make(P, c) {
       const v0 = P.beta * c;
       return { follow: true, at: (t, o) => set(o, v0 * t, 0, v0, 0, 0, 0) };
@@ -109,7 +109,7 @@ export const PRESETS = {
   oscillate: {
     label: 'Oscillation',
     params: {
-      beta: { label: 'β max', min: 0.01, max: 0.95, value: 0.2, title: 'The largest speed, as a fraction of c' },
+      beta: { label: 'top speed β', min: 0.01, max: 0.95, value: 0.2, title: 'The largest speed, as a fraction of c' },
       period: { label: 'period (s)', min: 0.2, max: 5, value: 1, log: true, title: 'The radiation has wavelength λ = c × period' },
     },
     make(P, c) {
@@ -122,7 +122,7 @@ export const PRESETS = {
   circle: {
     label: 'Circular motion',
     params: {
-      beta: { label: 'β', min: 0.01, max: 0.98, value: 0.5, title: 'The speed, as a fraction of c' },
+      beta: { label: 'speed β', min: 0.01, max: 0.98, value: 0.5, title: 'The speed, as a fraction of c' },
       radius: { label: 'radius', min: 0.2, max: 6, value: 1.5, title: 'The radius of the circle' },
     },
     make(P, c) {
@@ -139,7 +139,7 @@ export const PRESETS = {
   deflect: {
     label: 'Deflection',
     params: {
-      beta: { label: 'β', min: 0.05, max: 0.98, value: 0.8, title: 'The speed (it does not change)' },
+      beta: { label: 'speed β', min: 0.05, max: 0.98, value: 0.8, title: 'The speed (it does not change)' },
       angle: { label: 'angle (°)', min: 5, max: 180, value: 60, title: 'How far the charge turns' },
       tau: { label: 'turn time (s)', min: 0.02, max: 2, value: 0.25, log: true, title: 'How long the turn takes' },
     },
@@ -175,7 +175,7 @@ export const PRESETS = {
   hyperbolic: {
     label: 'Uniform acceleration',
     params: {
-      beta: { label: 'β in & out', min: 0.1, max: 0.98, value: 0.9, title: 'The speed at which it arrives and leaves' },
+      beta: { label: 'speed β in & out', min: 0.1, max: 0.98, value: 0.9, title: 'The speed at which it arrives and leaves' },
       alpha: { label: 'g/c (1/s)', min: 0.1, max: 5, value: 1, log: true, title: 'The acceleration felt by the charge (its proper acceleration g), over c' },
     },
     make(P, c) {

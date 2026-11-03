@@ -308,8 +308,14 @@ function drawScale(ctx) {
   ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'bottom';
   ctx.fillText(`light in ${sec === 1 ? '1 s' : fmt(sec, 2) + ' s'}`, x, y - 5);
   if (state.map !== 'off') {
+    // What the colour is, in words (fewer on a narrow picture), beside the scale bar, or above
+    // it where the picture is too narrow for both.
+    const notes = state.map === 'flux' ? ['colour: energy flux |E_rad|², how much radiation is passing', 'colour: energy flux |E_rad|²']
+      : ['colour: the radiation field E_rad (orange ↺ round the charge, blue ↻)', 'colour: radiation field E_rad (orange ↺, blue ↻)'];
+    const note = notes.find((s) => ctx.measureText(s).width < view.W - 24) || notes[1];
+    const clear = x + len + 24 + ctx.measureText(note).width < view.W - 12;
     ctx.textAlign = 'right';
-    ctx.fillText(state.map === 'flux' ? 'colour: |E_rad|², the radiated energy flux' : 'colour: E_rad (orange ↺, blue ↻)', view.W - 12, view.H - 8);
+    ctx.fillText(note, view.W - 12, clear ? view.H - 8 : y - 20);
     ctx.textAlign = 'left';
   }
 }
@@ -382,12 +388,15 @@ function drawPolar() {
   const { ctx, width, height } = fitCanvas(polarCanvas), col = themeColors();
   ctx.clearRect(0, 0, width, height);
   const { vx, vy, ax, ay } = present(), c = state.c;
-  const cx = width / 2, cy = height / 2 + 8, R = Math.min(width, height - 16) / 2 - 12;
+  // The title, in words, in as many lines as the width needs; the plot fits below it.
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = col.ink2; ctx.textBaseline = 'top';
+  const title = wrapWords(ctx, 'where it radiates now: power per angle, dP/dΩ, in the plane of motion', width - 12);
+  title.forEach((line, i) => ctx.fillText(line, 6, 4 + 13 * i));
+  const top = 6 + 13 * title.length;
+  const cx = width / 2, cy = top + (height - top) / 2, R = Math.min(width, height - top) / 2 - 10;
   ctx.strokeStyle = col.line; ctx.lineWidth = 1;
   for (const f of [0.5, 1]) { ctx.beginPath(); ctx.arc(cx, cy, R * f, 0, 2 * Math.PI); ctx.stroke(); }
   ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
-  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = col.ink2; ctx.textBaseline = 'top';
-  ctx.fillText('dP/dΩ, in the plane', 6, 4);
   const N = 720, vals = POLAR;
   let max = 0;
   for (let k = 0; k < N; k++) {
@@ -423,6 +432,16 @@ function drawPolar() {
   if (amag > 1e-9) arrowPlain(ctx, cx, cy, cx + (0.45 * R * ax) / amag, cy - (0.45 * R * ay) / amag, col.warn, 'a');
 }
 
+/** Words in lines no wider than maxWidth, in ctx's font. */
+function wrapWords(ctx, text, maxWidth) {
+  const lines = [''];
+  for (const w of text.split(' ')) {
+    const last = lines[lines.length - 1], next = last ? `${last} ${w}` : w;
+    if (last && ctx.measureText(next).width > maxWidth) lines.push(w); else lines[lines.length - 1] = next;
+  }
+  return lines;
+}
+
 function arrowPlain(ctx, x0, y0, x1, y1, color, label) {
   const a = Math.atan2(y1 - y0, x1 - x0);
   ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
@@ -453,16 +472,29 @@ function drawPower() {
   const { ctx, width, height } = fitCanvas(powerCanvas), col = themeColors();
   ctx.clearRect(0, 0, width, height);
   // The labels and their numbers sit in fixed places (they do not depend on the values):
-  // on one line if they fit, else on two.
+  // on one line if they fit, else on two.  Each label starts with a sample of its curve
+  // (solid: the exact power; dashed: Larmor's), so the chart says which curve is which.
   const last = powerLog[powerLog.length - 1] || [0, 0, 0];
-  const lab1 = 'Liénard P =', W = 9;
+  const W = 9;
   ctx.font = MONO; const wn = ctx.measureText('0'.repeat(W)).width;
   ctx.font = FONT;
-  // (On a narrow chart, Larmor's formula is left out of its label.)
-  const long = 'Larmor (2/3)q²a²/c³ =', lab2 = 54 + ctx.measureText(long).width + 5 + wn < width - 6 ? long : 'Larmor =';
-  const w1 = ctx.measureText(lab1).width, w2 = ctx.measureText(lab2).width;
-  const x1 = 54, n1 = x1 + w1 + 5 + wn, oneLine = n1 + 24 + w2 + 5 + wn < width - 6;
-  const x2 = oneLine ? n1 + 24 : x1, y2 = oneLine ? 16 : 31, n2 = x2 + w2 + 5 + wn;
+  // The fullest layout that fits: words and long samples over the frame; on a narrow chart,
+  // shorter labels, then labels that start at the left edge (above the y label's reach).
+  const layouts = [
+    { x: 54, sample: 22, l1: 'exact (Liénard) P =', l2: 'Larmor’s slow-charge formula (2/3)q²a²/c³ =' },
+    { x: 54, sample: 22, l1: 'exact (Liénard) P =', l2: 'Larmor (2/3)q²a²/c³ =' },
+    { x: 54, sample: 22, l1: 'Liénard P =', l2: 'Larmor =' },
+    { x: 8, sample: 14, l1: 'Liénard P =', l2: 'Larmor =' },
+  ];
+  let lab1, lab2, x1, n1, x2, n2, y2, SAMPLE, oneLine;
+  for (const L of layouts) {
+    SAMPLE = L.sample; lab1 = L.l1; lab2 = L.l2; x1 = L.x;
+    const w1 = SAMPLE + ctx.measureText(lab1).width, w2 = SAMPLE + ctx.measureText(lab2).width;
+    n1 = x1 + w1 + 5 + wn;
+    oneLine = n1 + 24 + w2 + 5 + wn < width - 6;
+    x2 = oneLine ? n1 + 24 : x1; y2 = oneLine ? 16 : 31; n2 = x2 + w2 + 5 + wn;
+    if (Math.max(n1, n2) < width - 6) break;
+  }
   canvasLabels.power = [x1, n1, x2, n2, y2];
   // (A bottom margin of 32 or more puts the axis label under the tick labels, where it fits.)
   const f = new Frame(ctx, width, height, { left: 50, right: 12, top: oneLine ? 26 : 40, bottom: 34 });
@@ -487,15 +519,17 @@ function drawPower() {
   line(2, col.ink3, [5, 4]);
   line(1, col.accent, []);
   ctx.restore();
-  f.axes({ xlabel: 't − now (s)', ylabel: 'radiated power', yTicks: powerTop > 0 });
+  f.axes({ xlabel: 'seconds before now', ylabel: 'radiated power', yTicks: powerTop > 0 });
   ctx.textBaseline = 'alphabetic';
-  const put = (lab, x, n, y, v, color) => {
-    ctx.fillStyle = color; ctx.font = FONT; ctx.textAlign = 'left'; ctx.fillText(lab, x, y);
+  const put = (lab, x, n, y, v, color, dash) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x + SAMPLE - 5, y - 4); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = color; ctx.font = FONT; ctx.textAlign = 'left'; ctx.fillText(lab, x + SAMPLE, y);
     ctx.font = MONO; ctx.textAlign = 'right'; ctx.fillText(fixed(v, 4, W), n, y);
     ctx.textAlign = 'left';
   };
-  put(lab1, x1, n1, 16, last[1], col.accent);
-  put(lab2, x2, n2, y2, last[2], col.ink2);
+  put(lab1, x1, n1, 16, last[1], col.accent, []);
+  put(lab2, x2, n2, y2, last[2], col.ink2, [5, 4]);
   ctx.font = FONT;
   if (!(powerTop > 0)) {
     ctx.fillStyle = col.ink3; ctx.textAlign = 'center';
@@ -516,7 +550,7 @@ function present() {
 
 // The read-outs: each quantity has its own slot, a fixed number of characters wide, and its
 // numbers have a fixed layout (format.js), so nothing moves as the values change.  The probe's
-// slots are kept (invisible) when the probe is off, so that turning it on moves nothing.
+// slots come last and are hidden when the probe is off, so turning it on moves none of the others.
 const RO = {};
 function readoutSlot(key, label, decimals, width, suffix = '') {
   const lab = el('span', { class: 'lab' }), num = el('span', { class: 'num', style: { width: `${width}ch` } });
@@ -525,15 +559,16 @@ function readoutSlot(key, label, decimals, width, suffix = '') {
   RO[key] = { item, num, decimals, width, text: '' };
   return item;
 }
+// Each quantity is named in words, so that the row reads as a sentence ("speed β = v/c = 0.600").
 $('#readout').append(
-  readoutSlot('beta', 'β =', 3, 5),
-  readoutSlot('gamma', 'γ =', 3, 5),
-  readoutSlot('a', '|a| =', 2, 7),
-  readoutSlot('ratio', 'P/P<sub>Larmor</sub> =', 3, 8),
-  readoutSlot('ev', '<i class="sw vel"></i>probe |E<sub>vel</sub>| =', 4, 7),
-  readoutSlot('ea', '<i class="sw acc"></i>|E<sub>acc</sub>| =', 4, 7),
-  readoutSlot('peak', 'peak', 4, 7),
-  readoutSlot('ago', '<i>t</i> − <i>t</i><sub>r</sub> =', 3, 6, 's'),
+  readoutSlot('beta', 'speed β = v/c =', 3, 5),
+  readoutSlot('gamma', 'Lorentz factor γ =', 3, 5),
+  readoutSlot('a', 'acceleration |a| =', 2, 7, 'units/s²'),
+  readoutSlot('ratio', 'radiated power P/P<sub>Larmor</sub> =', 3, 8, '(1 for a slow charge)'),
+  readoutSlot('ev', '<i class="sw vel"></i>at the probe: velocity part |E<sub>vel</sub>| =', 4, 7),
+  readoutSlot('ea', '<i class="sw acc"></i>radiation part |E<sub>acc</sub>| =', 4, 7),
+  readoutSlot('peak', 'its peak over the last 3 s', 4, 7),
+  readoutSlot('ago', 'light left the charge <i>t</i> − <i>t</i><sub>r</sub> =', 3, 6, 's ago'),
 );
 function show(key, v) {
   const r = RO[key], text = fixed(v, r.decimals, r.width);
@@ -546,7 +581,7 @@ function updateReadout() {
   show('beta', b); show('gamma', g); show('a', Math.hypot(ax, ay));
   show('ratio', L > 1e-12 ? P / L : NaN);   // undefined without acceleration: a dash
   const probe = state.probe && probeInfo;
-  for (const k of ['ev', 'ea', 'peak', 'ago']) RO[k].item.style.visibility = probe ? '' : 'hidden';
+  for (const k of ['ev', 'ea', 'peak', 'ago']) RO[k].item.hidden = !probe;
   if (probe) { show('ev', probeInfo.ev); show('ea', probeInfo.ea); show('peak', probeInfo.peak); show('ago', traj.tEnd - probeInfo.tr); }
 }
 
@@ -581,7 +616,6 @@ function eventWorld(e) {
 fieldCanvas.addEventListener('pointerdown', (e) => {
   const r = fieldCanvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
   fieldCanvas.setPointerCapture(e.pointerId);
-  $('#hint').classList.add('gone');
   if (state.probe) {
     const [qx, qy] = toPx(cam[0] + state.probeAt[0], cam[1] + state.probeAt[1]);
     if (Math.hypot(qx - px, qy - py) < 22) { drag = 'probe'; dirty = true; return; }
@@ -724,7 +758,7 @@ $('#bright-box').append(brightSlider);
 const extras = {
   trail: toggle('Path', state.trail, (on) => { state.trail = on; dirty = true; saveHash(); }, 'The charge\'s path over the last 4 seconds'),
   fronts: toggle('Light fronts', state.fronts, (on) => { state.fronts = on; dirty = true; saveHash(); }, 'Light sent out by the charge at regular intervals, each circle centred where it was sent'),
-  probe: toggle('Probe', state.probe, (on) => { state.probe = on; dirty = true; saveHash(); }, 'A point (drag it) showing the two parts of the field there, the retarded position, and the light ray from it'),
+  probe: toggle('Probe', state.probe, (on) => { state.probe = on; setHint(); dirty = true; saveHash(); }, 'A yellow dot (drag it) showing the two parts of the field there, the retarded position, and the light ray from it'),
 };
 $('#extras').append(...Object.values(extras));
 
@@ -768,6 +802,16 @@ function fromHash(h) {
 
 function setExtras(on) {
   for (const [k, t] of Object.entries(extras)) { t.on = !!on[k]; state[k] = !!on[k]; }
+  setHint();
+}
+
+/** The one-line hint under the picture: what to drag.  With the probe on, how to place it. */
+function setHint() {
+  const text = state.probe
+    ? 'Drag the yellow dot (the probe) to read the field there; drag anywhere else and the charge follows.'
+    : 'Drag anywhere on the picture: the charge follows (never faster than 0.98 c).  Stop, and watch the kink run out.';
+  const h = $('#hint');
+  if (h.textContent !== text) h.textContent = text;
 }
 
 // ---------------------------------------------------------------- experiments
@@ -787,8 +831,9 @@ function go(id, { params = {}, c = 8, lines = 'total', count = 24, map = 'off', 
 }
 
 const setups = {
+  kink: () => go('shuttle'),                                   // the opening set-up
+  stop: () => go('stop', { params: { beta: 0.6, tau: 0.15 } }),   // one stop at a time (what "kink" was)
   coulomb: () => go('rest'),
-  kink: () => go('stop', { params: { beta: 0.6, tau: 0.15 } }),
   inside: () => go('stop', { params: { beta: 0.8, tau: 0.1 }, probe: [-3, 7] }),
   far: () => go('stop', { params: { beta: 0.5, tau: 0.1 }, map: 'field', bright: 0.5, probe: [0, 8] }),
   heaviside: () => go('uniform', { params: { beta: 0.8 }, probe: [-2, 5], fronts: true }),
