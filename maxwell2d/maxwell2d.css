@@ -26,9 +26,14 @@
 .button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
 .button-grid.three { grid-template-columns: repeat(3, 1fr); }
 .button-grid button { padding: 3px 4px; font-size: 13px; }
+.button-grid.three button { padding: 3px 2px; font-size: 12px; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--line); }
 details.panel summary { cursor: pointer; }
-.hint { color: var(--ink-3); font-size: 12px; }
+/* A short explanation under a control (the hint under the picture is lib's .hint). */
+.note { color: var(--ink-3); font-size: 12px; }
+.note sub { font-size: 0.8em; }
+#more-box > .label { margin-top: 6px; }
+#more-box > .label:first-child { margin-top: 0; }
 @media (max-width: 900px) {
   .mx { grid-template-columns: minmax(0, 1fr); }
   .stage { position: static; }

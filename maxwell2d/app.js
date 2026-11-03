@@ -212,6 +212,8 @@ function draw() {
   drawMeters(ctx, X, Y);
   drawProbe(ctx, X, Y);
   drawLegend(ctx, width, height, s);
+  // What the hint names must be what is under the pointer now, after a set-up has moved things.
+  if (hover && !drag) { const h = hitTest(X(hover.x), Y(hover.y)); if (h !== hoverHandle && (h?.kind !== hoverHandle?.kind || h?.q !== hoverHandle?.q)) { hoverHandle = h; updateHint(); } }
 }
 
 function arrow(ctx, x0, y0, x1, y1, head = 9) {
@@ -344,9 +346,9 @@ function drawMeters(ctx, X, Y) {
       ctx.beginPath(); ctx.arc(hx, hy, 5, 0, 2 * Math.PI); ctx.fill();
       handles.push({ kind: 'meter', q, end, x: hx, y: hy });
     }
-    const label = `${METER_NAMES[q]} ${meterText(q)}`;
+    const label = `meter ${METER_NAMES[q]} ${meterText(q)}`;
     // The box is as wide as the longest reading could be, so the label never moves as it changes.
-    const tw = ctx.measureText('0'.repeat(meterTextWidth())).width + ctx.measureText('A ').width;
+    const tw = ctx.measureText('0'.repeat(meterTextWidth())).width + ctx.measureText('meter A ').width;
     const lx = Math.min(viewCanvas.clientWidth - tw - 6, Math.max(4, mx + 12 * nx + (nx > 0 ? 0 : -tw))), ly = Math.max(14, my + 12 * ny + 4);
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(lx - 3, ly - 12, tw + 6, 16);
     ctx.fillStyle = '#7ef0c8'; ctx.fillText(label, lx, ly);
@@ -375,13 +377,13 @@ function meterValue(q) {
 const MONO = '600 12px ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
 function meterText(q) {
   const v = meterValue(q), beam = source && source.type === 'beam';
-  const suffix = beam ? (state.src.wave === 'cw' ? '%' : '% of the pulse') : q > 0 ? '% of A' : '';
+  const suffix = beam ? (state.src.wave === 'cw' ? '% of the beam' : '% of the pulse') : q > 0 ? '% of meter A' : ' (power)';
   if (!Number.isFinite(v)) return ' '.repeat(meterTextWidth());
   return (beam || q > 0 ? num(100 * v, 2, 8) : num(v, 4, 10)) + suffix;
 }
 function meterTextWidth() {
   const beam = source && source.type === 'beam';
-  return beam ? (state.src.wave === 'cw' ? 9 : 22) : 14;
+  return beam ? 22 : 20;
 }
 
 function drawProbe(ctx, X, Y) {
@@ -397,21 +399,42 @@ function drawProbe(ctx, X, Y) {
   handles.push({ kind: 'probe', x, y });
 }
 
+/** What the picture is: the colours (bottom left), the scale (bottom right), the time (top left). */
 function drawLegend(ctx, width, height, s) {
   ctx.save();
-  const lut = state.view === 'intensity' ? SEQUENTIAL : DIVERGING, w = 90, h = 8, x0 = 10, y0 = height - 18;
+  const small = width < 500, font = small ? '11px system-ui, sans-serif' : '12px system-ui, sans-serif';
+  const intensity = state.view === 'intensity', lut = intensity ? SEQUENTIAL : DIVERGING;
+  const sym = fieldName(), field = state.mode === 'TM' ? 'electric' : 'magnetic';
+  const title = intensity ? `intensity: the time average of ${sym}²` : `${sym}, the ${field} field out of the screen`;
+  const w = small ? 80 : 110, h = 8, x0 = 10, y0 = height - 14, pad = 5;
+  ctx.font = font; ctx.textBaseline = 'alphabetic';
+  // A translucent box behind the words, so that they read on any field.
+  const box = (x, y, bw, bh) => { ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x, y, bw, bh); };
+  const tw = Math.max(ctx.measureText(title).width, w + 48);
+  box(x0 - pad, y0 - 34, tw + 2 * pad, 34 + h + pad - 4);
   for (let q = 0; q < w; q++) {
     const c = 3 * Math.round((q / (w - 1)) * 1023);
     ctx.fillStyle = `rgb(${lut[c]},${lut[c + 1]},${lut[c + 2]})`;
     ctx.fillRect(x0 + q, y0, 1, h);
   }
   ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(x0 - 0.5, y0 - 0.5, w + 1, h + 1);
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = '11px system-ui, sans-serif';
-  ctx.fillText(state.view === 'intensity' ? `time average of ${fieldName()}²` : `${fieldName()}: − 0 +`, x0, y0 - 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillText(title, x0, y0 - 20);
+  // The ends of the bar: what the colours mean.
+  ctx.fillText(intensity ? '0' : small ? '−' : '− (blue)', x0, y0 - 6);
+  ctx.textAlign = 'right'; ctx.fillText(intensity ? 'bright' : small ? '+' : '+ (red)', x0 + w, y0 - 6);
+  if (!intensity) { ctx.textAlign = 'center'; ctx.fillText('0', x0 + w / 2, y0 - 6); }
   // A scale bar of one wavelength.
-  const L = s, xr = width - 12 - L;
-  ctx.fillRect(xr, y0 + 2, L, 3);
-  ctx.textAlign = 'center'; ctx.fillText('λ', xr + L / 2, y0 - 3);
+  const L = s, label = small ? '1 λ' : 'one wavelength λ', lw = Math.max(L, ctx.measureText(label).width), xr = width - 12 - lw;
+  box(xr - pad, y0 - 18, lw + 2 * pad, 18 + h);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillRect(xr + (lw - L) / 2, y0 + 2, L, 3);
+  ctx.textAlign = 'center'; ctx.fillText(label, xr + lw / 2, y0 - 4);
+  // The time, in periods of the source.
+  ctx.font = MONO.replace('600 ', '');
+  const t = `t =${num(sim.t, 2, 8)} periods`, ttw = ctx.measureText(t).width;
+  box(x0 - pad, 8, ttw + 2 * pad, 20);
+  ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillText(t, x0, 22);
   ctx.restore();
 }
 
@@ -513,33 +536,68 @@ function num(v, decimals, width) {
 /** A slot of fixed width (in ch) for a value inside text. */
 const slot = (text, ch) => `<span class="slot" style="width:${ch}ch">${text}</span>`;
 
-// The read-out line is built once, with a slot of fixed width for every value.
+// The read-out line is built once, with a slot of fixed width for every value: the time, and
+// what is under the pointer (its place, the material there and the field).
 readouts.innerHTML = [
-  '<span class="ro"><span class="lab">t</span><span class="slot" style="width:9ch" data-k="t"></span><span class="unit">periods</span></span>',
-  '<span class="ro"><span class="lab">grid</span><span class="slot" style="width:9ch" data-k="grid"></span><span class="slot" style="width:4ch" data-k="ppw"></span><span class="unit">cells/λ</span></span>',
-  '<span class="ro"><span class="lab">x</span><span class="slot" style="width:7ch" data-k="x"></span><span class="lab">y</span><span class="slot" style="width:7ch" data-k="y"></span>'
-    + '<span class="slot left" style="width:10ch" data-k="mat"></span><span class="lab" data-k="fname"></span><span class="slot" style="width:9ch" data-k="f"></span></span>',
+  '<span class="ro"><span class="lab">time</span><span class="slot" style="width:9ch" data-k="t"></span><span class="unit">periods</span></span>',
+  // What is under the pointer, in groups that may wrap between them on a narrow screen.
+  '<span class="ro ptr"><span class="lab">under the pointer:</span></span>',
+  '<span class="ro ptr"><span class="lab">x</span><span class="slot" style="width:7ch" data-k="x"></span><span class="lab">y</span><span class="slot" style="width:7ch" data-k="y"></span></span>',
+  '<span class="ro ptr"><span class="slot left" style="width:10ch" data-k="mat"></span></span>',
+  '<span class="ro ptr"><span class="lab" data-k="fname"></span><span class="slot" style="width:9ch" data-k="f"></span></span>',
+  '<span class="ro muted noptr">point at the picture to read the field there</span>',
   '<span class="ro"><span class="slot left muted" style="width:30ch" data-k="lim"></span></span>',
 ].join('');
 const slots = Object.fromEntries([...readouts.querySelectorAll('[data-k]')].map((e) => [e.dataset.k, e]));
 const put = (k, text) => { if (slots[k].textContent !== text) slots[k].textContent = text; };
-const warnings = $('#warnings');
+const ptrEls = [...readouts.querySelectorAll('.ptr')], noPtrEl = readouts.querySelector('.noptr');
+for (const e of ptrEls) e.hidden = true;
+const warnings = $('#warnings'), hintEl = $('#hint');
 
 function updateReadouts() {
   put('t', num(sim.t, 2, 9));
-  put('grid', `${scene.cw}×${scene.ch}`.padStart(9)); put('ppw', String(state.ppw).padStart(4));
   put('lim', limited ? '(as fast as this computer goes)' : '');
   put('fname', fieldName());
+  if (noPtrEl.hidden !== !!hover) { noPtrEl.hidden = !!hover; for (const e of ptrEls) e.hidden = !hover; }
   if (hover) {
     const m = scene.materialAt(hover.x, hover.y);
     put('x', num(hover.x, 2, 7)); put('y', num(hover.y, 2, 7));
     put('mat', m.pec ? 'metal' : m.absorb ? 'absorber' : `n ${m.n.toFixed(3)}`);
     put('f', num(sim.sample(hover.x, hover.y), 4, 9));
-  } else for (const k of ['x', 'y', 'mat', 'f']) put(k, '');
+  }
   const w = [warning, srcWarning].filter(Boolean).join(' ');
   if (warnings.textContent !== w) warnings.textContent = w;
   const html = physicsNotes().join(' · ');
   if (notes.innerHTML !== html) notes.innerHTML = html;
+  const g = `${scene.cw} × ${scene.ch} cells, ${state.ppw} per wavelength.  A finer grid is more accurate and slower; the absorbing layer around the box is 16 cells thick.`;
+  if (gridNote.textContent !== g) gridNote.textContent = g;
+  updateHint();
+}
+
+/** The hint under the picture: what the pointer can drag where it is, or what it could. */
+const BRUSH_WORDS = { glass: 'paint glass', high: 'paint high-index glass', typed: 'paint glass of the index you chose', metal: 'paint metal', absorber: 'paint an absorber', eraser: 'erase what you painted' };
+let hoverHandle = null;
+function hintText() {
+  const h = hoverHandle, src = state.src;
+  if (h) {
+    if (h.kind === 'move') return src.type === 'beam' ? 'The beam\'s source: drag it (the ring at its arrow\'s tip aims it).'
+      : src.type === 'moving' ? 'Where the moving source starts: drag it (the ring aims its path).' : 'The source: drag it around.';
+    if (h.kind === 'aim') return src.type === 'beam' ? 'The beam\'s aim: drag the ring to turn the beam.' : 'The direction of the motion: drag the ring to turn it.';
+    if (h.kind === 'meter') return `Meter ${METER_NAMES[h.q]}: it reads the power crossing the green line, in the direction of its arrow${source && source.type === 'beam' ? ', as a share of the beam\'s' : ''}.  Drag its ends.`;
+    if (h.kind === 'probe') return 'The probe: it records the field here, on the chart below.  Drag it.';
+  }
+  const paint = state.brush ? `drag anywhere else to ${BRUSH_WORDS[state.brush]} (the brush under Paint)` : '';
+  let s = src.type === 'beam' ? `Drag the beam's white dot to move it, the ring at its arrow's tip to aim it; ${paint}.`
+    : src.type === 'point' ? `Drag the white dot (the source) around; ${paint}.`
+      : src.type === 'moving' ? `Drag the white square (where the source starts) and the ring to aim its path; ${paint}.`
+        : `No source: choose one under Source.  Drag on the picture to ${BRUSH_WORDS[state.brush] || 'paint'}.`;
+  if (state.meters.length) s += `  The green line${state.meters.length > 1 ? 's are' : ' is a'} power meter${state.meters.length > 1 ? 's' : ''}: drag ${state.meters.length > 1 ? 'their' : 'its'} ends.`;
+  if (state.probe) s += '  The yellow cross is the probe: drag it.';
+  return s;
+}
+function updateHint() {
+  const t = hintText();
+  if (hintEl.textContent !== t) hintEl.textContent = t;
 }
 
 // Values in the notes, each in a slot of fixed width.
@@ -693,7 +751,7 @@ function loop(now) {
   if (state.running) raf = requestAnimationFrame(loop);
   else last = 0;
 }
-function kick() { if (!raf) raf = requestAnimationFrame(loop); }
+function kick() { if (!raf) raf = requestAnimationFrame(loop); updateHint(); }
 function setRunning(on) { state.running = on; $('#play').textContent = on ? 'Pause' : 'Play'; kick(); }
 
 // --------------------------------------------------------------------------- pointer
@@ -703,9 +761,10 @@ const toBox = (px, py) => { const s = viewCanvas.clientWidth / scene.W; return [
 const clampBox = (x, y, m = 0.05) => [Math.max(-scene.W / 2 + m, Math.min(scene.W / 2 - m, x)), Math.max(-scene.H / 2 + m, Math.min(scene.H / 2 - m, y))];
 let drag = null;
 
+let pointerR = 13;   // how near a handle the pointer must be: wider for a finger
 function hitTest(px, py, e) {
-  const R = e.pointerType === 'touch' ? 22 : 13;
-  let best = null, bd = R;
+  if (e) pointerR = e.pointerType === 'touch' ? 22 : 13;
+  let best = null, bd = pointerR;
   for (const h of handles) { const d = Math.hypot(h.x - px, h.y - py); if (d < bd) { bd = d; best = h; } }
   return best;
 }
@@ -734,8 +793,9 @@ viewCanvas.addEventListener('pointermove', (e) => {
   const [px, py] = local(e), [x, y] = toBox(px, py);
   hover = { x, y };
   if (!drag) {
-    viewCanvas.classList.toggle('grab', !!hitTest(px, py, e));
-    if (!state.running) updateReadouts();
+    hoverHandle = hitTest(px, py, e);
+    viewCanvas.classList.toggle('grab', !!hoverHandle);
+    if (!state.running) updateReadouts(); else updateHint();
     return;
   }
   const [cx, cy] = clampBox(x, y);
@@ -768,7 +828,7 @@ function endDrag() {
 }
 viewCanvas.addEventListener('pointerup', endDrag);
 viewCanvas.addEventListener('pointercancel', endDrag);
-viewCanvas.addEventListener('pointerleave', () => { hover = null; });
+viewCanvas.addEventListener('pointerleave', () => { hover = null; hoverHandle = null; updateHint(); });
 
 // --------------------------------------------------------------------------- controls
 
@@ -777,7 +837,7 @@ $('#step').addEventListener('click', () => { setRunning(false); advance(Math.max
 $('#restart').addEventListener('click', () => restart());
 const speedSlider = slider({ label: 'speed', min: 0.05, max: 20, log: true, value: state.speed, title: 'Periods of the source per second (as fast as the computer allows)',
   onInput: (v) => { state.speed = v; } });
-$('#speed-box').append(speedSlider, el('div', { class: 'hint' }, 'periods per second'));
+$('#speed-box').append(speedSlider, el('div', { class: 'note' }, 'periods of the source per second'));
 
 // The source.
 const srcType = segmented([
@@ -805,7 +865,7 @@ const sourceSliders = {
   beta: slider({ label: 'β = v/c', min: 0.05, max: 0.99, step: 0.01, value: state.src.beta, title: 'The speed of the moving source',
     onInput: (v) => { state.src.beta = Math.min(0.99, v); makeSource(true); sourceChanged(); } }),
 };
-$('#src-box').append(...Object.values(sourceSliders), el('div', { class: 'hint' }, 'Drag the source on the picture; drag its arrow to aim it.'));
+$('#src-box').append(...Object.values(sourceSliders), el('div', { class: 'note' }, 'Or drag the source on the picture, and the ring at its arrow\'s tip to aim it.'));
 function showSourceControls() {
   const t = state.src.type;
   srcWave.hidden = !(t === 'point' || t === 'beam');
@@ -833,14 +893,15 @@ function setBrush(key) {
   state.brush = key;
   for (const [k, b] of Object.entries(matButtons)) b.setAttribute('aria-pressed', String(k === state.brush));
   brushNSlider.hidden = state.brush !== 'typed';
+  updateHint();
 }
 const brushNSlider = slider({ label: 'n', min: 1, max: 4, step: 0.01, value: state.brushN, title: 'The index of the n = … brush', onInput: (v) => { state.brushN = Math.max(1, Math.min(6, v)); } });
 brushNSlider.hidden = true;
 $('#n-box').append(brushNSlider);
 $('#brush-box').append(
   slider({ label: 'brush (λ)', min: 0.05, max: 2, value: state.brushSize, title: 'The brush\'s diameter', onInput: (v) => { state.brushSize = v; } }),
-  el('div', { class: 'row' }, el('button', { type: 'button', onclick: () => { state.paint.length = 0; rebuildMaterials(); } }, 'Clear paint'),
-    el('span', { class: 'hint' }, 'drag on the picture to paint')));
+  el('div', { class: 'row' }, el('button', { type: 'button', title: 'Take off everything you painted (the set-up\'s shape stays)', onclick: () => { state.paint.length = 0; rebuildMaterials(); } }, 'Clear paint'),
+    el('span', { class: 'note' }, 'drag on the picture to paint')));
 
 function rebuildMaterials() {
   scene.shapeOps = state.shape ? SHAPES[state.shape].build(state.p, state.n, scene.W, scene.H) : [];
@@ -853,19 +914,49 @@ function rebuildMaterials() {
   hashSoon(); kick();
 }
 
-// Shapes.
+// Set-ups: the presets.  One button for each experiment in the drawer that puts a shape in the
+// box (the button runs that experiment's set-up: the shape, the source aimed at it, its
+// meters), the point source and the Luneburg lens, and an empty box to paint in.  The sliders
+// under them change the shape alone.  (The shapes 'slab' and 'guide' have no button; they are
+// kept for addresses that name them.)
+const PRESETS = [
+  { setup: 'prism', shape: 'prism', label: 'Prism', title: 'A beam through a glass prism: it turns at both faces (Snell\'s law)' },
+  { setup: 'circles', shape: null, fromShape: false, label: 'Circular waves', title: 'A point source in an empty box: circular waves, which you can paint glass into' },
+  { setup: 'snell', shape: 'surface', label: 'Surface', title: 'A flat glass surface: the beam bends on entering (Snell\'s law) and a little is reflected (Fresnel)' },
+  { setup: 'ftir', shape: 'gap', label: 'Gap', title: 'Frustrated total internal reflection: light tunnels across a thin gap between two blocks of glass' },
+  { setup: 'guide', shape: 'bend', label: 'Waveguide', title: 'A strip of glass guides light by total internal reflection, round a bend' },
+  { setup: 'cutoff', shape: 'metalguide', label: 'Metal guide', title: 'A channel through metal narrower than half a wavelength: no wave gets through (cutoff)' },
+  { setup: 'lens', shape: 'lens', label: 'Lens', title: 'A glass lens brings a wide beam to a focus' },
+  { setup: 'grin', shape: null, fromShape: false, label: 'Luneburg lens', title: 'A lens without surfaces: the index varies smoothly and bends the light to a focus' },
+  { setup: 'slits', shape: 'slits', label: 'Two slits', title: 'Young\'s two slits in a metal wall: two circular waves overlap and make fringes' },
+  { setup: 'crystal', shape: 'crystal', label: 'Crystal', title: 'A photonic crystal: rows of rods that reflect this wavelength completely (a band gap)' },
+  { setup: 'pcbend', shape: 'pcbend', label: 'Crystal bend', title: 'A channel through the crystal takes light round a sharp corner' },
+  { setup: 'cavity', shape: 'cavity', label: 'Cavity', title: 'A metal box rings after a pulse and slowly leaks: its quality factor Q' },
+  { setup: 'cherenkov', shape: 'fill', label: 'Cherenkov', title: 'A source moving through glass faster than light does there: a shock wave of light' },
+  { setup: 'none', shape: null, label: 'Empty box', title: 'Take the shape away and keep the source: paint your own' },
+];
 const shapeButtons = {};
-for (const [id, sh] of [...Object.entries(SHAPES), ['none', { label: 'None' }]]) {
-  const b = el('button', { type: 'button', 'aria-pressed': 'false', onclick: () => setShape(id === 'none' ? null : id) }, sh.label);
-  shapeButtons[id] = b;
+for (const pr of PRESETS) {
+  const b = el('button', { type: 'button', 'aria-pressed': 'false', title: pr.title,
+    onclick: () => { if (pr.setup === 'none') { setShape(null); markPreset('none'); } else setups[pr.setup](); } }, pr.label);
+  shapeButtons[pr.setup] = b;
   $('#shapes').append(b);
+}
+/** Light the button of the set-up last chosen. */
+function markPreset(name) {
+  for (const [k, b] of Object.entries(shapeButtons)) b.setAttribute('aria-pressed', String(k === name));
+}
+/** The button for a set-up: its own, or (for one that shares a shape, or a shape loaded from
+ *  the address) the first button with that shape. */
+function presetOf(setup, shape) {
+  if (shapeButtons[setup]) return setup;
+  return (PRESETS.find((p) => p.shape === shape && p.fromShape !== false) || {}).setup || null;
 }
 const shapeP = slider({ label: 'size', min: 0, max: 1, value: 0, onInput: (v) => { state.p = v; rebuildMaterials(); } });
 const shapeN = slider({ label: 'n', min: 1, max: 4, step: 0.01, value: 1.5, title: 'The shape\'s refractive index', onInput: (v) => { state.n = Math.max(1, Math.min(6, v)); rebuildMaterials(); } });
 $('#shape-box').append(shapeP, shapeN);
 function showShapeControls() {
   const sh = state.shape && SHAPES[state.shape];
-  for (const [k, b] of Object.entries(shapeButtons)) b.setAttribute('aria-pressed', String(k === (state.shape || 'none')));
   shapeP.hidden = !sh || !sh.pLabel;
   shapeN.hidden = !sh || sh.n === undefined;
   if (sh && sh.pLabel) { shapeP.querySelector('label').textContent = sh.pLabel; shapeP.setRange(sh.p[0], sh.p[1]); shapeP.value = state.p; }
@@ -888,16 +979,16 @@ const polSeg = segmented([
   { value: 'TE', label: 'TE: Hz', title: 'H along z, E in the picture (p polarisation: has a Brewster angle)' },
 ], state.mode, (v) => { state.mode = v; build(); hashSoon(); kick(); }, { label: 'Polarisation' });
 const flowToggle = toggle('Energy flow', state.flow, (on) => { state.flow = on; makeMonitors(); hashSoon(); kick(); }, 'Arrows: the Poynting vector E × H averaged over a period (their length grows as the square root of its size, so that weak flows show)');
-const probeToggle = toggle('Probe', !!state.probe, (on) => { state.probe = on ? { x: 0, y: 0 } : null; makeMonitors(); layout(); hashSoon(); kick(); }, 'The field at a point against time (and Q, when it rings down)');
-const meterButton = el('button', { type: 'button', title: 'A line that measures the power crossing it (drag its ends)', onclick: () => {
+const probeToggle = toggle('Probe', !!state.probe, (on) => { state.probe = on ? { x: 0, y: 0 } : null; makeMonitors(); layout(); hashSoon(); kick(); }, 'A yellow cross you drag: the field there against time, on a chart under the picture (and Q, when it rings down)');
+const meterButton = el('button', { type: 'button', title: 'A green line that reads the power crossing it, as a share of the beam\'s (drag its ends; two at most)', onclick: () => {
   if (state.meters.length >= 2) state.meters.length = 0;
   else { const y = state.meters.length ? -1 : 1; state.meters.push({ x0: 1, y0: y - 1.5, x1: 1, y1: y + 1.5 }); }
-  makeMonitors(); meterButton.textContent = state.meters.length >= 2 ? 'Remove meters' : 'Add meter'; hashSoon(); kick();
-} }, 'Add meter');
-$('#show-mode').append(viewSeg);
+  makeMonitors(); meterButton.textContent = state.meters.length >= 2 ? 'Remove the meters' : 'Add a power meter'; hashSoon(); kick();
+} }, 'Add a power meter');
+$('#show-mode').append(viewSeg, flowToggle);
 $('#show-pol').append(polSeg);
-$('#show-toggles').append(flowToggle, probeToggle, meterButton);
-const brightSlider = slider({ label: 'brightness', min: -2, max: 2, step: 0.01, value: 0, onInput: (v) => { state.bright = v; kick(); } });
+$('#show-toggles').append(probeToggle, meterButton);
+const brightSlider = slider({ label: 'brightness', min: -2, max: 2, step: 0.01, value: 0, title: 'The colours are compressed so that weak waves show; this shifts the scale', onInput: (v) => { state.bright = v; kick(); } });
 $('#bright-box').append(brightSlider);
 function setView(v) { state.view = v; viewSeg.value = v; sim.trackIntensity(v === 'intensity', 1, false); hashSoon(); kick(); }
 
@@ -935,10 +1026,10 @@ function setBackground(expr, params, rebuild = true) {
 let bgTimer = 0;
 const bgButtons = el('div', { class: 'row' }, ...Object.entries(BG_PRESETS).map(([label, [src, p]]) =>
   el('button', { type: 'button', onclick: () => bgField.set(src, p) }, label)));
-$('#grid-box').append(...Object.values(gridSliders),
-  el('div', { class: 'hint' }, 'A finer grid is more accurate and slower.  The absorbing layer around the box is 16 cells thick.'),
+const gridNote = el('div', { class: 'note', id: 'grid-note' });
+$('#grid-box').append(...Object.values(gridSliders), gridNote,
   el('div', { class: 'label' }, 'Background'), bgField, bgButtons,
-  el('div', { class: 'hint' }, 'The index everywhere you haven\'t painted (x, y, r in wavelengths from the centre).'));
+  el('div', { class: 'note' }, 'The index everywhere you haven\'t painted (x, y, r in wavelengths from the centre).'));
 
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1002,6 +1093,7 @@ function go({ W = 16, H = 10, ppw = 24, mode = 'TM', shape = null, p, n, bg = '1
   if (shape) { state.p = p ?? SHAPES[shape].p[2]; state.n = n ?? SHAPES[shape].n ?? 1.5; }
   state.paint = [];
   state.src = { type: 'off', x: 0, y: 0, angle: 0, width: 1, wave: 'cw', beta: 0.9, mwave: 'steady', ...src };
+  hover = null; hoverHandle = null;   // the box may change size: what was under the pointer is gone
   bgField.set(bg, bgParams, false); setBackground(bgField.expr, bgField.params, false);
   if (brush !== undefined) setBrush(brush);
   syncControls();
@@ -1023,12 +1115,15 @@ function syncControls() {
   speedSlider.value = state.speed; brightSlider.value = state.bright;
   viewSeg.value = state.view; polSeg.value = state.mode;
   flowToggle.on = state.flow; probeToggle.on = !!state.probe;
-  meterButton.textContent = state.meters.length >= 2 ? 'Remove meters' : 'Add meter';
+  meterButton.textContent = state.meters.length >= 2 ? 'Remove the meters' : 'Add a power meter';
   gridSliders.ppw.value = state.ppw; gridSliders.W.value = state.W; gridSliders.H.value = state.H;
   showShapeControls(); showSourceControls();
 }
 
 const setups = {
+  // The opening state: a beam through a prism, meeting its first face at 38°.  (24 cells per
+  // wavelength, 16 in the glass: coarse enough to animate smoothly on a laptop.)
+  prism: () => go({ W: 16, H: 10, ppw: 24, shape: 'prism', p: 7, src: aimed(8, 5.5, -0.6, -0.2, { width: 1 }) }),
   circles: () => go({ src: { type: 'point', x: -2, y: 0 } }),
   snell: () => go({ W: 14, H: 10, ppw: 30, shape: 'surface', src: aimed(-60, 4, 0, 0, { width: 1.2 }) }),
   // 55° from the normal, 13° beyond the critical angle, so that little of the beam's spread of
@@ -1055,15 +1150,22 @@ const setups = {
   cavity: () => go({ W: 4, H: 3, ppw: 41, shape: 'cavity', p: 0.4, src: { type: 'point', x: 0, y: 0, wave: 'pulse' }, probe: { x: 0.18, y: 0.18 }, speed: 3 }),
   cherenkov: () => go({ W: 16, H: 9, ppw: 24, shape: 'fill', n: 1.5, src: { type: 'moving', x: -7, y: 0, angle: 0, beta: 0.9, mwave: 'steady' } }),
 };
+// Every set-up lights its button under Set-ups.
+for (const name of Object.keys(setups)) {
+  const f = setups[name];
+  setups[name] = () => { f(); markPreset(presetOf(name, state.shape)); };
+}
 drawer($('#help'), $('#help-button'), setups);
 
 // --------------------------------------------------------------------------- start
 
-const welcome = () => go({ W: 16, H: 10, ppw: 30, shape: 'prism', p: 7, src: aimed(8, 5.5, -0.6, -0.2, { width: 1 }) });
 const hash = readHash();
 if (setups[hash.setup]) setups[hash.setup]();
-else if (Object.keys(hash).length) { try { loadHash(hash); } catch { /* keep the defaults */ } syncControls(); build(); restart(); setRunning(true); }
-else welcome();
+else if (Object.keys(hash).length) {
+  try { loadHash(hash); } catch { /* keep the defaults */ }
+  syncControls(); build(); restart(); setRunning(true);
+  markPreset(presetOf(null, state.shape));
+} else setups.prism();
 
 window.__app = {
   state, setups, ready: true, theory,
