@@ -41,6 +41,7 @@ class Side {
     this.canvas = $('canvas.view', this.root);
     this.ctx = this.canvas.getContext('2d');
     this.readout = $('.readout', this.root);
+    this.hint = $('.hint', this.root);   // under the picture while the pointer is off it
     this.mode = 'complex';
     this.modeAuto = key === 'x'; // grey while the image is real and positive, colour once not
     this.autoR = 1;
@@ -363,9 +364,10 @@ function onUp(side) {
   schedule();
 }
 
-// The value under the pointer: each number in a slot of its own (fixed decimals, room for a
-// sign), so that nothing in the line moves as the pointer does.
+// The value under the pointer, in the hint's place under the picture: each number in a slot of
+// its own (fixed decimals, room for a sign), so that nothing in the line moves as the pointer does.
 function showReadout(side, p) {
+  if (side.readout.hidden) { side.readout.hidden = false; side.hint.hidden = true; }
   const n = state.n, x = p.i - n / 2, y = n / 2 - p.j, idx = p.j * n + p.i;
   const re = side.re[idx], im = side.im[idx], mag = Math.hypot(re, im);
   const deg = (Math.atan2(im, re) * 180) / Math.PI;
@@ -375,7 +377,8 @@ function showReadout(side, p) {
     setSlots(side.readout, ['x ', { v: x, dec: 0, w: 4 }, ', y ', { v: y, dec: 0, w: 4 }, ...value]);
   } else {
     const k = Math.hypot(x, y);
-    const wave = k ? ['   λ ', { v: n / k, dec: 1, w: 5 }, ' px, ', { v: Math.round((Math.atan2(y, x) * 180) / Math.PI), dec: 0, w: 4 }, '°'] : ['   (the average)'];
+    // F(0, 0) = (1/N) sum f, the mean of the image times N (the transform is unitary).
+    const wave = k ? ['   λ ', { v: n / k, dec: 1, w: 5 }, ' px, ', { v: Math.round((Math.atan2(y, x) * 180) / Math.PI), dec: 0, w: 4 }, '°'] : ['   (k = 0: the average × N)'];
     setSlots(side.readout, ['kx ', { v: x, dec: 0, w: 4 }, ', ky ', { v: y, dec: 0, w: 4 }, ...value, ...wave]);
   }
 }
@@ -386,7 +389,22 @@ for (const side of Object.values(sides)) {
   c.addEventListener('pointermove', (e) => onMove(side, e));
   c.addEventListener('pointerup', () => onUp(side));
   c.addEventListener('pointercancel', () => onUp(side));
-  c.addEventListener('pointerleave', () => { side.hover = null; side.readout.innerHTML = '&nbsp;'; schedule(); });
+  c.addEventListener('pointerleave', () => { side.hover = null; side.readout.hidden = true; side.hint.hidden = false; schedule(); });
+}
+
+// The hint under each picture (while the pointer is off it): what the chosen tool does there.
+const HINTS = {
+  brush: { x: 'Paint on the picture: the transform follows each stroke', k: 'Paint here too: one dot of k is one wave in the picture' },
+  eraser: { x: 'Erase part of the picture: the transform follows', k: 'Erase here: the picture loses the waves you erase' },
+  hand: { x: 'Drag to shift the picture: the transform changes only in phase', k: 'Drag to shift the transform: the picture gets a phase ramp' },
+  mask: {
+    inside: { x: 'Press and drag outwards: outside the circle is set to zero', k: 'Press on the centre and drag outwards: outside is zeroed, so the picture blurs' },
+    outside: { x: 'Press and drag outwards: inside the circle is set to zero', k: 'Press on the centre and drag outwards: inside is zeroed, so only edges stay' },
+  },
+};
+function updateHints() {
+  const h = state.tool === 'mask' ? HINTS.mask[state.maskKeep] : HINTS[state.tool];
+  for (const s of Object.values(sides)) s.hint.textContent = h[s.key];
 }
 
 // -------------------------------------------------------------------------- the tools
@@ -413,7 +431,7 @@ const maskShapeSeg = segmented([
 const maskKeepSeg = segmented([
   { value: 'inside', label: 'Keep inside', title: 'Zero everything outside: centred on the transform, a low-pass filter' },
   { value: 'outside', label: 'Keep outside', title: 'Zero everything inside: centred on the transform, a high-pass filter' },
-], state.maskKeep, (v) => { state.maskKeep = v; }, { label: 'Mask keeps' });
+], state.maskKeep, (v) => { state.maskKeep = v; updateHints(); }, { label: 'Mask keeps' });
 const handHint = el('div', { class: 'small muted' }, 'Drag either picture to shift it; it wraps around the edges.');
 const maskHint = el('div', { class: 'small muted' }, 'Press and drag outwards. Press near the centre to centre the mask on the origin.');
 
@@ -427,6 +445,7 @@ function setTool(tool) {
   else box.append(handHint);
   $('#picker-box').hidden = tool !== 'brush';
   for (const s of Object.values(sides)) s.canvas.classList.toggle('hand', tool === 'hand');
+  updateHints();
   schedule();
 }
 
@@ -518,7 +537,7 @@ for (const side of Object.values(sides)) {
   side.zoomSelect = zoom;
 
   const ops = $('select.ops', side.root);
-  $('.side-foot', side.root).append(el('div', { class: 'foot-row' }, ops, side.readout));
+  $('.side-foot', side.root).append(el('div', { class: 'foot-row' }, ops));
   ops.append(el('option', { value: '', disabled: true, selected: true }, 'Operations…'));
   for (const [k, op] of Object.entries(OPERATIONS)) ops.append(el('option', { value: k, title: op.title }, op.label));
   ops.append(el('option', { value: '', disabled: true }, '──────────'));
@@ -753,12 +772,12 @@ const setups = {
   },
   async lowpass() {
     reset({ tool: 'mask' });
-    state.maskKeep = 'inside'; maskKeepSeg.value = 'inside';
+    state.maskKeep = 'inside'; maskKeepSeg.value = 'inside'; updateHints();
     await loadPreset('portrait');
   },
   async highpass() {
     reset({ tool: 'mask' });
-    state.maskKeep = 'outside'; maskKeepSeg.value = 'outside';
+    state.maskKeep = 'outside'; maskKeepSeg.value = 'outside'; updateHints();
     await loadPreset('portrait');
   },
   async gaussian() { reset(); await loadPreset('gaussian'); },
@@ -781,6 +800,9 @@ const setups = {
   },
   async wave() {
     reset({ tool: 'hand' });
+    // A one-pixel brush, so that B and a click add a second wave, as the help says.
+    state.brush.shape = 'round'; shapeSeg.value = 'round';
+    state.brush.size = 1; sizeSlider.value = 1;
     await loadPreset('wave');
     for (const s of Object.values(sides)) { s.zoom = 1; s.zoomSelect.value = 1; }
     sides.k.zoom = 8; sides.k.zoomSelect.value = 8;
