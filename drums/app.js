@@ -1370,6 +1370,8 @@ function go({ mode = 'quantum', shape = 'stadium', params = {}, start, seed = 0,
   setModeLabels();
   speedSlider.setRange(mode === 'drum' ? 0.02 : 0.001, mode === 'drum' ? 20 : 2);
   speedSlider.value = state.speed[mode];
+  // Every set-up starts with the folded panels folded; the ones that need them open them after.
+  $('#drum-more').open = false; $('#draw-panel').open = false;
   setTool('act');
   showTab(tab || 'list');
   setShape(shape, params);
