@@ -113,7 +113,7 @@ export function createModes(app) {
 
   function fftNote() {
     const box = $('#fft-note');
-    let parts = ['Compute the beam at z from the one at the waist with the angular spectrum method of the diffraction demo (exact, not paraxial: w₀ = 20λ), instead of the formula.'];
+    let parts = ['Instead of the formula, send the field at the waist a distance z numerically (an FFT, as in the Diffraction demo: exact, not paraxial, with w₀ = 20λ) and compare the two.'];
     if (state.fft) {
       // Each number in a slot of its own, so that the words keep their places as z changes.
       const f = computeFFT(), N = order(mode()), psi = Math.atan(state.zeta);
@@ -246,7 +246,10 @@ export function createModes(app) {
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     for (let v = -top; v <= top + 1e-9; v += top > 2 ? 1 : 0.5) ctx.fillText(Math.abs(v) < 1e-9 ? '0' : `${tickLabel(v).replace(/^(−?)1$/, '$1')}π`, F.left - 5, F.Y(v));
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`Gouy phase (N+1)·atan(z/z_R), N = ${N}${N > 0 ? (F.w > 480 ? '; dashed: the fundamental, N = 0' : '; dashed: N = 0') : ''}`, F.left, 14);
+    const dash = N > 0 ? '; dashed: N = 0' : '';
+    const titles = [`Gouy phase, how far the crests run ahead of a plane wave’s: (N+1)·atan(z/z_R), N = ${N}${dash}`,
+      `Gouy phase (how far the crests run ahead): (N+1)·atan(z/z_R), N = ${N}${dash}`, `Gouy phase (N+1)·atan(z/z_R), N = ${N}${dash}`];
+    ctx.fillText(titles.find((t) => ctx.measureText(t).width <= F.w - 4) || titles[2], F.left, 14);
     ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText('z / z_R', F.right, F.bottom + 16);
   }
 
@@ -281,15 +284,22 @@ export function createModes(app) {
   // ------------------------------------------------------------------- controls
 
   const famSeg = segmented([
-    { value: 'hg', label: 'Hermite–Gauss', title: 'HG_mn: products of Hermite functions in x and y' },
-    { value: 'lg', label: 'Laguerre–Gauss', title: 'LG_pl: round, with a phase that winds l times round the axis' },
-    { value: 'mix', html: 'HG<sub>10</sub> + e<sup>iφ</sup>HG<sub>01</sub>', title: 'A superposition of two modes of the same order' },
+    { value: 'hg', label: 'Hermite–Gauss', title: 'Rectangular modes HG_mn: m dark lines across x and n across y' },
+    { value: 'lg', label: 'Laguerre–Gauss', title: 'Round modes LG_pl: p dark rings, and a phase that winds l times round the axis' },
+    { value: 'mix', html: 'HG<sub>10</sub> + e<sup>iφ</sup>HG<sub>01</sub>', title: 'Two modes of order 1 added with a phase φ between them' },
   ], state.family, (v) => { state.family = v; buildIndex(); changed(); buildGallery(); }, { label: 'Family' });
   $('#family-box').append(famSeg);
+  // What the family's name means, in a line under the buttons.
+  const FAMILY_NOTES = {
+    hg: 'Hermite–Gauss HG_mn: a rectangular pattern with m dark lines across and n down; order N = m + n.',
+    lg: 'Laguerre–Gauss LG_pl: round, with p dark rings and a phase winding l times round the axis (a donut when l ≠ 0).',
+    mix: 'HG₁₀ and HG₀₁ added with a phase φ between them: φ = π/2 makes the LG₀₁ donut, φ = 0 a tilted HG₁₀.',
+  };
 
   let idx = {};
   function buildIndex() {
     const box = $('#index-box');
+    $('#family-note').textContent = FAMILY_NOTES[state.family];
     idx = {};
     const mk = (key, label, min, max, step, title) => (idx[key] = slider({ label, labelHTML: true, min, max, step, value: state[key], title,
       onInput: (v) => { state[key] = step === 1 ? Math.round(v) : v; changed(); buildGallery(); } }));
@@ -346,7 +356,7 @@ export function createModes(app) {
     const z = state.zeta, w = Math.sqrt(1 + z * z), N = order(mode());
     // Each number in a slot of its own, so that nothing moves as z runs.
     const R = z === 0 ? [{ text: '∞', w: 7 }] : [{ v: z + 1 / z, dec: 2, w: 7 }, '\u00a0z_R'];
-    setSlots(whereSpan, ['at z = ', { v: z, dec: 2, w: 5 }, '\u00a0z_R: w = ', { v: w, dec: 3, w: 5 }, '\u00a0w₀, R = ', ...R,
+    setSlots(whereSpan, ['at z = ', { v: z, dec: 2, w: 5 }, '\u00a0z_R: radius w = ', { v: w, dec: 3, w: 5 }, '\u00a0w₀, wavefront radius R = ', ...R,
       `, Gouy phase ${N + 1}ψ = `, ...piParts((N + 1) * Math.atan(z), 3)]);
   }
 

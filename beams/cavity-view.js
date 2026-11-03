@@ -179,11 +179,14 @@ export function createCavity(app) {
     const { ctx, width, height } = fitCanvas(stab);
     const c = themeColors();
     ctx.clearRect(0, 0, width, height);
-    const size = Math.min(width - 50, height - 44);
-    const F = new Frame(ctx, size + 50, size + 44, { left: 40, right: 10, top: 14, bottom: 30 });
+    // (The test tests/ui/beams.py repeats this geometry to find the point.)
+    const size = Math.min(width - 50, height - 54);
+    const F = new Frame(ctx, size + 50, size + 54, { left: 40, right: 10, top: 24, bottom: 30 });
     F.left += (width - (size + 50)) / 2; F.right = F.left + F.w;
     sframe = F;
     F.x0 = -G; F.x1 = G; F.y0 = -G; F.y1 = G;
+    ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(width > 300 ? 'Stability diagram: drag the dot to change the mirrors' : 'Stability diagram: drag the dot', F.left, 16);
     F.clip();
     // The stable region, 0 <= g1 g2 <= 1.
     ctx.fillStyle = c.good; ctx.globalAlpha = 0.16;
@@ -247,15 +250,17 @@ export function createCavity(app) {
     const { ctx, width, height } = fitCanvas(spec);
     const c = themeColors();
     ctx.clearRect(0, 0, width, height);
-    const F = new Frame(ctx, width, height, { left: 52, right: 24, top: 24, bottom: 34 });
+    const F = new Frame(ctx, width, height, { left: 52, right: 24, top: 40, bottom: 34 });
     F.x0 = -0.04; F.x1 = 2.04; F.y0 = 0; F.y1 = 1.2;
     const FSR = fsr(state.L), q0 = q0Now();
+    // Two lines above the plot: what it is, then what the dotted lines are and the legend of colours.
     ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     {
-      // The longest title that ends before the legend of colours (drawn below, at the right).
+      const fits = (titles, room) => titles.find((t) => ctx.measureText(t).width <= room) || titles[titles.length - 1];
+      ctx.fillText(fits(['Resonant frequencies of the modes of order N (N + 1 modes of each order)', 'Resonant frequencies of the modes of order N', 'Resonances'], F.w), F.left, 15);
       const legendLeft = F.right - 7 * (F.w > 560 ? 28 : 22) - ctx.measureText('N =').width - 18;
-      const titles = ['Resonant frequencies of the modes of order N (N + 1 modes each)', 'Resonances of the modes of order N', 'Resonances'];
-      ctx.fillText(titles.find((t) => F.left + ctx.measureText(t).width <= legendLeft) || titles[2], F.left, 15);
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText(fits(['dotted grey: the plain comb q·c/2L that flat mirrors would have', 'dotted grey: the plain comb q·c/2L', 'dotted: plain comb'], legendLeft - F.left - 8), F.left, 31);
     }
     F.clip();
     // The plain comb q c/2L, without the Gouy phase.
@@ -279,25 +284,27 @@ export function createCavity(app) {
     const d = mode.gouy / Math.PI;
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.strokeStyle = c.ink2; ctx.lineWidth = 1;
     // From the plain comb to TEM00: the Gouy phase psi1/pi; from TEM00 to N = 1: the same again.
-    const bracket = (x0, x1, y, label) => {
+    // Labelled in words where there is room, by the symbol where there is not.
+    const bracket = (x0, x1, y, labels) => {
       ctx.beginPath(); ctx.moveTo(F.X(x0), y - 3); ctx.lineTo(F.X(x0), y + 3); ctx.moveTo(F.X(x0), y); ctx.lineTo(F.X(x1), y);
       ctx.moveTo(F.X(x1), y - 3); ctx.lineTo(F.X(x1), y + 3); ctx.stroke();
       ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      if (Math.abs(F.X(x1) - F.X(x0)) > ctx.measureText(label).width + 6) ctx.fillText(label, (F.X(x0) + F.X(x1)) / 2, y - 2);
+      const label = labels.find((l) => Math.abs(F.X(x1) - F.X(x0)) > ctx.measureText(l).width + 6);
+      if (label) ctx.fillText(label, (F.X(x0) + F.X(x1)) / 2, y - 2);
     };
-    bracket(0, d, F.Y(1.1), 'ψ₁/π');
-    bracket(d, 2 * d, F.Y(1.1), 'Δν_T');
+    bracket(0, d, F.Y(1.1), ['Gouy shift ψ₁/π', 'ψ₁/π']);
+    bracket(d, 2 * d, F.Y(1.1), ['next order: Δν_T', 'Δν_T']);
     ctx.restore();
     spectrumAxes(ctx, F, c, FSR, q0);
     // A legend of colours.
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '12px system-ui, sans-serif';
     const step = F.w > 560 ? 28 : 22;
     let x = F.right - 7 * step;
-    ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.fillText('N =', x - 6, 11); ctx.textAlign = 'left';
+    ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.fillText('N =', x - 6, 27); ctx.textAlign = 'left';
     for (let N = 0; N <= 6; N++) {
       ctx.fillStyle = N === 0 ? c.accent : N_COLORS[N];
-      ctx.fillRect(x, 6, 4, 11);
-      ctx.fillStyle = c.ink2; ctx.fillText(`${N}`, x + 8, 11);
+      ctx.fillRect(x, 22, 4, 11);
+      ctx.fillStyle = c.ink2; ctx.fillText(`${N}`, x + 8, 27);
       x += step;
     }
   }
@@ -308,8 +315,9 @@ export function createCavity(app) {
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (let q = 0; q <= 2; q++) ctx.fillText(q ? `q₀ + ${q}` : 'q₀', F.X(q), F.bottom + 5);
     for (const v of [0.5, 1.5]) ctx.fillText(tickLabel(v), F.X(v), F.bottom + 5);
-    fillSlots(ctx, F.w > 480 ? ['ν in units of c/2L = ', ...freqParts(FSR), ', above q₀ c/2L, q₀ = ', { v: q0, dec: 0, w: 7 }]
-      : ['ν / (c/2L), q₀ = ', { v: q0, dec: 0, w: 7 }], F.left + F.w / 2, F.bottom + 19);
+    fillSlots(ctx, F.w > 620 ? ['frequency ν in units of c/2L = ', ...freqParts(FSR), ' (the free spectral range), above q₀ c/2L with q₀ = ', { v: q0, dec: 0, w: 7 }]
+      : F.w > 480 ? ['ν in units of c/2L = ', ...freqParts(FSR), ', above q₀ c/2L, q₀ = ', { v: q0, dec: 0, w: 7 }]
+        : ['ν / (c/2L), q₀ = ', { v: q0, dec: 0, w: 7 }], F.left + F.w / 2, F.bottom + 19);
   }
 
   // ------------------------------------------------------------------- rays in phase space
@@ -318,13 +326,14 @@ export function createCavity(app) {
     const { ctx, width, height } = fitCanvas(rph);
     const c = themeColors();
     ctx.clearRect(0, 0, width, height);
-    const size = Math.min(width - 50, height - 52);
-    const F = new Frame(ctx, size + 50, size + 52, { left: 40, right: 10, top: 22, bottom: 30 });
+    const size = Math.min(width - 50, height - 66);
+    const F = new Frame(ctx, size + 50, size + 66, { left: 40, right: 10, top: 36, bottom: 30 });
     F.left += (width - (size + 50)) / 2; F.right = F.left + F.w;
     const s = scale(), L = state.L;
+    // Two lines of title: what the plot is, then what to look for in it.
     ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    fillSlots(ctx, mode ? ['hits on mirror 1: each round trip turns them by 2ψ₁ = ', ...piParts(2 * mode.gouy, 3, 5)] : ['hits on mirror 1: they run away'],
-      F.left + F.w / 2, 14);
+    ctx.fillText(width > 330 ? 'Where each ray hits mirror 1: its position x against its angle' : 'Where each ray hits mirror 1: x against angle', width / 2, 14);
+    fillSlots(ctx, mode ? ['each round trip turns the dots by 2ψ₁ = ', ...piParts(2 * mode.gouy, 3, 5)] : ['they run away: the cavity is unstable'], width / 2, 28);
     // Scaled to the ellipses (stable), or to where the rays started (unstable: they leave).
     let big = 0;
     for (const ray of rays) for (const [x, th] of mode ? ray.phase : ray.phase.slice(0, 1)) big = Math.max(big, Math.abs(x / s), Math.abs((th * L) / s));
@@ -357,20 +366,21 @@ export function createCavity(app) {
     const [g1, g2] = gParams(state.L, state.R1, state.R2), p = g1 * g2;
     const st = !!mode;
     // Each number in a slot of its own (setSlots), so that nothing moves as they change.
+    // Each row named in words (the symbol after them), for a reader who has not met g1 g2.
     const rows = [
-      ['g₁, g₂', [{ v: g1, dec: 3, w: 7 }, ', ', { v: g2, dec: 3, w: 7 }]],
-      ['g₁g₂', [{ v: p, dec: 3, w: 7 }, `: ${p === 0 && mode ? 'confocal, on the edge' : st ? 'stable' : p === 0 || p === 1 ? 'on the edge' : 'unstable'}`]],
+      ['stability numbers g₁, g₂ = 1 − L/R', [{ v: g1, dec: 3, w: 7 }, ', ', { v: g2, dec: 3, w: 7 }]],
+      ['their product g₁g₂ (0 to 1: stable)', [{ v: p, dec: 3, w: 7 }, `: ${p === 0 && mode ? 'confocal, on the edge' : st ? 'stable' : p === 0 || p === 1 ? 'on the edge' : 'unstable'}`]],
     ];
     if (mode) {
       rows.push(
-        ['waist w₀', lenParts(mode.w0, 7)],
-        ['waist from mirror 1', lenParts(mode.zw, 7)],
+        ['mode waist w₀', lenParts(mode.w0, 7)],
+        ['its distance from mirror 1', lenParts(mode.zw, 7)],
         ['Rayleigh range z_R', lenParts(mode.zR, 7)],
-        ['spot on mirror 1, 2', [...lenParts(mode.w1, 7), ', ', ...lenParts(mode.w2, 7)]],
-        ['Gouy phase ψ₁ each way', piParts(mode.gouy, 3, 5)],
-        ['free spectral range c/2L', freqParts(fsr(state.L))],
-        ['TEM₀₀ resonances', ['(q + ', { v: mode.gouy / Math.PI, dec: 3, w: 5 }, ') c/2L']],
-        ['order spacing Δν_T', freqParts((fsr(state.L) * mode.gouy) / Math.PI)],
+        ['beam radius on mirror 1, 2', [...lenParts(mode.w1, 7), ', ', ...lenParts(mode.w2, 7)]],
+        ['Gouy phase ψ₁ per pass', piParts(mode.gouy, 3, 5)],
+        ['free spectral range c/2L (comb spacing)', freqParts(fsr(state.L))],
+        ['lowest mode TEM₀₀ resonates at', ['(q + ', { v: mode.gouy / Math.PI, dec: 3, w: 5 }, ') c/2L']],
+        ['each order higher by Δν_T', freqParts((fsr(state.L) * mode.gouy) / Math.PI)],
       );
     }
     const dl = $('#cav-numbers'), nkey = rows.map(([k]) => k).join('|');
@@ -378,9 +388,13 @@ export function createCavity(app) {
     rows.forEach(([, parts], i) => setSlots(dl.children[2 * i + 1], parts));
     // A short line, the same length whatever the cavity, so the canvases below don't move
     // while the point is dragged.
+    // In words a reader who has just met cavities can follow: the stability product and what it
+    // means, then the mode the mirrors hold.
+    const edge = p === 0 || p === 1;
     const r = mode
-      ? [['good', ['stable: g₁g₂ = ', { v: p, dec: 3, w: 7 }]], ['', ['mode waist ', ...lenParts(mode.w0, 7).map((x) => (typeof x === 'string' ? x : { ...x, class: 'b' })), ', Gouy phase ψ₁ = ', ...piParts(mode.gouy, 3, 5), ' each way']]]
-      : [['warn', [`${p === 0 || p === 1 ? 'on the edge' : 'unstable'}: g₁g₂ = `, { v: p, dec: 3, w: 7 }]], ['', ['no mode']]];
+      ? [['good', ['stable: g₁g₂ = ', { v: p, dec: 3, w: 7 }, edge ? ' is on the edge of 0 to 1' : ' is between 0 and 1']],
+        ['', ['the mode it holds: waist ', ...lenParts(mode.w0, 7).map((x) => (typeof x === 'string' ? x : { ...x, class: 'b' })), ', Gouy phase ψ₁ = ', ...piParts(mode.gouy, 3, 5), ' per pass']]]
+      : [['warn', [`${edge ? 'on the edge' : 'unstable'}: g₁g₂ = `, { v: p, dec: 3, w: 7 }, edge ? ' is on the edge of 0 to 1' : ' is outside 0 to 1']], ['', ['no mode: the rays walk off']]];
     const box = $('#cavity-readout'), key = r.map(([c]) => c).join('|');
     if (key !== readoutKey) { readoutKey = key; box.replaceChildren(...r.map(([c]) => el('span', { class: c || undefined }))); }
     r.forEach(([, parts], i) => setSlots(box.children[i], parts));
@@ -405,11 +419,15 @@ export function createCavity(app) {
   const lamNote = el('div', { class: 'small muted' });
   box.append(Ls, el('div', { class: 'small muted' }, 'Mirror 1'), R1s, el('div', { class: 'small muted' }, 'Mirror 2'), R2s, lamNote);
   const presets = {
-    'near planar': [250, 2500, 2500], confocal: [250, 250, 250], 'near concentric': [250, 130, 130],
-    hemispherical: [250, Infinity, 270], unstable: [250, 100, 100], 'unequal mirrors': [250, 300, 1000],
+    'near planar': [250, 2500, 2500, 'Both mirrors nearly flat (R ≫ L): g₁ = g₂ just under 1'],
+    confocal: [250, 250, 250, 'R₁ = R₂ = L: each mirror’s centre of curvature on the other mirror, g₁ = g₂ = 0'],
+    'near concentric': [250, 130, 130, 'R just over L/2: the two centres of curvature almost meet in the middle, g₁ = g₂ near −1'],
+    hemispherical: [250, Infinity, 270, 'One flat mirror and one with R just over L: g₁ = 1, g₂ near 0'],
+    unstable: [250, 100, 100, 'R < L/2: g₁g₂ > 1, no mode, and the rays walk off'],
+    'unequal mirrors': [250, 300, 1000, 'R₁ = 300 mm, R₂ = 1 m: the waist sits nearer the flatter mirror'],
   };
-  for (const [name, [L, R1, R2]] of Object.entries(presets)) {
-    $('#cav-presets').append(el('button', { type: 'button', onclick: () => set({ L, R1, R2 }) }, name[0].toUpperCase() + name.slice(1)));
+  for (const [name, [L, R1, R2, title]] of Object.entries(presets)) {
+    $('#cav-presets').append(el('button', { type: 'button', title, onclick: () => set({ L, R1, R2 }) }, name[0].toUpperCase() + name.slice(1)));
   }
   const playButton = el('button', { type: 'button', class: 'primary', title: 'Run or stop the rays', onclick: () => setPlay(!state.play) }, 'Pause');
   function setPlay(on) { state.play = on; playButton.textContent = on ? 'Pause' : 'Play'; app.animate(); }
