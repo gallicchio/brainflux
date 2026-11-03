@@ -151,12 +151,15 @@ function drawOverlay(ctx, w, h) {
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillText('2D²/λ', px + rf * scale * 0.71 + 4, py - rf * scale * 0.71 - 4);
   }
-  // The beam's direction.
+  // The beam's direction, named.
   if (info && info.beam !== null && !info.omni && A.phaseMode !== 'focus') {
-    const [px, py] = toPx(cx, cy, w), L = w * 0.75;
+    const [px, py] = toPx(cx, cy, w), L = w * 0.75, sn = Math.sin(info.beam), cs = Math.cos(info.beam);
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.setLineDash([2, 6]); ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + L * Math.sin(info.beam), py - L * Math.cos(info.beam)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + L * sn, py - L * cs); ctx.stroke();
     ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('beam', px + 0.55 * L * sn + 6, py - 0.55 * L * cs);
+    ctx.textBaseline = 'alphabetic';
   }
   // The focus.
   if (A.phaseMode === 'focus') {
@@ -281,6 +284,9 @@ const DB_RANGE = 40;
 function drawPolar() {
   const { ctx, width, height } = fitCanvas(polarCanvas), c = themeColors();
   ctx.clearRect(0, 0, width, height);
+  // The note beside the title says what the rings mean (dB on first sight: a tenth, a hundredth).
+  const note = A.db ? 'power in each direction; −10 dB is a tenth of the beam’s' : 'power in each direction, as a fraction of the beam’s';
+  if ($('#polar-note').textContent !== note) $('#polar-note').textContent = note;
   const cx = width / 2, cy = height / 2, R = Math.min(width, height) / 2 - 26;
   ctx.save();
   ctx.font = '11px system-ui, sans-serif';
@@ -385,18 +391,19 @@ function readouts() {
     add('Far field', ['no single beam: the waves meet at the focus and spread out again']);
   } else if (info.omni) add('Beam', ['none: the same power within 3 dB in every direction']);
   else {
-    add('Beam direction', ['θ = ', ...deg(info.beam)]);
+    // Each row names what it is in words a first-time reader knows, and where it is in the plot.
+    add('Beam direction', ['θ = ', ...deg(info.beam), ' (the black line)']);
     add('Beamwidth', [{ v: info.hpbw / DEG, dec: 1, w: 5 }, '° between the half-power (−3 dB) points']);
     // A grating lobe proper: an equally spaced line with d > lambda / (1 + |sin theta0|).
     const grating = A.layout === 'line' && A.phaseMode === 'steer' && A.d > 1 / (1 + Math.abs(Math.sin(A.theta0 * DEG))) - 1e-9;
     if (info.sll === null) add('Highest sidelobe', ['none']);
     else if (info.sll > -0.5) add('Highest sidelobe', [...dB(info.sll), ' at ', ...deg(info.sllAngle), `: as strong as the beam${grating ? ' (a grating lobe)' : ''}`], 'warn');
-    else add('Highest sidelobe', [...dB(info.sll), ' at ', ...deg(info.sllAngle)]);
+    else add('Highest sidelobe', [...dB(info.sll), ' at ', ...deg(info.sllAngle), ' (the red dot)']);
   }
   // (No line breaks either side of an "=": a wrapped line keeps the equation whole.)
-  if (D > 0 && A.phaseMode !== 'focus') add('Directivity', [{ v: 10 * Math.log10(D), dec: 1, w: 4 }, '\u00a0dBi (D\u00a0=\u00a0', { v: D, dec: 1, w: 5 }, ')']);
+  if (D > 0 && A.phaseMode !== 'focus') add('Directivity D', [{ v: D, dec: 1, w: 5 }, '× an isotropic antenna’s power towards the beam (', { v: 10 * Math.log10(D), dec: 1, w: 4 }, '\u00a0dBi)']);
   const Dsz = extent(A.els);
-  add('Elements', [{ v: A.els.length, dec: 0, w: 2 }, ', across D\u00a0=\u00a0', { v: Dsz, dec: 1, w: 4 }, '\u00a0λ; far field beyond 2D²/λ\u00a0=\u00a0', { v: 2 * Dsz * Dsz, dec: 1, w: 6 }, '\u00a0λ']);
+  add('Elements', [{ v: A.els.length, dec: 0, w: 2 }, ', spanning D\u00a0=\u00a0', { v: Dsz, dec: 1, w: 4 }, '\u00a0λ; far field beyond 2D²/λ\u00a0=\u00a0', { v: 2 * Dsz * Dsz, dec: 1, w: 6 }, '\u00a0λ']);
   // The rows are made again only when the quantities shown change; otherwise only their numbers.
   const key = rows.map(([k, , cls]) => `${k}|${cls}`).join(';');
   if (box._rows !== key) {
@@ -477,7 +484,7 @@ const phaseSeg = segmented([
   { value: 'manual', label: 'By hand', title: 'Set each element’s phase yourself (select it in the picture)' },
 ], A.phaseMode, (v) => setPhaseMode(v), { label: 'Phases' });
 $('#phase-mode').append(phaseSeg);
-const theta0Slider = slider({ label: 'θ₀ (°)', min: -90, max: 90, step: 0.5, value: A.theta0, title: 'The steering angle, from straight up',
+const theta0Slider = slider({ label: 'beam angle θ₀ (°)', min: -90, max: 90, step: 0.5, value: A.theta0, title: 'The steering angle, from straight up',
   onInput: (v) => { A.theta0 = v; if (A.phaseMode !== 'steer') setPhaseMode('steer'); arraysChanged(); } });
 const sweepToggle = toggle('Sweep', A.sweep, (on) => { A.sweep = on; if (on && A.phaseMode !== 'steer') setPhaseMode('steer'); kick(); arraysChanged(); }, 'Swing the beam back and forth, like a radar');
 const steerBox = el('div', { class: 'stack' }, theta0Slider, el('div', { class: 'row' }, sweepToggle,

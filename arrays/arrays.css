@@ -30,12 +30,15 @@
 .synth-stage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
 .synth-stage .cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .synth-stage .sq { max-width: calc(50vh - 75px); margin: 0 auto; }
-/* Notes beside the panel titles stay on one line. */
-.synth-stage .side-head { flex-wrap: nowrap; }
-.synth-stage .side-head h2 { flex: none; }
-.synth-stage .side-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Each panel's title on one line and its note (what the panel is, and its numbers) on the next,
+   both kept to one line so that the six pictures line up. */
+.synth-stage .side-head { flex-direction: column; align-items: flex-start; gap: 0; min-height: 40px; }
+.synth-stage .side-head h2 { flex: none; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.synth-stage .side-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%; }
+/* The hint, a row of its own across the grid, under the top three pictures. */
+.synth-stage .hint { grid-column: 1 / -1; }
 /* Under the CLEAN image, where its counts have room to keep still in slots of their own. */
-.synth-stage .foot-note { width: 100%; max-width: calc(50vh - 75px); margin: 0 auto; min-height: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.synth-stage .foot-note { width: 100%; max-width: calc(50vh - 75px); margin: 0 auto; min-height: 2.9em; }
 
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
@@ -52,4 +55,7 @@
   .arrays-stage .view .sq { max-width: none; }
   .synth-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .synth-stage .sq, .synth-stage .foot-note { max-width: none; }
+  /* Two columns: the hint goes under the first two pictures, not after the third alone. */
+  .synth-stage .cell:nth-child(-n+2) { order: -2; }
+  .synth-stage .hint { order: -1; }
 }

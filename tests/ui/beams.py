@@ -66,6 +66,25 @@ def set_box(b, panel, label, value):
     return lambda: b.eval(f"""(() => {{ const s = [...document.querySelectorAll({json.dumps(panel + ' .slider')})].find((x) => x.querySelector('label').textContent.trim() === {json.dumps(label)});
         const n = s.querySelector('input[type=number]'); n.value = {value}; n.dispatchEvent(new Event('change')); }})()""")
 
+# The first screen: the hint (lib/style.css .hint, with its arrow) right under the main picture and
+# inside the first screen without scrolling, in both themes; the drawer's "Start here" block.
+HINT = """((sel, pics) => { const e = document.querySelector(sel); if (!e || !e.getClientRects().length) return null;
+    const r = e.getBoundingClientRect(), gap = Math.min(...pics.map((p) => r.top - document.querySelector(p).getBoundingClientRect().bottom));
+    return { text: e.textContent.trim(), cls: e.className, arrow: getComputedStyle(e, '::before').content, gap, top: r.top, bottom: r.bottom, h: innerHeight }; })"""
+def hint_check(b, sel, pics, starts, where):
+    h = b.eval(f'{HINT}({json.dumps(sel)}, {json.dumps(pics)})')
+    check(bool(h) and h['cls'].split()[0] == 'hint' and '→' in h['arrow'] and h['text'].startswith(starts) and 0 <= h['gap'] < 40 and h['bottom'] <= h['h'],
+          f'{where}: the hint is in the shared style, {h["gap"]:.0f} px under the picture and inside the first screen ({h["bottom"]:.0f} of {h["h"]} px): "{h["text"][:48]}..."' if h else f'{where}: no hint {sel}')
+    return h
+# The contrast of an element's text against the background behind it (WCAG ratio).
+CONTRAST = """((sel) => { const e = document.querySelector(sel);
+    const lum = (c) => { const [r, g, b] = c.match(/[\\d.]+/g).slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    let bg = 'rgba(0, 0, 0, 0)', p = e; while (p && /rgba\\(0, 0, 0, 0\\)|transparent/.test(bg)) { bg = getComputedStyle(p).backgroundColor; p = p.parentElement; }
+    const a = lum(getComputedStyle(e).color), c = lum(bg); return { ratio: (Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05), dark: c < 0.2 }; })"""
+def contrast_check(b, sel, theme, what):
+    r = b.eval(f'{CONTRAST}({json.dumps(sel)})')
+    check(r['ratio'] >= 4 and r['dark'] == (theme == 'dark'), f'{theme} theme: {what} reads (contrast {r["ratio"]:.1f}, {"dark" if r["dark"] else "light"} background)')
+
 with Browser('beams/index.html', size=SIZE) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1)
     b.screenshot(f'build/beams{TAG}-start.png')
@@ -82,6 +101,34 @@ with Browser('beams/index.html', size=SIZE) as b:
     text = b.eval("document.querySelector('#bench-readout').textContent + ' | ' + document.querySelector('#el-info').textContent").replace('\xa0', ' ')
     check('198.5 mm' in text and '1.01 mrad' in text and '141.9 µm' in text and '300.74 mm after it' in text and '400.00 mm after it' in text,
           f'opening view: the read-outs quote zR, theta, the new waist and the ray-optics image: "{text[:200]}..."')
+    check('Rayleigh range' in text and 'divergence' in text and 'input waist' in text, 'opening view: every number in the read-out has its name beside it')
+    # The first screen: the hint under the bench, and the obscure controls folded away.
+    hint_check(b, '#bench-hint', ['#bench'], 'Drag a lens', 'bench')
+    folded = b.eval("[...document.querySelectorAll('.view-controls[data-view=bench] details.more')].map((d) => [d.querySelector('summary').textContent, d.open])")
+    check(len(folded) == 3 and not any(o for _, o in folded), f'the higher-order mode, the stretch and exposure, and mode matching are folded away: {[s for s, _ in folded]}')
+    contrast_check(b, '#bench-hint', 'light', 'the hint')
+    # The drawer: "Start here" first (plain words, no equations), experiment 1 the opening state, the theory last.
+    d = b.eval("""(() => { const h = document.querySelector('#help'), start = h.querySelector('section.start');
+        const order = [...h.querySelectorAll('.exp, #how')].map((e) => e.id || e.dataset.setup);
+        return { first: h.querySelector('header').nextElementSibling === start, h3: start && start.querySelector('h3').textContent, math: start ? start.querySelectorAll('math').length : -1,
+                 sentences: start ? start.textContent.split(/[.!?]\\s/).length : 0, firstExp: order[0], last: order[order.length - 1], howH3: document.querySelector('#how h3')?.textContent }; })()""")
+    check(d['first'] and d['h3'] == 'Start here' and d['math'] == 0 and 3 <= d['sentences'] <= 9 and d['firstExp'] == 'start' and d['last'] == 'how' and d['howH3'] == 'How it works',
+          f'the drawer opens with "Start here" ({d["sentences"]} sentences, no equations), experiment 1 is the opening state, and "{d["howH3"]}" comes last')
+    b.eval("document.querySelector('#help-button').click()"); b.sleep(0.4)
+    contrast_check(b, '#help .start p', 'light', 'the Start-here block')
+    b.key('Escape'); b.sleep(0.3)
+    # The other two views have hints too, under their main pictures, with the plots and numbers named in words.
+    b.eval("__app.setView('cavity')"); b.sleep(0.5)
+    hint_check(b, '#cavity-hint', ['#cavity', '#stability'], 'Drag the right-hand mirror', 'cavity')
+    words = b.eval("document.querySelector('#cavity-readout').textContent + ' | ' + [...document.querySelectorAll('#cav-numbers dt')].map((d) => d.textContent).join(' | ')")
+    check('between 0 and 1' in words and 'stability numbers' in words and 'mode waist' in words and 'beam radius on mirror' in words and 'comb spacing' in words,
+          f'cavity: the read-out and the Numbers panel say in words what g1 g2 and the rest are: "{words[:120]}..."')
+    b.eval("__app.setView('modes')"); b.sleep(0.5)
+    hint_check(b, '#modes-hint', ['#cross', '#mgouy'], 'Click a mode', 'modes')
+    fam = b.eval("[document.querySelector('#family-note').textContent, document.querySelector('#modes-readout').textContent, document.querySelector('#fft-note').textContent]")
+    check(fam[0].startswith('Hermite–Gauss HG_mn: a rectangular pattern') and 'radius w =' in fam[1] and 'wavefront radius R =' in fam[1] and 'numerically' in fam[2] and 'FFT' in fam[2],
+          f'modes: the family, the read-out and the FFT check are glossed: "{fam[0][:50]}..." / "{fam[2][:50]}..."')
+    b.eval("__app.setView('bench')"); b.sleep(0.3)
     # What can be dragged: the hint under the bench changes as the pointer goes over the lens and
     # the waist's handle.
     F = b.eval('(() => { const f = __app.bench.frame; return [f.left, f.w, f.top, f.h, f.x0, f.x1]; })()')
@@ -211,7 +258,7 @@ with Browser('beams/index.html', size=SIZE) as b:
     # Drag the point on the stability diagram, first to (-0.5, -1.4), stable (g1 g2 = 0.7),
     # then to (-0.5, 1.4), unstable (g1 g2 < 0).
     sf = b.eval("(() => { const c = document.querySelector('#stability'), r = c.getBoundingClientRect(); return [r.width, r.height]; })()")
-    size = min(sf[0] - 50, sf[1] - 44); left = (sf[0] - (size + 50)) / 2 + 40; top = 14   # as in cavity-view.js
+    size = min(sf[0] - 50, sf[1] - 54); left = (sf[0] - (size + 50)) / 2 + 40; top = 24   # as in cavity-view.js
     X = lambda g: (left + (g + 2.2) / 4.4 * size) / sf[0]
     Y = lambda g: (top + (2.2 - g) / 4.4 * size) / sf[1]
     for (t1, t2, stable) in [(-0.5, -1.4, True), (-0.5, 1.4, False)]:
@@ -349,10 +396,32 @@ with Browser('beams/index.html', size=SIZE) as b:
         for name in ['start', 'stability', 'hermite']:
             b.eval(f'__app.setups[{json.dumps(name)}]()'); b.sleep(0.8)
             b.screenshot(f'build/beams-dark-{name}.png')
+            contrast_check(b, {'start': '#bench-hint', 'stability': '#cavity-hint', 'hermite': '#modes-hint'}[name], 'dark', f'the {name} hint')
         b.eval("document.querySelector('#help-button').click()"); b.sleep(0.5)
+        contrast_check(b, '#help .start p', 'dark', 'the Start-here block')
         b.screenshot('build/beams-dark-help.png')
 
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
+
+# Phone width: no sideways scrolling, the controls under the pictures, and each view's hint right
+# under its main picture, inside the first screen.
+if full:
+    with Browser('beams/index.html', size=(390, 844)) as b:
+        b.wait('window.__app && __app.ready'); b.sleep(1)
+        w = b.eval('[document.documentElement.scrollWidth, innerWidth]')
+        check(w[0] <= w[1], f'phone: no sideways scrolling ({w[0]} <= {w[1]})')
+        order = b.eval("[document.querySelector('#view-bench').getBoundingClientRect().bottom, document.querySelector('.controls').getBoundingClientRect().top]")
+        check(order[1] >= order[0] - 1, 'phone: the controls come under the pictures')
+        hint_check(b, '#bench-hint', ['#bench'], 'Drag a lens', 'phone, bench')
+        b.screenshot('build/beams-phone-start.png')
+        b.eval("__app.setView('cavity')"); b.sleep(0.6)
+        hint_check(b, '#cavity-hint', ['#cavity'], 'Drag the right-hand mirror', 'phone, cavity')
+        b.screenshot('build/beams-phone-cavity.png')
+        b.eval("__app.setView('modes')"); b.sleep(0.6)
+        hint_check(b, '#modes-hint', ['#cross'], 'Click a mode', 'phone, modes')
+        b.screenshot('build/beams-phone-modes.png')
+        errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
+        check(not errors, 'phone: no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 print(f"SUMMARY: {'all passed' if not failures else str(len(failures)) + ' failed'}")
 sys.exit(1 if failures else 0)

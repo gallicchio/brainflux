@@ -40,7 +40,8 @@ INFO = """(() => { const i = __app.arrays.info, d = 180 / Math.PI;
     return { beam: i.beam === null ? null : i.beam * d, hpbw: i.hpbw === null ? null : i.hpbw * d, sll: i.sll,
              sllAngle: i.sllAngle === null ? null : i.sllAngle * d, D: __app.arrays.D, omni: i.omni }; })()"""
 # Type a value into the slider whose label starts with `name`, as a student would.
-SET = """((name, v) => { const s = [...document.querySelectorAll('.slider')].find((e) => !e.closest('[hidden]') && e.querySelector('label').textContent.startsWith(name));
+SET = """((name, v) => { const shown = [...document.querySelectorAll('.slider')].filter((e) => !e.closest('[hidden]'));
+    const s = shown.find((e) => e.querySelector('label').textContent.startsWith(name)) || shown.find((e) => e.querySelector('label').textContent.includes(name));
     const box = s.querySelector('input[type=number]'); box.value = v; box.dispatchEvent(new Event('change')); return true; })"""
 def setslider(b, name, v):
     b.eval(f'{SET}({json.dumps(name)}, {v})'); b.sleep(0.25)
@@ -55,6 +56,25 @@ def load(b, page):
     b.goto(page); b.wait('window.__app && __app.ready'); b.sleep(1)
 def errors(b):
     return [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
+
+# The first screen: the hint (lib/style.css .hint, with its arrow) right under the main picture and
+# inside the first screen without scrolling, in both themes; the drawer's "Start here" block.
+HINT = """((sel, pics) => { const e = document.querySelector(sel); if (!e || !e.getClientRects().length) return null;
+    const r = e.getBoundingClientRect(), gap = Math.min(...pics.map((p) => r.top - document.querySelector(p).getBoundingClientRect().bottom));
+    return { text: e.textContent.trim(), cls: e.className, arrow: getComputedStyle(e, '::before').content, gap, top: r.top, bottom: r.bottom, h: innerHeight }; })"""
+def hint_check(b, sel, pics, starts, where):
+    h = b.eval(f'{HINT}({json.dumps(sel)}, {json.dumps(pics)})')
+    check(bool(h) and h['cls'].split()[0] == 'hint' and '→' in h['arrow'] and h['text'].startswith(starts) and 0 <= h['gap'] < 40 and h['bottom'] <= h['h'],
+          f'{where}: the hint is in the shared style, {h["gap"]:.0f} px under the picture and inside the first screen ({h["bottom"]:.0f} of {h["h"]} px): "{h["text"][:48]}..."' if h else f'{where}: no hint {sel}')
+    return h
+# The contrast of an element's text against the background behind it (WCAG ratio).
+CONTRAST = """((sel) => { const e = document.querySelector(sel);
+    const lum = (c) => { const [r, g, b] = c.match(/[\\d.]+/g).slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    let bg = 'rgba(0, 0, 0, 0)', p = e; while (p && /rgba\\(0, 0, 0, 0\\)|transparent/.test(bg)) { bg = getComputedStyle(p).backgroundColor; p = p.parentElement; }
+    const a = lum(getComputedStyle(e).color), c = lum(bg); return { ratio: (Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05), dark: c < 0.2 }; })"""
+def contrast_check(b, sel, theme, what):
+    r = b.eval(f'{CONTRAST}({json.dumps(sel)})')
+    check(r['ratio'] >= 4 and r['dark'] == (theme == 'dark'), f'{theme} theme: {what} reads (contrast {r["ratio"]:.1f}, {"dark" if r["dark"] else "light"} background)')
 
 def uniform_line(n, d, t0=0):
     """Half-power width and first sidelobe of n equal elements d apart, steered to t0 (degrees)."""
@@ -76,6 +96,22 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     check(abs(i['beam'] - 20) < 0.01 and abs(i['D'] - 8) < 1e-6, f"opens steered to 20 degrees with D = N = 8 ({i['beam']:.3f}, {i['D']:.6f})")
     t1 = b.eval('__app.A.t'); b.sleep(0.5); t2 = b.eval('__app.A.t')
     check(t2 > t1, f'the waves are moving (t {t1:.2f} -> {t2:.2f})')
+    # The first screen: the hint under the waves, the dB rings glossed, every read-out named in words.
+    hint_check(b, '#field-hint', ['#field'], 'Drag an element', 'arrays')
+    contrast_check(b, '#field-hint', 'light', 'the hint')
+    words = b.eval("document.querySelector('#polar-note').textContent + ' | ' + document.querySelector('#readouts').textContent").replace('\xa0', ' ')
+    check('−10 dB is a tenth' in words and 'the black line' in words and 'the red dot' in words and 'isotropic antenna' in words and '13.6° between the half-power' in words,
+          f'the dB rings, the beam line, the sidelobe dot and the directivity are explained in words: "{words[:100]}..."')
+    # The drawer: "Start here" first (plain words, no equations), experiment 1 the opening state, the theory last.
+    d = b.eval("""(() => { const h = document.querySelector('#help'), start = h.querySelector('section.start');
+        const order = [...h.querySelectorAll('.exp, #how')].map((e) => e.id || e.dataset.setup);
+        return { first: h.querySelector('header').nextElementSibling === start, h3: start && start.querySelector('h3').textContent, math: start ? start.querySelectorAll('math').length : -1,
+                 sentences: start ? start.textContent.split(/[.!?]\\s/).length : 0, firstExp: order[0], last: order[order.length - 1], howH3: document.querySelector('#how h3')?.textContent }; })()""")
+    check(d['first'] and d['h3'] == 'Start here' and d['math'] == 0 and 3 <= d['sentences'] <= 9 and d['firstExp'] == 'start' and d['last'] == 'how' and d['howH3'] == 'How it works',
+          f'the drawer opens with "Start here" ({d["sentences"]} sentences, no equations), experiment 1 is the opening state, and "{d["howH3"]}" comes last')
+    b.eval("document.querySelector('#help-button').click()"); b.sleep(0.4)
+    contrast_check(b, '#help .start p', 'light', 'the Start-here block')
+    b.key('Escape'); b.sleep(0.3)
 
     # ---------------------------------------------------------------- the arrays experiments
     setup(b, 'two'); i = b.eval(INFO)
@@ -189,12 +225,22 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     check(abs(b.eval(INFO)['beam'] - 90) < 0.01, 'typing #setup=cardioid into the address sets up the cardioid')
     load(b, 'arrays/index.html#setup=focus')
     check(b.eval('__app.A.phaseMode') == 'focus', 'opening the page at #setup=focus sets up the focusing experiment')
+    load(b, 'arrays/index.html#setup=start')
+    check(b.eval('[__app.A.n, __app.A.d, __app.A.theta0, __app.A.layout]') == [8, 0.5, 20, 'line'], '#setup=start is the opening view: eight in a line, steered to 20 degrees')
 
     # ---------------------------------------------------------------- synthesis
     load(b, 'arrays/index.html')
     click(b, 'Aperture synthesis', '#mode-row'); b.sleep(2)
     b.screenshot('build/arrays-synth-start.png')
     check(b.eval('__app.state.mode') == 'synth' and b.eval('__app.S.dishes.length') == 27, 'the synthesis mode opens on a Y of 27 dishes')
+    # Its first screen: a hint under the top row of pictures, and each panel named in plain words.
+    hint_check(b, '#synth-hint', ['#map', '#uv', '#beam'], 'Drag a dish', 'synthesis')
+    notes = b.eval("['map-note', 'uv-note', 'beam-note', 'sky-note', 'dirty-note', 'clean-head-note', 'clean-note'].map((id) => document.querySelector('#' + id).textContent)")
+    titles = b.eval("[...document.querySelectorAll('#synth-stage h2')].map((h) => h.textContent)")
+    check('pairs (baselines)' in notes[0] and notes[1].startswith('uv plane') and notes[2].startswith('one point’s image') and 'Fourier’s portrait' in notes[3]
+          and 'blurred by the dirty beam' in notes[4] and 'point by point' in notes[5] and 'CLEAN takes the brightest point' in notes[6]
+          and titles == ['Dishes on the ground', 'What is measured', 'Dirty beam', 'The true sky', 'Dirty image', 'CLEAN image'],
+          f'the six panels say what they are in words: {titles}; "{notes[1]}", "{notes[2]}"')
 
     # Two dishes: the dirty image of a point at the centre is the dirty beam, a single cosine.
     setup(b, 'fringe', 1.5)
@@ -302,21 +348,34 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     for name in ['fringe', 'six', 'rotation', 'ellipses', 'equator', 'resolution', 'shortspacing', 'eht', 'clean']:
         setup(b, name, 1.5)
         b.screenshot(f'build/arrays-exp-{name}.png')
+    # Dark theme: the hints and the Start-here block read.
+    b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
+    setup(b, 'rotation', 1.0)
+    contrast_check(b, '#synth-hint', 'dark', 'the synthesis hint')
+    b.screenshot('build/arrays-dark-synth.png')
+    setup(b, 'start', 1.0)
+    contrast_check(b, '#field-hint', 'dark', 'the arrays hint')
+    b.eval("document.querySelector('#help-button').click()"); b.sleep(0.4)
+    contrast_check(b, '#help .start p', 'dark', 'the Start-here block')
+    b.screenshot('build/arrays-dark-help.png')
     e = errors(b)
     check(not e, 'no exceptions or console errors' + ('' if not e else ': ' + '; '.join(e[:3])))
 
-# Phone width: the controls go under the pictures.
-with Browser('arrays/index.html', size=(400, 850)) as b:
+# Phone width: the controls go under the pictures, and each mode's hint sits right under its main
+# picture, inside the first screen.
+with Browser('arrays/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1)
     b.screenshot('build/arrays-phone.png')
     w = b.eval('[document.documentElement.scrollWidth, innerWidth]')
     check(w[0] <= w[1], f'no sideways scrolling at phone width ({w[0]} <= {w[1]})')
     top = b.eval("[document.querySelector('#arrays-controls').getBoundingClientRect().top, document.querySelector('#polar').getBoundingClientRect().bottom]")
     check(top[0] > top[1], 'the controls stack under the pictures')
+    hint_check(b, '#field-hint', ['#field'], 'Drag an element', 'phone, arrays')
     b.eval("__app.setups.eht()"); b.sleep(2)
     b.screenshot('build/arrays-phone-synth.png')
     w = b.eval('[document.documentElement.scrollWidth, innerWidth]')
     check(w[0] <= w[1], f'synthesis: no sideways scrolling at phone width ({w[0]} <= {w[1]})')
+    hint_check(b, '#synth-hint', ['#map', '#uv'], 'Drag a dish', 'phone, synthesis')
     e = errors(b)
     check(not e, 'no errors at phone width' + ('' if not e else ': ' + '; '.join(e[:3])))
 

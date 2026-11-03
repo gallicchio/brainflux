@@ -266,7 +266,7 @@ export function createBench(app) {
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(px, F.top); ctx.lineTo(px, F.bottom); ctx.stroke(); ctx.setLineDash([]);
       // Each number in a slot of its own, in a column, the box as wide whatever they are.
-      const lines = [['z = ', lenParts(hover, 7)], ['w = ', lenParts(b.w, 7)], ['R = ', lenParts(b.R, 7)], ['ψ = ', piParts(b.gouy, 3, 7)]];
+      const lines = [['z = ', lenParts(hover, 7)], ['radius w = ', lenParts(b.w, 7)], ['wavefront R = ', lenParts(b.R, 7)], ['Gouy ψ = ', piParts(b.gouy, 3, 7)]];
       const glass = b.n !== 1 ? ['in glass, n = ', { v: b.n, dec: 3, w: 5 }] : null;
       ctx.font = '12px system-ui, sans-serif';
       const lw = Math.max(...lines.map(([k]) => ctx.measureText(k).width));
@@ -584,7 +584,7 @@ export function createBench(app) {
     setGroups(ro.input, [
       ['λ = ', { v: state.lambda, dec: 0, w: 4 }, NBSP + 'nm,'],
       ['input waist w₀ = ', ...bold(lenParts(state.w0, 5))], ['at z = ', ...lenParts(state.z0, 6, { mm: 1 }), ','],
-      ['z', { html: '<sub>R</sub>' }, ' = πw₀²/λ = ', ...lenParts(zR, 6, { mm: 1 }), ','],
+      ['Rayleigh range z', { html: '<sub>R</sub>' }, ' = πw₀²/λ = ', ...lenParts(zR, 6, { mm: 1 }), ','],
       ['divergence θ = λ/πw₀ = ', ...angleParts(lam() / (Math.PI * state.w0), 5)],
     ]);
     const m = matching();
@@ -621,7 +621,10 @@ export function createBench(app) {
     onInput: (v) => { state.z0 = v; changed(); } });
   const mSlider = slider({ label: 'mode HG<sub>m0</sub>, m', labelHTML: true, min: 0, max: 6, step: 1, value: state.m, title: 'Send the Hermite–Gauss mode HG_m0 instead of the fundamental: m dark lines across the beam, and a Gouy phase (m + 1)ψ',
     onInput: (v) => { state.m = Math.round(v); changed(false); } });
-  laserBox.append(lambdaSlider, lambdaPresets, w0Slider, z0Slider, mSlider);
+  // Folded away: a reader who has just met Gaussian beams has no use for higher-order modes yet.
+  const laserMore = el('details', { class: 'more', id: 'laser-more' }, el('summary', {}, 'More: send a higher-order mode'),
+    el('div', { class: 'stack' }, mSlider, el('div', { class: 'small muted' }, 'HG_m0 has m dark lines across the beam, and gains the Gouy phase (m + 1)ψ (dashed in the strip under the bench).')));
+  laserBox.append(lambdaSlider, lambdaPresets, w0Slider, z0Slider, laserMore);
 
   const addBox = $('#add-box');
   for (const [type, label] of [['lens', '+ Lens'], ['mirror', '+ Mirror'], ['slab', '+ Glass']]) {
@@ -810,7 +813,8 @@ export function createBench(app) {
     onInput: (v) => { state.E = v; changed(false); } });
   const bSlider = slider({ label: 'brightness', min: -2, max: 2, step: 0.01, value: state.bright, title: 'The exposure, in powers of ten of the intensity (0: set by the beam over most of the bench)',
     onInput: (v) => { state.bright = v; requestDraw(); app.hashSoon(); } });
-  $('#view-box').append(eSlider, bSlider);
+  const viewMore = el('details', { class: 'more', id: 'view-more' }, el('summary', {}, 'More: the sideways stretch and the exposure'), el('div', { class: 'stack' }, eSlider, bSlider));
+  $('#view-box').append(viewMore);
 
   // Mode matching.
   const targetToggle = toggle('Show a cavity to match', state.target, (on) => { state.target = on; if (on && !(state.tz > state.vz0 && state.tz < state.vz1)) state.tz = +(state.vz0 + 0.6 * (state.vz1 - state.vz0)).toPrecision(4); buildTarget(); changed(false); },
@@ -819,7 +823,8 @@ export function createBench(app) {
   let tzSlider = null;
   function buildTarget() {
     const box = $('#target-more');
-    if (!state.target) { box.replaceChildren(el('div', { class: 'small muted' }, 'The cavity of the Cavity view, placed on the bench; the fraction of the beam\'s power that goes into its mode is η.')); tzSlider = null; return; }
+    if (state.target) $('#target-details').open = true;
+    if (!state.target) { box.replaceChildren(el('div', { class: 'small muted' }, 'Put the cavity of the Cavity view on the bench: only the part of the beam shaped like the cavity\'s own mode gets in, a fraction η of its power.')); tzSlider = null; return; }
     const c = app.state.cavity;
     tzSlider = slider({ label: 'cavity at (mm)', min: state.vz0, max: state.vz1, step: 0.1, value: state.tz, title: 'Where its first mirror is',
       onInput: (v) => { state.tz = v; changed(false); } });
@@ -1042,6 +1047,8 @@ export function createBench(app) {
     lambdaSlider.value = state.lambda; w0Slider.value = state.w0 * 1000; z0Slider.value = state.z0;
     fieldSeg.value = state.field; mSlider.value = state.m; eSlider.value = state.E; wfToggle.on = state.wavefronts; bSlider.value = state.bright;
     targetToggle.on = state.target;
+    if (state.m > 0) laserMore.open = true;
+    if (state.bright !== 0) viewMore.open = true;
     playButton.textContent = state.play ? 'Pause' : 'Play';
     if (tzSlider) tzSlider.value = state.tz;
     buildChips();

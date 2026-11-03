@@ -44,7 +44,7 @@ table.waists tr.virtual td { color: var(--ink-3); }
 .cav-grid .sq-wrap:last-child { height: max(200px, 30vh); }
 .spec-wrap { height: max(200px, 30vh); }
 #stability { cursor: crosshair; }
-dl.numbers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3px 10px; margin: 0; font-size: 13px; }
+dl.numbers { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 3px 10px; margin: 0; font-size: 13px; }
 dl.numbers dt { color: var(--ink-2); }
 dl.numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
 
@@ -78,9 +78,15 @@ dl.numbers dd { margin: 0; font-variant-numeric: tabular-nums; }
 .el-x { font-size: 12px; min-width: 30px; min-height: 28px; padding: 2px 6px; color: var(--ink-2); }
 .el-x:hover { color: var(--warn); border-color: var(--warn); }
 .presets button { font-size: 12px; padding: 2px 8px; min-height: 26px; }
-/* What the pointer can do, under the bench: kept two lines tall so nothing below moves. */
-.hint { min-height: 2.6em; padding: 0 4px; line-height: 1.3; }
-@media (min-width: 1200px) { .hint { min-height: 1.4em; } }
+/* What the pointer can do, under the bench (lib/style.css .hint): kept two lines tall so nothing
+   below moves as its text changes with what is under the pointer. */
+#bench-hint { min-height: 2.6em; padding: 0 4px; line-height: 1.3; }
+@media (min-width: 1200px) { #bench-hint { min-height: 1.4em; } }
+.cav-grid .hint { grid-column: 1 / -1; padding: 0 4px; }
+#modes-hint { padding: 0 4px; }
+/* The obscure controls, folded away ("More: ...") until wanted. */
+.controls details.more > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.controls details.more[open] > summary { margin-bottom: 6px; }
 .editor-head { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 6px; }
 .editor-head .remove { font-size: 12px; min-height: 24px; }
 .signed { display: flex; flex-direction: column; gap: 4px; }
@@ -100,7 +106,14 @@ details.lens-law summary { cursor: pointer; color: var(--accent); }
   .bm { grid-template-columns: minmax(0, 1fr); }
   .cav-grid { grid-template-columns: minmax(0, 1fr); }
   .sq-wrap, .cav-grid .sq-wrap:last-child { height: auto; aspect-ratio: 1; max-height: 70vh; }
-  .mode-grid { grid-template-columns: minmax(0, 1fr); }
+  /* One column: the hint right under the cavity picture, before the stability diagram. */
+  .cav-grid .cav-wrap { order: -2; }
+  .cav-grid .hint { order: -1; }
+  /* Likewise the modes' hint right under the cross-section: the grid's two columns become
+     children of the view's column, with the side view and the gallery after the hint. */
+  .mode-grid { display: contents; }
+  .side-col { order: 1; }
+  #gallery-head, #gallery { order: 2; }
   .bench-wrap { height: max(280px, 46vh); }
 }
 @media (max-width: 700px) {
