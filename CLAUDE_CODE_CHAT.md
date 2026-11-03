@@ -1029,9 +1029,10 @@ things on the way: `tools/cdp.py` crashed in a fresh checkout (no `build/` folde
 beams cavity test is now seeded.
 
 **Tests.**  `tools/test_all.sh` passes on the merged `main`: the 315 unit tests in Chromium and
-the scripted run of all 19 demos, whose UI tests grew from 777 to 1,083 checks for the hints,
-the Start-here blocks, the glosses, the folded panels, both themes and the phone's first
-screen.  (Firefox isn't installed here, so that second unit-test run was skipped.)
+the scripted run of all 19 demos.  The thirteen beta demos' UI tests now make 1,032 checks
+between them (the agents' counts; about 300 of them new), for the hints, the Start-here
+blocks, the glosses, the folded panels, both themes and the phone's first screen.  (Firefox
+isn't installed here, so that second unit-test run was skipped.)
 
 **Left.**  `lib/style.css` gives every canvas `touch-action: none`, so on a phone a finger can't
 scroll the page from over a picture that fills the width; several demos set `pan-y` on the
