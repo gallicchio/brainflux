@@ -1583,3 +1583,56 @@ wait for the new page could pass at once and the next call land mid-navigation. 
 by clearing `__app` before the reload (the dispersion test had the same race, fixed too; the
 OCT test already did it), and both tests pass on their own after the fix.  Firefox isn't
 installed here.
+
+## Prompt 23
+
+> Do the visualizations make it very clear what the difference between T₁, T₂, and T* are?
+
+### Response 23 (2026-11-04)
+
+Not yet.  T₂* was clear, T₂ only weakly shown, and nothing put the three side by side as three
+different clocks.  What worked: in "Many spins" the arrows fan out while each stays full length,
+their sum (what the coil sees) dies in about 1.4 ms ("the signal dies, though no spin does"),
+the spectrum's width matches 1/(πT₂*), and the echo closes the fan, so that decay can be undone.
+T₁ had two good plots, inversion recovery with its null at T₁ ln 2 and, on the board, the FID's
+start against polarizing time.  What didn't: T₂ showed only as the echo coming back at 0.85 of
+the FID's start (the arrows lose 14% of their length, which you can't see) and as a fitted CPMG
+number; every sample has T₁ and T₂ nearly equal (oil 25/20 ms, copper-sulphate water 12/10 ms,
+water 2.5/2 s), which is right for those liquids but hides the difference; the echo window (6 ms)
+is too short for T₁ and T₂ to act; no experiment shows a single spin relaxing; and the plots show
+only the sum, never each spin's own transverse length, the curve that separates T₂ from T₂*.
+Proposed: a "Three clocks" experiment with T₂* = 1 ms, T₂ = 10 ms, T₁ = 100 ms on one log time
+axis (the sum's |M⊥|, the mean spin's own |M⊥|, M_z, each against its exponential), a ring on the
+sphere at the mean spin length, an echo train climbing the T₂ curve, and T₂* ≤ T₂ ≤ 2T₁.
+
+## Prompt 24
+
+> The Teach Spin uses mineral oil for most of the initial demos. Is that one of your materials for NMR?
+
+### Response 24 (2026-11-04)
+
+Yes: mineral oil is the default sample for the TeachSpin instrument and every TeachSpin experiment
+opens on it, with T₁ = 25 ms, T₂ = 20 ms and a 500 Hz spread from the magnet's unevenness
+(T₂* about 0.6 ms); the page measures CPMG T₂ = 20.2 ms and inversion-recovery T₁ = 25.0 ms with
+the null at 17.3 ms.  Two caveats: these are typical values, not checked against TeachSpin's
+manual or a class's data (T₁ in oil depends on its grade and temperature, T₂* on the shim; send
+the numbers your students measure and the oil will be set to them), and oil already separates
+T₂* from T₂ by a factor of 30, but its T₁ and T₂ are close, so the T₁-against-T₂ part needs a
+slider-set sample or a more viscous liquid such as glycerol.
+
+## Prompt 25
+
+> In any of the demos, when you show an oscilloscope plot with features about the size of a pixel, did you do proper anti-aliasing or have a proper alpha value, such that it looks like a real professional digital oscilloscope rather than a simple "all or nothing" plot?  In the Quantum Optics demo, "The signal" plot that you happened to screenshot looked like it had some aliasing-looking features.
+
+### Response 25 (2026-11-04)
+
+No.  Dense traces were drawn as each pixel column's lowest-to-highest sample, a solid stroke
+(the quantum-optics chirp and detector strips, the NMR coil and receiver voltages, the OCT
+detector trace, the interferometer's record, the dispersion pulse), or as plain polylines (the
+radio time streams).  Nothing at partial brightness, nothing weighted by time.  The chirp aliases
+because at 70 Hz one cycle spans about 2.5 pixel columns, so each column's height depends on where
+in the cycle it falls (the diamond pattern), and near the merger there are only about 2.6 samples
+per cycle, so straight lines between samples misdraw the peaks.  Doing it properly, as a digital
+phosphor scope does: intensity grading by the time spent in each pixel with soft edges and a
+gamma, continuity between columns, sin(x)/x interpolation where samples are sparse, and an
+ordinary anti-aliased line where there's less than a sample per pixel, in one shared `lib/scope.js`.
