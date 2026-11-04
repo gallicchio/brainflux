@@ -27,7 +27,9 @@
   <section class="analysis">
     <div class="panel">
       <div class="panel-head"><span class="label">Momentum space</span><span class="small muted" id="mom-note"></span></div>
-      <div class="mom-wrap"><canvas id="momentum" aria-label="The wave function in momentum space, with the energy circle"></canvas></div>
+      <div class="panel-gloss">outside the circle, dσ/dθ toward each k: measured (blue), Born's |Ṽ(k − k₀)|² (grey dashes); point at the circle to move k and the momentum transfer q = k − k₀</div>
+      <div class="mom-wrap"><canvas id="momentum" aria-label="The wave function in momentum space, with the energy circle, dσ/dθ round it, and the momentum transfer"></canvas></div>
+      <div class="mono small" id="q-readout"></div>
     </div>
     <div class="panel">
       <div class="panel-head"><span class="label">Differential cross section</span>
@@ -87,11 +89,12 @@
     (the cross section) and the share of each partial wave.  Units: ħ = m = 1.</p>
     <p>Pick another <b>Target</b>; switch <b>Show</b> to <b>Scattered only</b> to see what the
     target adds to the wave; raise <b>k₀</b> for a faster packet with shorter waves, or the
-    <b>width</b> for a beam more like a plane wave.  Every change restarts the collision;
-    <b>done</b> appears under the picture when the packet has gone.</p>
+    <b>width</b> for a beam more like a plane wave; point at the momentum picture to see the
+    momentum the target gives.  Every change restarts the collision; <b>done</b> appears under
+    the picture when the packet has gone.</p>
     <p>Look for the circular wave spreading from the target and the shadow behind it, the
-    measured curve (blue) settling onto the exact one (green) once the packet has gone, and
-    the totals in the table agreeing.  The experiments take the ideas one at a time: what
+    measured curve (blue) settling onto the exact one (green) once the packet has gone, far
+    from what classical particles would do (violet), and the totals in the table agreeing.  The experiments take the ideas one at a time: what
     scatters and how it is counted, the Born approximation, partial waves, interference and
     Bragg reflection.</p>
   </section>
@@ -107,10 +110,12 @@
     is the <em>differential cross section</em> $d\sigma/d\theta$ (the blue curve): how much of
     the beam is sent to each angle $\theta$, counted from the forward direction.  Its total
     over all angles, $\sigma$ (the table's first line), is a length in two dimensions: the
-    width of beam the disk takes out.  Here $\sigma=8.3$, well over the disk's width $2a=3$,
-    which is all a classical particle could hit: more than half of it (4.4) is the forward
-    peak within $\pm40^\circ$, the wave diffracted round the edge, which is what makes the
-    shadow (experiment 2).  Once the packet has gone, the table shows $\sigma$ four ways, and
+    width of beam the disk takes out.  Here $\sigma=8.3$, well over the 3.55 that classical
+    particles would give (the violet dashes and the table's <em>classical</em> line: they
+    bounce off where $V=E$, at $r=1.77$, and a disk that wide blocks $2r$ of the beam).  More
+    than half of $\sigma$ (4.4) is the forward peak within $\pm40^\circ$, which classical particles
+    haven't got: the wave diffracted round the edge, which is what makes the shadow
+    (experiment 2).  Once the packet has gone, the table shows $\sigma$ four ways, and
     the blue curve lies on the exact one (green).</p>
   </article>
 
@@ -125,11 +130,32 @@
     directions, $\sigma=-\sqrt{8\pi/k}\,\mathrm{Re}\,[e^{i\pi/4}f(0)]$ in two dimensions (the
     counterpart of $\sigma=\frac{4\pi}{k}\,\mathrm{Im}\,f(0)$ in three).  The table's
     <em>optical theorem</em> line is $\sigma$ computed from $f(0)$ alone, out of the measured
-    partial waves (experiment 5).</p>
+    partial waves (experiment 6).</p>
+  </article>
+
+  <article class="exp" data-setup="classical">
+    <h3>3. Twice the classical cross section</h3>
+    <p>A bigger and harder disk ($a=2.5$, a wall $V_0=15$ high and $w=0.15$ soft) and a
+    shorter wave ($k_0=3$, $\lambda=2.1$), so that the disk is eight wavelengths round
+    ($kr\approx8$).  The violet dashes are what classical particles would do.  One with
+    impact parameter $b$ meets the wall at the angle $\alpha$ to its normal, with
+    $\sin\alpha=b/r$, and bounces off through $\theta=\pi-2\alpha$; so $b=r\cos(\theta/2)$, and
+    $$\frac{d\sigma}{d\theta}=\Big|\frac{db}{d\theta}\Big|=\frac r2\Big|\sin\frac\theta2\Big|,\qquad
+    \sigma=\int_{-\pi}^{\pi}\frac{d\sigma}{d\theta}\,d\theta=2r,$$
+    the width the disk blocks: 5.25 here, with $r=2.63$ where $V=E$.  Away from forward the
+    wave does what the particles do: beyond $90^\circ$ the measured and the classical curves
+    hold 3.71 and 3.74.  Forward it does not: within $\pm30^\circ$ there is a peak of 5.7,
+    as much as the disk sends everywhere else, where classical particles go hardly at all
+    (0.18).
+    It is the shadow of experiment 2: behind the disk the scattered wave must cancel the
+    incident one, so it carries forward as much as the disk takes out of the beam.  So
+    $\sigma=11.4$, twice the classical $2r$ and a little more: for a disk many wavelengths
+    wide it tends to $4r$ (the <em>extinction paradox</em>), slowly (2.3 times for the disk of
+    experiment 1, 2.2 here).</p>
   </article>
 
   <article class="exp" data-setup="born">
-    <h3>3. The Born approximation</h3>
+    <h3>4. The Born approximation</h3>
     <p>A smooth bump, $V_0=1$, half the packet's energy $E=2$: about a sixth of the packet
     (18%) is scattered, nearly all of it (96%) within $60^\circ$ of forward.  To first order in
     $V$ (the <em>first Born approximation</em>) the scattered amplitude is the Fourier transform
@@ -148,21 +174,39 @@
     exact answer can (2.48 instead of 2.67).  For the hard disk of experiment 1 the phase is 6,
     and Born's total, 294, is 35 times the real one: a target that stops the wave is as far
     from weak as can be.</p>
+    <p>The momentum picture shows it at a glance (experiment 5): outside the circle Born's
+    $d\sigma/d\theta$ (grey dashes) and the measured one (blue) are drawn on one scale.  For
+    this bump they lie together over the forward lobe; at $V_0=2$ Born's lobe is twice the
+    other (12.6 against 5.53 straight ahead).  Pick the <em>Hard disk</em>: Born's lobe is
+    fifty times the measured one (303 against 5.66), which hardly leaves the circle, and
+    straight back, where the ring is plainly lit, Born has almost nothing (0.14
+    at $180^\circ$ against 0.73).</p>
   </article>
 
   <article class="exp" data-setup="ring">
-    <h3>4. Scattering puts the wave on a circle</h3>
+    <h3>5. Scattering puts the wave on a circle</h3>
     <p>The same bump, in the <em>Scattered only</em> view, so that momentum space shows
     $\psi-\psi_\text{inc}$ alone.  The incident packet is a spot at $(k_0,0)$; the scattering
     is elastic, the energy and so $|\vec k|$ are unchanged, and it can only turn $\vec k$, not
     shorten it: the scattered wave fills in the circle $|\vec k|=k_0$, brightest where
     $|f(\theta)|^2$ is largest.  The Born approximation says the brightness at $\vec k$ is
     $|\tilde V(\vec k-\vec k_0)|^2$: the potential's Fourier transform, centred on the incident
-    spot and read round the circle.</p>
+    spot and read round the circle.  That is the grey dashed curve outside the circle, Born's
+    $d\sigma/d\theta$ toward each $\vec k$, its distance from the circle in proportion; the blue
+    one, on the same scale, is the measured $d\sigma/d\theta$, growing as the scattered wave
+    crosses the detector.</p>
+    <p>Point at the circle to move $\vec k$ round it.  The pink arrow from the incident spot to
+    $\vec k$ is the momentum transfer $\vec q=\vec k-\vec k_0$, of length $2k_0\sin(\theta/2)$
+    (the readout under the picture: $q=k_0=2$ at $60^\circ$), and Born's curve there is the
+    transform at that $\vec q$, for this bump $\tilde V(q)=2\pi a^2V_0\,e^{-q^2a^2/2}$.  Once the
+    packet has gone, the two agree over the forward lobe (at $30^\circ$, 1.07 measured and
+    1.08 Born); further round, where $q$ is larger than $1/a$, Born's falls away faster than
+    the measured (at $60^\circ$, 0.058 against 0.171): $\tilde V$ of a Gaussian falls as a
+    Gaussian, and the second-order terms that Born leaves out fall more slowly.</p>
   </article>
 
   <article class="exp" data-setup="swave">
-    <h3>5. Partial waves: slow particles scatter in all directions</h3>
+    <h3>6. Partial waves: slow particles scatter in all directions</h3>
     <p>A small hard disk and a slow packet, $ka\approx1$ (here 0.8), in a bigger box, since
     slow waves are long.  A <em>partial wave</em> is the part of the wave with angular momentum
     $m\hbar$ about the target, $e^{im\theta}$ times a radial wave.  A round target scatters
@@ -183,7 +227,7 @@
   </article>
 
   <article class="exp" data-setup="resonance">
-    <h3>6. A resonance: the packet lingers</h3>
+    <h3>7. A resonance: the packet lingers</h3>
     <p>An attractive well, with a quasi-bound state near the packet's energy: a state that
     would be bound if the well were a little deeper, and that lives for a while behind the
     centrifugal barrier of angular momentum $3\hbar$.  Part of the wave is caught, circles
@@ -197,7 +241,7 @@
   </article>
 
   <article class="exp" data-setup="coulomb">
-    <h3>7. A screened Coulomb potential</h3>
+    <h3>8. A screened Coulomb potential</h3>
     <p>Charge scattering: strongly peaked forward and falling off steeply with angle, as
     Rutherford found (his $1/\sin^4(\theta/2)$ law is for three dimensions).  Most of the
     scattering is by the long, weak tail of the potential, which deflects the wave only a
@@ -215,7 +259,7 @@
   </article>
 
   <article class="exp" data-setup="two">
-    <h3>8. Two scatterers interfere</h3>
+    <h3>9. Two scatterers interfere</h3>
     <p>Two disks, a distance $d$ apart across the beam.  The waves scattered by each
     interfere, and $d\sigma/d\theta$ has fringes spaced by about $\lambda/d$ in angle
     ($36^\circ$ here: peaks at $0$, $\pm37^\circ$, $\pm83^\circ$, $\pm141^\circ$ and
@@ -225,7 +269,7 @@
   </article>
 
   <article class="exp" data-setup="slits">
-    <h3>9. The double slit</h3>
+    <h3>10. The double slit</h3>
     <p>A wall with two openings, $a=1.2$ wide and $d=5$ apart.  Behind it, two circular waves
     overlap and make fringes.  There is no incident wave behind a wall to subtract, so the graph
     shows the flux of $\psi$ itself through the far half of the detector, from $-90^\circ$ to
@@ -247,7 +291,7 @@
   </article>
 
   <article class="exp" data-setup="crystal">
-    <h3>10. Bragg reflection from a crystal</h3>
+    <h3>11. Bragg reflection from a crystal</h3>
     <p>A square crystal of $7\times7$ atoms, $c=2$ apart, turned by $\alpha=30^\circ$, in a beam
     of wavelength $\lambda=2$.  Each row of atoms reflects a little of the wave, like a
     half-silvered mirror, and lets the rest through; the waves reflected by successive rows add
@@ -258,11 +302,13 @@
     crystal) of the plane waves that repeat with the lattice, hung on the incident spot.  A
     scattered wave $\vec k_0+\vec G$ must also be on the energy circle $|\vec k|=k_0$; where a
     lattice point sits on it (filled), there is a Bragg beam: <em>Ewald's construction</em>.
+    The pink arrow, at $60^\circ$, ends on it: the momentum transfer to a Bragg beam is a
+    vector of the reciprocal lattice, $q=2k_0\sin\alpha=2\pi/c$, which is Bragg's law again.
     Born's curve is the crystal's Fourier transform, the kinematic theory of diffraction.</p>
   </article>
 
   <article class="exp" data-setup="offbragg">
-    <h3>11. Off the Bragg angle</h3>
+    <h3>12. Off the Bragg angle</h3>
     <p>The same crystal turned to $\alpha=20^\circ$: $2c\sin\alpha/\lambda=0.68$, no lattice
     point on the energy circle, and the beam mostly goes through; a sixth as much goes to
     $2\alpha$ (4.5%).  Turn the crystal slowly back to $30^\circ$ and the reflected beam comes
@@ -273,7 +319,7 @@
   </article>
 
   <article class="exp" data-setup="impact">
-    <h3>12. The impact parameter</h3>
+    <h3>13. The impact parameter</h3>
     <p>A narrow packet aimed off centre, with <em>impact parameter</em> $b$: how far from the
     centre it would pass if nothing deflected it.  Large $b$: it passes by, barely deflected.
     Small $b$: it bounces off.  A classical particle's deflection depends on $b$ alone; a
@@ -281,7 +327,7 @@
   </article>
 
   <article class="exp" data-setup="typed">
-    <h3>13. Your own target</h3>
+    <h3>14. Your own target</h3>
     <p>Type any $V(x,y)$, using $x$, $y$, $r$ and $\theta$.  Sharp edges are softened slightly
     (an edge sharper than the grid can't be followed in time).</p>
   </article>
@@ -330,6 +376,20 @@
   $$f(\theta)=-\frac{m}{\hbar^2}\,\frac{e^{i\pi/4}}{\sqrt{2\pi k}}\,\tilde V(\vec q),\quad
   \vec q=\vec k_\text{out}-\vec k_\text{in},\qquad
   \delta_m\approx-\pi\frac{m}{\hbar^2}\int_0^\infty V(r)\,J_m^2(kr)\,r\,dr.$$</p>
+  <p><b>Round the momentum circle, and classically.</b>  After the collision the scattered
+  wave moves freely, and the part of it leaving along $\theta$ has its momentum along
+  $\theta$: the probability on the circle $|\vec k|=k_0$ toward $\theta$ is the incident
+  fluence times $d\sigma/d\theta$.  So both curves are drawn round it, on one scale: the
+  measured one, the flux through the detector, and Born's,
+  $\frac{m^2}{2\pi\hbar^4k}|\tilde V(\vec k-\vec k_0)|^2$ for $\vec k$ on the circle, the
+  potential's transform at the momentum transfer $q=2k\sin(\theta/2)$.  The classical curve
+  is a hard disk's, of the radius where the wall's $V$ equals $E$ and a particle coming head
+  on is turned back, $r=a+w\ln(V_0/E-1)$: $\frac r2|\sin\frac\theta2|$, and $2r$ in all
+  (experiment 3).  A wave's $\sigma$ tends to $4r$ as $kr\to\infty$, as much again diffracted
+  forward as the disk reflects.  The wall is soft, over $w$: a particle that meets it at the
+  angle $\alpha$ to its normal turns back where $V=E\cos^2\alpha$, further out than $r$, and
+  is bent on its way past too.  Rays through the disk of experiment 1 itself ($w=0.25$) send
+  less straight back than the hard disk (0.73 against 0.89), and so does the wave (0.73).</p>
   <p class="small muted">New in 2026 for BrainFlux.  Source:
   <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
   </section>
