@@ -15,7 +15,7 @@ export const TISSUES = {
   fat: { label: 'fat', rho: 0.95, T1: 260, T2: 80, T1at3T: 370, colour: '#ffcf5a' },
   grey: { label: 'grey matter', rho: 0.8, T1: 950, T2: 100, T1at3T: 1330, colour: '#9c9c9c' },
   white: { label: 'white matter', rho: 0.7, T1: 650, T2: 90, T1at3T: 830, colour: '#e0e0e0' },
-  lesion: { label: 'lesion (oedema)', rho: 0.9, T1: 1200, T2: 200, T1at3T: 1600, colour: '#ff7a9a' },
+  lesion: { label: 'lesion (oedema)', rho: 0.9, T1: 1500, T2: 200, T1at3T: 2000, colour: '#ff7a9a' },
   bone: { label: 'bone (no signal)', rho: 0, T1: 1, T2: 1, T1at3T: 1, colour: '#303030' },
 };
 export const TISSUE_NAMES = Object.keys(TISSUES);

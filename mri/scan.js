@@ -14,7 +14,7 @@
 import { fft2Centered } from '../lib/fft.js';
 import { GB, lorentzOffsets } from './bloch.js';
 import { rasterize, weightedImage, projection, shapesExtent } from './phantom.js';
-import { prepareRaster, backproject, padRow, filterResponse, filterRow, filterWork, circleRows } from '../tomography/radon.js';
+import { prepareRaster, projectRaster, backproject, padRow, filterResponse, filterRow, filterWork, circleRows } from '../tomography/radon.js';
 
 // ------------------------------------------------------------------- the sequence
 
@@ -362,8 +362,12 @@ export function echoTrace(sp, seq, q, ts) {
  * Returns {profiles: [Float64Array(N)], ds, fOfS}.
  */
 export function projections(img, N, dx, angles, G = 1) {
+  // By the tomography demo's projector (Joseph's method: each ray steps through the rows or
+  // columns and interpolates), on its grid, which is this one: pixel N/2 at the centre, the
+  // scan circle's radius fov/2, so its line integrals are in units of fov/2.
+  const raster = prepareRaster(img, N), half = (N * dx) / 2, M = N, ds = 2 / M;
   // (Array.from: a typed array's own map would turn each profile into a number.)
-  const profiles = Array.from(angles, (th) => projection(img, N, N, dx, th, N, dx));
+  const profiles = Array.from(angles, (th) => { const p = projectRaster(raster, th, M, ds, 1, new Float64Array(M)); for (let k = 0; k < M; k++) p[k] *= half; return p; });
   return { profiles, ds: dx, fOfS: (s) => GB * G * s };
 }
 

@@ -330,6 +330,10 @@ test('Lauterbur: projections under a turned gradient, back-projected with the ra
   assert(worst < 1e-9, `projections along the axes off by ${worst}`);
   const angles = Float64Array.from({ length: 90 }, (_, j) => (j * Math.PI) / 90);
   const pr = projections(pic.total, N, dx, angles, 5);
+  // The projector used for this (Joseph's) agrees with the exact sums along the axes.
+  let ax = 0;
+  for (let k = 1; k < N - 1; k++) ax = Math.max(ax, Math.abs(pr.profiles[0][k] - p0[k]), Math.abs(pr.profiles[45][k] - p90[k]));
+  assert(ax < 1e-9, `Joseph's projections along the axes off by ${ax}`);
   const bp = backprojection(pr.profiles, angles, N, dx, true);
   const d = rmsDiff(bp.filtered, pic.total);
   assert(d.rms < 0.06 * d.max, `filtered back-projection rms ${d.rms / d.max}`);

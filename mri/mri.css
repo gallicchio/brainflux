@@ -11,6 +11,12 @@
   --sig-im: #c8501a;
   --fan: rgba(90, 100, 120, 0.16);
   --ring: rgba(90, 100, 120, 0.35);
+  /* the tissues, in plots (the pictures use their own colours on black) */
+  --t-water: #2f7fe0;
+  --t-fat: #d49b00;
+  --t-grey: #6f6f6f;
+  --t-white: #a3a3a3;
+  --t-lesion: #e0507a;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -24,6 +30,11 @@
     --sig-im: #ff9a5c;
     --fan: rgba(170, 180, 200, 0.16);
     --ring: rgba(170, 180, 200, 0.35);
+    --t-water: #6fb0ff;
+    --t-fat: #ffcf5a;
+    --t-grey: #9a9a9a;
+    --t-white: #e6e6e6;
+    --t-lesion: #ff8aa8;
   }
 }
 
@@ -38,8 +49,9 @@
 
 /* One view at a time, and only its controls. */
 .view { display: none; flex-direction: column; gap: 6px; }
-.mri[data-view="axis"] #view-axis, .mri[data-view="slice"] #view-slice, .mri[data-view="kspace"] #view-kspace { display: flex; }
-.mri:not([data-view="axis"]) .only-axis, .mri:not([data-view="slice"]) .only-slice, .mri:not([data-view="kspace"]) .only-kspace { display: none; }
+.mri[data-view="axis"] #view-axis, .mri[data-view="slice"] #view-slice, .mri[data-view="kspace"] #view-kspace, .mri[data-view="contrast"] #view-contrast { display: flex; }
+.mri:not([data-view="axis"]) .only-axis, .mri:not([data-view="slice"]) .only-slice, .mri:not([data-view="kspace"]) .only-kspace, .mri:not([data-view="contrast"]) .only-contrast { display: none; }
+.mri[data-mode="lauterbur"] .only-fourier, .mri:not([data-mode="lauterbur"]) .only-lauterbur { display: none; }
 
 /* 1 · One axis: one canvas, the field, the sample and its spins, the spectrum and the signal */
 .v1-main { height: max(540px, calc(100vh - 230px)); max-height: 720px; }
@@ -51,6 +63,9 @@
 /* 3 · The second axis */
 .v3-main { height: max(580px, calc(100vh - 230px)); max-height: 780px; }
 #v3-main { touch-action: pan-y; }
+
+/* 4 · Contrast and artefacts */
+.v4-main { height: max(560px, calc(100vh - 230px)); max-height: 760px; }
 
 .readout { color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 3em; line-height: 1.5; }
 .readout b, .readout .fixnum.b { color: var(--ink); font-weight: 600; }
@@ -69,4 +84,5 @@ details[open] summary { margin-bottom: 6px; }
   .v1-main { height: 860px; max-height: none; }
   .v2-main { height: 1060px; max-height: none; }
   .v3-main { height: 1460px; max-height: none; }
+  .v4-main { height: 1060px; max-height: none; }
 }

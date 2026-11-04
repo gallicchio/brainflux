@@ -7,12 +7,14 @@
 import { AxisView } from './view-axis.js';
 import { SliceView } from './view-slice.js';
 import { KspaceView } from './view-kspace.js';
+import { ContrastView } from './view-contrast.js';
 import { $, segmented, drawer, readHash, writeHash } from '../lib/ui.js';
 
 const VIEWS = [
   { id: 'axis', label: '1 · One axis', make: (app) => new AxisView(app) },
   { id: 'slice', label: '2 · A slice', make: (app) => new SliceView(app) },
   { id: 'kspace', label: '3 · The second axis', make: (app) => new KspaceView(app) },
+  { id: 'contrast', label: '4 · Contrast and artefacts', make: (app) => new ContrastView(app) },
 ];
 
 // (Declared before the views are made: they schedule the address and the clock as they start.)
@@ -32,6 +34,7 @@ function readColors() {
     pieces: [get('--piece-0', '#1f8f8a'), get('--piece-1', '#c45a16'), get('--piece-2', '#7b3fb5'), get('--piece-3', '#2f7a2f')],
     field: get('--field', '#2f62d8'), spec: get('--spec', '#1d1d1f'), sigRe: get('--sig-re', '#2f62d8'), sigIm: get('--sig-im', '#c8501a'),
     fan: get('--fan', 'rgba(90,100,120,0.16)'), ring: get('--ring', 'rgba(90,100,120,0.35)'),
+    tissue: { water: get('--t-water', '#2f7fe0'), fat: get('--t-fat', '#d49b00'), grey: get('--t-grey', '#6f6f6f'), white: get('--t-white', '#a9a9a9'), lesion: get('--t-lesion', '#e0507a') },
   };
 }
 readColors();
@@ -48,6 +51,9 @@ function setView(v) {
   if (!app.views[v]) return;
   app.view = v; viewSeg.value = v;
   $('#main').dataset.view = v;
+  // (Views 3 and 4 show the slice picked in view 2: make them again for it if it has moved.)
+  const z = app.slice?.z ?? 0, w = app.views[v];
+  if ((v === 'kspace' || v === 'contrast') && w.s.obj === 'head' && w.madeAt !== z) { w.madeAt = z; w.rebuild(); }
   current().dirty = true;
   kick(); scheduleHash();
 }
@@ -82,6 +88,7 @@ function saveHash() { writeHash({ v: app.view, ...current().toHash() }); }
 const AXIS = { G: 2, slow: 2, T2s: 20, B0: 1.5 };
 const SLICE = { Gz: 4, bw: 1.5, fc: 0, T: 3, flip: 90, rephase: true, slow: 1.5 };
 const KSP = { obj: 'head', type: 'se', TE: 20, TR: 500, N: 64, T2p: 60, order: 'centre', rate: 12, slow: 9, show: 'spins' };
+const CON = { obj: 'head', mode: 'fourier', type: 'se', TR: 500, TE: 15, N: 128, fov: 256, lines: 128, sigma: 0, nsa: 1, fat: false, Gx: 4, B0: 1.5, T2p: 60, nA: 12, filter: true, rate: 3 };
 /** The slice of views 3 and 4 back at the middle of the head (as view 2 opens). */
 const slice0 = () => { if (Math.abs(app.views.slice.centre) > 1e-9) app.views.slice.set({ ...SLICE, playing: app.views.slice.s.playing }); };
 const setups = {
@@ -102,6 +109,13 @@ const setups = {
   centre: () => { setView('kspace'); slice0(); app.views.kspace.set({ ...KSP, only: 'centre' }); },
   spinecho: () => { setView('kspace'); slice0(); const v = app.views.kspace; v.set({ ...KSP, T2p: 8, slow: 14, cue: { q: 32, t: 0 } }); v.cue(32, 0); },
   motion: () => { setView('kspace'); app.views.kspace.set({ ...KSP, obj: 'disks', rate: 5, ramp: false }); },
+  // 4 · Contrast and artefacts
+  contrast: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON }); },
+  wrap: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, fov: 180 }); },
+  lines: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, lines: 32 }); },
+  noise: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, sigma: 0.05 }); },
+  fat: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, fat: true, Gx: 0.5 }); },
+  lauterbur: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, obj: 'disks', mode: 'lauterbur', nA: 4, rate: 1.5 }); },
 };
 drawer($('#help'), $('#help-button'), setups);
 

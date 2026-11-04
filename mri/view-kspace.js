@@ -66,6 +66,7 @@ export class KspaceView {
     this.traces.clear();
     this.buildWarp();
     this.kR = kspaceBrightness(this.acq.kre, this.acq.kim);
+    this.madeAt = this.app.slice?.z ?? 0;
     let pmax = 0;
     for (const v of this.acq.picture.total) pmax = Math.max(pmax, v);
     this.pmax = pmax || 1;
