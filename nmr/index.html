@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bloch sphere and NMR · BrainFlux</title>
+<meta name="description" content="Send pulses into a spin and watch it on the Bloch sphere: precession, the rotating frame, the free induction decay, spin echoes, T1 and T2, noise and averaging, and the Earth's-field NMR board's polarize-and-listen.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="nmr.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Bloch sphere and NMR</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="nmr" id="main" data-view="one">
+  <section class="stage">
+    <div class="top-row">
+      <div class="row" id="view-row"></div>
+      <div class="row" id="inst-row"><span class="label">Instrument</span></div>
+    </div>
+    <div class="sphere-area">
+      <div class="sphere-col">
+        <div class="plot-wrap sphere-wrap" id="sphere-wrap">
+          <canvas id="sphere" tabindex="0" aria-label="The Bloch sphere: the magnetization arrow, the fields, and the spins.  Drag the arrow's tip to tip it; drag elsewhere to turn the sphere"></canvas>
+          <div class="sphere-note" id="sphere-note"></div>
+        </div>
+        <div class="hint" id="sphere-hint">Drag the arrow's tip to tip the spin, or press a pulse button; drag anywhere else on the sphere to turn it</div>
+      </div>
+      <div class="side">
+        <div class="panel spin-half" id="spin-half">
+          <div class="label">Spin ½</div>
+          <div class="small">The arrow is the direction of the spin, ⟨S⟩, of the quantum state</div>
+          <div class="state" id="state-formula">$|\psi\rangle=\cos\frac{\theta}{2}\,\text{|↑⟩}+e^{i\varphi}\sin\frac{\theta}{2}\,\text{|↓⟩}$</div>
+          <div class="amps" id="amps"></div>
+          <div class="bars" id="bars">
+            <span>P(↑)</span><span class="pbar"><i id="bar-up"></i></span><span class="fixnum" id="p-up" style="width: 4.5ch"></span>
+            <span>P(↓)</span><span class="pbar down"><i id="bar-down"></i></span><span class="fixnum" id="p-down" style="width: 4.5ch"></span>
+          </div>
+          <div class="why" id="spin-why">↑ is along B₀, the lower energy for a proton.  P(↑) is the chance of finding the spin up if you measured it along B₀.</div>
+        </div>
+        <div class="plot-wrap curve-wrap" id="curve-wrap"><canvas id="curve" aria-label="What the sequence measures, against the delay or the time, with the fitted time constant"></canvas></div>
+      </div>
+    </div>
+    <div class="readout small" id="readout" aria-live="off"></div>
+    <div class="plot-wrap timeline-wrap v-seq" id="timeline-wrap"><canvas id="timeline" aria-label="The pulse sequence: drag a pulse to move it in time, click one to choose it"></canvas></div>
+    <div class="hint v-seq" id="timeline-hint">Drag a pulse along the timeline to move it; click one to choose it and set its angle and axis on the right</div>
+    <div class="plot-wrap board-wrap v-earth" id="board-wrap"><canvas id="board" aria-label="The board's cycle: the polarizing current, then the switch-off, then listening"></canvas></div>
+    <div class="plot-wrap signal-wrap" id="signal-wrap"><canvas id="signal" aria-label="The detected signal against time: the mixer's two outputs and the envelope"></canvas></div>
+    <div class="plots2">
+      <div class="plot-wrap raw-wrap" id="raw-wrap"><canvas id="raw" aria-label="The EMF in the coil, as a scope on it would show it"></canvas></div>
+      <div class="plot-wrap zoom-wrap" id="zoom-wrap"><canvas id="zoom" aria-label="A few milliseconds of the FID, the oscillation itself"></canvas></div>
+      <div class="plot-wrap spec-wrap" id="spec-wrap"><canvas id="spec" aria-label="The spectrum of the signal: its power against frequency"></canvas></div>
+    </div>
+  </section>
+
+  <aside class="controls" id="controls">
+    <div class="panel" id="seq-panel" data-views="seq"></div>
+    <div class="panel" id="earth-panel" data-views="earth"></div>
+    <div class="panel" id="pulse-panel" data-views="one many seq"></div>
+    <div class="panel" id="spins-panel" data-views="one many seq earth"></div>
+    <div class="panel" id="clock-panel" data-views="one many seq"></div>
+    <div class="panel" id="settle-panel" data-views="one many seq earth"></div>
+    <div class="panel" id="noise-panel" data-views="one many seq earth"></div>
+    <details class="panel" id="more-panel" data-views="one many seq earth"><summary class="small">More: the magnet, the RF's frequency, the sample</summary><div id="more-box" class="stack"></div></details>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>The red arrow is the magnetization of a sample of protons, in units of what the magnet
+    gives it once the protons have settled: pointing up, along the magnet's field, is that
+    settled state.  The arrow spins round the field as a top spins round the vertical, far
+    too fast to watch (five million turns a second in the TeachSpin's magnet), so the page
+    slows time down and says by how much.</p>
+    <p><b>Drag the arrow's tip</b> to tip it, or <b>press a pulse button</b>: a short burst of
+    radio waves that turns the arrow by the angle you choose.  The plots under the sphere are
+    what the instrument records: the voltage the spinning arrow makes in a coil.  Switch to the
+    <b>rotating frame</b> to turn with the arrow: then only the pulses and the slow changes are
+    left to watch.</p>
+    <p>The tabs go on from one spin to many (why the signal dies away, and how an echo brings
+    it back), to the pulse sequences that measure a sample, and to the Earth's-field board,
+    which tips the protons without any radio pulse.  The buttons at the top load the numbers
+    of the TeachSpin (5 MHz) or of the board (2 kHz).</p>
+  </section>
+
+  <article class="exp" data-setup="larmor">
+    <h3>1. The spin goes round the field at the Larmor frequency</h3>
+    <p>One spin, tipped 45° from the field $B_0$, seen in the lab.  It goes round $B_0$ at the
+    Larmor frequency $f_0=\gamma B_0/2\pi$, with $\gamma/2\pi=42.577$ MHz/T for a proton:
+    5.000 MHz in the TeachSpin's 117.4 mT, slowed here so that one turn takes a second.  Drag
+    the tip to another angle: a turn takes the same time at any angle, because only the field
+    sets the rate.  Under <em>More</em>, set $B_0$ to 234.9 mT: twice as fast.  The coil lies
+    along $x$, and the voltage in it (the lower plot) follows $dM_x/dt$: an oscillation at $f_0$
+    as big as the part of the arrow across the field, $|M_{xy}|$.</p>
+  </article>
+
+  <article class="exp" data-setup="pulse90">
+    <h3>2. A π/2 pulse tips the spin over, and the coil starts to ring</h3>
+    <p>The arrow starts along $B_0$, with nothing across it and no signal.  A pulse of RF at the
+    Larmor frequency turns it down to the equator.  In the lab it spirals down, twelve and a
+    half turns round $B_0$ while it goes a quarter turn down, because the RF's field $B_1$
+    (2.35 mT) is 50 times weaker than $B_0$.  Then it goes round freely, all of it across the
+    field, and the coil rings at full size: the <em>free induction</em>.  The pulse lasted
+    2.50 μs, as $\theta=\gamma B_1\tau$ says.  Press <em>π/2 about x′</em> again: a second
+    quarter turn takes it to the bottom, and the ringing stops.</p>
+  </article>
+
+  <article class="exp" data-setup="rotating">
+    <h3>3. The rotating frame: the same pulse without the spinning</h3>
+    <p>Turn with the RF, at the Larmor frequency, and $B_0$ is gone: in this frame nothing
+    moves the spin but $B_1$, which stands still along $x'$.  The spiral of experiment 2 becomes
+    a plain quarter turn about $x'$, from $z$ to $y'$.  The mixer's two outputs, $M_{x'}$ and
+    $M_{y'}$, are the arrow's coordinates in this frame; the coil's oscillation is the same arrow
+    seen from the lab.  Press <em>Back to equilibrium</em>, then <em>π/2 about y′</em>: the arrow
+    goes to $-x'$.  The axis of a pulse is the phase of its RF.</p>
+  </article>
+
+  <article class="exp" data-setup="offres">
+    <h3>4. Off resonance: the pulse misses, and the mixer beats</h3>
+    <p>The RF is 50 kHz above the Larmor frequency, half the rate $\gamma B_1/2\pi=100$ kHz at
+    which $B_1$ turns the spin.  In the frame of the RF, $B_0$ is no longer quite cancelled:
+    $\Delta B=-2\pi\delta f/\gamma$ is left along $z$, and during the pulse the spin turns about
+    the tilted <em>effective field</em> $B_\mathrm{eff}$, so it misses the equator.  The "π/2"
+    leaves $M_z=0.053$; 100 kHz off it would leave 0.197.  After the pulse the spin goes round
+    $\Delta B$ at 50 kHz in this frame, so the mixer's outputs swing, a quarter period apart,
+    while the envelope $|M_{xy}|$ holds still.  That beat is how the TeachSpin is tuned: turn the
+    RF's frequency until the mixer stops beating.</p>
+  </article>
+
+  <article class="exp" data-setup="spread">
+    <h3>5. Many spins: the signal dies, though no spin does</h3>
+    <p>A real sample is many spins, and the magnet's field is not quite the same through it,
+    so their frequencies spread, here over $\Delta f=500$ Hz (the full width of a Lorentzian).
+    After a π/2 pulse they all start along $y'$ and fan out, the faster ones (orange) ahead and
+    the slower (violet) behind.  Their sum, which is what the coil sees, shrinks and dies away:
+    the free induction decay, falling by $1/e$ in $T_2^*=1/(\pi\Delta f)=0.64$ ms.  No spin
+    has lost anything: each arrow is as long as ever.  The spectrum is the line the spread makes,
+    500 Hz wide at half power: $1/(\pi T_2^*)$.</p>
+  </article>
+
+  <article class="exp" data-setup="echo">
+    <h3>6. The spin echo: a π pulse brings the signal back</h3>
+    <p>As in experiment 5, with a π pulse about $x'$ at $\tau=1.5$ ms, when the fan has spread
+    all the way round.  It flips the fan over: the faster spins are now behind by as much as
+    they were ahead, and they catch up at $2\tau$.  The fan closes and the signal comes back, an
+    <em>echo</em> (Hahn, 1950), along $-y'$.  It is smaller than the FID's start, 0.86 of it,
+    because each spin has also lost some of itself with $T_2=20$ ms: $e^{-2\tau/T_2}$.  The echo
+    undoes the spread, not that loss.  Slide $T_2$ down and the echo shrinks.  $T_1$ (25 ms)
+    pulls the sum's $M_z$ back up all the while: 0.08 by 5 ms.</p>
+  </article>
+
+  <article class="exp" data-setup="cpmg">
+    <h3>7. T₂ from a train of echoes</h3>
+    <p>A π/2 pulse, then sixteen π pulses about $y'$, at $\tau$, $3\tau$, $5\tau$… with
+    $\tau=2$ ms.  Each refocuses the fan, so an echo comes every 4 ms, out to 64 ms, and the
+    echoes' heights fall as $e^{-t/T_2}$: one run measures $T_2$.  The fit beside the sphere gives
+    20.2 ms for this oil's 20 ms.  With one echo per run (<em>Spin echo</em>, then <em>Scan τ</em>)
+    it takes twelve runs.  This train is Carr and Purcell's (1954) with Meiboom and Gill's change
+    (1958): the π pulses about $y'$, along the spins, not about $x'$.</p>
+  </article>
+
+  <article class="exp" data-setup="mg">
+    <h3>8. Why Meiboom and Gill: pulses that are slightly wrong</h3>
+    <p>The same train with the π pulses about $x'$ (Carr–Purcell), and every pulse 10% too
+    long: a π that is really 198°, as a width set by hand can be.  About $x'$ each pulse's error
+    adds to the last, the echoes alternate in sign, and they die in half the time: the fit says
+    $T_2=10.6$ ms.  Press <em>CPMG</em>, keep the error at 10%: about $y'$, along the spins,
+    an error in one pulse is undone by the next, and the fit gives 20.3 ms again.  A short
+    pulse, −10%, fails the same way about $x'$ (10.6 ms).</p>
+  </article>
+
+  <article class="exp" data-setup="ir">
+    <h3>9. T₁ by inversion recovery</h3>
+    <p>A π pulse turns $M$ to $-z$; it climbs back with $T_1$, as $1-2e^{-\tau/T_1}$; a π/2 at
+    $\tau$ tips what it has reached over, and the FID's start reads it, with its sign on the
+    mixer.  The scan runs it for fifteen delays and plots the readings: below zero for short
+    $\tau$, through zero at $\tau=T_1\ln2$, up to the full FID.  The fit gives $T_1=25.0$ ms and
+    the null at 17.3 ms.  Click the plot there: the sequence runs at that $\tau$, and the sphere
+    shows why the FID vanishes: $M$ has climbed back exactly to nothing, so the π/2 has nothing
+    to tip.  On the TeachSpin the null is the quick way: find the $\tau$ where the FID vanishes
+    and divide by $\ln 2=0.693$.  (The detector's envelope, which has no sign,
+    folds the curve up at the null.)</p>
+  </article>
+
+  <article class="exp" data-setup="noise">
+    <h3>10. Noise, and averaging it away</h3>
+    <p>An FID with thermal noise: a signal-to-noise ratio of 5, so the noise is 0.20 of the full
+    signal, r.m.s.  Repeat and average: the signal is the same each time and adds up, the noise
+    does not, and the average of $N$ runs has $1/\sqrt N$ of the noise: 0.050 after 16, 0.012
+    after 256.  Watch the fit of $T_2^*$ beside the sphere: from one run it says 0.545 ms, 12%
+    short of the true 0.617; from 16, 0.606; from 256, 0.618.  It fits the mixer's output in
+    phase with the FID, which noise leaves at zero on average.  The envelope $|M_{xy}|$ does
+    not go to zero: noise alone has a mean length $\sigma\sqrt{\pi/2}$, 0.25 here, which would
+    make the FID look longer.</p>
+  </article>
+
+  <article class="exp" data-setup="board">
+    <h3>11. The Earth's-field board: polarize, switch off, listen</h3>
+    <p>No magnet and no RF pulse.  A litre of water sits in a coil whose axis lies across the
+    Earth's field (east–west).  For 3 s a current of 1.5 A makes 7.84 mT along the coil, 170
+    times the Earth's 46.0 μT, and the protons build a magnetization along it, as
+    $1-e^{-t/T_1}$: 0.699 of all of it by 3 s for tap water ($T_1=2.5$ s).  Then the current is
+    switched off in 0.4 ms, before the protons can follow, so $M$ is left across the Earth's
+    field: 98.9% of it.  That is the π/2 pulse.  It goes round $B_E$ at 1960 Hz and makes
+    0.78 μV in the same coil, dying away with $T_2^*=0.86$ s.  The board multiplies it by its
+    tank's $Q$ of 37 and its gain of 20 301: about 0.6 V at OUT.  Press <em>Hear it</em>: the
+    whistle the board's headphones give.</p>
+  </article>
+
+  <article class="exp" data-setup="adiabatic">
+    <h3>12. Sudden or adiabatic: switch it off slowly and nothing rings</h3>
+    <p>The same, with the current switched off in 300 ms instead of 0.4.  As it falls, the
+    total field turns from the coil's axis to the Earth's; slowly enough, the spins follow it
+    round, and $M$ ends up along $B_E$, with nothing across it to ring: 4.5% is left, an FID of
+    0.033 μV.  The field turns only at the very end of the ramp, through its last 1/170, so what
+    matters is $A=\gamma B_E^2\tau/B_p$: 0.029 for the board's 0.4 ms (sudden), 1 at 13.8 ms
+    (69% left across), 22 at 300 ms (adiabatic).  The plainer $\gamma B_E\tau$ would say 4.9 at
+    0.4 ms, and be wrong.  Watch the sphere through the switch-off at each speed.</p>
+  </article>
+
+  <article class="exp" data-setup="t1board">
+    <h3>13. T₁ from the polarizing time</h3>
+    <p>The FID's start is the magnetization built while the current flowed, $1-e^{-t_p/T_1}$.
+    <em>Measure T₁</em> runs the cycle polarizing for 0.2 to 4.7 s, the board's range, and fits
+    the starts: $T_1=2.50$ s for tap water's 2.5.  Each cycle you run adds its own point.  Try
+    <em>Copper sulphate</em>: its ions take the protons' energy far faster, and $T_1$ falls to
+    0.3 s, so the FID reaches full size within a second of polarizing.</p>
+  </article>
+
+  <article class="exp" data-setup="field">
+    <h3>14. The Earth's field to a nanotesla</h3>
+    <p>Listening for 4.8 s, the spectrum's line is 0.37 Hz wide, $1/(\pi T_2^*)$, and its peak
+    falls at 1959.82 Hz: $B=f/42.577$ Hz/μT = 46 030.0 nT, the field that was set.  One
+    nanotesla moves the line 0.043 Hz, a tenth of its width, and an FID this clean locates the
+    peak far better than that, so the board reads the field to a few nanotesla: enough to watch it
+    drift through the day.  Set the Earth's field to 50 μT, as further north: the peak gives
+    50 000.0 nT.</p>
+  </article>
+
+  <article class="exp" data-setup="steel">
+    <h3>15. A steel tool nearby</h3>
+    <p>Steel near the coil bends the field, so it differs across the bottle: 100 nT here, not
+    5.  The protons' frequencies spread over 4.26 Hz, $T_2'=1/(\pi\Delta f)$ falls from 1.5 s to
+    75 ms, and the FID dies within a tenth of a second ($T_2^*=72$ ms), its line 4.4 Hz wide.
+    The protons have lost nothing: an echo would bring them back, but the board has no π
+    pulse.  The cure is to take the steel away: a steel desk, a car or a radiator nearby kills
+    the signal.</p>
+  </article>
+
+  <section class="theory">
+  <h3>How it works</h3>
+  <p><b>The Bloch equations.</b>  A magnetization $\mathbf M$ in a field $\mathbf B$ precesses and
+  relaxes,
+  $$\frac{d\mathbf M}{dt}=\gamma\,\mathbf M\times\mathbf B-\frac{M_x\hat x+M_y\hat y}{T_2}-\frac{M_z-M_0}{T_1}\,\hat z ,$$
+  with $\gamma/2\pi=42.577$ MHz/T for protons.  The first term turns $\mathbf M$ about $\mathbf B$
+  at $\omega_0=\gamma B$, clockwise seen from the tip of $\mathbf B$; $T_1$ brings $M_z$ back to
+  its equilibrium $M_0$, and $T_2$ takes away the part across the field.  The page integrates
+  them exactly, as rotations about the field of the moment and exponentials.  $M$ is in units of
+  $M_0$ (of the magnetization the polarizing field gives, for the board).</p>
+  <p><b>The rotating frame.</b>  Seen from a frame turning at $\omega$ about $z$, the same
+  equation holds with $\mathbf B$ replaced by $\mathbf B+\boldsymbol\omega/\gamma$: at
+  $\omega=-\gamma B_0$ (the precession's own sense) $B_0$ vanishes.  An RF field
+  $B_1\cos\omega t$ along the coil is two fields turning opposite ways; the one turning with the
+  spins stands still in this frame, along $x'$ (or where its phase says), and turns $\mathbf M$
+  by $\theta=\gamma B_1\tau$ in a pulse of length $\tau$.  The other turns at $2\omega$ and averages
+  away (the page leaves it out).</p>
+  <p><b>The effective field.</b>  With the RF at $f_0+\delta f$, what is left of $B_0$ in its
+  frame is $\Delta B=-2\pi\delta f/\gamma$ along $z$, and $\mathbf M$ turns about
+  $\mathbf B_\mathrm{eff}=B_1\hat x'+\Delta B\hat z$, tilted from $z$ by $\beta$ with
+  $\tan\beta=\gamma B_1/2\pi\delta f$, at $\sqrt{(\gamma B_1)^2+(2\pi\delta f)^2}$.  From $z$,
+  $M_z=\cos^2\beta+\sin^2\beta\cos\big(\sqrt{1+(2\pi\delta f/\gamma B_1)^2}\,\theta\big)$.</p>
+  <p><b>The signal.</b>  A coil along $x$ links a flux proportional to $M_x$, and its EMF is
+  $-d\Phi/dt\propto -dM_x/dt$.  With $M_x=M_{x'}\cos\omega t+M_{y'}\sin\omega t$ the fast factor
+  dominates, so the EMF is $\omega_0$ times the transverse magnetization: the signal grows as
+  $\omega_0 M_0\propto B_0^2$ ($M_0\propto B_0$ too).  Multiplying it by the reference,
+  $\cos\omega t$ and $\sin\omega t$, and filtering gives $M_{x'}$ and $M_{y'}$: the mixer's
+  outputs.  Their length $|M_{xy}|$ is the detector's envelope.  Thermal noise is added to the
+  two outputs, independently at each point; the signal-to-noise ratio is the full signal over
+  its r.m.s.  Averaging $N$ runs leaves the signal and $1/\sqrt N$ of the noise.</p>
+  <p><b>Many spins.</b>  The ensemble is 4096 spins whose offsets from $f_0$ follow a Lorentzian
+  of full width $\Delta f$, taken at its quantiles, not at random, so that their sum decays as
+  $e^{-t/T_2'}$ with $T_2'=1/(\pi\Delta f)$, and with $T_2$ as $e^{-t/T_2^*}$,
+  $1/T_2^*=1/T_2+1/T_2'$.  The sphere draws a few of them, evenly spread through the line.  A
+  finite ensemble never quite cancels: a floor of about 1.5% is left after the FID has gone.
+  The power spectrum $|S(f)|^2$ of $A\,e^{-t/T_2^*}$ is a Lorentzian $1/(\pi T_2^*)$ wide at half
+  height.  The pulses act on the spins far out in the Lorentzian's tails less well than on the
+  rest: with 2.5 μs pulses an echo is 0.4% lower than $e^{-2\tau/T_2}$.</p>
+  <p><b>The board.</b>  While the current flows, the protons relax towards the polarizing
+  field, $B_p\approx170\,B_E$ along the coil; during the switch-off they relax towards the field of
+  the moment.  A linear ramp of $B_p$ to zero in $\tau$ turns the total field from the coil's
+  axis to $B_E$, fastest at the end, through its last radian in $\tau B_E/B_p$.  The spins follow
+  while the field turns slower than they precess, $A=\gamma B_E^2\tau/B_p\gg1$ (adiabatic); when
+  $A\ll1$ (sudden) they follow only the field's first, slow turning and are left almost where
+  they were: tilted 8.7° towards $B_E$ at the board's 0.4 ms, 98.9% across, and 2.5° at a tenth
+  of that time.  The FID's EMF is the board's design value, 1.199 μV for a litre of water
+  fully polarized at 1.5 A and precessing at 1960 Hz, scaled by the current and the field.</p>
+  <p><b>Spin ½.</b>  For one proton the arrow is the expectation value $\langle\mathbf S\rangle$
+  (times $2/\hbar$) of the state $\cos\frac\theta2\,\text{|↑⟩}+e^{i\varphi}\sin\frac\theta2\,\text{|↓⟩}$:
+  every pure state of a spin ½ is a point on the sphere.  Its Hamiltonian
+  $H=-\gamma\mathbf S\cdot\mathbf B$ is linear in $\mathbf S$, and the components of $\mathbf S$
+  close under commutation, so Ehrenfest's theorem gives
+  $d\langle\mathbf S\rangle/dt=\gamma\langle\mathbf S\rangle\times\mathbf B$ exactly: the quantum
+  spin's arrow moves just as a classical magnetization does, and so does any sum of them.  A sum
+  shorter than one spin is a mixed state.</p>
+  </section>
+
+  <p class="small muted">New in 2026 for BrainFlux.  The Earth's-field board is Jason
+  Gallicchio's (<a href="https://github.com/gallicchio/earth-nmr-pcb">github.com/gallicchio/earth-nmr-pcb</a>).
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
