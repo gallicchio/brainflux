@@ -3,7 +3,7 @@ import {
   GAMMA, GAMMA_HZ, rotate, precess, relax, integrate, effectiveField, pulseDuration, pulseField, pulse,
   toLab, toRotating, spinHalf, lorentzianOffsets, spreadT2, T2star, Ensemble, adiabaticity, switchOff, polarized,
 } from '../nmr/bloch.js';
-import { Record, Rng, meanGauss, rms, noiseRms, rawColumns, spectrum, fitShape } from '../nmr/signal.js';
+import { Record, Rng, meanGauss, rms, noiseRms, rawAt, rawPlan, rawFill, spectrum, fitShape } from '../nmr/signal.js';
 import { Engine } from '../nmr/engine.js';
 import { buildSequence, runSequence, startSequence, recoveryCurve, echoAmplitudes, echoCurve, polarizeCurve, leftAcross, threeClocks, clockFits, clockTrain } from '../nmr/sequence.js';
 import {
@@ -275,16 +275,54 @@ test('the FID\'s spectrum: a line at the Larmor frequency of width 1/(πT2*)', (
 
 // ------------------------------------------------------------------------- the raw trace
 
-test('the raw trace is the EMF: Vpk (Mx′ sin ωt − My′ cos ωt), drawn as an envelope when a column holds many periods', () => {
+test('the raw trace is the EMF: Vpk (Mx′ sin ωt − My′ cos ωt), sampled 16 a period where a column holds less than one; where it holds many, a band ± the envelope with a sinusoid\'s spread of values', () => {
   const e = new Engine({ B0, N: 1 }), T = 1 / (GAMMA_HZ * B0);
   e.reset([1, 0, 0], 0); e.setSampling(T / 50); e.advance(40 * T);
-  const fine = rawColumns(e.record, e.omegaRef, 0, T, 64);
-  assert(!fine.envelope, 'one period in 64 columns is drawn as samples');
-  close(Math.max(...fine.hi), 1, 0.01, 'the peak of one cycle'); close(Math.min(...fine.lo), -1, 0.01, 'its trough');
-  close(fine.hi[16], 1, 0.02, 'sin ωt peaks a quarter period in');
-  const coarse = rawColumns(e.record, e.omegaRef, 0, 40 * T, 8);
-  assert(coarse.envelope && Math.abs(coarse.hi[3] - 1) < 1e-9 && Math.abs(coarse.lo[3] + 1) < 1e-9, 'five periods a column: ± the envelope');
-  return `64 columns a period: samples, peak ${Math.max(...fine.hi).toFixed(3)}; 5 periods a column: the envelope ±1`;
+  // One period over 64 columns: the trace itself, rawAt at each sample, 16 or more a period.
+  const p1 = rawPlan(e.omegaRef, 0, T, 64);
+  assert(!p1.band && p1.n >= 65, `one period in 64 columns: the carrier itself (${p1.n} samples)`);
+  const v1 = rawFill(e.record, e.omegaRef, 0, T, p1);
+  let worst = 0;
+  v1.forEach((v, j) => { worst = Math.max(worst, Math.abs(v - rawAt(e.record, e.omegaRef, (j * T) / (p1.n - 1)))); });
+  assert(worst < 1e-6, `the samples are rawAt's: ${worst}`);
+  close(Math.max(...v1), 1, 0.01, 'the peak of one cycle'); close(Math.min(...v1), -1, 0.01, 'its trough');
+  close(v1.indexOf(Math.max(...v1)) / (p1.n - 1), 0.25, 0.02, 'sin ωt peaks a quarter period in');
+  // 40 periods over 8 columns: a band, against a stand-in carrier of about a period a column,
+  // 24 samples to it, that swings to ± the envelope (1 here) in every column.
+  const p2 = rawPlan(e.omegaRef, 0, 40 * T, 8);
+  assert(p2.band && p2.n === 8 * 24 + 1, `five periods a column: a band (${p2.n} samples)`);
+  const v2 = rawFill(e.record, e.omegaRef, 0, 40 * T, p2);
+  for (let c = 0; c < 8; c++) {
+    const col = v2.slice(c * 24, (c + 1) * 24 + 1);
+    assert(Math.max(...col) > 0.99 && Math.max(...col) <= 1 + 1e-6 && Math.min(...col) < -0.99, `column ${c}: ${Math.min(...col)} to ${Math.max(...col)}`);
+  }
+  // Over many columns its values spread as a sinusoid's: |v| > 0.9 for (2/π) arccos 0.9 of the time.
+  const p4 = rawPlan(e.omegaRef, 0, 40 * T, 0.2 * 40), many = rawPlan(e.omegaRef, 0, 4000 * T, 2000), long = new Engine({ B0, N: 1 });
+  long.reset([0, 1, 0], 0); long.setSampling(T * 7.3); long.advance(4000 * T);
+  const v4 = rawFill(long.record, long.omegaRef, 0, 4000 * T, many);
+  const out = v4.filter((v) => Math.abs(v) > 0.9).length / v4.length, want = (2 / Math.PI) * Math.acos(0.9);
+  close(out, want, 0.02, 'the time spent beyond 0.9 of the envelope');
+  assert(p4.band, 'and a band at five periods a column');
+  // A part is that part of the whole; fast: the envelope's top and bottom in turn, four a column.
+  const part = rawFill(e.record, e.omegaRef, 0, 40 * T, p2, 0, null, 50, 90);
+  assert(part.every((v, j) => v === v2[50 + j]), 'a part of the samples is the same as that part of the whole');
+  const p3 = rawPlan(e.omegaRef, 0, 40 * T, 8, { fast: true }), v3 = rawFill(e.record, e.omegaRef, 0, 40 * T, p3);
+  assert(p3.n === 33 && v3.every((v, j) => Math.abs(v - (j & 1 ? -1 : 1)) < 1e-6), `fast: ±1 in turn (${p3.n} samples)`);
+  // Never 1.2 to 2 samples a column (where a part could be drawn otherwise than the whole).
+  const mid = rawPlan(e.omegaRef, 0, 6 * T, 64);
+  assert(!mid.band && mid.n === 2 * 64 + 1, `6 periods over 64 columns: ${mid.n} samples, not 97`);
+  return `the carrier's samples within ${worst.toExponential(0)} of rawAt; a band: ± the envelope in every column, beyond 0.9 of it ${(100 * out).toFixed(1)}% of the time (a sinusoid: ${(100 * want).toFixed(1)}%)`;
+});
+
+test('a record\'s version moves on with every change, its epoch with all but a new sample', () => {
+  const R = new Record(), other = new Record();
+  assert(R.id !== other.id, 'each record has its own id');
+  const v = () => [R.version, R.epoch];
+  const a = v(); R.push(0, 1, 0, 0); const b = v(); R.push(1, 1, 0, 0); R.push(2, 1, 0, 0); const c = v();
+  assert(b[0] > a[0] && b[1] === a[1] && c[0] > b[0] && c[1] === a[1], `a sample: version ${a[0]} -> ${b[0]}, epoch ${a[1]} -> ${b[1]}`);
+  R.renoise(5, 4); const d = v(); R.trim(1.5); const f = v(); R.clear(); const g = v();
+  assert(d[0] > c[0] && d[1] > c[1] && f[0] > d[0] && f[1] > d[1] && g[0] > f[0] && g[1] > f[1], `renoise, trim, clear: ${[d, f, g].join(' ')}`);
+  return `id ${R.id}; versions ${[a, b, c, d, f, g].map((x) => x[0]).join(', ')}; epochs ${[a, b, c, d, f, g].map((x) => x[1]).join(', ')}`;
 });
 
 // ---------------------------------------------------------------------------- the board

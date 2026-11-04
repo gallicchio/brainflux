@@ -24,16 +24,24 @@ import { fft } from '../lib/fft.js';
  * divided by √N (meanGauss draws the N, for the tests).  The noise of a sample depends only on a
  * seed and on where the sample falls on the grid of the sampling interval, not on the order in
  * which samples were taken, so a run gives the same noise however its clock was stepped.
+ *
+ * Each record has an id, a version that every change moves on (a sample added, the noise drawn
+ * afresh, the start trimmed, everything cleared), and an epoch that only the changes to what is
+ * already there move on (all but adding a sample): a picture of it keyed on the id and version
+ * is good until the record changes, and a picture of its samples so far, on the id and epoch,
+ * until anything but its growth does.
  */
+let records = 0;
 export class Record {
-  constructor() { this.clear(); }
+  constructor() { this.id = ++records; this.version = 0; this.epoch = 0; this.clear(); }
 
-  clear() { this.t = []; this.x = []; this.y = []; this.z = []; this.nx = []; this.ny = []; this.k = []; }
+  clear() { this.t = []; this.x = []; this.y = []; this.z = []; this.nx = []; this.ny = []; this.k = []; this.version++; this.epoch++; }
 
   get length() { return this.t.length; }
 
   /** A sample; noise: {seed, dt, averages} (no noise when omitted). */
   push(t, x, y, z, noise = null) {
+    this.version++;
     this.t.push(t); this.x.push(x); this.y.push(y); this.z.push(z);
     if (!noise) { this.nx.push(0); this.ny.push(0); this.k.push(0); return; }
     const k = noiseIndex(t, noise.dt), g = gauss2(noise.seed, k), f = 1 / Math.sqrt(Math.max(1, noise.averages || 1));
@@ -43,13 +51,14 @@ export class Record {
   /** Draw the noise afresh (from another seed) for every sample, as the mean of `averages` repeats. */
   renoise(seed, averages = 1) {
     const f = 1 / Math.sqrt(Math.max(1, averages));
+    this.version++; this.epoch++;
     for (let i = 0; i < this.t.length; i++) { const g = gauss2(seed, this.k[i]); this.nx[i] = g[0] * f; this.ny[i] = g[1] * f; }
   }
 
   /** Drop the samples before tMin (keeping one, for interpolation). */
   trim(tMin) {
     const i = Math.max(0, this.index(tMin));
-    if (i > 0) for (const k of ['t', 'x', 'y', 'z', 'nx', 'ny', 'k']) this[k].splice(0, i);
+    if (i > 0) { this.version++; this.epoch++; for (const k of ['t', 'x', 'y', 'z', 'nx', 'ny', 'k']) this[k].splice(0, i); }
   }
 
   /** The last index whose time is ≤ t (−1 before the first sample). */
@@ -120,36 +129,56 @@ export function rawAt(record, omegaRef, t, sigma = 0, tmp = [0, 0, 0]) {
 }
 
 /**
- * The raw trace between t0 and t1 in `cols` columns, as a scope draws it: the lowest and highest
- * value in each column (in units of Vpk).  Where a column holds a whole period or more the
- * oscillation sweeps every phase and the column is ± the envelope; otherwise the trace is
- * sampled `sub` times across it.  Returns {lo, hi} (Float32Arrays).
+ * How to sample the raw trace between t0 and t1 for a scope's display `cols` device columns wide
+ * (lib/scope.js draws the samples; rawFill makes them).  Where a column holds less than a period
+ * of the reference, the trace itself: 16 samples a period, so a carrier a few pixels a period
+ * keeps its crests (cos π/16 of them at worst), and at least `perCol` a column.  Where it holds more (at 5 MHz over a
+ * millisecond, thousands a column), a scope shows a band, its edges the envelope and its
+ * brightness across it the sinusoid's (arcsine) density, whatever the carrier's own frequency:
+ * so the same M_x′ and M_y′ go against a stand-in carrier of about one period a column,
+ * `perCycle` samples to it, a few samples a column instead of thousands (band: true).  (A little
+ * over one: 1 + 0.618/perCycle, so that from column to column the samples fall at other phases,
+ * as a real scope's do, and the kinks of the line between them don't stack into stripes.)  fast (the
+ * old per-column drawing, which needs only each column's extremes): for a band four samples a
+ * column, the envelope's top and bottom in turn (so that every column has both, wherever its edges
+ * fall among them), and otherwise 2 a column, 8 a period.  Returns
+ * {n, band, perCycle, fast}.
  */
-export function rawColumns(record, omegaRef, t0, t1, cols, sigma = 0, sub = 4) {
-  const lo = new Float32Array(cols), hi = new Float32Array(cols), w = (t1 - t0) / cols;
-  const periodsPerCol = (w * omegaRef) / (2 * Math.PI);
-  const tmp = [0, 0, 0];
-  if (periodsPerCol >= 1) {
-    // Every phase in every column: ± the largest envelope among the samples in it.
-    for (let c = 0; c < cols; c++) {
-      const ta = t0 + c * w, tb = ta + w;
-      let m = 0;
-      const i0 = Math.max(0, record.index(ta)), i1 = Math.max(i0, record.index(tb));
-      for (let i = i0; i <= i1; i++) m = Math.max(m, Math.hypot(record.x[i] + sigma * record.nx[i], record.y[i] + sigma * record.ny[i]));
-      lo[c] = -m; hi[c] = m;
-    }
-    return { lo, hi, envelope: true };
+export function rawPlan(omegaRef, t0, t1, cols, { perCol = 1, perCycle = 24, fast = false } = {}) {
+  const C = Math.max(1, Math.round(cols)), cycles = (Math.abs(omegaRef) * (t1 - t0)) / (2 * Math.PI);
+  const band = cycles > C;
+  let n = band ? C * (fast ? 4 : perCycle) + 1 : Math.ceil(Math.max(C * (fast ? 2 : perCol), cycles * (fast ? 8 : 16))) + 1;
+  // (Never 1.2 to 2 a column: a part of the trace, drawn on its own as the trace grows, then can't
+  // fall on the other side of lib/scope.js's 1.5 a column, from line to graded, than the whole.)
+  if (!band && !fast && n > 1.2 * C && n < 2 * C) n = 2 * C + 1;
+  return { n: Math.max(2, n), band, perCycle: fast ? 4 : perCycle, fast };
+}
+
+/**
+ * The plan's samples (rawPlan) of the raw trace Vpk (M_x′ sin ω_ref t − M_y′ cos ω_ref t), sample j
+ * at t0 + j (t1 − t0)/(n − 1), in units of Vpk, M_x′ and M_y′ (and their noise times sigma)
+ * interpolated in the record as Record.at does; for a band, the stand-in carrier's phase is
+ * 2π j (1 + 0.618/perCycle)/perCycle at sample j (for fast, the envelope's top and bottom in turn).
+ * Samples j0 to j1 (all of them by default) into out[0 …] (a Float32Array of j1 − j0 + 1), which is
+ * returned: a part is the same as that part of the whole.
+ */
+export function rawFill(record, omegaRef, t0, t1, plan, sigma = 0, out = null, j0 = 0, j1 = plan.n - 1) {
+  const { n, band, perCycle, fast } = plan, T = record.t, N = T.length, X = record.x, Y = record.y, NX = record.nx, NY = record.ny;
+  if (!out) out = new Float32Array(j1 - j0 + 1);
+  if (!N) { out.fill(0, 0, j1 - j0 + 1); return out; }
+  const dt = (t1 - t0) / (n - 1), w = (2 * Math.PI * (1 + 0.618 / perCycle)) / perCycle;
+  let i = Math.max(0, record.index(t0 + j0 * dt));
+  for (let j = j0; j <= j1; j++) {
+    const t = t0 + j * dt, o = j - j0;
+    while (i + 1 < N && T[i + 1] <= t) i++;          // (the last sample at or before t, as index() finds)
+    const k = Math.min(N - 1, i + 1), f = k > i && T[k] > T[i] ? Math.max(0, Math.min(1, (t - T[i]) / (T[k] - T[i]))) : 0;
+    const mx = X[i] + (X[k] - X[i]) * f + sigma * (NX[i] + (NX[k] - NX[i]) * f);
+    const my = Y[i] + (Y[k] - Y[i]) * f + sigma * (NY[i] + (NY[k] - NY[i]) * f);
+    if (!band) { const p = omegaRef * t; out[o] = mx * Math.sin(p) - my * Math.cos(p); }
+    else if (fast) out[o] = (j & 1 ? -1 : 1) * Math.hypot(mx, my);
+    else { const p = w * j; out[o] = mx * Math.sin(p) - my * Math.cos(p); }
   }
-  for (let c = 0; c < cols; c++) {
-    let a = Infinity, b = -Infinity;
-    for (let s = 0; s < sub; s++) {
-      const v = rawAt(record, omegaRef, t0 + (c + (s + 0.5) / sub) * w, sigma, tmp);
-      if (v < a) a = v;
-      if (v > b) b = v;
-    }
-    lo[c] = a; hi[c] = b;
-  }
-  return { lo, hi, envelope: false };
+  return out;
 }
 
 // ------------------------------------------------------------------------ thermal noise
