@@ -8,14 +8,15 @@ import { $, slider, segmented, toggle, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame } from '../lib/plot.js';
 import { STACKS, makeStack, bursts, mulberry32 } from './sample.js';
 import { detectorTrace, demodulate, peaks } from './tdoct.js';
-import { octColors, addInterval, covers, greyOf, um } from './plots.js';
+import { octColors, addInterval, covers, greyOf, um, fringePixels, smoothFor } from './plots.js';
+import { scopeTrace } from '../lib/scope.js';
 
 export const OFFSET = 20;     // the sample's front face is 20 μm beyond equal paths
 const PASS = 5;               // seconds for one pass of the mirror, by default
 
 export const state = { sample: 'slide', gap: 8, noise: -60, motor: 'sweep', speed: 50, scale: 'db', d: 0, alone: true };
 
-let S = null, stack = null, B = [], pass = null, seed = 1, sweepDir = 1, record = [], dirty = true;
+let S = null, stack = null, B = [], pass = null, passes = 0, seed = 1, sweepDir = 1, record = [], dirty = true;
 const stripC = $('#a-strip'), traceC = $('#a-trace'), scanC = $('#a-scan'), greyC = $('#a-grey');
 
 /** The mirror's travel for this sample: from a little before its front to a little past its back. */
@@ -35,7 +36,7 @@ function compute() {
   const tr = detectorTrace(B, src, D0, h, N, { noise: sigmaR(), rng: mulberry32(1000 + seed) });
   const A = demodulate(tr, src), E = new Float32Array(N);
   for (let j = 0; j < N; j++) E[j] = Math.hypot(tr.re[j], tr.im[j]);
-  pass = { I: Float32Array.from(tr.I), A: Float32Array.from(A), E, D0, h, N, dc: tr.dc, d0, d1, sigmaI: tr.sigmaI };
+  pass = { I: Float32Array.from(tr.I), A: Float32Array.from(A), E, D0, h, N, dc: tr.dc, d0, d1, sigmaI: tr.sigmaI, id: ++passes };
   dirty = true;
 }
 
@@ -145,15 +146,23 @@ function drawTrace(c) {
   ctx.fillStyle = c.faint; ctx.fillRect(f.left, f.top, f.w, f.h);
   ctx.fillStyle = c.panel;
   for (const iv of record) { const a = Math.max(f.left, f.X(iv[0])), b = Math.min(f.right, f.X(iv[1])); if (b > a) ctx.fillRect(a, f.top, b - a, f.h); }
-  ctx.fillStyle = c.sig;
-  const { I } = pass;
-  columns(f).forEach((col, i) => {
-    if (!col.on) return;
-    let lo = Infinity, hi = -Infinity;
-    for (let j = col.j0; j < col.j1; j++) { const v = I[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
-    const y0 = f.Y(hi), y1 = f.Y(lo);
-    ctx.fillRect(f.left + i, y0, 1, Math.max(1, y1 - y0));
-  });
+  // The whole pass's trace, drawn as a digital phosphor scope draws it (lib/scope.js: many fringes
+  // to a pixel, a band brightest where it turns), shown only where the mirror has been.  It does
+  // not change during a pass, so the picture is kept and only the window onto it grows.  Smoothed
+  // across columns where its finest fringe (or, if visible, the noise: two samples) has fewer
+  // than three device pixels.
+  const { I, D0, h, N } = pass;
+  if (record.some((iv) => iv[1] > iv[0])) {
+    const dpr = ctx.getTransform().a, devW = f.w * dpr, noisy = pass.sigmaI * (f.h / (f.y1 - f.y0)) * dpr > 0.5;
+    const finest = Math.min(fringePixels(S.src, f.x1 - f.x0, devW), noisy ? (h * devW) / (f.x1 - f.x0) : Infinity);
+    ctx.save();
+    ctx.beginPath();
+    for (const iv of record) if (iv[1] > iv[0]) ctx.rect(f.X(iv[0]), f.top, f.X(iv[1]) - f.X(iv[0]), f.h);
+    ctx.clip();
+    scopeTrace(ctx, f, { n: N, y: (j) => f.Y(I[j]), x0: f.X(D0 / 2), x1: f.X((D0 + (N - 1) * h) / 2), color: c.sig, bandlimited: true,
+      smooth: smoothFor(finest), key: `oct a-trace ${pass.id} ${f.x0} ${f.x1} ${f.y0} ${f.y1}` });
+    ctx.restore();
+  }
   const mx = f.X(state.d);
   ctx.strokeStyle = c.mirror; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(mx, f.top); ctx.lineTo(mx, f.bottom); ctx.stroke();
   ctx.restore();

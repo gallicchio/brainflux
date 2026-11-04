@@ -7,10 +7,11 @@
 import { el, $, slider, segmented, toggle, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame } from '../lib/plot.js';
 import { plateStack, bursts } from './sample.js';
-import { dcLevel } from './tdoct.js';
+import { dcLevel, complexEnvelope } from './tdoct.js';
 import { glassBeta, glassAt, spectrumPerNm } from './source.js';
 import { drawMichelson } from './pictures.js';
-import { octColors, fieldAt, signalRange, addInterval, covers, um } from './plots.js';
+import { octColors, fieldAt, addInterval, covers, um, fringePixels, smoothFor } from './plots.js';
+import { scopeTrace } from '../lib/scope.js';
 
 export const state = {
   d: 32, motor: 'sweep', speed: 8,
@@ -166,25 +167,47 @@ function drawSpectrum(c) {
 }
 let specFrame = null;
 
-/** The signal over mirror positions [x0, x1] drawn column by column into frame f. */
+/**
+ * The signal over the window, sampled finely enough for any fringe the source makes: every λ₀/16
+ * of mirror travel (8 samples to the centre wavelength's fringe, 6 to the shortest's at 250 nm of
+ * bandwidth, as view 2's detector samples), and at least four times a device pixel, so that a
+ * fringe a few pixels wide keeps its peaks (in ?scope=fast too).  Kept while the window, the
+ * sample, the source and the plot's width are unchanged.
+ */
+let sampled = { key: '', I: null, n: 0 };
+function sampleSignal(x0, x1, devW) {
+  const src = S.src, step = Math.min(src.lam0 / 16, (x1 - x0) / Math.max(1, 4 * devW)), n = Math.max(2, Math.ceil((x1 - x0) / step) + 1);
+  const key = `${src.lamNm} ${src.fwhmNm} ${state.z} ${state.two} ${state.t} ${state.n} ${state.glass} ${x0} ${x1} ${n}`;
+  if (sampled.key === key) return sampled;
+  const re = new Float64Array(n), im = new Float64Array(n), I = new Float32Array(n), h = (x1 - x0) / (n - 1);
+  complexEnvelope(B, src, 2 * x0, 2 * h, n, re, im);
+  for (let i = 0; i < n; i++) I[i] = dc + 2 * re[i];
+  sampled = { key, I, n };
+  return sampled;
+}
+
+/** The signal over mirror positions [x0, x1] drawn into frame f, where the detector has been if recorded. */
 function drawSignal(ctx, f, x0, x1, c, recorded) {
-  const g = [0, 0], cols = Math.max(1, Math.round(f.w));
-  const lo = new Float32Array(cols), hi = new Float32Array(cols), has = new Uint8Array(cols);
-  const envU = new Float32Array(cols);
+  const cols = Math.max(1, Math.round(f.w)), has = new Uint8Array(cols), envU = new Float32Array(cols);
   for (let i = 0; i < cols; i++) {
     const a = x0 + ((x1 - x0) * i) / cols, b = x0 + ((x1 - x0) * (i + 1)) / cols;
     if (recorded && !covers(record, a, b)) continue;
     has[i] = 1;
-    signalRange(B, S.src, dc, 2 * a, 2 * b, g);
-    lo[i] = g[0]; hi[i] = g[1];
     envU[i] = Math.hypot(...fieldAt(B, S.src, a + b));
   }
-  // The signal as a band from its lowest to its highest value in each column.
-  ctx.fillStyle = c.sig;
-  for (let i = 0; i < cols; i++) {
-    if (!has[i]) continue;
-    const y0 = f.Y(hi[i]), y1 = f.Y(lo[i]);
-    ctx.fillRect(f.left + i, y0, 1, Math.max(1, y1 - y0));
+  // The signal, drawn as a digital phosphor scope draws it (lib/scope.js): where many fringes
+  // share a pixel, a band brightest at its turning points; where a fringe has a few pixels, the
+  // fringe itself, anti-aliased.  Computed for the whole window, shown where the detector has been.
+  const ivs = recorded ? record.filter((iv) => iv[1] > iv[0] && iv[1] > x0 && iv[0] < x1) : [[x0, x1]];
+  if (ivs.length) {
+    const devW = f.w * ctx.getTransform().a, sm = sampleSignal(x0, x1, devW), I = sm.I;
+    ctx.save();
+    ctx.beginPath();
+    for (const iv of ivs) ctx.rect(f.X(iv[0]), f.top, f.X(iv[1]) - f.X(iv[0]), f.h);
+    ctx.clip();
+    scopeTrace(ctx, f, { n: sm.n, y: (i) => f.Y(I[i]), x0: f.X(x0), x1: f.X(x1), color: c.sig,
+      smooth: smoothFor(fringePixels(S.src, x1 - x0, devW)), key: `oct f-trace ${sm.key} ${f.y0} ${f.y1}` });
+    ctx.restore();
   }
   // The envelope dc ± 2|E| (what OCT keeps), dashed.
   if (recorded) {
