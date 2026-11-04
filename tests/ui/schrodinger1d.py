@@ -272,6 +272,22 @@ with Browser('schrodinger1d/index.html', size=(1400, 950)) as b:
     b.eval(f"location.hash = 'pot=well&init=' + encodeURIComponent({json.dumps(init)}); location.reload()")
     b.sleep(1.0); b.wait('window.__app && __app.ready')
     check(lit(b) == [['Off resonance', True]], f'a link to the finite well with that packet lights Off resonance ({lit(b)})')
+
+    # Backwards pauses at t = 0 exactly, on the starting packet; Play again goes on into negative
+    # time, the packet's past: further left, and wider (a Gaussian with no chirp is narrowest at 0).
+    b.eval('__app.setups.backwards()'); b.sleep(0.3)
+    back = b.eval("""(() => { const play = document.querySelector('#play'); if (!__app.state.running) play.click();
+        let i = 0; for (; i < 1000 && __app.state.running; i++) __app.advance(-0.5);
+        const o = __app.sim.observables(); return { t: __app.sim.t, running: __app.state.running, x: o.x, sx: o.sx, i }; })()""")
+    check(back['t'] == 0 and not back['running'] and abs(back['x'] + 25) < 0.05 and abs(back['sx'] - 4) < 0.05,
+          f"Backwards pauses at t = 0 exactly, on the starting packet (t = {back['t']}, <x> = {back['x']:.3f}, sigma = {back['sx']:.3f})")
+    past = b.eval("""(() => { const play = document.querySelector('#play'); play.click();
+        for (let i = 0; i < 1000 && __app.sim.t > -3 + 1e-9; i++) __app.advance(Math.max(-0.5, -3 - __app.sim.t));
+        const o = __app.sim.observables(), r = { t: __app.sim.t, running: __app.state.running, x: o.x, sx: o.sx, norm: o.norm };
+        play.click(); return r; })()""")
+    check(abs(past['t'] + 3) < 1e-9 and past['running'] and abs(past['x'] - (-25 - 1.8 * 3)) < 0.1
+          and abs(past['sx'] - 4 * math.sqrt(1 + (3 / 32) ** 2)) < 0.02 and abs(past['norm'] - 1) < 1e-9,
+          f"Play goes on into negative time: at t = {past['t']:.2f} the packet is at {past['x']:.2f} (−30.4) and {past['sx']:.4f} wide ({4 * math.sqrt(1 + (3 / 32) ** 2):.4f})")
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 

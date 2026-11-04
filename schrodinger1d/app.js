@@ -273,12 +273,19 @@ function rebuild() {
 function advance(T) {
   if (T === 0) return;
   dtMax = Math.min(dtCal, sim.suggestedStep(lastE));
-  // Running backwards stops at t = 0: the initial state, recovered.
-  if (state.direction < 0 && sim.t + T < 0) { T = -sim.t; setRunning(false); toast('Back at t = 0.'); }
-  if (Math.abs(T) < 1e-12) return;
+  // Running backwards from t > 0 pauses at t = 0 exactly: the initial state, recovered.  Play
+  // again goes on into negative time, the state's past under the same Hamiltonian.
+  // (Only on the frame that gets there: one whose steps are capped stops short of it.)
+  let atZero = false;
+  if (state.direction < 0 && sim.t > 0 && sim.t + T <= 0) { T = -sim.t; atZero = true; }
   let steps = Math.max(1, Math.ceil(Math.abs(T) / dtMax));
   slowed = false;
-  if (steps > maxSteps) { steps = maxSteps; T = Math.sign(T) * steps * dtMax; slowed = true; slowFrames++; }
+  if (steps > maxSteps) { steps = maxSteps; T = Math.sign(T) * steps * dtMax; slowed = true; slowFrames++; atZero = false; }
+  if (atZero) {
+    setRunning(false);
+    toast('Back at t = 0: the starting state again.  Play goes on into negative time.', 4000);
+  }
+  if (Math.abs(T) < 1e-12) { if (atZero) sim.t = 0; return; }
   frames++;
   const h = T / steps;
   if (Vdynamic) {
@@ -292,6 +299,7 @@ function advance(T) {
     sim.step(h, steps);
     for (let s = 0; s < steps; s++) stepClassical(h);
   }
+  if (atZero) sim.t = 0;        // (exactly, not a rounding away, so Play doesn't pause again)
   started = true;
 }
 

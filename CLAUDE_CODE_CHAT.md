@@ -1769,3 +1769,19 @@ across at 0.4 ms (about 100 V on the coil), 97.3% at 1 ms (40 V), 95.7% at 1.6 m
 clamp near 40-50 V would cost about 1.5% of the signal and keep the coil and its cable far below
 130 V; the author's call.  East–west (magnetic) is confirmed; at a slant the real switch-off makes
 the loss a little more than sin²α (north–south 0.68, not 0.733).
+
+## Prompt 29
+
+> Yes, change Schrodinger 1d so Backwards pauses at t = 0 and pressing Play continues into negative time.
+
+### Response 29 (2026-11-04)
+
+Backwards now pauses at t = 0 exactly, with a note that Play goes on, and Play then runs into
+negative time: the packet's past under the same Hamiltonian.  In experiment 19 that past is the
+tunnelling packet further left and wider (σ(−3) = 4.0175 against 4 at t = 0, the packet being
+narrowest there), and soon a bounce off the box's left wall; the help says why absorbing walls
+would get the past wrong.  Making it turned up an older bug: when the time left to t = 0 needed
+more steps than a frame allows, the frame stopped short and still paused with "Back at t = 0";
+the recovered packet was really at t = 0.39 (⟨x⟩ = −24.30 against −25).  The pause now comes only
+on the frame that gets there, and the packet comes back to ⟨x⟩ = −24.99999997, σ = 4.00000002.
+A UI check covers both, and the experiment's picture is remade.

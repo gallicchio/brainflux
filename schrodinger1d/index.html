@@ -94,8 +94,9 @@
     <p>Pick a <b>potential</b> on the right, then a starting <b>wave function</b> from its rows of
     named states, and drag the sliders (<b>x₀</b>, <b>σ</b>, <b>k₀</b> for a packet).  Click a thin
     grey line on the plot to load that stationary state.  <b>Play</b> pauses and resumes,
-    <b>Restart</b> goes back to the beginning, <b>Backwards</b> runs time in reverse, and
-    <b>Speed</b> slows a fast packet down.</p>
+    <b>Restart</b> goes back to the beginning, <b>Backwards</b> runs time in reverse (it pauses
+    at time zero, the starting state again; <b>Play</b> then goes on into negative time, the
+    state's past), and <b>Speed</b> slows a fast packet down.</p>
     <p>Look for this: a stationary state only changes colour; anything else moves, spreads or
     sloshes.  The triangle and bar at the foot of the plot are the mean position and its spread,
     and the readouts above the plot give the same numbers.  Each experiment below sets up one
@@ -300,9 +301,14 @@
     <h3>19. Running time backwards</h3>
     <p>A spread-out mess: a packet hit a barrier a while ago, and part went through, part came back.
     <em>Backwards</em> is on: press <em>Play</em>, and the reflected and transmitted parts come back
-    together into the original packet, which stops at $t=0$.  The
+    together into the original packet, and the clock pauses at $t=0$.  The
     Schrödinger equation is time-reversal symmetric (the absorbing walls are not, so they are
-    off here).</p>
+    off here).  Press <em>Play</em> again to go on into negative time, the packet's past under the
+    same Hamiltonian: it moves back to the left and is wider, so at $t=0$ it was at its narrowest
+    (a Gaussian with no chirp spreads the same way into the past as into the future,
+    $\sigma(t)=\sigma_0\sqrt{1+(\hbar t/2m\sigma_0^2)^2}$).  In this box its past soon includes a bounce
+    off the left wall; with absorbing walls the past would be wrong, as what they take can't come
+    back.</p>
   </article>
 
   <h3>How it is computed</h3>
