@@ -131,3 +131,33 @@ test('scope: the fast way leaves a gap where the samples are not numbers, as the
   const restart = path.find(([op, x]) => op === 'M' && x > 59 && x < 61);
   assert(path.length > 100 && !across.length && restart, `nothing drawn across the gap (${across.length} pieces), the pen put down again after it (${!!restart})`);
 });
+
+test('scope: a thick trace is spread down its columns: as thick as asked, and about even along its length', () => {
+  const W = 40, H = 60;
+  const shade = (Yof, thick, n = 801) => {
+    const X = [], Y = [];
+    for (let i = 0; i < n; i++) { const x = (W * i) / (n - 1); X.push(x); Y.push(Yof(x)); }
+    const D = new Float32Array(W * H), T = new Float32Array(W * H), ext = new Float64Array(2 * W), out = new Uint32Array(W * H);
+    depositTrace(D, W, H, X, Y, n, 0, ext, T);
+    shadeTrace(D, T, W, H, ext, out, 0, { smooth: false, thick });
+    return out;
+  };
+  const rows = (out, c) => { let k = 0; for (let r = 0; r < H; r++) if ((out[r * W + c] >>> 24) > 128) k++; return k; };
+  const flat = (x) => 30.5;
+  assert(rows(shade(flat, 0), 20) === 1, `a flat line, thin: ${rows(shade(flat, 0), 20)} row`);
+  assert(rows(shade(flat, 1), 20) === 3, `thick 1 (a line 3 rows high): ${rows(shade(flat, 1), 20)} rows`);
+  // A gentle slope sampled 20 times a column: every column carries about the same ink (no beads where
+  // pieces meet; what varies is a line centred on a row against one shared by two, through the gamma).
+  const out = shade((x) => 15 + 0.37 * x, 1), ink = [];
+  for (let c = 3; c < W - 3; c++) { let a = 0; for (let r = 0; r < H; r++) a += out[r * W + c] >>> 24; ink.push(a); }
+  const lo = Math.min(...ink), hi = Math.max(...ink);
+  assert(hi - lo <= 0.15 * hi, `ink per column ${lo}..${hi}`);
+});
+
+test('scope: band-limited interpolation is a fixed set of weights per phase (fast, and the same answer)', () => {
+  const n = 200, v = new Float64Array(n);
+  for (let i = 0; i < n; i++) v[i] = Math.sin(i * 1.7) + 0.3 * Math.cos(i * 0.4);
+  const t0 = performance.now(), u = upsample(v, n, 16), ms = performance.now() - t0;
+  for (let i = 0; i < n; i++) near(u[i * 16], v[i], 1e-12, `sample ${i}`);
+  assert(ms < 50, `${ms} ms for 3184 values`);
+});
