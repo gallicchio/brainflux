@@ -3,12 +3,13 @@
 // polarize-and-listen.  The physics is in bloch.js, engine.js, signal.js and sequence.js; the
 // sphere is drawn by sphere.js and the plots by charts.js; this file is the page.
 
-import { GAMMA_HZ, pulseField, pulseDuration, spinHalf, T2star, spreadT2, toLab, adiabaticity } from './bloch.js';
+import { GAMMA_HZ, pulseField, pulseDuration, spinHalf, T2star, spreadT2, toLab, adiabaticity, coilAxis } from './bloch.js';
 import { Engine } from './engine.js';
-import { spectrum, fitShape, rawAt } from './signal.js';
+import { spectrum, fitShape } from './signal.js';
 import { PRESETS, buildSequence, runSequence, echoAmplitudes } from './sequence.js';
 import { SphereView } from './sphere.js';
-import { drawSignal, drawRaw, drawSpectrum, drawCurve, timeUnit, pulseName, duration, legend } from './charts.js';
+import { drawSignal, drawRaw, drawSpectrum, drawCurve, drawTrace, drawTank, timeUnit, pulseName, duration, legend } from './charts.js';
+import { TANK, RECEIVER, bankC, switchesOn, codeFor, resonance, capacitanceFor, quality, tankWidth, tuneFor, tankH, filterH, noiseDensity, receiverNoise, kTC, synthOut } from './receiver.js';
 import { el, $, $$, slider, segmented, drawer, readHash, writeHash, setSlots, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame } from '../lib/plot.js';
 import { renderMath } from '../lib/mathml.js';
@@ -184,7 +185,7 @@ function unitOf(t) {
 // ------------------------------------------------------------------------- the sphere
 
 const sphereCanvas = $('#sphere');
-let drag = null, hoverTip = false;
+let drag = null, hoverTip = false, hoverCoil = false;
 
 function tipScreen() {
   const m = shownSum();
@@ -197,23 +198,34 @@ sphereCanvas.addEventListener('pointerdown', (e) => {
   const r = sphereCanvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
   const T = tipScreen(), m = shownSum();
   sphereCanvas.setPointerCapture(e.pointerId);
-  // (The board's spins are set by its cycle: there the sphere only turns.)
+  // (The board's spins are set by its cycle: there the sphere turns, and the coil's ends turn
+  // the coil.)
   if (state.view !== 'earth' && Math.hypot(x - T[0], y - T[1]) < 18 && Math.hypot(...m) > 0.05) {
     drag = { kind: 'tip', back: T[2] < 0 };
     goFree();
     eng.queue = [];
-  } else drag = { kind: 'turn', x, y };
+  } else if (nearCoilEnd(x, y)) drag = { kind: 'coil' };
+  else drag = { kind: 'turn', x, y };
   sphereCanvas.classList.add('dragging');
 });
+/** Whether the screen point is on one of the coil's end handles (view 4). */
+function nearCoilEnd(x, y) {
+  return state.view === 'earth' && view.coilEnds(coilAxis(board.angle * DEG)).some((p) => Math.hypot(x - p[0], y - p[1]) < 20);
+}
 sphereCanvas.addEventListener('pointermove', (e) => {
   const r = sphereCanvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
   if (!drag) {
     const T = tipScreen(), on = state.view !== 'earth' && Math.hypot(x - T[0], y - T[1]) < 18;
-    if (on !== hoverTip) { hoverTip = on; sphereCanvas.classList.toggle('on-tip', on); }
+    const onCoil = nearCoilEnd(x, y);
+    if (on !== hoverTip) { hoverTip = on; sphereCanvas.classList.toggle('on-tip', on || onCoil); }
+    if (onCoil !== hoverCoil) { hoverCoil = onCoil; sphereCanvas.classList.toggle('on-tip', on || onCoil); dirty(); }
     return;
   }
   if (drag.kind === 'turn') { view.turn(x - drag.x, y - drag.y); drag.x = x; drag.y = y; trail = trail.slice(-2); }
-  else {
+  else if (drag.kind === 'coil') {
+    const a = view.angleXZ(x, y);
+    if (a !== null) setAngle(a / DEG);
+  } else {
     const v = view.pick(x, y, drag.back);
     eng.setVector(v, state.frame);
     trail = [];
@@ -230,7 +242,8 @@ function turnsPerFrame() {
   let f = state.frame === 'lab' ? eng.f0 : Math.abs(state.offsetHz);
   if (state.view === 'earth' && eng.earth && state.frame === 'lab') {
     const E = eng.earth, s = eng.t < E.tp ? 1 : eng.t < E.tp + E.ramp ? Math.max(0, 1 - (eng.t - E.tp) / E.ramp) : 0;
-    f = GAMMA_HZ * Math.hypot(Bp() * s, board.BE);
+    const n = coilAxis(board.angle * DEG);
+    f = GAMMA_HZ * Math.hypot(Bp() * s * n[0], board.BE + Bp() * s * n[2]);
   } else if (state.view === 'earth' && eng.earth) f = eng.t < eng.earth.tp + eng.earth.ramp ? eng.f0 : 0;
   return (f * speedNow()) / 60;
 }
@@ -238,20 +251,24 @@ function turnsPerFrame() {
 function drawSphere() {
   const { ctx, width, height } = fitCanvas(sphereCanvas);
   ctx.clearRect(0, 0, width, height);
-  view.fit(width, height);
+  // (On the board the sphere, with the coil round it, keeps above the note that says what the cycle does.)
+  const noteH = state.view === 'earth' ? 0.2 * height : 0;
+  view.fit(width, height - noteH);
   const lab = state.frame === 'lab', fields = [];
   const fast = turnsPerFrame() > 0.12;
   const m = shownSum();
   const P = eng.pulse;
   const E = state.view === 'earth' && eng.earth ? eng.earth : null;
   let coneAxis = [0, 0, 1];
+  const nC = coilAxis(board.angle * DEG);
   if (E) {
     const s = eng.t < E.tp ? 1 : eng.t < E.tp + E.ramp ? Math.max(0, 1 - (eng.t - E.tp) / E.ramp) : 0;
     if (lab) {
       fields.push({ v: [0, 0, 0.4], from: [0, 0, 1.04], color: C.b0, label: 'B_E (the Earth\'s)', dx: 48 });
       if (s > 0) {
-        fields.push({ v: [0.15 + 0.3 * s, 0, 0], from: [1.16, 0, 0], color: C.coil, label: `B_p = ${(Bp() * s / board.BE).toFixed(Bp() * s / board.BE < 9.95 ? 1 : 0)} B_E`, dy: -16, dx: 10 });
-        const b = [Bp() * s, 0, board.BE], n = Math.hypot(...b);
+        const len = 0.15 + 0.3 * s;
+        fields.push({ v: nC.map((x) => len * x), from: nC.map((x) => 1.16 * x), color: C.coil, label: `B_p = ${(Bp() * s / board.BE).toFixed(Bp() * s / board.BE < 9.95 ? 1 : 0)} B_E`, dy: -16, dx: 10 });
+        const b = [Bp() * s * nC[0], 0, board.BE + Bp() * s * nC[2]], n = Math.hypot(...b);
         coneAxis = b.map((x) => x / n);
         // (Labelled once it has turned off the coil's axis, where B_p's label is.)
         if (eng.t >= E.tp) fields.push({ v: coneAxis.map((x) => 1.12 * x), color: C.beff, label: coneAxis[2] > 0.3 ? 'B (total)' : '', dash: [6, 4], dy: -16 });
@@ -290,7 +307,7 @@ function drawSphere() {
     colors: C, axisLabels: lab ? ['x', 'y', 'z'] : ['x′', 'y′', 'z'],
     fields, spins, sum: m, sumWidth: state.ensemble ? 4.5 : 4,
     trail: E ? trail : trailPoints(), projections: true,
-    cone: lab && fast ? { axis: coneAxis, v: m } : null, coil: !!E && lab,
+    cone: lab && fast ? { axis: coneAxis, v: m } : null, coil: !!E && lab, coilAxis: nC, coilHover: hoverCoil || drag?.kind === 'coil',
     tipHover: hoverTip || drag?.kind === 'tip',
   });
   sphereNote(fast);
@@ -303,11 +320,12 @@ function sphereNote(fast) {
   const E = state.view === 'earth' && eng.earth;
   if (E) {
     const t = eng.t, now = t < E.tp ? `<b>Polarizing</b>: the current's field B_p magnetizes the water along the coil (${(100 * polarizedAt(t)).toFixed(0)}% so far)`
-      : t < E.tp + E.ramp ? `<b>Switching off</b>: B_p falls and the total field turns from the coil's axis to the Earth's; ${adiabaticity(Bp(), board.BE, board.ramp) < 0.3 ? 'too fast for M, which stays where it was' : 'slowly enough for M to follow it'}`
+      : t < E.tp + E.ramp ? `<b>Switching off</b>: B_p falls and the total field turns from the coil's axis to the Earth's; ${adiabaticity(Bp(), board.BE, board.ramp, board.angle * DEG) < 0.3 ? 'too fast for M, which stays where it was' : 'slowly enough for M to follow it'}`
         : t < tOpenAbs() ? '<b>The receiver is off</b> for 19 ms while the relay hands the coil over; M goes round the Earth\'s field'
           : eng.done ? '<b>Done</b>: the cycle starts again (Repeat)' : `<b>Listening</b>: M goes round the Earth's field at ${eng.f0.toFixed(0)} Hz and the coil picks it up`;
-    const cone = fast && t >= E.tp + E.ramp;
-    s = `${now}.  <span class="more">${lab ? `Lab frame: the Earth's field along z, the coil's axis along x (east–west).${cone ? `  The spins turn ${turns} times a second on screen: the cone is the path of the tip.` : ''}` : 'Rotating frame, at the Larmor frequency in the Earth\'s field.'}</span>`;
+    const cone = fast && t >= E.tp + E.ramp, square = Math.abs(board.angle - 90) < 0.05;
+    const axis = square ? 'the coil along x (east–west), square to it' : `the coil at α = ${board.angle.toFixed(1)}° to it: sin α = ${Math.sin(board.angle * DEG).toFixed(2)} of M precesses, and the coil sees sin α of that`;
+    s = `${now}.  <span class="more">${lab ? `Lab frame: B_E along z, ${axis}.${cone ? `  The cone is the tip's path (${turns} turns a second on screen).` : ''}` : 'Rotating frame, at the Larmor frequency in the Earth\'s field.'}</span>`;
   } else if (lab) s = `<b>Lab frame</b>: the field B₀ along z, the coil along x.${fast ? `  <span class="more">At this speed the spin turns ${turns} times a second on screen, too fast to draw: the cone is the path of its tip.  </span>Slow the clock, or use the rotating frame.` : ''}`;
   else s = `<b>Rotating frame</b>: turning with the RF, at ${f.toFixed(u.dec)} ${u.u}, so B₀ is gone${state.offsetHz ? ' but for ΔB, as the RF is off resonance' : ''}.`;
   const P = eng.pulse;
@@ -370,14 +388,14 @@ function drawPlots() {
 
 /** The spectrum of the signal since the last pulse ended (or of the whole window), sampled
  *  finely enough for the line and padded so its bins are a small part of the plotted range. */
-function specOf(a, b, span) {
+function specOf(a, b, span, sg = sigma()) {
   const win = b - a;
   let n = 64;
   while (n < 2048 && win / n > 1 / (8 * span)) n *= 2;
   const dt = win / n;
   let N = 4 * n;
   while (N < 65536 && N * dt < 150 / span) N *= 2;
-  return spectrum(eng.record, a, b, sigma(), n, N / n);
+  return spectrum(eng.record, a, b, sg, n, N / n);
 }
 function drawSpec(t0, t1, acq = null) {
   const { ctx, width, height } = fitCanvas($('#spec'));
@@ -507,6 +525,8 @@ function draw() {
 // ----------------------------------------------------------------------------- controls
 
 renderMath($('#spin-half'));
+// On a phone the spin-½ box comes between the sphere and the plots: folded there until opened.
+if (window.matchMedia('(max-width: 900px)').matches) $('#spin-half').open = false;
 
 const viewSeg = segmented([
   { value: 'one', label: '1 · One spin' }, { value: 'many', label: '2 · Many spins' },
@@ -598,7 +618,9 @@ const noiseCheck = el('input', { type: 'checkbox', onchange: () => { state.noise
 const snrSlider = slider({ label: 'signal / noise', min: 1, max: 1000, log: true, value: state.snr, title: 'The full signal (all of M across the field) over the r.m.s. noise of one record',
   onInput: (v) => { state.snr = v; state.noiseOn = true; noiseCheck.checked = true; snrSlider.classList.remove('off'); scheduleHash(); dirty(); } });
 const avgSeg = segmented([1, 4, 16, 64, 256].map((n) => ({ value: n, label: String(n) })), 1, (n) => { state.averages = n; applyEngine(); scheduleHash(); dirty(); }, { label: 'Average' });
-noisePanel.append(el('div', { class: 'label' }, 'Noise'), el('label', { class: 'check' }, noiseCheck, 'Thermal noise in the receiver'), snrSlider,
+// (On the board the noise is the receiver's own, set by the coil, the tank and the preamplifier.)
+const boardNoiseNote = el('div', { class: 'gloss', id: 'board-noise-note' }, 'On the board the noise is the receiver\'s own: the coil\'s thermal noise, which the tank shapes as it shapes the FID, and the preamplifier\'s, flat across the band (the tank\'s plot shows both).');
+noisePanel.append(el('div', { class: 'label' }, 'Noise'), el('label', { class: 'check' }, noiseCheck, 'Thermal noise in the receiver'), snrSlider, boardNoiseNote,
   el('div', { class: 'row' }, el('span', { class: 'small muted' }, 'repeat and average'), avgSeg),
   el('div', { class: 'gloss' }, 'Averaging N repeats keeps the signal and divides the noise by √N.'));
 function syncNoise() { noiseCheck.checked = state.noiseOn; snrSlider.value = state.snr; snrSlider.classList.toggle('off', !state.noiseOn); avgSeg.value = state.averages; }
@@ -663,7 +685,7 @@ const HINTS = {
   one: 'Drag the arrow\'s tip to tip the spin, or press a pulse button; drag anywhere else on the sphere to turn it',
   many: 'Press a pulse button and watch the spins fan out and the sum shrink; drag the sphere to turn it',
   seq: 'Watch the spins as the sequence runs (the timeline below sets it); drag the sphere to turn it',
-  earth: 'Press Polarize and listen; then slide the switch-off time: fast leaves M across the Earth\'s field and it rings, slow lets it follow and nothing rings',
+  earth: 'Press Polarize and listen; drag the coil\'s end to turn it against the Earth\'s field; slide the switch-off: fast leaves M across the field to ring, slow lets it follow',
 };
 function setView(v) {
   if (v === 'earth' && state.inst !== 'earth') { loadInstrument('earth'); }
@@ -674,6 +696,7 @@ function setView(v) {
   phaseSlider.hidden = v === 'earth'; phaseSlider.nextElementSibling.hidden = v === 'earth';
   $('#equilibrium-row').hidden = v === 'earth';
   spreadSlider.hidden = v === 'earth'; spreadSlider.nextElementSibling.hidden = v === 'earth';
+  snrSlider.hidden = v === 'earth'; boardNoiseNote.hidden = v !== 'earth';
   // The board's coil is seen from the side, as a solenoid is drawn; the others from the usual corner.
   if (v === 'earth') view.look(1.3, 0.22); else view.look(0.55, 0.32);
   for (const p of $$('#controls [data-views]')) p.hidden = !p.dataset.views.split(' ').includes(v);
@@ -1006,17 +1029,45 @@ function seqReadout(lines) {
 // The board's numbers (sim/design.json of github.com/gallicchio/earth-nmr-pcb): 5.225 mT per amp
 // at the middle of the coil, 1.5 A, and an EMF of 1.199 μV from a litre of water fully polarized
 // at 1.5 A precessing at 1959.8 Hz; the relay hands the coil to the receiver 19 ms after the
-// switch-off; the thermal noise leaves a signal-to-noise ratio of about 285 for that EMF.
-const BOARD = { BpPerA: 5.2249e-3, emf: 1.199e-6, emfI: 1.5, emfB: 46.028e-6, tOpen: 0.019, snr: 285, claremont: 46.03e-6 };
-const board = { tp: 3, ramp: 0.4e-3, tl: 2, I: 1.5, BE: BOARD.claremont, gradNT: 5, speedMode: 'auto', loop: true, points: [], scan: null, listen: 0, afterRamp: null };
+// switch-off; the tank (receiver.js) is tuned by switches 1 2 4 7 (code 75); the field in
+// Claremont dips 58.89° below the horizontal (so a coil laid north–south is at 58.89° to it).
+const BOARD = { BpPerA: 5.2249e-3, emf: 1.199e-6, emfI: 1.5, emfB: 46.028e-6, tOpen: 0.019, snr: 285, claremont: 46.03e-6, code: 75, dip: 58.89 };
+const board = { tp: 3, ramp: 0.4e-3, tl: 2, I: 1.5, BE: BOARD.claremont, gradNT: 5, angle: 90, code: BOARD.code, speedMode: 'auto', loop: true, points: [], scan: null, listen: 0, afterRamp: null };
 const Bp = () => BOARD.BpPerA * board.I;
-/** The EMF at the coil of the full polarization, precessing: ∝ the current (M) and the field (ω). */
-const Vfull = () => BOARD.emf * (board.I / BOARD.emfI) * (board.BE / BOARD.emfB);
+const sinA = () => Math.max(1e-6, Math.sin(board.angle * DEG));
+/** The EMF in the coil of the full polarization precessing across the Earth's field, per unit of
+ *  the record's M: ∝ the current (M), the field (ω), and sin α (what the coil picks up of it). */
+const Vfull = () => BOARD.emf * (board.I / BOARD.emfI) * (board.BE / BOARD.emfB) * sinA();
 const tOpenAbs = () => board.tp + board.ramp + BOARD.tOpen;
+
+// The receiver: the tank's capacitance and response at the protons' frequency, the gain to OUT,
+// the noise.  (The tank changes only what the receiver makes of the FID, not the spins: it acts
+// on the record as it is drawn, so retuning shows at once, without a new cycle.)
+const tankC = () => bankC(board.code);
+const fLarmor = () => GAMMA_HZ * board.BE;
+const tankNow = () => tankH(fLarmor(), tankC());
+/** Volts at OUT (on HIGH) per unit of the record's transverse M. */
+const outPerM = () => Vfull() * tankNow().mag * RECEIVER.gain.high * filterH(fLarmor()).mag;
+/** The scale of the plots at OUT: the FID of the full polarization with the tank tuned exactly
+ *  and the coil square to the field. */
+const outRef = () => BOARD.emf * (board.I / BOARD.emfI) * (board.BE / BOARD.emfB) * quality(fLarmor()) * RECEIVER.gain.high * filterH(fLarmor()).mag;
+let noiseCache = { code: -1 };
+/** The receiver's noise for the switches now: r.m.s. at the tank over its whole band. */
+function rxNoise() { if (noiseCache.code !== board.code) noiseCache = { code: board.code, ...receiverNoise(tankC()) }; return noiseCache; }
+/** The board's noise in the record's units: on a scope trace, the receiver's whole band
+ *  (r.m.s. at OUT over the FID's size at OUT)... */
+function sigmaBand() { return state.noiseOn ? (rxNoise().total * RECEIVER.gain.high) / outPerM() : 0; }
+/** ...and for what is read in a narrow band at the protons' frequency (the spectrum, the FID's
+ *  start), the density there over the record's bandwidth 1/dt. */
+function sigmaAt(dt = eng.dtSample) {
+  return state.noiseOn ? noiseDensity(fLarmor(), tankC()).total / (Math.sqrt(dt) * Vfull() * tankNow().mag) : 0;
+}
 
 function boardParams() {
   return { B0: board.BE, B1: state.B1, offsetHz: 0, T1: T1eff(), T2: T2eff(), N: state.ensemble ? NSIG : 1, spreadHz: state.ensemble ? state.spreadHz : 0, averages: state.averages };
 }
+/** The cycle's settings for the engine. */
+const earthCycle = (o = {}) => ({ Bp: Bp(), BE: board.BE, tp: board.tp, ramp: board.ramp, tl: board.tl, tOpen: BOARD.tOpen, angle: board.angle * DEG, ...o });
 
 /** Start the board's cycle: polarize, switch off, listen. */
 function startBoard() {
@@ -1024,9 +1075,9 @@ function startBoard() {
   applyEngine();
   eng.setSampling(board.tl / SAMPLES_PER_WINDOW);
   reseed();
-  eng.startEarth({ Bp: Bp(), BE: board.BE, tp: board.tp, ramp: board.ramp, tl: board.tl, tOpen: BOARD.tOpen });
+  eng.startEarth(earthCycle());
   run = { earth: true, t0: 0, span: eng.tEnd, loop: board.loop, pulses: [] }; runId++;
-  board.listen = 0; board.afterRamp = null; pauseLeft = 0;
+  board.listen = 0; board.afterRamp = null; board.recorded = false; pauseLeft = 0;
   trail = [];
   dirty();
 }
@@ -1073,7 +1124,7 @@ function tickBoard(dt) {
 }
 
 /** The FID's start, read from this cycle's record (the envelope's mean over its first 50 ms). */
-function fidStart(record = eng.record, sg = sigma()) {
+function fidStart(record = eng.record, sg = sigmaAt()) {
   const t0 = tOpenAbs();
   return record.meanEnvelope(t0, t0 + 0.05, sg);
 }
@@ -1101,10 +1152,10 @@ function boardScanStep() {
   const tp = S.tps[S.points.length], e = new Engine(boardParams());
   e.noiseSeed = S.seed++;
   e.setSampling(Infinity);
-  e.startEarth({ Bp: Bp(), BE: board.BE, tp, ramp: board.ramp, tl: BOARD.tOpen + 0.05, tOpen: BOARD.tOpen });
+  e.startEarth(earthCycle({ tp, tl: BOARD.tOpen + 0.05 }));
   const t0 = tp + board.ramp + BOARD.tOpen;
   e.advance(t0 - e.t); e.setSampling(0.05 / 30); e.advance(e.tEnd - e.t);
-  S.points.push({ tp, amp: e.record.meanEnvelope(t0, t0 + 0.05, sigma()) });
+  S.points.push({ tp, amp: e.record.meanEnvelope(t0, t0 + 0.05, sigmaAt(0.05 / 30)) });
   fitPoints();
 }
 
@@ -1138,43 +1189,67 @@ function drawBoardStrip() {
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = C.ink2; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
   ctx.fillText(`polarize ${board.tp.toFixed(1)} s at ${board.I.toFixed(1)} A`, f.left + 4, f.Y(1) + 3);
   ctx.textAlign = 'left';
-  ctx.fillText(`switch off in ${duration(board.ramp)}; the receiver opens 19 ms later and listens ${board.tl.toFixed(1)} s`, Math.min(xs + 6, f.right - 330), f.top + 2);
+  { // (On a narrow strip, the short form, where it fits after the switch-off.)
+    const long = `switch off in ${duration(board.ramp)}; the receiver opens 19 ms later and listens ${board.tl.toFixed(1)} s`, short = `off in ${duration(board.ramp)}, listen ${board.tl.toFixed(1)} s`;
+    const text = ctx.measureText(long).width < f.right - xs - 10 || f.w > 700 ? long : short;
+    ctx.fillText(text, Math.max(f.left + 4, Math.min(xs + 6, f.right - ctx.measureText(text).width - 4)), f.top + 2);
+  }
   ctx.restore();
   const g = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
   g.x0 = 0; g.x1 = T; g.y0 = 0; g.y1 = 1.15;
   g.axes({ xlabel: 'time (s)', colors: C, yTicks: false });
   legend(ctx, f.left + 6, 4, [{ text: 'The board\'s cycle', color: C.ink, bold: true }, { text: 'the polarizing current', color: C.coil }, { text: 'M along the coil', color: C.m }, { text: 'the FID\'s envelope', color: C.mxy }], C, width - 70);
 }
-function polarizedAt(t) { const T1 = T1eff(), m0 = (board.BE / Math.hypot(Bp(), board.BE)) ** 2; return Number.isFinite(T1) ? 1 - (1 - m0) * Math.exp(-t / T1) : m0; }
+function polarizedAt(t) {
+  const T1 = T1eff(), n = coilAxis(board.angle * DEG), bz = board.BE + Bp() * n[2], m0 = (board.BE * bz) / ((Bp() * n[0]) ** 2 + bz * bz);
+  return Number.isFinite(T1) ? 1 - (1 - m0) * Math.exp(-t / T1) : m0;
+}
+
+/** OUT, as the receiver makes it, at 48 kHz from t0 for n samples: the FID from the record (its
+ *  EMF), the tank's and the filters' gain and phase, the receiver's noise. */
+function outSamples(record, omegaRef, t0, n, fs = 48000, seed = eng.noiseSeed) {
+  const V = Vfull(), tmp = [0, 0, 0], open = tOpenAbs();
+  return synthOut({
+    fs, t0, n, fL: omegaRef / (2 * Math.PI), C: tankC(), seed, averages: state.averages, noise: state.noiseOn,
+    emf: (t, m) => { if (t < open) { m[0] = m[1] = 0; return; } const r = record.at(t, 0, tmp); m[0] = V * r[0]; m[1] = V * r[1]; },
+  });
+}
+
+/** A round number at or above x: 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8 × 10ⁿ. */
+function niceUp(x) {
+  const e = 10 ** Math.floor(Math.log10(x));
+  return e * [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((m) => m * e >= x * (1 - 1e-9));
+}
 
 function drawBoardPlots() {
   drawBoardStrip();
-  const a = board.tp + board.ramp, b = board.tp + board.ramp + board.tl, sg = sigma(), V = Vfull() * 1e6;
+  drawTankPlot();
+  const a = board.tp + board.ramp, b = board.tp + board.ramp + board.tl, V = Vfull() * 1e6, Vo = niceUp(1.1 * outRef()) / 1.1;
   {
     const { ctx, width, height } = fitCanvas($('#signal'));
     ctx.clearRect(0, 0, width, height);
-    drawRaw(ctx, width, height, { record: eng.record, omegaRef: eng.omegaRef, t0: a, t1: b, ymax: 1.1 * V, scale: V, sigma: sg, colors: C,
-      title: 'The FID at the coil (μV): what the scope and the headphones get', zoomNote: 'thousands of cycles: the band is the oscillation (zoom below)' });
+    drawRaw(ctx, width, height, { record: eng.record, omegaRef: eng.omegaRef, t0: a, t1: b, ymax: 1.1 * Vo, scale: outPerM(), sigma: sigmaBand(), colors: C,
+      title: 'The FID at OUT (V): what the scope and the headphones get', zoomNote: 'thousands of cycles: the band is the oscillation (zoom below)' });
   }
   {
     const { ctx, width, height } = fitCanvas($('#zoom'));
     ctx.clearRect(0, 0, width, height);
     // A scope's sweep of 10 ms: the newest 10 ms while the FID comes in, its first 10 ms after.
     const open = tOpenAbs(), live = run && !eng.done && eng.t > open + 0.01;
-    const z1 = live ? eng.t : open + 0.01, z0 = z1 - 0.01;
-    drawRaw(ctx, width, height, { record: eng.record, omegaRef: eng.omegaRef, t0: z0, t1: z1, ymax: 1.1 * V, scale: V, sigma: sg, colors: C,
-      title: eng.t < open ? '10 ms of it: the receiver opens 19 ms after the switch-off' : live ? 'The last 10 ms (μV): the oscillation itself' : 'Its first 10 ms after the receiver opens (μV)' });
+    const z1 = live ? eng.t : open + 0.01, z0 = z1 - 0.01, y = outSamples(eng.record, eng.omegaRef, z0, 480);
+    drawTrace(ctx, width, height, { t0: z0, t1: z1, y, ymax: 1.1 * Vo, colors: C,
+      title: eng.t < open ? '10 ms of OUT: the receiver opens 19 ms after the switch-off' : live ? 'The last 10 ms at OUT (V): the oscillation itself' : 'Its first 10 ms at OUT (V)' });
   }
   {
     const { ctx, width, height } = fitCanvas($('#spec'));
     ctx.clearRect(0, 0, width, height);
-    const t0 = tOpenAbs(), t1 = Math.min(b, eng.t), f0 = eng.f0;
+    const sg = sigmaAt(), t0 = tOpenAbs(), t1 = Math.min(b, eng.t), f0 = eng.f0;
     const line = 1 / (Math.PI * T2star(T2eff(), state.ensemble ? state.spreadHz : 0)), span = Math.max(2, 4 * (Number.isFinite(line) ? line : 0));
     let spec = null;
     if (t1 - t0 > 0.1) {
       const key = `b|${t0}|${eng.record.length}|${sg}|${span}`, same = specCache.run === `b${runId}|${sg}|${span}`;
       const grown = eng.record.length > 1.05 * (specCache.n || 0) + 8;
-      if (specCache.key !== key && (!same || grown || specCache.frame++ % 6 === 0)) specCache = { key, run: `b${runId}|${sg}|${span}`, spec: specOf(t0, t1, span), frame: 1, n: eng.record.length };
+      if (specCache.key !== key && (!same || grown || specCache.frame++ % 6 === 0)) specCache = { key, run: `b${runId}|${sg}|${span}`, spec: specOf(t0, t1, span, sg), frame: 1, n: eng.record.length };
       spec = specCache.spec;
     }
     board.spec = spec;
@@ -1189,25 +1264,78 @@ function drawBoardPlots() {
     drawCurve(ctx, width, height, {
       x: P.map((p) => p.tp), y: P.map((p) => p.amp * V), fit: fit ? (x) => fit.A * V * (1 - Math.exp(-x / fit.T1)) : null,
       xmax: 5, ymin: 0, ymax: 1.1 * V, colors: C, xunit: { s: 1, u: 's' },
-      title: 'The FID\'s start (μV) against the polarizing time', xlabel: 'polarizing time (s)', current: board.tp,
+      title: 'The FID\'s start in the coil (μV)', xlabel: 'polarizing time (s)', current: board.tp,
       note: fit ? ['fit: T₁ = ', { v: fit.T1, dec: 2, w: 5 }, ' s'] : ['each cycle adds a point'],
     });
   }
 }
 
+// The tank's plot: its range of frequencies, kept while its peak is dragged; the drag tunes it.
+let tankFrame = null, tankDrag = false, tankRange = null;
+/** A range that holds the tank's resonance and the protons' frequency, in steps of 300 Hz × 2ⁿ
+ *  centred on a multiple of 25 Hz (only the protons' when the tank is far out of the band). */
+function tankRangeNow() {
+  const fT = resonance(tankC()), fL = fLarmor(), inBand = fT > 600 && fT < 4500;
+  const lo = Math.min(fL, inBand ? fT : fL) - 70, hi = Math.max(fL, inBand ? fT : fL) + 70;
+  let span = 300;
+  while (span < hi - lo && span < 4800) span *= 2;
+  const mid = Math.round((lo + hi) / 2 / 25) * 25;
+  return [mid - span / 2, mid + span / 2];
+}
+function drawTankPlot() {
+  const { ctx, width, height } = fitCanvas($('#tank'));
+  ctx.clearRect(0, 0, width, height);
+  if (!tankDrag || !tankRange) tankRange = tankRangeNow();
+  const C0 = tankC(), fT = resonance(C0), fL = fLarmor(), d = noiseDensity(fL, C0);
+  tankFrame = drawTank(ctx, width, height, {
+    f0: tankRange[0], f1: tankRange[1], fT, fL, Q: quality(fT), width: tankWidth(),
+    mag: (f) => tankH(f, C0).mag, phase: (f) => tankH(f, C0).phase,
+    noiseK: Math.hypot(d.coil, d.bias) / tankH(fL, C0).mag, floor: RECEIVER.enAmp,
+    ymax: 1.12 * (fT > tankRange[0] && fT < tankRange[1] ? Math.max(quality(fL), quality(fT)) : quality(fL)),
+    colors: C, title: 'The tank',
+    off: fT > tankRange[1] ? `the tank resonates at ${fT.toFixed(0)} Hz, far above: ×${tankNow().mag.toFixed(2)} here` : fT < tankRange[0] ? `the tank resonates at ${fT.toFixed(0)} Hz, far below` : '',
+  });
+}
+const tankCanvas = $('#tank');
+tankCanvas.addEventListener('pointerdown', (e) => {
+  if (!tankFrame) return;
+  tankDrag = true; tankCanvas.setPointerCapture(e.pointerId); tankCanvas.classList.add('dragging');
+  tuneTo(tankFrame.invX(e.clientX - tankCanvas.getBoundingClientRect().left));
+});
+tankCanvas.addEventListener('pointermove', (e) => { if (tankDrag) tuneTo(tankFrame.invX(e.clientX - tankCanvas.getBoundingClientRect().left)); });
+const tankEnd = () => { if (!tankDrag) return; tankDrag = false; tankCanvas.classList.remove('dragging'); dirty(); };
+tankCanvas.addEventListener('pointerup', tankEnd);
+tankCanvas.addEventListener('pointercancel', tankEnd);
+/** Set the switches nearest the capacitance that puts the tank at f. */
+function tuneTo(f) { if (f > 0) setCode(codeFor(capacitanceFor(f))); }
+/** Set the switches (a code 0–255): the tank and what the receiver makes of the FID change at once. */
+function setCode(code) {
+  code = Math.max(0, Math.min(255, Math.round(code)));
+  if (code === board.code) return;
+  board.code = code; syncTank(); scheduleHash(); dirty();
+}
+/** Turn the coil to the angle α (degrees) to the Earth's field: a new cycle. */
+function setAngle(deg) {
+  board.angle = Math.max(0, Math.min(90, +(+deg).toFixed(1)));
+  coilSlider.value = board.angle; syncAngleButtons(); startBoard(); scheduleHash();
+}
+
 function boardReadout(lines) {
-  const f0 = eng.f0, A = adiabaticity(Bp(), board.BE, board.ramp), dash = (w) => ({ text: '–', w, class: 'b' });
+  const f0 = eng.f0, A = adiabaticity(Bp(), board.BE, board.ramp, board.angle * DEG), dash = (w) => ({ text: '–', w, class: 'b' });
   lines.push(['Earth\'s field', ['B_E = ', { v: board.BE * 1e6, dec: 2, w: 5, class: 'b' }, ' μT:'], 'protons at', ['f₀ = ', { v: f0, dec: 1, w: 6, class: 'b' }, ' Hz'],
     '(a turn in', [{ v: 1e3 / f0, dec: 3, w: 5 }, ' ms)']]);
   lines.push(['Polarizing:', [{ v: board.I, dec: 2, w: 4 }, ' A'], 'makes', ['B_p = ', { v: Bp() * 1e3, dec: 2, w: 5, class: 'b' }, ' mT,'], [{ v: Bp() / board.BE, dec: 0, w: 4 }, ' × B_E,'],
-    'along the coil; M grows as 1 − e^(−t/T₁):', [{ v: polarizedAt(board.tp), dec: 3, w: 5, class: 'b' }], `of all of it after ${board.tp.toFixed(1)} s`]);
+    'along the coil, at', ['α = ', { v: board.angle, dec: 1, w: 4, class: 'b' }, '°'], 'to B_E; M grows as 1 − e^(−t/T₁):', [{ v: polarizedAt(board.tp), dec: 3, w: 5, class: 'b' }], `of all of it after ${board.tp.toFixed(1)} s`]);
   const ar = board.afterRamp;
   lines.push(['Switch-off in', [...time3(board.ramp), ':'], ['A = γB_E²τ/B_p = ', { v: A, dec: A < 0.01 ? 4 : A < 10 ? 3 : 1, w: 6, class: 'b' }],
     A < 0.3 ? '(≪ 1: sudden, M is left behind)' : A > 3 ? '(≫ 1: adiabatic, M follows the field)' : '(near 1: M partly follows)',
     '· after it,', [ar ? { v: 100 * ar.across, dec: 1, w: 5, class: 'b' } : dash(5), '%'], 'of M is across B_E']);
-  const fs = eng.t > tOpenAbs() + 0.05 ? fidStart() : NaN, t2s = T2star(T2eff(), state.ensemble ? state.spreadHz : 0), sp = board.spec;
-  lines.push(['Listening: the FID starts at', [Number.isFinite(fs) ? { v: fs * Vfull() * 1e6, dec: 3, w: 5, class: 'b' } : dash(5), ' μV'], 'at the coil ·', ['T₂* = ', ...time3(t2s)],
-    '· its peak gives', ['B = ', sp ? { v: (f0 + sp.peak.f) / GAMMA_HZ * 1e9, dec: 1, w: 7, class: 'b' } : dash(7), ' nT']]);
+  const fs = eng.t > tOpenAbs() + 0.05 ? fidStart() : NaN, ok = Number.isFinite(fs), H = tankNow(), G = filterH(fLarmor()).mag * RECEIVER.gain.high;
+  lines.push(['Listening: the FID starts at', [ok ? { v: fs * Vfull() * 1e6, dec: 3, w: 5, class: 'b' } : dash(5), ' μV'], 'in the coil, × the tank\'s', [{ v: H.mag, dec: 1, w: 4, class: 'b' }, ':'],
+    [ok ? { v: fs * Vfull() * H.mag * 1e6, dec: 1, w: 5, class: 'b' } : dash(5), ' μV'], 'on the tank, × the receiver\'s', [{ v: G, dec: 0, w: 6 }, ':'], [ok ? { v: fs * outPerM(), dec: 3, w: 5, class: 'b' } : dash(5), ' V'], 'at OUT']);
+  const t2s = T2star(T2eff(), state.ensemble ? state.spreadHz : 0), sp = board.spec, nOut = rxNoise().total * RECEIVER.gain.high;
+  lines.push([['T₂* = ', ...time3(t2s)], '· its peak gives', ['B = ', sp ? { v: (f0 + sp.peak.f) / GAMMA_HZ * 1e9, dec: 1, w: 7, class: 'b' } : dash(7), ' nT'],
+    '· the receiver\'s noise at OUT:', [{ v: nOut * 1e3, dec: 1, w: 4, class: 'b' }, ' mV'], 'r.m.s.; the FID is', [ok && state.noiseOn ? { v: (fs * outPerM()) / (nOut / Math.sqrt(state.averages)), dec: 1, w: 5, class: 'b' } : dash(5), ' ×'], 'it']);
 }
 
 // The board's panel.
@@ -1215,7 +1343,7 @@ const earthPanel = $('#earth-panel');
 const cycleButton = el('button', { type: 'button', class: 'primary', onclick: () => startBoard() }, 'Polarize and listen');
 const boardLoop = el('button', { type: 'button', 'aria-pressed': 'true', title: 'Run the cycle again and again, as the board\'s sequencer does', onclick: () => { board.loop = !board.loop; boardLoop.setAttribute('aria-pressed', String(board.loop)); if (run) run.loop = board.loop; } }, 'Repeat');
 const boardPause = el('button', { type: 'button', title: 'Stop or start the clock (space), to look at the sphere', onclick: () => playButton.click() }, 'Pause');
-const hearButton = el('button', { type: 'button', title: 'Play the FID through the speakers or headphones, as the board\'s headphone jack does (start quietly)', onclick: () => hearIt() }, 'Hear it');
+const hearButton = el('button', { type: 'button', title: 'Play OUT through the speakers or headphones, as the board\'s headphone jack does (start quietly)', onclick: () => hearIt() }, 'Hear it');
 const tpSlider = slider({ label: 'polarize (s)', min: 0.2, max: 4.7, step: 0.05, value: board.tp, title: 'How long the current flows: the board\'s POLARIZE TIME, 0.2 to 4.7 s',
   onInput: (v) => { board.tp = v; startBoard(); scheduleHash(); } });
 const rampSlider = slider({ label: 'switch-off (ms)', min: 0.01, max: 1000, log: true, value: board.ramp * 1e3, title: 'How long the polarizing current takes to fall to zero: the board\'s is 0.4 ms',
@@ -1236,23 +1364,58 @@ const currentSlider = slider({ label: 'current (A)', min: 0.5, max: 3, step: 0.0
 const scanT1Button = el('button', { type: 'button', title: 'Run cycles polarizing from 0.2 to 4.7 s and fit the FID\'s start, A(1 − e^(−t/T₁))', onclick: () => startBoardScan() }, 'Measure T₁');
 const boardSpeedSeg = segmented([{ value: 'auto', label: 'Auto', title: 'Real time, but slow motion through the switch-off and the first turns' }, { value: 'real', label: 'Real time' }, { value: 'slow', label: '×10⁻³', title: 'A thousand times slower: two turns a second' }],
   board.speedMode, (v) => { board.speedMode = v; trail = []; scheduleHash(); }, { label: 'Speed' });
+// The coil's angle to the Earth's field, and the three ways to lay it (in Claremont, where the
+// field dips 58.9° below the horizontal to the north).
+const coilSlider = slider({ label: 'coil to B_E (°)', min: 0, max: 90, step: 0.1, value: board.angle, title: 'The angle α between the coil\'s axis and the Earth\'s field: the FID goes as sin² α',
+  onInput: (v) => setAngle(v) });
+const ORIENT = [
+  { label: 'East–west', angle: 90, title: 'Horizontal, pointing magnetic east–west: square to the field anywhere on Earth' },
+  { label: 'North–south', angle: BOARD.dip, title: `Horizontal, pointing magnetic north: at the dip, ${BOARD.dip}°, to Claremont's field` },
+  { label: 'Upright', angle: +(90 - BOARD.dip).toFixed(2), title: `Vertical: at 90° − the dip, ${(90 - BOARD.dip).toFixed(2)}°, to Claremont's field` },
+];
+const orientButtons = ORIENT.map((o) => el('button', { type: 'button', title: o.title, onclick: () => setAngle(o.angle) }, o.label));
+function syncAngleButtons() { ORIENT.forEach((o, i) => orientButtons[i].setAttribute('aria-pressed', String(Math.abs(board.angle - o.angle) < 0.06))); }
 const audioNote = el('div', { class: 'gloss' }, 'Sound starts only after a click.  Headphones, at a low volume.');
 earthPanel.append(el('div', { class: 'label' }, 'The board'),
   el('div', { class: 'row' }, cycleButton, boardLoop, boardPause, hearButton), audioNote,
   tpSlider, el('div', { class: 'gloss' }, 'The current magnetizes the water along the coil, with T₁.'),
   rampSlider, el('div', { class: 'gloss' }, 'Faster than the protons can turn (sudden), M is left across the Earth\'s field and rings; slower (adiabatic), it follows the field round and nothing rings.'),
   tlSlider, beSlider, el('div', { class: 'row' }, claremont),
+  coilSlider, el('div', { class: 'row orient' }, ...orientButtons),
+  el('div', { class: 'gloss' }, 'The FID goes as sin² α: once for the part of M left across the field, once for what the coil picks up of it.  Or drag the coil\'s end on the sphere.'),
   gradSlider, el('div', { class: 'gloss' }, 'A steel tool near the coil spreads the field across the bottle, and the FID dies sooner (T₂*).'),
   el('div', { class: 'row' }, scanT1Button), el('div', { class: 'row' }, el('span', { class: 'small muted' }, 'speed'), boardSpeedSeg));
 $('#more-box').append(currentSlider);
 
+// The tank's panel: the eight DIP switches of SW1, and the handbook's recipe for the field now.
+const tankPanel = $('#tank-panel');
+const dipButtons = TANK.switches.map((c, i) => el('button', { type: 'button', 'aria-pressed': 'false', title: `Switch ${i + 1}: ${+(c * 1e9).toFixed(1)} nF across the coil when ON`,
+  onclick: () => setCode(board.code ^ (1 << i)) }, el('span', { class: 'n' }, String(i + 1)), el('span', { class: 'knob' }), el('span', { class: 'c' }, String(+(c * 1e9).toFixed(1)))));
+const tankNote = el('div', { class: 'note' }), recipeNote = el('div', { class: 'note' });
+const tuneButton = el('button', { type: 'button', class: 'primary', title: 'Set the switches the handbook\'s way, for the field now', onclick: () => setCode(tuneFor(board.BE, GAMMA_HZ).code) }, 'Tune to the protons');
+const allOff = el('button', { type: 'button', title: 'Every switch OFF: only the clamp\'s 0.39 nF across the coil, so it resonates far above the band', onclick: () => setCode(0) }, 'All off');
+tankPanel.append(el('div', { class: 'label' }, 'The tank: switches SW1 (nF)'),
+  el('div', { class: 'gloss' }, 'Each switch ON adds its capacitance across the coil; the tank resonates at f_T = 1/(2π√(LC)) and multiplies the FID by up to Q = 37 there.'),
+  el('div', { class: 'dip', role: 'group', 'aria-label': 'The DIP switches' }, ...dipButtons), tankNote,
+  el('div', { class: 'row' }, tuneButton, allOff), recipeNote);
+function syncTank() {
+  dipButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(((board.code >> i) & 1) === 1)));
+  const C0 = tankC(), fT = resonance(C0), on = switchesOn(board.code);
+  setSlots(tankNote, ['C = ', { v: C0 * 1e9, dec: 2, w: 6 }, ' nF: f_T = ', { v: fT, dec: 1, w: 7 }, ' Hz, Q = ', { v: quality(fT), dec: 1, w: 5 }, ` · ON: ${on.length ? on.join(' ') : 'none'}`]);
+  const t = tuneFor(board.BE, GAMMA_HZ), short = t.C > bankC(255) * 1.01;
+  setSlots(recipeNote, ['The handbook\'s recipe for ', { v: board.BE * 1e6, dec: 2, w: 5 }, ' μT: f = 42.577 Hz/μT × B = ', { v: t.f, dec: 1, w: 6 }, ' Hz; C = 1/(4π²f²L) = ', { v: t.C * 1e9, dec: 1, w: 6 },
+    ` nF (L = ${(TANK.L * 1e3).toFixed(1)} mH); ${short ? 'more than the bank holds: all ON,' : 'the nearest the switches make:'} `, { v: t.Cset * 1e9, dec: 2, w: 6 }, ' nF, ', { v: t.fT, dec: 1, w: 6 }, ` Hz: ${short ? 'all of them' : `switches ${t.switches.join(' ')}`}`]);
+}
+
 function syncBoard() {
   tpSlider.value = board.tp; rampSlider.value = board.ramp * 1e3; tlSlider.value = board.tl; beSlider.value = +(board.BE * 1e6).toPrecision(5);
   gradSlider.value = board.gradNT; currentSlider.value = board.I; boardSpeedSeg.value = board.speedMode;
+  coilSlider.value = board.angle; syncAngleButtons(); syncTank();
   boardLoop.setAttribute('aria-pressed', String(board.loop));
 }
 
-// Hear it: a cycle run silently with the settings now, the FID at its real frequency, through Web Audio.
+// Hear it: a cycle run silently with the settings now, and OUT as the receiver gives it (the FID
+// through the tank, the filters and the gain, with the receiver's noise), through Web Audio.
 let audio = null;
 function hearIt() {
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -1262,21 +1425,24 @@ function hearIt() {
   const e = new Engine(boardParams());
   e.noiseSeed = 77;
   e.setSampling(Infinity);
-  e.startEarth({ Bp: Bp(), BE: board.BE, tp: board.tp, ramp: board.ramp, tl: board.tl, tOpen: BOARD.tOpen });
+  e.startEarth(earthCycle());
   const t0 = tOpenAbs();
   e.advance(t0 - e.t); e.setSampling(board.tl / 4000); e.advance(e.tEnd - e.t);
   const rate = audio.sampleRate, n = Math.max(1, Math.round((e.tEnd - t0) * rate));
-  const buf = audio.createBuffer(1, n, rate), d = buf.getChannelData(0), sg = sigma(), tmp = [0, 0, 0];
-  for (let i = 0; i < n; i++) {
-    const t = t0 + i / rate, fade = Math.min(1, i / (0.005 * rate), (n - i) / (0.02 * rate));
-    d[i] = 0.35 * fade * rawAt(e.record, e.omegaRef, t, sg, tmp);
-  }
+  const out = outSamples(e.record, e.omegaRef, t0, n, rate, 77);
+  const buf = audio.createBuffer(1, n, rate), d = buf.getChannelData(0);
+  // 1 V at OUT is 0.4 of full scale (the FID of a litre of water, tuned, is about 0.6 V).
+  for (let i = 0; i < n; i++) d[i] = Math.max(-1, Math.min(1, 0.4 * out[i] * Math.min(1, i / (0.005 * rate), (n - i) / (0.02 * rate))));
   const src = audio.createBufferSource(), g = audio.createGain();
   g.gain.value = 0.8;
   src.buffer = buf; src.connect(g); g.connect(audio.destination);
   src.start();
-  board.heard = { n, rate, peak: d.reduce((m, v) => Math.max(m, Math.abs(v)), 0) };
-  audioNote.textContent = `Playing ${(n / rate).toFixed(1)} s of the FID at ${eng.f0.toFixed(0)} Hz, as loud as the signal is (louder for more polarization).`;
+  let peak = 0, s2 = 0;
+  for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(out[i])); }
+  const tail = Math.floor(0.9 * n);
+  for (let i = tail; i < n; i++) s2 += out[i] * out[i];
+  board.heard = { n, rate, peak: 0.4 * peak, outPeak: peak, tailRms: Math.sqrt(s2 / Math.max(1, n - tail)) };
+  audioNote.textContent = `Playing ${(n / rate).toFixed(1)} s of OUT: the FID at ${eng.f0.toFixed(0)} Hz, ${peak.toFixed(2)} V at its start, and the receiver's hiss.`;
 }
 
 // ------------------------------------------------------------------------ the address
@@ -1297,7 +1463,8 @@ function saveHash() {
     q: state.view === 'seq' ? seq.preset : undefined, tau: state.view === 'seq' ? r4(seq.tau) : undefined,
     pn: state.view === 'seq' && (seq.preset === 'cpmg' || seq.preset === 'cp') ? seq.n : undefined,
     err: state.view === 'seq' && seq.error ? r4(seq.error) : undefined,
-    ...(state.view === 'earth' ? { tp: r4(board.tp), ramp: r4(board.ramp), tl: r4(board.tl), be: r4(board.BE), gr: r4(board.gradNT), I: r4(board.I), bs: board.speedMode, sp: undefined } : {}),
+    ...(state.view === 'earth' ? { tp: r4(board.tp), ramp: r4(board.ramp), tl: r4(board.tl), be: r4(board.BE), gr: r4(board.gradNT), I: r4(board.I), bs: board.speedMode, sp: undefined,
+      sw: board.code, ang: board.angle !== 90 ? board.angle : undefined } : {}),
   });
 }
 function loadHash(h) {
@@ -1315,7 +1482,8 @@ function loadHash(h) {
   state.custom.angle = num(h.a, 45); state.custom.phase = num(h.ph, 0);
   applyEngine(); syncSliders();
   if (h.v === 'earth') {
-    boardSetup({ tp: num(h.tp, 3), ramp: num(h.ramp, 0.4e-3), tl: num(h.tl, 2), BE: num(h.be, BOARD.claremont), gradNT: num(h.gr, 5), I: num(h.I, 1.5), speedMode: ['auto', 'real', 'slow'].includes(h.bs) ? h.bs : 'auto' });
+    boardSetup({ tp: num(h.tp, 3), ramp: num(h.ramp, 0.4e-3), tl: num(h.tl, 2), BE: num(h.be, BOARD.claremont), gradNT: num(h.gr, 5), I: num(h.I, 1.5), speedMode: ['auto', 'real', 'slow'].includes(h.bs) ? h.bs : 'auto',
+      code: Math.max(0, Math.min(255, Math.round(num(h.sw, BOARD.code)))), angle: Math.max(0, Math.min(90, num(h.ang, 90))) });
     if (I.samples[h.s]) loadSample(h.s);
     state.T1on = h.t1 !== 'off'; state.T2on = h.t2 !== 'off'; state.T1 = num(h.t1, state.T1); state.T2 = num(h.t2, state.T2);
     state.noiseOn = h.nz !== undefined; state.snr = num(h.nz, BOARD.snr); state.averages = num(h.av, 1);
@@ -1384,6 +1552,10 @@ const setups = {
   noise: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'fid', snr: 5 }),
   board: () => boardSetup({}),
   adiabatic: () => boardSetup({ ramp: 0.3 }),
+  angle: () => boardSetup({ angle: BOARD.dip }),
+  tune: () => boardSetup({ code: 0 }),
+  elsewhere: () => boardSetup({ BE: 50e-6 }),
+  tanknoise: () => boardSetup({ code: 79 }),
   t1board: () => boardSetup({ scan: true }),
   field: () => boardSetup({ tl: 4.8, speedMode: 'real' }),
   steel: () => boardSetup({ gradNT: 100 }),
@@ -1392,7 +1564,7 @@ const setups = {
 function boardSetup(o) {
   seedCount = 0;
   loadInstrument('earth');
-  Object.assign(board, { tp: 3, ramp: 0.4e-3, tl: 2, I: 1.5, BE: BOARD.claremont, gradNT: 5, speedMode: 'auto', loop: true, points: [], scan: null, fit: null }, o);
+  Object.assign(board, { tp: 3, ramp: 0.4e-3, tl: 2, I: 1.5, BE: BOARD.claremont, gradNT: 5, angle: 90, code: BOARD.code, speedMode: 'auto', loop: true, points: [], scan: null, fit: null }, o);
   delete board.scan; board.scan = null;
   state.frame = 'lab'; state.ensemble = true; state.arrows = 24;
   state.spreadHz = GAMMA_HZ * board.gradNT * 1e-9;
@@ -1431,6 +1603,15 @@ window.__app = {
   setView, sendPulse, startRun, startFree, goFree, loadInstrument, loadSample, windowNow, sigma, turnsPerFrame,
   seq, setPreset, buildSeq, runSeq, startScan, scanStep, trainEchoes, fidFit,
   board, BOARD, startBoard, boardSpeed, startBoardScan, fidStart, hearIt,
+  setCode, setAngle, tuneTo, outSamples, outPerM, outRef, sigmaAt, sigmaBand, Vfull,
+  /** The tank and the receiver now: the capacitance, the resonance, the gain and phase at the
+   *  protons' frequency, the noise at OUT. */
+  get tank() {
+    const C0 = tankC(), fT = resonance(C0), H = tankNow(), n = rxNoise(), d = noiseDensity(fLarmor(), C0);
+    return { code: board.code, switches: switchesOn(board.code), C: C0, fT, Q: quality(fT), width: tankWidth(), fL: fLarmor(), gain: H.mag, phase: H.phase / DEG,
+      outNoise: n.total * RECEIVER.gain.high, coilNoise: kTC(C0), density: d, outPerM: outPerM(), recipe: tuneFor(board.BE, GAMMA_HZ) };
+  },
+  get tankFrame() { return tankFrame && { left: tankFrame.left, right: tankFrame.right, top: tankFrame.top, bottom: tankFrame.bottom, f0: tankFrame.x0, f1: tankFrame.x1 }; },
   finishBoardScan() { while (board.scan && board.scan.points.length < board.scan.tps.length) boardScanStep(); draw(); return board.fit; },
   /** Run the board's cycle to its end (in the page's frames), and draw. */
   runBoard(maxSteps = 2e5) { for (let i = 0; i < maxSteps && !eng.done; i++) tick(1 / 60); draw(); return eng.t; },

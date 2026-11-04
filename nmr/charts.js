@@ -196,6 +196,143 @@ export function drawRaw(ctx, width, height, o) {
   return { frame: f, envelope };
 }
 
+/** A trace given as evenly spaced samples (OUT at an audio rate), as a scope draws it: per pixel
+ *  column the samples' range.  opts: {t0, t1, y (Float32Array over [t0, t1]), ymax, colors,
+ *  title, note}. */
+export function drawTrace(ctx, width, height, o) {
+  const c = o.colors, f = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
+  const tu = timeUnit(o.t1 - o.t0), y = o.y, n = y.length;
+  f.x0 = o.t0; f.x1 = o.t1; f.y0 = -o.ymax; f.y1 = o.ymax;
+  ctx.save(); f.clip();
+  ctx.strokeStyle = c.line;
+  ctx.beginPath(); ctx.moveTo(f.left, f.Y(0)); ctx.lineTo(f.right, f.Y(0)); ctx.stroke();
+  if (n > 1) {
+    const cols = Math.max(10, Math.round(f.w));
+    ctx.strokeStyle = c.raw; ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (let i = 0; i < cols; i++) {
+      const a0 = Math.floor((i * (n - 1)) / cols), a1 = Math.max(a0, Math.floor(((i + 1) * (n - 1)) / cols));
+      let lo = Infinity, hi = -Infinity;
+      for (let j = a0; j <= a1; j++) { if (y[j] < lo) lo = y[j]; if (y[j] > hi) hi = y[j]; }
+      const x = f.left + ((i + 0.5) * f.w) / cols, ya = f.Y(lo), yb = f.Y(hi);
+      if (i === 0) ctx.moveTo(x, (ya + yb) / 2);
+      if (Math.abs(ya - yb) > 1.5) { ctx.lineTo(x, ya); ctx.lineTo(x, yb); } else ctx.lineTo(x, (ya + yb) / 2);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.save();
+  const g = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
+  g.x0 = o.t0 * tu.s; g.x1 = o.t1 * tu.s; g.y0 = f.y0; g.y1 = f.y1;
+  g.axes({ xlabel: `time (${tu.u})`, colors: c });
+  ctx.restore();
+  legend(ctx, f.left + 6, 4, [{ text: o.title, color: c.ink, bold: true }, ...(o.note ? [{ parts: o.note, color: c.ink3 }] : [])], c, width - f.left - 12);
+  return f;
+}
+
+/**
+ * The tank's response against frequency, as a Bode plot: the gain |H| (the tank's voltage per
+ * volt of EMF) above, which read on the right axis is also the coil's thermal noise through the
+ * tank (nV/√Hz), with the preamplifier's flat noise dashed across it; the phase below; the
+ * protons' frequency as a line through both, with a dot where it meets each curve.
+ * opts: {f0, f1 (Hz), fT, fL, Q, mag(f), phase(f) (radians), noiseK (V/√Hz per unit of |H|),
+ * floor (V/√Hz), ymax, width (Hz, the half-power width), colors, title, off (a note when fT
+ * is off the plot)}.  Returns the gain's Frame (its X maps frequency).
+ */
+export function drawTank(ctx, width, height, o) {
+  const c = o.colors, L = 48, Rm = 44, top = 22, bottom = 34, gap = 14;
+  const inner = height - top - bottom - gap, hMag = Math.round(inner * 0.66);
+  const fm = new Frame(ctx, width, height, { left: L, right: Rm, top, bottom: height - top - hMag });
+  const fp = new Frame(ctx, width, height, { left: L, right: Rm, top: top + hMag + gap, bottom });
+  fm.x0 = fp.x0 = o.f0; fm.x1 = fp.x1 = o.f1;
+  fm.y0 = 0; fm.y1 = o.ymax; fp.y0 = -180; fp.y1 = 0;
+  const cols = Math.max(20, Math.round(fm.w)), DEGS = 180 / Math.PI;
+  const xs = Array.from({ length: cols + 1 }, (_, i) => o.f0 + ((o.f1 - o.f0) * i) / cols);
+  // The gain, and the preamplifier's noise on the same scale (which happens to lie close to the
+  // half-power level, Q/√2).
+  ctx.save(); fm.clip();
+  const yFloor = fm.Y(o.floor / o.noiseK);
+  ctx.strokeStyle = c.ink3; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(fm.left, yFloor); ctx.lineTo(fm.right, yFloor); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = c.ink3; ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'bottom';
+  // (Its label on the side away from the peak.)
+  const peakRight = o.fT > (o.f0 + o.f1) / 2 && o.fT < o.f1;
+  ctx.textAlign = peakRight ? 'left' : 'right';
+  ctx.fillText('the preamplifier\'s noise', peakRight ? fm.left + 4 : fm.right - 4, yFloor - 2);
+  ctx.strokeStyle = c.coil; ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  xs.forEach((fx, i) => { const y = fm.Y(o.mag(fx)); if (i) ctx.lineTo(fm.X(fx), y); else ctx.moveTo(fm.X(fx), y); });
+  ctx.stroke();
+  ctx.restore();
+  // The phase.
+  ctx.save(); fp.clip();
+  ctx.strokeStyle = c.line; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(fp.left, fp.Y(-90)); ctx.lineTo(fp.right, fp.Y(-90)); ctx.stroke();
+  ctx.strokeStyle = c.coil; ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  xs.forEach((fx, i) => { const y = fp.Y(o.phase(fx) * DEGS); if (i) ctx.lineTo(fp.X(fx), y); else ctx.moveTo(fp.X(fx), y); });
+  ctx.stroke();
+  ctx.restore();
+  // The protons' frequency through both, and where it meets each curve; its labels on the side
+  // away from the tank's peak (where they fit), the peak's on the other.
+  const inL = o.fL > o.f0 && o.fL < o.f1, inT = o.fT > o.f0 && o.fT < o.f1;
+  const xL = fm.X(o.fL), xT = fm.X(o.fT);
+  // (The labels away from the peak where they fit; the line's name is in the legend.)
+  let right = !(inT && o.fT > o.fL);
+  if (right && xL + 50 > fm.right) right = false;
+  else if (!right && xL - 50 < fm.left) right = true;
+  if (inL) {
+    ctx.save();
+    ctx.strokeStyle = c.m; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(xL, fm.top); ctx.lineTo(xL, fm.bottom); ctx.moveTo(xL, fp.top); ctx.lineTo(xL, fp.bottom); ctx.stroke();
+    const g = o.mag(o.fL), p = Math.round(o.phase(o.fL) * DEGS) || 0;
+    ctx.fillStyle = c.m;
+    for (const [px, py] of [[xL, fm.Y(g)], [xL, fp.Y(p)]]) { ctx.beginPath(); ctx.arc(px, py, 4, 0, 2 * Math.PI); ctx.fill(); }
+    ctx.font = '600 12px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+    ctx.textAlign = right ? 'left' : 'right';
+    const lx = xL + (right ? 7 : -7);
+    ctx.fillText(`×${g.toFixed(g < 9.95 ? 2 : 1)}`, lx, Math.max(fm.top + 22, Math.min(fm.bottom - 8, fm.Y(g))));
+    ctx.fillText(`${p}°`, lx, Math.max(fp.top + 8, Math.min(fp.bottom - 8, fp.Y(p))));
+    ctx.restore();
+  }
+  if (inT) {
+    ctx.save();
+    ctx.fillStyle = c.coil; ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+    const label = `f_T ${o.fT.toFixed(1)} Hz`, w = ctx.measureText(label).width;
+    // Above the peak where there is room and the protons' line is clear of it; else beside the
+    // peak, on the side away from that line (or where it fits).
+    const yP = fm.Y(o.mag(o.fT)), above = yP - 20 > fm.top && !(inL && Math.abs(xL - xT) < w / 2 + 8);
+    if (above) {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(label, Math.max(fm.left + w / 2 + 2, Math.min(fm.right - w / 2 - 2, xT)), yP - 5);
+    } else {
+      let side = inL && Math.abs(xL - xT) < w + 60 ? (o.fT > o.fL ? 1 : -1) : (xT + 6 + w < fm.right ? 1 : -1);
+      if (side > 0 && xT + 6 + w > fm.right) side = -1;
+      if (side < 0 && xT - 6 - w < fm.left) side = 1;
+      ctx.textAlign = side > 0 ? 'left' : 'right';
+      ctx.fillText(label, xT + 6 * side, Math.max(fm.top + 8, yP + 2));
+    }
+    ctx.restore();
+  } else if (o.off) {
+    ctx.save();
+    ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = Math.min(fm.w - 8, ctx.measureText(o.off).width + 10), y = fm.top + fm.h * 0.7;
+    ctx.fillStyle = c.panel; ctx.globalAlpha = 0.9; ctx.fillRect(fm.left + fm.w / 2 - tw / 2, y - 9, tw, 18); ctx.globalAlpha = 1;
+    ctx.fillStyle = c.coil;
+    ctx.fillText(o.off, fm.left + fm.w / 2, y, fm.w - 10);
+    ctx.restore();
+  }
+  ctx.save();
+  fm.axes({ colors: c, xTicks: false, ylabel: 'gain |H|' });
+  fm.rightAxis(0, o.ymax * o.noiseK * 1e9, 'noise, nV/√Hz', c);
+  fp.axes({ xlabel: 'frequency (Hz)', colors: c, yTicks: false, ylabel: 'phase' });
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (const v of [0, -90, -180]) ctx.fillText(`${v}°`, fp.left - 6, fp.Y(v));
+  ctx.restore();
+  legend(ctx, fm.left + 6, 4, [{ text: o.title || 'The tank', color: c.ink, bold: true }, ...(o.width ? [{ text: `${o.width.toFixed(1)} Hz wide`, color: c.coil }] : []), { text: `the protons, ${o.fL.toFixed(1)} Hz`, color: c.m }], c, width - fm.left - 12);
+  return fm;
+}
+
 /** A power spectrum: {f, power} with the line's half-power width marked.  opts: {spec, f0,
  *  fmin, fmax, unit {s, u}, colors, title, mark} (f in Hz relative to the reference; f0 added to
  *  label absolute frequencies when given). */

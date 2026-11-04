@@ -71,8 +71,9 @@ export class SphereView {
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
-    // The coil round the sample, along x: its far halves behind the sphere.
-    if (scene.coil) this.coil(ctx, c, 'back');
+    // The coil round the sample, along its axis: its far halves behind the sphere.
+    const coilAxis = scene.coilAxis || [1, 0, 0];
+    if (scene.coil) this.coil(ctx, c, 'back', coilAxis);
     // The sphere: a disc with a soft shading, the far half of the equator and of one meridian dashed.
     const g = ctx.createRadialGradient(this.cx - 0.35 * R, this.cy - 0.4 * R, 0.1 * R, this.cx, this.cy, R);
     g.addColorStop(0, c.sphereHi); g.addColorStop(1, c.sphereLo);
@@ -119,7 +120,7 @@ export class SphereView {
     // The cone swept by a spin precessing too fast to draw one arrow.
     if (scene.cone && !this.narrow(scene.cone)) this.drawCone(ctx, scene.cone, c);
 
-    if (scene.coil) this.coil(ctx, c, 'front');
+    if (scene.coil) this.coil(ctx, c, 'front', coilAxis, scene.coilHover);
 
     // The main arrow and its projections.
     const m = scene.sum;
@@ -148,8 +149,11 @@ export class SphereView {
     ctx.restore();
   }
 
-  /** Six turns of a coil round the x axis, outside the sphere: the near or the far halves. */
-  coil(ctx, c, half) {
+  /** Eight turns of a coil round its axis n (a unit vector in the x–z plane: x̂ by default),
+   *  outside the sphere: the near or the far halves; `hot` draws its ends' handles brighter. */
+  coil(ctx, c, half, n = [1, 0, 0], hot = false) {
+    // Two directions square to the axis: ŷ, and n × ŷ.
+    const e1 = [0, 1, 0], e2 = [-n[2], 0, n[0]];
     ctx.save();
     ctx.globalAlpha = half === 'front' ? 0.55 : 0.35;
     for (const x of [-1.05, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1.05]) {
@@ -157,12 +161,38 @@ export class SphereView {
       ctx.beginPath();
       let on = false;
       for (let k = 0; k <= 72; k++) {
-        const t = (2 * Math.PI * k) / 72, p = this.P([x, 1.08 * Math.cos(t), 1.08 * Math.sin(t)]), vis = half === 'front' ? p[2] >= 0 : p[2] < 0;
+        const t = (2 * Math.PI * k) / 72, a = 1.08 * Math.cos(t), b = 1.08 * Math.sin(t);
+        const p = this.P([x * n[0] + a * e1[0] + b * e2[0], x * n[1] + a * e1[1] + b * e2[1], x * n[2] + a * e1[2] + b * e2[2]]), vis = half === 'front' ? p[2] >= 0 : p[2] < 0;
         if (vis) { if (on) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); on = true; } else on = false;
       }
       ctx.stroke();
     }
+    if (half === 'front') {
+      // The coil's axis, dashed, and a handle at each end to turn it by.
+      const a = this.P(n.map((v) => -1.3 * v)), b = this.P(n.map((v) => 1.3 * v));
+      ctx.globalAlpha = hot ? 0.95 : 0.6; ctx.strokeStyle = c.coil; ctx.lineWidth = 1.2; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = c.coil;
+      for (const p of [a, b]) { ctx.beginPath(); ctx.arc(p[0], p[1], hot ? 6.5 : 5, 0, 2 * Math.PI); ctx.fill(); }
+    }
     ctx.restore();
+  }
+
+  /** The screen points of the coil's two end handles (axis n). */
+  coilEnds(n) { return [this.P(n.map((v) => 1.3 * v)), this.P(n.map((v) => -1.3 * v))]; }
+
+  /**
+   * The angle from ẑ (0 to π/2: a coil's two ends are the same coil) of the direction in the x–z
+   * plane that the screen point (X, Y) lies along, seen from the sphere's centre: the screen
+   * offset is written as a x̂ + b ẑ on the screen.  Null where x̂ and ẑ fall on one line.
+   */
+  angleXZ(X, Y) {
+    const o = this.P([0, 0, 0]), px = this.P([1, 0, 0]), pz = this.P([0, 0, 1]);
+    const ux = px[0] - o[0], uy = px[1] - o[1], vx = pz[0] - o[0], vy = pz[1] - o[1], qx = X - o[0], qy = Y - o[1];
+    const det = ux * vy - uy * vx;
+    if (Math.abs(det) < 0.15 * Math.hypot(ux, uy) * Math.hypot(vx, vy)) return null;
+    const a = (qx * vy - qy * vx) / det, b = (ux * qy - uy * qx) / det;
+    return Math.atan2(Math.abs(a), Math.abs(b));
   }
 
   /** A great circle (or any closed curve) given by f(t), its near or far half. */
