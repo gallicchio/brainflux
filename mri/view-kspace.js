@@ -275,7 +275,7 @@ export class KspaceView {
     if (narrow) {
       const S = W - 16, top = 24;
       const sq = [0, 1, 2].map((i) => ({ x0: 8, y0: top + i * (S + 54), s: S }));
-      const seq = { x0: 52, x1: W - 8, y0: sq[2].y0 + S + 46, y1: H - 32 };
+      const seq = { x0: 52, x1: W - 8, y0: sq[2].y0 + S + 62, y1: H - 32 };
       return { narrow, W, H, sq, seq };
     }
     const seqH = Math.max(200, Math.round(0.31 * H)), gap = 58;

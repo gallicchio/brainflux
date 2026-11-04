@@ -81,6 +81,8 @@ details[open] summary { margin-bottom: 6px; }
 
 @media (max-width: 900px) {
   .mri { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  /* The pictures are tall here: the hint goes above them, on the first screen. */
+  .view .hint { order: -1; }
   .v1-main { height: 860px; max-height: none; }
   .v2-main { height: 1060px; max-height: none; }
   .v3-main { height: 1460px; max-height: none; }

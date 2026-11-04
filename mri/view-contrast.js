@@ -65,7 +65,7 @@ export class ContrastView {
     document.querySelector('#main').dataset.mode = s.mode;
     const hint = document.querySelector('#v4-hint');
     if (hint) hint.textContent = s.mode === 'lauterbur' ? 'Watch the gradient turn: each angle\'s spectrum is one projection, smeared back across the picture; raise the angles to sharpen it'
-      : 'Drag the TR line (left curves) and the TE line (right curves): the dots at the lines are each tissue\'s brightness in the picture';
+      : 'Drag the TR line on the recovery curves and the TE line on the echo\'s: the dots where they cross are each tissue\'s brightness in the picture';
     this.madeAt = this.app.slice?.z ?? 0;
     this.dirty = true;
     this.app.scheduleHash();
