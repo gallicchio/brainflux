@@ -309,7 +309,7 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     b.wait("location.hash.includes('3.1_0.3_0.7') && location.hash.includes('v=medium') && location.hash.includes('w=' + __app.state.probe.toPrecision(4).replace(/0+$/, '').replace(/[.]$/, ''))", timeout=20)
     h = b.eval('location.hash')
     wbefore = b.eval('__app.state.probe')
-    b.eval('location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
+    b.eval('window.__app = undefined; location.reload()'); b.wait('window.__app && __app.ready', timeout=60)   # (cleared first: else the old page's __app satisfies the wait mid-reload)
     oscs = b.eval('__app.state.oscs')
     check(len(oscs) == 2 and abs(oscs[1]['w0'] - 3.1) < 1e-9 and b.eval('__app.state.view') == 'medium' and abs(b.eval('__app.state.probe') - wbefore) < 1e-3 * wbefore,
           f'reloading the address brings back two oscillators, the view and the light\'s frequency ({h[:70]}...)')
