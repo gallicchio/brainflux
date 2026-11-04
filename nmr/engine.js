@@ -132,17 +132,18 @@ export class Engine {
   // -------------------------------------------------------------------- the board's cycle
 
   /**
-   * Start the board's cycle at t = 0: polarize for tp with Bp along the coil's axis x̂ (across
-   * the Earth's field BE along ẑ), switch off in a linear ramp of `ramp`, listen for tl; the
-   * receiver opens tOpen after the switch-off (the relay).  M is in units of the full
-   * polarization in Bp; M (lab frame) carries on from where the last cycle left it.
+   * Start the board's cycle at t = 0: polarize for tp with Bp along the coil's axis (at `angle`
+   * to the Earth's field BE along ẑ, in the x–z plane: x̂, square to the field, by default),
+   * switch off in a linear ramp of `ramp`, listen for tl; the receiver opens tOpen after the
+   * switch-off (the relay).  M is in units of the full polarization in the polarizing field;
+   * M (lab frame) carries on from where the last cycle left it.
    */
-  startEarth({ Bp, BE, tp, ramp, tl, tOpen = 0.019 }, M = null) {
-    const B = Math.hypot(Bp, BE);
+  startEarth({ Bp, BE, tp, ramp, tl, tOpen = 0.019, angle = Math.PI / 2 }, M = null) {
+    const Bpol = [Bp * Math.sin(angle), 0, BE + Bp * Math.cos(angle)], B = Math.hypot(...Bpol);
     const M0E = BE / B;                      // the equilibrium in the Earth's field alone
     const Mlab = M ? [...M] : [0, 0, M0E];   // (each cycle starts from the Earth's field's equilibrium)
     this.mode = 'earth';
-    this.earth = { Bp, BE, tp, ramp, tl, tOpen, M0E, M: Mlab, Bpol: [Bp, 0, BE], npol: [Bp / B, 0, BE / B], phase: 'polarize' };
+    this.earth = { Bp, BE, tp, ramp, tl, tOpen, angle, M0E, M: Mlab, Bpol, npol: Bpol.map((x) => x / B), phase: 'polarize' };
     this.t = 0; this.tEnd = tp + ramp + tl; this.done = false;
     this.record.clear();
     this.pulse = null; this.queue = []; this.sent = [];
@@ -211,7 +212,7 @@ export class Engine {
     if (ph === 'polarize') { blochStep(e.M, e.Bpol, dt, T1, T2, 1, e.npol); return 1; }
     if (ph === 'ramp') {
       let n = 0;
-      integrate(e.M, (t) => rampField(e.Bp, e.BE, e.ramp, t - e.tp), this.t, next,
+      integrate(e.M, (t) => rampField(e.Bp, e.BE, e.ramp, t - e.tp, e.angle), this.t, next,
         { T1, T2, M0: e.M0E, axis: 'field', Bref: e.BE, perPeriod: 64, dtMax: e.ramp / 200, onStep: () => n++ });
       return n;
     }

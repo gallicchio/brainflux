@@ -225,22 +225,30 @@ export class Ensemble {
 }
 
 // ------------------------------------------------------------------- the Earth's field board
+//
+// The coil's axis n̂ lies at the angle α to the Earth's field BE (along ẑ), in the x–z plane:
+// n̂ = (sin α, 0, cos α).  α = 90° (the default) is the board's coil laid east–west, square to
+// the field.  The polarizing field Bp is along n̂.
+
+/** The coil's axis at the angle `angle` (radians) to the Earth's field ẑ. */
+export function coilAxis(angle = Math.PI / 2) { return [Math.sin(angle), 0, Math.cos(angle)]; }
 
 /**
- * The adiabaticity of a linear ramp of the polarizing field Bp (along the coil's axis, across
- * the Earth's field BE) down to zero in the time tau.  The total field swings from the coil's
- * axis to the Earth's; it turns fastest at the end of the ramp, through its last radian in the
- * time τ BE/Bp.  Against the Larmor period in the Earth's field that is
- *   A = γ BE² τ / Bp:
+ * The adiabaticity of a linear ramp of the polarizing field Bp (along the coil's axis, at the
+ * angle α to the Earth's field BE) down to zero in the time tau.  The total field swings from the
+ * coil's axis to the Earth's; it turns fastest at the end of the ramp, through its last radian in
+ * the time τ BE/(Bp sin α).  Against the Larmor period in the Earth's field that is
+ *   A = γ BE² τ / (Bp sin α):
  * A ≪ 1 is sudden (M is left where it was, across the Earth's field, and rings), A ≫ 1 is
  * adiabatic (M follows the field down to ẑ and nothing rings).
  */
-export function adiabaticity(Bp, BE, tau) { return (GAMMA * BE * BE * tau) / Bp; }
+export function adiabaticity(Bp, BE, tau, angle = Math.PI / 2) { return (GAMMA * BE * BE * tau) / (Bp * Math.max(1e-9, Math.sin(angle))); }
 
-/** The total field during the switch-off: Bp ramping linearly to zero in tau along x̂, BE along ẑ. */
-export function rampField(Bp, BE, tau, t) {
+/** The total field during the switch-off: Bp ramping linearly to zero in tau along the coil's
+ *  axis (at `angle` to ẑ: x̂ by default), BE along ẑ. */
+export function rampField(Bp, BE, tau, t, angle = Math.PI / 2) {
   const s = tau > 0 ? Math.max(0, 1 - t / tau) : 0;
-  return [Bp * s, 0, BE];
+  return [Bp * s * Math.sin(angle), 0, BE + Bp * s * Math.cos(angle)];
 }
 
 /**
@@ -251,19 +259,21 @@ export function rampField(Bp, BE, tau, t) {
  * field of the moment towards the equilibrium of that field (M0E |B|/BE, with M0E the
  * equilibrium in the Earth's field alone, in the units of M).  Returns M at the end of the ramp.
  */
-export function switchOff(M, Bp, BE, tau, { T1 = Infinity, T2 = Infinity, M0E = 0, perPeriod = 64, onStep = null } = {}) {
+export function switchOff(M, Bp, BE, tau, { T1 = Infinity, T2 = Infinity, M0E = 0, perPeriod = 64, onStep = null, angle = Math.PI / 2 } = {}) {
   if (tau <= 0) return M;
-  return integrate(M, (t) => rampField(Bp, BE, tau, t), 0, tau, { T1, T2, M0: M0E, axis: 'field', Bref: BE, perPeriod, dtMax: tau / 200, onStep });
+  return integrate(M, (t) => rampField(Bp, BE, tau, t, angle), 0, tau, { T1, T2, M0: M0E, axis: 'field', Bref: BE, perPeriod, dtMax: tau / 200, onStep });
 }
 
 /**
- * The magnetization built along the coil's axis by polarizing for tp with a field Bp across
- * the Earth's field BE, in units of the equilibrium in Bp: 1 − e^{−tp/T1} (the equilibrium in
- * the Earth's field alone, BE/Bp of it, is where it starts).
+ * The magnetization built along the polarizing field by polarizing for tp with a field Bp along
+ * the coil's axis (at `angle` to the Earth's field BE, square to it by default), in units of the
+ * equilibrium in the total field: 1 − e^{−tp/T1} (the equilibrium in the Earth's field alone,
+ * about BE/Bp of it, is where it starts).
  */
-export function polarized(tp, T1, Bp, BE) {
+export function polarized(tp, T1, Bp, BE, angle = Math.PI / 2) {
   // It starts at the equilibrium of the Earth's field alone, BE/|B| along ẑ, of which only the
-  // part along the total field, (BE/|B|)² of M_p, counts for T1.
-  const m0 = (BE * BE) / (Bp * Bp + BE * BE);
+  // part along the total field, BE (BE + Bp cos α)/|B|² of M_p, counts for T1.
+  const Bz = BE + Bp * Math.cos(angle), B2 = (Bp * Math.sin(angle)) ** 2 + Bz * Bz;
+  const m0 = (BE * Bz) / B2;
   return T1 === Infinity ? m0 : 1 - (1 - m0) * Math.exp(-tp / T1);
 }
