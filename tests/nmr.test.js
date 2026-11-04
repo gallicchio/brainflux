@@ -5,7 +5,7 @@ import {
 } from '../nmr/bloch.js';
 import { Record, Rng, meanGauss, rms, noiseRms, rawColumns, spectrum, fitShape } from '../nmr/signal.js';
 import { Engine } from '../nmr/engine.js';
-import { buildSequence, runSequence, recoveryCurve, echoAmplitudes, echoCurve, polarizeCurve, leftAcross } from '../nmr/sequence.js';
+import { buildSequence, runSequence, startSequence, recoveryCurve, echoAmplitudes, echoCurve, polarizeCurve, leftAcross, threeClocks, clockFits, clockTrain } from '../nmr/sequence.js';
 import {
   TANK, RECEIVER, K_B, bankC, switchesOn, codeFor, resonance, capacitanceFor, quality, tankWidth, tuneFor, tankH, filterH,
   noiseDensity, kTC, receiverNoise, synthOut,
@@ -165,6 +165,81 @@ test('a CPMG train of π pulses about y gives echoes decaying with T2, and the f
   close(ec.fit.T2, T2, 0.03 * T2, 'T2 from the train');
   for (let k = 0; k < n; k++) close(ec.t[k], seq.echoes[k], 2e-5, `echo ${k + 1} at 2(k+1)τ`);
   return `${n} echoes, 4 to 40 ms: T2 = ${(ec.fit.T2 * 1e3).toFixed(2)} ms (set 20)`;
+});
+
+// ------------------------------------------------------------------- the three clocks
+
+// The page's made-up sample: T1 = 100 ms, T2 = 10 ms, and the Lorentzian spread that makes
+// T2* = 1 ms (1/T2* = 1/T2 + πΔf), with the TeachSpin's 2.5 μs π/2.
+const CK = { T1: 0.1, T2: 0.01, df: (1 / 1e-3 - 1 / 0.01) / Math.PI };
+const logTimes = (a, b, r = 1.02) => { const out = []; for (let t = a; t <= b; t *= r) out.push(t); return out; };
+
+test('three clocks after a π/2: the sum dies as e^{−t/T2*}, each spin\'s own part exactly as e^{−t/T2}, M_z exactly as 1 − e^{−t/T1}; the fits find 1, 10 and 100 ms', () => {
+  close(T2star(CK.T2, CK.df), 1e-3, 1e-15, 'T2* of the sample');
+  const P = { B0, B1, N: 4096, spreadHz: CK.df, T1: CK.T1, T2: CK.T2 };
+  const c = threeClocks(P, logTimes(2e-6, 0.3));
+  // Each spin's own part and M_z: exact exponentials from where the pulse left them (it tips the
+  // line's far tails a little less: 0.9994 across, 0.0009 along z).
+  const t0 = c.t[0], p0 = c.perp[0], z0 = c.mz[0];
+  assert(p0 > 0.999 && p0 < 1 && z0 > 0 && z0 < 0.001, `after the pulse: mean |M⊥ᵢ| ${p0}, M_z ${z0}`);
+  let wp = 0, wz = 0, ws = 0, over = -Infinity;
+  c.t.forEach((t, i) => {
+    wp = Math.max(wp, Math.abs(c.perp[i] - p0 * Math.exp(-(t - t0) / CK.T2)));
+    wz = Math.max(wz, Math.abs(1 - c.mz[i] - (1 - z0) * Math.exp(-(t - t0) / CK.T1)));
+    if (t >= 1e-4) ws = Math.max(ws, Math.abs(c.sig[i] - Math.exp(-t / 1e-3)));
+    over = Math.max(over, c.sig[i] - c.perp[i]);
+  });
+  assert(wp < 1e-12 && wz < 1e-12, `mean |M⊥ᵢ| against e^{−t/T2}: ${wp}; 1 − M_z against e^{−t/T1}: ${wz}`);
+  // The sum: e^{−t/T2*} but for a finite ensemble's residue, and never longer than the spins' mean.
+  assert(ws < 0.005, `|ΣM⊥|/N against e^{−t/T2*} from 0.1 ms: ${ws}`);
+  assert(over <= 1e-15, `the sum is never longer than the spins' own mean: ${over}`);
+  const F = clockFits(c, { from: 1e-4 });
+  close(F.T2s.tau, 1e-3, 1e-6, 'T2* fitted'); close(F.T2.tau, CK.T2, 1e-9, 'T2 fitted'); close(F.T1.tau, CK.T1, 1e-8, 'T1 fitted');
+  // A clock is read only once it has run: to 5 ms, T2* is there and T2, T1 are not.
+  const early = clockFits(c, { from: 1e-4, until: 5e-3 });
+  assert(early.T2s && !early.T2 && !early.T1, `fitted to 5 ms: ${JSON.stringify(early)}`);
+  // One spin: no fan, so the sum is the spin and T2* = T2.
+  const one = threeClocks({ ...P, N: 1, spreadHz: 0 }, logTimes(2e-6, 0.05));
+  assert(one.sig.every((s, i) => Math.abs(s - one.perp[i]) < 1e-15), 'one spin: the sum is its own part');
+  close(clockFits(one, { from: 1e-4 }).T2s.tau, CK.T2, 1e-9, 'one spin: T2* = T2');
+  return `fits: T2* = ${(F.T2s.tau * 1e3).toFixed(4)} ms, T2 = ${(F.T2.tau * 1e3).toFixed(4)} ms, T1 = ${(F.T1.tau * 1e3).toFixed(3)} ms; mean |M⊥ᵢ| = ${p0.toFixed(4)} e^{−t/T2} to ${wp.toExponential(0)}; the sum within ${ws.toFixed(4)} of e^{−t/T2*}`;
+});
+
+test('T2 ≤ 2T1 keeps a spin inside the sphere: tipped 10° off z it never grows with T2 = 2T1, and grows past 1 with T2 = 3T1', () => {
+  // d|M|²/dt = −2M⊥²/T2 + 2M_z(1 − M_z)/T1, which near z is θ²(1/T1 − 2/T2).
+  const th = 10 * Math.PI / 180, T1 = 0.1, longest = {};
+  for (const T2 of [0.2, 0.3]) {
+    const e = new Engine({ B0, N: 1, T1, T2 });
+    e.reset([Math.sin(th), 0, Math.cos(th)], 0); e.setSampling(Infinity);
+    let mx = 0;
+    for (let k = 0; k < 400; k++) { e.advance(1e-3); mx = Math.max(mx, norm(e.sum('rot'))); }
+    longest[T2] = mx;
+  }
+  assert(longest[0.2] <= 1 + 1e-12, `T2 = 2T1: |M| reaches ${longest[0.2]}`);
+  assert(longest[0.3] > 1.001, `T2 = 3T1: |M| reaches ${longest[0.3]}`);
+  // The slope at the start, against θ²(1/T1 − 2/T2).
+  const e = new Engine({ B0, N: 1, T1, T2: 0.3 });
+  e.reset([Math.sin(th), 0, Math.cos(th)], 0); e.setSampling(Infinity); e.advance(1e-6);
+  const slope = (norm(e.sum('rot')) ** 2 - 1) / 1e-6, exact = -2 * Math.sin(th) ** 2 / 0.3 + 2 * Math.cos(th) * (1 - Math.cos(th)) / T1;
+  close(slope, exact, 1e-3 * Math.abs(exact), 'd|M|²/dt at the start');
+  return `tipped 10°: the longest |M| is ${longest[0.2].toFixed(6)} with T2 = 2T1, ${longest[0.3].toFixed(4)} with T2 = 3T1 (d|M|²/dt = ${slope.toFixed(4)}/s at first)`;
+});
+
+test('the CPMG train beside the clocks: each echo reaches the spins\' own mean length and never passes it, so the echoes fall with T2, not T2*', () => {
+  const T2s = T2star(CK.T2, CK.df), tr = clockTrain(T2s, CK.T2, 0.3);
+  close(tr.tau, 2.5e-3, 1e-15, 'τ: 2τ = T2/2 (and ≥ 5 T2*)'); assert(tr.n === 12, `${tr.n} echoes, to 6 T2`);
+  const s = buildSequence('cpmg', tr.tau, tr.n, T2s);
+  const e = startSequence({ B0, B1, N: 4096, spreadHz: CK.df, T1: CK.T1, T2: CK.T2 }, s.pulses, s.span, Infinity);
+  const rows = [];
+  for (const te of s.echoes) { e.advance(te - e.t); const m = e.sum('rot'); rows.push([te, Math.hypot(m[0], m[1]), e.meanTransverse()]); }
+  for (const [te, echo, own] of rows) {
+    assert(echo <= own + 1e-15, `at ${te}: the echo ${echo} is longer than the spins' mean ${own}`);
+    close(own, Math.exp(-te / CK.T2), 0.002, `the spins' own mean at ${te * 1e3} ms`);
+  }
+  rows.slice(0, 8).forEach(([te, echo, own]) => assert(echo > 0.99 * own, `echo at ${te * 1e3} ms: ${echo} of ${own}`));
+  const fit = fitShape(rows.map((r) => r[0]), rows.map((r) => r[1]), 'decay');
+  close(fit.tau, CK.T2, 0.005 * CK.T2, 'T2 from the echoes');
+  return `${tr.n} echoes every ${(2 * tr.tau * 1e3).toFixed(1)} ms: each ${rows.slice(0, 8).map((r) => (r[1] / r[2]).toFixed(4)).join(', ')}… of the spins' own mean; fit T2 = ${(fit.tau * 1e3).toFixed(3)} ms`;
 });
 
 test('inversion recovery: M_z(τ) = 1 − 2e^{−τ/T1}, the null at T1 ln 2, and the fit finds T1', () => {

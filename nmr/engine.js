@@ -241,6 +241,12 @@ export class Engine {
     return frame === 'lab' ? toLab(out, this.omegaRef, this.t, out) : out;
   }
 
+  /** The mean length of the spins' own parts across ẑ, mean |M⊥ᵢ| (the same in either frame). */
+  meanTransverse() {
+    if (this.earth && this.earth.phase !== 'listen') return Math.hypot(this.earth.M[0], this.earth.M[1]);
+    return this.ens.meanTransverse();
+  }
+
   /**
    * `count` of the spins now (evenly spaced through the spread, so they are themselves its
    * quantiles), in the frame asked for; all of them when count is not given.  While the board
