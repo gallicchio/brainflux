@@ -11,6 +11,7 @@ import { fft } from '../lib/fft.js';
 import { colorize, autoBrightness } from '../lib/complexcolor.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, toast } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, contour } from '../lib/plot.js';
+import { scopeTrace } from '../lib/scope.js';
 
 const L_PHYS = 0.3;          // the box is 30 cm wide, for the drum's frequencies in hertz
 const MODES = 80;            // exact modes (with eigenvectors) computed for every shape
@@ -38,7 +39,7 @@ const state = {
 };
 
 let grid = null, geo = null, mask = null;
-let sim = null, signal = null, stride = 1, stepCount = 0;
+let sim = null, signal = null, signalCount = 0, stride = 1, stepCount = 0;   // signalCount: signals started (names the trace's picture)
 let probe = null, psi0 = null, startField = null;
 let filter = null, selected = null;   // selected: {kind: 'peak', lambda, Omega} | {kind: 'exact', k}
 let ray = null, autoR = 1, conserved0 = 1, startStats = { mean: 0, spread: 0 };
@@ -183,7 +184,7 @@ function restart() {
   const lamTop = Math.min(8 / (grid.h * grid.h), lamMean + 5 * lamSpread);
   const OmTop = omegaOfLambda(lamTop) + 1e-9;
   stride = Math.max(1, Math.floor(Math.PI / (1.2 * OmTop * sim.dt)));
-  signal = new Signal(stride * sim.dt, isQ());
+  signal = new Signal(stride * sim.dt, isQ()); signalCount++;
   // The spectrum's range: where the start has its energy, but no further than the grid is good.
   startStats = { mean: lamMean, spread: lamSpread };
   setSpectrumRange();
@@ -658,17 +659,11 @@ function drawSignal() {
   for (let k = 0; k < K; k++) mx = Math.max(mx, isQ() ? Math.hypot(signal.re[k], signal.im[k]) : Math.abs(signal.re[k]));
   mx = mx || 1;
   ctx.strokeStyle = c.line; ctx.strokeRect(left + 0.5, top + 0.5, w, h);
-  ctx.strokeStyle = c.ink2; ctx.lineWidth = 1;
-  ctx.beginPath();
-  const cols = Math.max(1, Math.floor(w));
-  for (let px = 0; px < cols; px++) {
-    const a = Math.floor((px * K) / cols), b = Math.max(a + 1, Math.floor(((px + 1) * K) / cols));
-    let lo = Infinity, hi = -Infinity;
-    for (let k = a; k < b && k < K; k++) { const v = isQ() ? Math.hypot(signal.re[k], signal.im[k]) : signal.re[k]; lo = Math.min(lo, v); hi = Math.max(hi, v); }
-    const Y = (v) => (isQ() ? top + h - (v / mx) * h : top + h / 2 - (v / mx) * (h / 2));
-    ctx.moveTo(left + px + 0.5, Y(hi)); ctx.lineTo(left + px + 0.5, Y(lo) + 0.5);
-  }
-  ctx.stroke();
+  // Thousands of samples across a few hundred pixels: drawn as a digital phosphor scope draws
+  // them (lib/scope.js).  The picture is kept while the signal holds still (paused, or full).
+  const { re, im } = signal, q = isQ(), still = !state.running || K >= SIGNAL_MAX;
+  const y = q ? (k) => top + h - (Math.sqrt(re[k] * re[k] + im[k] * im[k]) / mx) * h : (k) => top + h / 2 - (re[k] / mx) * (h / 2);
+  scopeTrace(ctx, { left, top, w, h }, { n: K, y, x0: left, x1: left + w, color: c.ink2, key: still ? `drums signal ${signalCount} ${K} ${q}` : undefined });
   ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif';
   ctx.fillText(isQ() ? 'signal: overlap with the start |⟨ψ(0)|ψ(t)⟩|' : 'signal: the membrane under the mallet', left + 4, top + 11);
   ctx.fillText('0', left, height - 3);
