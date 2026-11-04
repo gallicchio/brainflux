@@ -418,7 +418,7 @@ function readout() {
     return;
   }
   lines.push(['Field', ['B₀ = ', { v: state.B0 * bu.s, dec: bu.dec, w: 6, class: 'b' }, ` ${bu.u}:`], 'Larmor frequency',
-    ['f₀ = γB₀/2π = ', { v: eng.f0 * fu.s, dec: fu.dec, w: fu.dec + 3, class: 'b' }, ` ${fu.u}`], '· the RF is', [{ v: state.offsetHz * ou.s, dec: ou.dec, w: 6, plus: '+' }, ` ${ou.u}`], 'off it']);
+    ['f₀ = γB₀/2π = ', { v: eng.f0 * fu.s, dec: fu.dec, w: fu.dec + (state.inst === 'earth' ? 5 : 3), class: 'b' }, ` ${fu.u}`], '· the RF is', [{ v: state.offsetHz * ou.s, dec: ou.dec, w: 6, plus: '+' }, ` ${ou.u}`], 'off it']);
   const th = r > 1e-9 ? Math.acos(Math.max(-1, Math.min(1, m[2] / r))) / DEG : 0;
   lines.push([state.ensemble ? 'The sum of the spins:' : 'The arrow:', ['θ = ', { v: th, dec: 1, w: 5, class: 'b' }, '°'], 'from B₀ · along B₀',
     ['M', { html: '<sub>z</sub>' }, ' = ', { v: m[2], dec: 3, w: 6, class: 'b' }], '· across it',
@@ -1354,13 +1354,20 @@ function setup(o) {
   scheduleHash();
 }
 const S45 = Math.SQRT1_2;
+/** The times a set-up of views 1 and 2 is laid out in, for the instrument it will have: the π/2's
+ *  length p, T2′ = 1/(πΔf) of its spread, and the nutation rate γB1/2π (TeachSpin: 2.5 μs,
+ *  0.637 ms, 100 kHz). */
+function scales(k) {
+  const I = INSTRUMENTS[k.keepInstrument ? state.inst : 'teachspin'];
+  return { I, p: I.pi2, T2p: 1 / (Math.PI * I.spread), nut: 1 / (4 * I.pi2) };
+}
 const setups = {
-  larmor: (k = {}) => setup({ ...k, view: 'one', frame: 'lab', speed: 2e-7, M: [S45, 0, S45] }),
-  pulse90: (k = {}) => setup({ ...k, view: 'one', frame: 'lab', speed: 1e-6, script: { pulses: [{ t: 2e-6, angle: 90, phase: 0 }], span: 12e-6, loop: false } }),
-  rotating: (k = {}) => setup({ ...k, view: 'one', frame: 'rot', speed: 1e-6, script: { pulses: [{ t: 2e-6, angle: 90, phase: 0 }], span: 8e-6 } }),
-  offres: (k = {}) => setup({ ...k, view: 'one', frame: 'rot', speed: 2e-6, offset: 50e3, script: { pulses: [{ t: 2e-6, angle: 90, phase: 0 }], span: 30e-6 } }),
-  spread: (k = {}) => setup({ ...k, view: 'many', frame: 'rot', ensemble: true, speed: 4e-4, script: { pulses: [{ t: 0, angle: 90, phase: 0 }], span: 4e-3 } }),
-  echo: (k = {}) => setup({ ...k, view: 'many', frame: 'rot', ensemble: true, T1: true, T2: true, speed: 5e-4, script: { pulses: [{ t: 0, angle: 90, phase: 0 }, { t: 1.5e-3, angle: 180, phase: 0 }], span: 5e-3 } }),
+  larmor: (k = {}) => { const { I } = scales(k); setup({ ...k, view: 'one', frame: 'lab', speed: I.speedLab, M: [S45, 0, S45] }); },
+  pulse90: (k = {}) => { const { p } = scales(k); setup({ ...k, view: 'one', frame: 'lab', speed: 0.4 * p, script: { pulses: [{ t: 0.8 * p, angle: 90, phase: 0 }], span: 4.8 * p, loop: false } }); },
+  rotating: (k = {}) => { const { p } = scales(k); setup({ ...k, view: 'one', frame: 'rot', speed: 0.4 * p, script: { pulses: [{ t: 0.8 * p, angle: 90, phase: 0 }], span: 3.2 * p } }); },
+  offres: (k = {}) => { const { p, nut } = scales(k); setup({ ...k, view: 'one', frame: 'rot', speed: 0.8 * p, offset: 0.5 * nut, script: { pulses: [{ t: 0.8 * p, angle: 90, phase: 0 }], span: 12 * p } }); },
+  spread: (k = {}) => { const { T2p } = scales(k); setup({ ...k, view: 'many', frame: 'rot', ensemble: true, speed: 0.628 * T2p, script: { pulses: [{ t: 0, angle: 90, phase: 0 }], span: 6.28 * T2p } }); },
+  echo: (k = {}) => { const { T2p } = scales(k); setup({ ...k, view: 'many', frame: 'rot', ensemble: true, T1: true, T2: true, speed: 0.785 * T2p, script: { pulses: [{ t: 0, angle: 90, phase: 0 }, { t: 2.356 * T2p, angle: 180, phase: 0 }], span: 7.85 * T2p } }); },
   cpmg: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'cpmg' }),
   mg: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'cp', error: 0.1 }),
   ir: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'ir', scan: true }),
