@@ -159,7 +159,7 @@ export function drawMichelson(canvas, o) {
         ctx.fillRect(cx0 + (cw * i) / n, cy0 + 0.3 * u, cw / n + 0.6, ch - 0.6 * u);
       }
     }
-    label('line camera: one pixel per wavelength', camX1 + 1, camY, 'left', TEXT, 9);
+    label('line camera: a pixel per wavelength', camX0, camY + 3.4, 'left', TEXT, 9);
   }
   const perPx = W / (2 * span * u);
   return {
@@ -169,10 +169,10 @@ export function drawMichelson(canvas, o) {
 }
 
 function niceStep(W) {
-  const raw = W / 5, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
+  const raw = W / 4, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
   return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p;
 }
-function fmtUm(d) { return Math.abs(d) >= 1000 ? `${(d / 1000).toFixed(1)} mm` : `${+d.toFixed(2)}`; }
+function fmtUm(d) { return `${+d.toFixed(2)}`; }
 
 /**
  * The scene from the side: x across (μm), geometric depth z down, the bands coloured by how much

@@ -105,6 +105,34 @@
       </div>
       <div class="readout" id="s-readout"><div id="s-readout-1"></div><div id="s-readout-2"></div><div id="s-readout-3"></div></div>
     </div>
+
+    <!-- 4 · Fourier-domain OCT -->
+    <div class="view" id="v-fourier">
+      <div class="row"><span id="q-mode-box"></span></div>
+      <div class="q-a">
+        <div class="cell q-schem-cell">
+          <div class="head"><h2>The reference mirror stays still</h2><span class="note">a spectrometer instead of a detector</span></div>
+          <div class="box dark-box schem-box"><canvas id="q-schem" aria-label="The interferometer with its reference mirror fixed at zero path, and a grating spreading the light over a line camera"></canvas></div>
+        </div>
+        <div class="cell q-spec-cell">
+          <div class="head"><h2>What the line camera records</h2><span class="note">the interference spectrum: a fringe for every layer, the finer the deeper</span></div>
+          <div class="box q-spec-box"><canvas id="q-spec" aria-label="The interference spectrum on the camera's pixels against wavenumber"></canvas></div>
+        </div>
+        <div class="cell q-scan-cell">
+          <div class="head"><h2>Its Fourier transform: the whole A-scan at once</h2><span class="note">one peak per fringe frequency</span><span class="spacer"></span><span id="q-scale-box"></span></div>
+          <div class="box q-scan-box"><canvas id="q-scan" aria-label="The A-scan from the Fourier transform of the spectrum, against optical depth: click a layer's marker to see its own fringe in the spectrum"></canvas></div>
+          <div class="hint" id="q-hint">The stage motor moves the sample slowly in depth: watch its fringes get finer as it goes deeper.  Click a ▼ to see that layer's own fringe in the spectrum.</div>
+        </div>
+      </div>
+      <div class="q-b">
+        <div class="cell">
+          <div class="head"><h2>A B-scan, one camera frame per column</h2><span class="note">the whole depth of every column at once; the sample moves, the picture follows at video rate</span></div>
+          <div class="box dark-box q-bscan-box"><canvas id="q-bscan" aria-label="A B-scan made the Fourier-domain way, its depth from zero path to the end of the range"></canvas></div>
+          <div class="hint" id="q-bhint">Drag "sample at" (or let the stage motor move it): bring the sample up through zero path and see its mirror image fold in; push it past the end of the range and see it fold back.</div>
+        </div>
+      </div>
+      <div class="readout" id="q-readout"><div id="q-readout-1"></div><div id="q-readout-2"></div><div id="q-readout-3"></div></div>
+    </div>
   </section>
 
   <aside class="controls">
@@ -169,6 +197,25 @@
       <div class="label">The beam</div>
       <div id="s-beam-box" class="stack"></div>
       <div class="gloss">NA, the numerical aperture: the sine of the half-angle of the cone of light the lens focuses into the sample.  A wide cone makes a small spot, but only near the focus.</div>
+    </div>
+
+    <div class="panel for-fourier">
+      <div class="label">The spectrometer</div>
+      <div class="row"><span class="small muted">Pixels</span><span id="q-n-box"></span></div>
+      <div class="gloss">The camera spans three bandwidths of the light.  More pixels across it: finer steps δk in wavenumber, finer fringes followed, a deeper range.</div>
+      <div id="q-show-box" class="stack"></div>
+      <div id="q-noise-box"></div>
+      <div class="gloss">Why every OCT built since about 2006 works this way: a time-domain system measures one depth at a time, a spectrometer all N at once, each pixel collecting light for the whole A-scan.  For the same light and the same time its noise floor is about N/2 lower (for 1024 pixels, 27 dB), or for the same floor it is that much faster: from 400 A-scans a second to 70,000 and more.</div>
+    </div>
+    <div class="panel for-fourier q-a-only">
+      <div class="label">The sample</div>
+      <div id="q-sample-box"></div>
+      <div id="q-pos-box" class="stack"></div>
+    </div>
+    <div class="panel for-fourier q-b-only">
+      <div class="label">The sample</div>
+      <div id="q-scene-box"></div>
+      <div id="q-shift-box" class="stack"></div>
     </div>
   </aside>
 </main>

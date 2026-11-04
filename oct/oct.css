@@ -89,6 +89,16 @@ h2 .sw { display: inline-block; width: 14px; height: 5px; border-radius: 2px; ma
 .oct[data-smode="bscan"] .s-vol-only { display: none; }
 #s-play { min-width: 6.2em; }
 
+/* View 4: the mirror fixed, the spectrum and its transform; or a B-scan refolded live. */
+.q-a { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); grid-template-areas: "schem spec" "scan scan"; gap: 8px 10px; }
+.q-schem-cell { grid-area: schem; } .q-spec-cell { grid-area: spec; } .q-scan-cell { grid-area: scan; }
+.q-spec-cell .q-spec-box { flex: 1; min-height: 200px; }
+.q-scan-box { height: max(220px, calc(100vh - 640px)); }
+#q-scan { cursor: pointer; }
+.q-bscan-box { height: max(320px, calc(100vh - 330px)); }
+.oct[data-qmode="bscan"] .q-a, .oct:not([data-qmode="bscan"]) .q-b { display: none; }
+.oct[data-qmode="bscan"] .q-a-only, .oct:not([data-qmode="bscan"]) .q-b-only { display: none; }
+
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .controls .slider { grid-template-columns: minmax(7.6em, auto) 1fr 4.8em; }
@@ -109,6 +119,8 @@ h2 .sw { display: inline-block; width: 14px; height: 5px; border-radius: 2px; ma
   .s-scene-box { height: 210px; } .s-bscan-box, .s-ascan-box { height: 240px; }
   .s-cube-box, .s-xy-box { height: 280px; } .s-sl-box { height: 170px; }
   .legend { flex-direction: row; flex-wrap: wrap; gap: 3px 12px; }
+  .q-a { grid-template-columns: minmax(0, 1fr); grid-template-areas: "spec" "scan" "schem"; }
+  .q-spec-cell .q-spec-box { height: 210px; flex: none; } .q-scan-box { height: 240px; } .q-bscan-box { height: 340px; }
   .zoom-box { height: 170px; flex: none; }
   .bar { flex-wrap: wrap; }
   .bar h1 { font-size: 15px; }

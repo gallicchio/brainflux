@@ -9,12 +9,14 @@ import { Source, SOURCES } from './source.js';
 import * as F from './fringes-view.js';
 import * as A from './ascan-view.js';
 import * as B from './scan-view.js';
+import * as Q from './fourier-view.js';
 
-const VIEWS = { fringes: F, ascan: A, scan: B };
+const VIEWS = { fringes: F, ascan: A, scan: B, fourier: Q };
 const VIEW_LIST = [
   { value: 'fringes', label: '1 · Fringes from a layer', title: 'One reflecting surface in the sample arm: a burst of fringes where the paths match' },
   { value: 'ascan', label: '2 · The A-scan', title: 'A layered sample, scanned in depth: the envelope of the fringes is its reflectivity against depth' },
   { value: 'scan', label: '3 · B-scan and volume', title: 'Step the beam across: A-scans side by side make a cross-section; step it along y too and they make a volume' },
+  { value: 'fourier', label: '4 · Fourier domain', title: 'The mirror still, a spectrometer: one Fourier transform gives the whole A-scan at once' },
 ];
 const app = { view: 'fringes' };
 
@@ -107,6 +109,10 @@ const setups = {
   lateral: () => go('scan', { scene: 'beads', NA: 0.1, focus: 300, done: true }),
   tilt: () => go('scan', { scene: 'plate', tilt: 5, done: true }),
   volume: () => go('scan', { scene: 'retina', mode: 'volume', ix: 46, iy: 33, m: 83 }),
+  fourier: () => go('fourier', { sample: 'one', offset: 40, motor: true, pick: 0 }),
+  conjugate: () => go('fourier', { sample: 'film', offset: -60, both: true, motor: false, pick: 0, scale: 'lin' }),
+  range: () => go('fourier', { sample: 'slide', N: 256, offset: 60, motor: false, pick: 1 }),
+  fdbscan: () => go('fourier', { mode: 'bscan', scene: 'retina', shift: 120, motor: true }),
 };
 
 // --------------------------------------------------------------------- start
@@ -114,6 +120,7 @@ const setups = {
 F.init(shared);
 A.init(shared);
 B.init(shared);
+Q.init(shared);
 drawer($('#help'), $('#help-button'), setups);
 lightReadout();
 
@@ -144,7 +151,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.__app = {
-  ready: true, setups, setView, views: VIEWS, F, A, B, src: shared.src, shared,
+  ready: true, setups, setView, views: VIEWS, F, A, B, Q, src: shared.src, shared,
   get view() { return app.view; },
   /** Hold the clock (the tests move it with step) or let it run again. */
   hold(on = true) { held = on; last = 0; },

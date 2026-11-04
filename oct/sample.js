@@ -50,6 +50,10 @@ export const fresnel = (n1, n2) => (n2 - n1) / (n2 + n1);
  * (μm, geometric) the A-scan should cover.
  */
 export const STACKS = {
+  one: {
+    label: 'One surface', title: 'One glass surface (r = 0.2): one fringe frequency in the spectrum, one peak in its transform',
+    n: 1, depth: 0, fdOnly: true, layers: [{ z: 0, r: 0.2, name: 'surface' }],
+  },
   slide: {
     label: 'Cover slip', title: 'A microscope cover slip, 170 μm of glass (n = 1.52): a front face and a back face',
     n: 1.52, depth: 230, layers: [{ z: 0, r: fresnel(1, 1.52), name: 'front face' }, { z: 170, r: fresnel(1.52, 1), name: 'back face' }],

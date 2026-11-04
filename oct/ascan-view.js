@@ -283,7 +283,7 @@ let sampleSeg, gapSlider, noiseSlider, motorSeg, speedSlider, scaleSeg, aloneTog
 
 export function init(shared) {
   S = shared;
-  sampleSeg = segmented(Object.entries(STACKS).map(([k, s]) => ({ value: k, label: s.label, title: s.title })), state.sample, (v) => setSample(v), { label: 'Sample' });
+  sampleSeg = segmented(Object.entries(STACKS).filter(([, s]) => !s.fdOnly).map(([k, s]) => ({ value: k, label: s.label, title: s.title })), state.sample, (v) => setSample(v), { label: 'Sample' });
   sampleSeg.classList.add('button-grid');
   $('#a-sample-box').append(sampleSeg);
   gapSlider = slider({ label: 'gap (μm)', min: 0.5, max: 30, step: 0.01, value: state.gap, title: 'How far apart the two surfaces are (in air, so geometric and optical are the same)',
@@ -308,7 +308,7 @@ export function init(shared) {
 }
 
 export function setSample(v) {
-  state.sample = STACKS[v] ? v : 'slide';
+  state.sample = STACKS[v] && !STACKS[v].fdOnly ? v : 'slide';
   sampleSeg.value = state.sample;
   $('#a-gap-box').hidden = state.sample !== 'pair';
   rebuild();
@@ -343,7 +343,7 @@ export function toHash() {
   return { smp: s.sample, gap: s.sample === 'pair' ? s.gap : undefined, noise: s.noise, motor: s.motor, v: s.speed, scale: s.scale, d: +s.d.toFixed(2) };
 }
 export function fromHash(h, num) {
-  configure({ sample: STACKS[h.smp] ? h.smp : 'slide', gap: num('gap', 8), noise: num('noise', -60), motor: ['stop', 'fwd', 'sweep'].includes(h.motor) ? h.motor : 'sweep',
+  configure({ sample: STACKS[h.smp] && !STACKS[h.smp].fdOnly ? h.smp : 'slide', gap: num('gap', 8), noise: num('noise', -60), motor: ['stop', 'fwd', 'sweep'].includes(h.motor) ? h.motor : 'sweep',
     speed: num('v', undefined), scale: h.scale === 'lin' ? 'lin' : 'db', d: num('d', 0) });
 }
 
