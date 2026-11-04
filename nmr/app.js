@@ -197,7 +197,8 @@ sphereCanvas.addEventListener('pointerdown', (e) => {
   const r = sphereCanvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
   const T = tipScreen(), m = shownSum();
   sphereCanvas.setPointerCapture(e.pointerId);
-  if (Math.hypot(x - T[0], y - T[1]) < 18 && Math.hypot(...m) > 0.05) {
+  // (The board's spins are set by its cycle: there the sphere only turns.)
+  if (state.view !== 'earth' && Math.hypot(x - T[0], y - T[1]) < 18 && Math.hypot(...m) > 0.05) {
     drag = { kind: 'tip', back: T[2] < 0 };
     goFree();
     eng.queue = [];
@@ -207,7 +208,7 @@ sphereCanvas.addEventListener('pointerdown', (e) => {
 sphereCanvas.addEventListener('pointermove', (e) => {
   const r = sphereCanvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
   if (!drag) {
-    const T = tipScreen(), on = Math.hypot(x - T[0], y - T[1]) < 18;
+    const T = tipScreen(), on = state.view !== 'earth' && Math.hypot(x - T[0], y - T[1]) < 18;
     if (on !== hoverTip) { hoverTip = on; sphereCanvas.classList.toggle('on-tip', on); }
     return;
   }
@@ -564,7 +565,7 @@ const arrowsSlider = slider({ label: 'arrows drawn', min: 4, max: 256, step: 1, 
 const ensembleBox = el('div', { class: 'stack' }, spreadSlider,
   el('div', { class: 'gloss' }, 'The field is not quite the same all through the sample, so the spins\' frequencies differ.'), arrowsSlider);
 spinsPanel.append(el('div', { class: 'label' }, 'The spin'), frameSeg,
-  el('div', { class: 'row' }, el('button', { type: 'button', title: 'Every spin back along B₀, as after waiting many T₁', onclick: () => { goFree(); eng.setVector([0, 0, 1], 'rot'); trail = []; dirty(); } }, 'Back to equilibrium')),
+  el('div', { class: 'row', id: 'equilibrium-row' }, el('button', { type: 'button', title: 'Every spin back along B₀, as after waiting many T₁', onclick: () => { goFree(); eng.setVector([0, 0, 1], 'rot'); trail = []; dirty(); } }, 'Back to equilibrium')),
   el('label', { class: 'check' }, ensembleCheck, 'Many spins (an ensemble)'), ensembleBox);
 function syncEnsemble() { ensembleCheck.checked = state.ensemble; ensembleBox.hidden = !state.ensemble; }
 
@@ -606,7 +607,10 @@ function syncNoise() { noiseCheck.checked = state.noiseOn; snrSlider.value = sta
 
 // The clock.
 const clockPanel = $('#clock-panel');
-const playButton = el('button', { type: 'button', id: 'play', onclick: () => { state.playing = !state.playing; playButton.textContent = state.playing ? 'Pause' : 'Play'; lastT = 0; } }, 'Pause');
+const playButton = el('button', { type: 'button', id: 'play', title: 'Stop or start the clock (space)', onclick: () => {
+  state.playing = !state.playing; playButton.textContent = state.playing ? 'Pause' : 'Play'; lastT = 0;
+  if (typeof boardPause !== 'undefined') boardPause.textContent = playButton.textContent;
+} }, 'Pause');
 const speedSlider = slider({ label: 'time ×', min: 1e-9, max: 1, log: true, value: state.speed, title: 'Slow motion: seconds of the real thing per second on screen',
   onInput: (v) => { state.speed = v; if (!run) resample(); trail = []; scheduleHash(); dirty(); } });
 const restartButton = el('button', { type: 'button', title: 'Run the sequence again from the start', onclick: () => { if (run) startRun(run); else { startFree(eng.sum('rot')); } } }, 'Restart');
@@ -670,6 +674,7 @@ function setView(v) {
   $('#sphere-hint').textContent = HINTS[v];
   b0Slider.hidden = v === 'earth'; currentSlider.hidden = v !== 'earth';
   phaseSlider.hidden = v === 'earth'; phaseSlider.nextElementSibling.hidden = v === 'earth';
+  $('#equilibrium-row').hidden = v === 'earth';
   spreadSlider.hidden = v === 'earth'; spreadSlider.nextElementSibling.hidden = v === 'earth';
   // The board's coil is seen from the side, as a solenoid is drawn; the others from the usual corner.
   if (v === 'earth') view.look(1.3, 0.22); else view.look(0.55, 0.32);
@@ -683,6 +688,12 @@ function defaultsFor(v) {
   if (setups[first]) setups[first]({ keepInstrument: true });
 }
 
+// Space pauses and plays (not while typing in a box).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== ' ' || e.target.closest?.('input, textarea, select, button')) return;
+  e.preventDefault();
+  playButton.click();
+});
 window.addEventListener('resize', dirty);
 document.addEventListener('visibilitychange', () => { lastT = 0; kick(); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', dirty);
@@ -1205,6 +1216,7 @@ function boardReadout(lines) {
 const earthPanel = $('#earth-panel');
 const cycleButton = el('button', { type: 'button', class: 'primary', onclick: () => startBoard() }, 'Polarize and listen');
 const boardLoop = el('button', { type: 'button', 'aria-pressed': 'true', title: 'Run the cycle again and again, as the board\'s sequencer does', onclick: () => { board.loop = !board.loop; boardLoop.setAttribute('aria-pressed', String(board.loop)); if (run) run.loop = board.loop; } }, 'Repeat');
+const boardPause = el('button', { type: 'button', title: 'Stop or start the clock (space), to look at the sphere', onclick: () => playButton.click() }, 'Pause');
 const hearButton = el('button', { type: 'button', title: 'Play the FID through the speakers or headphones, as the board\'s headphone jack does (start quietly)', onclick: () => hearIt() }, 'Hear it');
 const tpSlider = slider({ label: 'polarize (s)', min: 0.2, max: 4.7, step: 0.05, value: board.tp, title: 'How long the current flows: the board\'s POLARIZE TIME, 0.2 to 4.7 s',
   onInput: (v) => { board.tp = v; startBoard(); scheduleHash(); } });
@@ -1228,7 +1240,7 @@ const boardSpeedSeg = segmented([{ value: 'auto', label: 'Auto', title: 'Real ti
   board.speedMode, (v) => { board.speedMode = v; trail = []; scheduleHash(); }, { label: 'Speed' });
 const audioNote = el('div', { class: 'gloss' }, 'Sound starts only after a click.  Headphones, at a low volume.');
 earthPanel.append(el('div', { class: 'label' }, 'The board'),
-  el('div', { class: 'row' }, cycleButton, boardLoop, hearButton), audioNote,
+  el('div', { class: 'row' }, cycleButton, boardLoop, boardPause, hearButton), audioNote,
   tpSlider, el('div', { class: 'gloss' }, 'The current magnetizes the water along the coil, with T₁.'),
   rampSlider, el('div', { class: 'gloss' }, 'Faster than the protons can turn (sudden), M is left across the Earth\'s field and rings; slower (adiabatic), it follows the field round and nothing rings.'),
   tlSlider, beSlider, el('div', { class: 'row' }, claremont),
@@ -1388,7 +1400,7 @@ function boardSetup(o) {
   state.spreadHz = GAMMA_HZ * board.gradNT * 1e-9;
   state.T1on = true; state.T2on = true; loadSample('water', { on: true });
   state.noiseOn = true; state.snr = BOARD.snr; state.averages = 1;
-  state.playing = true; playButton.textContent = 'Pause';
+  state.playing = true; playButton.textContent = 'Pause'; boardPause.textContent = 'Pause';
   applyEngine(); syncSliders(); syncBoard();
   setView('earth');
   startBoard();
