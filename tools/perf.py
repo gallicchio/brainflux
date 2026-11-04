@@ -50,6 +50,13 @@ window.__perf = {
     });
     return all.slice(0, 2);
   },
+  sliderNames() {
+    return this.sliders().map((s) => {
+      const w = s.closest('.slider, label, .row, div');
+      const l = (s.id && document.querySelector(`label[for="${s.id}"]`)) || w?.querySelector('label');
+      return (l?.textContent || s.title || s.id || '?').trim().replace(/\s+/g, ' ').slice(0, 40);
+    });
+  },
   async drag(steps = 8) {
     const out = [];
     const frame = () => new Promise((r) => requestAnimationFrame(r));
@@ -219,8 +226,9 @@ def profile(args):
                 b.eval('__perf.start()'); time.sleep(args.run * 1.5); d = b.eval('__perf.stop()') or []
                 extra = f"{len(d)} frames, median {pct(d, 0.5) or 0:.1f} ms, p90 {pct(d, 0.9) or 0:.1f} ms"
             else:
+                names = b.eval('__perf.sliderNames()') or []
                 lat = b.eval(f'__perf.drag({args.steps})') or []
-                extra = f"{len(lat)} slider steps, median {pct(lat, 0.5) or 0:.1f} ms, max {max(lat) if lat else 0:.1f} ms"
+                extra = f"{len(lat)} slider steps ({', '.join(names) or 'no sliders'}), median {pct(lat, 0.5) or 0:.1f} ms, max {max(lat) if lat else 0:.1f} ms"
             prof = b.call('Profiler.stop')['profile']
             m1 = {x['name']: x['value'] for x in b.call('Performance.getMetrics')['metrics']}
             wall = m1['Timestamp'] - m0['Timestamp']
