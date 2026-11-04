@@ -283,23 +283,28 @@ export function carrierTrace(re, im, i0, i1, cols, cyc) {
   cols = Math.max(1, cols);
   const f = (cyc * (m - 1)) / cols, need = PER_CYCLE * f, synthetic = need > MOST_PER_PX || cyc > 0.35;
   const perPx = synthetic ? MOST_PER_PX : need <= 1.4 ? 1.4 : Math.max(2, Math.ceil(need));
-  const n = Math.max(2, Math.round(perPx * cols) + 1), y = new Float64Array(n), step = (m - 1) / (n - 1);
-  const amp = (j) => Math.hypot(re[j], im[j]);
-  for (let k = 0; k < n; k++) {
-    const u = k * step, j = Math.min(i0 + Math.floor(u), i1 - 1), t = i0 + u - j;
-    if (m < 2) { y[k] = re[i0]; continue; }
-    if (synthetic) {
-      const c = Math.floor(k / MOST_PER_PX), ph = (k - c * MOST_PER_PX + ((c * GOLDEN) % 1)) / MOST_PER_PX;
-      y[k] = (amp(j) * (1 - t) + amp(j + 1) * t) * Math.cos(2 * Math.PI * ph);
-    } else if (t === 0) y[k] = re[j];
-    else {
-      // The phase from sample j to j + 1: the angle of a(j + 1) a*(j), less than π.
-      const a0 = amp(j), a1 = amp(j + 1);
-      if (!(a0 > 0 && a1 > 0)) { y[k] = re[j] * (1 - t) + re[j + 1] * t; continue; }
-      const cr = re[j + 1] * re[j] + im[j + 1] * im[j], ci = im[j + 1] * re[j] - re[j + 1] * im[j];
-      const p = Math.atan2(im[j], re[j]) + t * Math.atan2(ci, cr);
-      y[k] = (a0 * (1 - t) + a1 * t) * Math.cos(p);
+  const n = Math.max(2, Math.round(perPx * cols) + 1), y = new Float64Array(n);
+  if (m < 2) { y.fill(re[i0]); return { y, synthetic, perPx, f }; }
+  // Each sample's modulus and phase, and the phase from each to the next (the angle of
+  // a(j + 1) a*(j), less than π).
+  const A = new Float64Array(m), P = synthetic ? null : new Float64Array(m), dP = synthetic ? null : new Float64Array(m);
+  for (let j = 0; j < m; j++) {
+    const r = re[i0 + j], q = im[i0 + j];
+    A[j] = Math.sqrt(r * r + q * q);
+    if (P) {
+      P[j] = Math.atan2(q, r);
+      if (j + 1 < m) { const r1 = re[i0 + j + 1], q1 = im[i0 + j + 1]; dP[j] = Math.atan2(q1 * r - r1 * q, r1 * r + q1 * q); }
     }
+  }
+  const step = (m - 1) / (n - 1), TAU = 2 * Math.PI;
+  for (let k = 0; k < n; k++) {
+    const u = k * step, j = Math.min(Math.floor(u), m - 2), t = u - j, a = A[j] * (1 - t) + A[j + 1] * t;
+    if (synthetic) {
+      const c = Math.floor(k / MOST_PER_PX);
+      y[k] = a * Math.cos((TAU * (k - c * MOST_PER_PX + ((c * GOLDEN) % 1))) / MOST_PER_PX);
+    } else if (t === 0) y[k] = re[i0 + j];
+    else if (!(A[j] > 0 && A[j + 1] > 0)) y[k] = re[i0 + j] * (1 - t) + re[i0 + j + 1] * t;
+    else y[k] = a * Math.cos(P[j] + t * dP[j]);
   }
   return { y, synthetic, perPx, f };
 }
