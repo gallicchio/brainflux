@@ -212,8 +212,9 @@
     the turns per millimetre (the top axis of the signal's record).  The signal is the sum of the
     arrows, so it is the overlap of the tube with that winding.  At $t=1/(\bar\gamma G w)=0.587$
     ms exactly one turn fits in the tube: its arrows point every way, and the signal is zero.
-    Half a turn more and the signal comes back, upside down, to 21.7% at 0.840 ms (the sinc of a
-    tube's width).  So each moment of the record measures one spatial frequency $k$ of the
+    Half a turn more and the signal comes back, upside down, to 21.6% at 0.840 ms (the first lobe
+    of a sinc, the transform of a block, is 21.7%; the magnet's slight unevenness takes the
+    rest).  So each moment of the record measures one spatial frequency $k$ of the
     sample: its Fourier component $\int\rho(x)\,e^{-2\pi ikx}dx$.  That is why its spectrum is
     the profile: the record is the profile's Fourier transform, written down one $k$ at a time.</p>
   </article>
@@ -225,9 +226,10 @@
     readout says how fine, as it goes).  The page stops at $k=0.25$ per mm, when neighbouring
     arrows 2 mm apart point opposite ways, and the detail is 2 mm: the arrows are the pixels of
     this one-dimensional image.  Listening longer would show finer detail, but only for spins
-    closer together than the arrows.  (Under <em>More</em>, a magnet's unevenness, $T_2^*$,
-    blurs each edge too: with $T_2^*=2$ ms every line of the spectrum is $1/\pi T_2^*=159$ Hz
-    wide, 1.87 mm at this gradient.)</p>
+    closer together than the arrows.  (Under <em>More</em>, a magnet whose field is not quite
+    even: with $T_2^*=2$ ms neighbouring spins drift apart even with no gradient, and the signal
+    falls by $e$ every 2 ms; in the spectrum each edge blurs by about $1/\pi T_2^*=159$ Hz, 1.9 mm
+    at this gradient.)</p>
   </article>
 
   <article class="exp" data-setup="slice">
@@ -313,7 +315,7 @@
 
   <article class="exp" data-setup="centre">
     <h3>12. The middle of k-space holds the picture; the edges hold its edges</h3>
-    <p>Only the middle 16 rows of 64.  They hold 86.8% of the signal's energy, and with them alone
+    <p>Only the middle 16 rows of 64.  They hold 86.7% of the signal's energy, and with them alone
     the picture has its brightness right (its mean is 1.06 of the true one) but no sharp edges:
     the middle of k-space is the slow variations, the contrast between tissues.  Press <em>Only the
     edges</em>: the other 48 rows, 13% of the energy, give only outlines, a picture whose mean is
@@ -340,10 +342,11 @@
 
   <article class="exp" data-setup="motion">
     <h3>14. Move during the scan</h3>
-    <p>Three disks, scanned at 5 lines a second.  While it scans, drag a disk to another place on
-    the left picture.  The rows measured before the move saw it in one place, the rest in the
-    other, and no single picture has that k-space: the disk shows twice, faint, and ghosts of it
-    are smeared along $y$, the phase-encoding direction, where each row is a different moment.
+    <p>Three disks, scanned at 5 lines a second from the bottom row of k-space to the top, as most
+    scanners go.  Half-way through, drag a disk (the bright one, fat) to another place on the left
+    picture.  The rows measured before the move saw it in one place, the rest in the other, and no
+    single picture has that k-space: the disk shows twice, each half as bright, and ghosts of it are
+    smeared along $y$, the phase-encoding direction, where each row is a different moment.
     Along $x$ the picture is sharp, because each row was read out in 3 ms.  This is why patients
     are asked to hold still, and why breathing and the heartbeat smear MRI pictures along the
     phase-encoding direction.  (Once a scan is over, any change measures every row again at
@@ -408,7 +411,7 @@
     <p>Fat's protons sit in molecules whose electrons shield them a little more than water's, so
     they turn 3.4 parts per million slower: 217 Hz at 1.5 T.  The readout reads frequency as
     position, $x=f/\bar\gamma G_x$, so fat is drawn $217\ \mathrm{Hz}/\bar\gamma G_x$ too
-    far to the low side: 1.27 mm with $G_x=4$ mT/m, hardly a pixel.  Here $G_x$ is 0.5 mT/m, and
+    far to the low side: about 1.3 mm with $G_x=4$ mT/m, hardly a pixel.  Here $G_x$ is 0.5 mT/m, and
     the shift is 10.2 mm: the scalp's fat slides off the skull to the left (a bright band where
     it overlaps the brain's edge, a dark gap on the right), and the pocket of fat leaves its
     place (dashed: where the fat is).  A weak readout gradient also means a long readout, so TE

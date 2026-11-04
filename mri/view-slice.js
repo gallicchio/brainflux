@@ -489,4 +489,11 @@ export class SliceView {
   probe() {
     return { stage: this.clock.stage, t: this.tNow, centre: this.centre, thickness: this.thickness, measured: this.measured, handles: this.handles, sideBox: this.sideBox, lay: this.lay, s: { ...this.s } };
   }
+  /** For the tests: how much in step the slab's spins end, |sum of Mxy| / sum of |Mxy|. */
+  coherence() {
+    const m = this.movie, L = m.mx.length - 1;
+    let sr = 0, si = 0, sm = 0;
+    for (let i = 0; i < NZ; i++) { sr += m.mx[L][i]; si += m.my[L][i]; sm += Math.hypot(m.mx[L][i], m.my[L][i]); }
+    return Math.hypot(sr, si) / sm;
+  }
 }

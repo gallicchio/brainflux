@@ -30,7 +30,7 @@ export class KspaceView {
     this.app = app;
     this.canvas = $('#v3-main');
     this.s = {
-      obj: 'head', disks: disksPhantom().map((d) => ({ ...d })), type: 'se', TE: 20, TR: 500, N: 64, T2p: 60,
+      obj: 'head', disks: disksPhantom().map((d) => ({ ...d })), type: 'se', TE: 20, TR: 500, N: 64, T2p: 200,
       order: 'centre', rate: 12, slow: 9, show: 'spins', playing: true,
     };
     this.acq = new Acquisition();
@@ -251,7 +251,7 @@ export class KspaceView {
   }
   toHash() {
     const s = this.s, r = (v) => +(+v).toPrecision(4);
-    return { obj: s.obj, seq: s.type, TE: r(s.TE), TR: r(s.TR), N: s.N, t2p: s.T2p !== 60 ? r(s.T2p) : undefined, ord: s.order !== 'centre' ? s.order : undefined,
+    return { obj: s.obj, seq: s.type, TE: r(s.TE), TR: r(s.TR), N: s.N, t2p: s.T2p !== 200 ? r(s.T2p) : undefined, ord: s.order !== 'centre' ? s.order : undefined,
       rate: s.rate !== 12 ? r(s.rate) : undefined, slow: s.slow !== 9 ? r(s.slow) : undefined, show: s.show !== 'spins' ? s.show : undefined,
       dk: s.obj === 'disks' ? s.disks.map((d) => [d.x, d.y].map(r).join('_')).join('~') : undefined, z: r(this.app.slice?.z ?? 0) };
   }
@@ -259,7 +259,7 @@ export class KspaceView {
     const num = (v, d, lo = -Infinity, hi = Infinity) => (v !== undefined && Number.isFinite(+v) ? Math.max(lo, Math.min(hi, +v)) : d);
     if (h.z !== undefined) this.app.slice = { ...(this.app.slice || {}), z: num(h.z, 0, -125, 125) };
     const o = { obj: h.obj === 'disks' ? 'disks' : 'head', type: h.seq === 'gre' ? 'gre' : 'se', TE: num(h.TE, 20, 1, 300), TR: num(h.TR, 500, 20, 10000), N: [32, 64, 128].includes(+h.N) ? +h.N : 64,
-      T2p: num(h.t2p, 60, 1, 1000), order: h.ord === 'up' ? 'up' : 'centre', rate: num(h.rate, 12, 0.05, 100), slow: num(h.slow, 9, 1, 100), show: h.show === 'wave' ? 'wave' : 'spins' };
+      T2p: num(h.t2p, 200, 1, 1000), order: h.ord === 'up' ? 'up' : 'centre', rate: num(h.rate, 12, 0.05, 100), slow: num(h.slow, 9, 1, 100), show: h.show === 'wave' ? 'wave' : 'spins' };
     if (h.dk) {
       const xy = h.dk.split('~').map((p) => p.split('_').map(Number));
       const d = disksPhantom().map((dd, i) => (xy[i] && xy[i].length === 2 && xy[i].every(Number.isFinite) ? { ...dd, x: xy[i][0], y: xy[i][1] } : dd));
@@ -521,9 +521,9 @@ export class KspaceView {
     const sq = this.seq, box = $('#v3-readout'), q = this.curQ, t = this.tNow, N = sq.N;
     const lines = [];
     if (q !== null) {
-      const ky = sq.ky(q), Gy = sq.Gy(q);
-      lines.push(['This line: row ', { v: N / 2 - q, dec: 0, w: 4, plus: '+' }, ` of ±${N / 2}, k_y = `, { v: ky, dec: 4, w: 7, plus: '+' }, ' per mm, wound by G_y = ', { v: Gy, dec: 2, w: 5, plus: '+' }, ' mT/m for ', { v: sq.Tpe, dec: 1, w: 3 }, ' ms: stripes along y ', ...(Math.abs(ky) > 1e-9 ? [{ v: 1 / Math.abs(ky), dec: 1, w: 5, class: 'b' }, ' mm apart.'] : [{ text: '∞', w: 5, class: 'b' }, ' apart (none).'])]);
-      const se = sq.t180 !== null;
+      const ky = sq.ky(q), Gy = sq.gyLobe(q)[0][2], se = sq.t180 !== null;
+      lines.push(['This line: row ', { v: N / 2 - q, dec: 0, w: 4, plus: '+' }, ` of ±${N / 2}, k_y = `, { v: ky, dec: 4, w: 7, plus: '+' }, ' per mm, wound by G_y = ', { v: Gy, dec: 2, w: 5, plus: '+' }, ' mT/m for ', { v: sq.Tpe, dec: 1, w: 3 },
+        se ? ' ms (to −k_y: the π pulse turns it round)' : ' ms', ': stripes along y ', ...(Math.abs(ky) > 1e-9 ? [{ v: 1 / Math.abs(ky), dec: 1, w: 5, class: 'b' }, ' mm apart.'] : [{ text: '∞', w: 5, class: 'b' }, ' apart (none).'])]);
       const stage = t < sq.t90 ? 'the π/2 pulse tips the slice' : t < sq.gyStart ? 'the slice\'s rephasing lobe'
         : t < sq.preStart ? `the phase-encoding lobe winds stripes along y${se ? ' (the π pulse will turn them round)' : ''}`
         : t < sq.preEnd ? (se ? 'the prephasing lobe, +G_x, moves k to the right end of the row' : 'the prephasing lobe, −G_x, moves k to the left end of the row')
@@ -593,6 +593,39 @@ export class KspaceView {
     cv.addEventListener('pointerleave', () => { if (this.hover) { this.hover = null; this.dirty = true; this.app.kick(); } });
     const end = () => { this.drag = null; };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  }
+
+  /** For the tests: the size of row q's echo at TE, and at the times ts the spins' summed signal. */
+  echoAt(q) {
+    const tr = this.trace(q), i = tr.ts.findIndex((t) => Math.abs(t - this.seq.tEcho) < 1e-9);
+    return Math.hypot(tr.re[i], tr.im[i]);
+  }
+  /** For the tests: the picture from the rows measured against the true one, and its mean against the true mean. */
+  imageStats() {
+    const img = this.acq.image().mag, truth = this.acq.picture.total;
+    let s2 = 0, m = 0, mt = 0, max = 0;
+    for (let i = 0; i < img.length; i++) { s2 += (img[i] - truth[i]) ** 2; m += img[i]; mt += truth[i]; max = Math.max(max, truth[i]); }
+    return { rms: Math.sqrt(s2 / img.length) / max, mean: m / mt };
+  }
+  /** For the tests: the fraction of k-space's energy in the rows measured. */
+  energyMeasured() {
+    const N = this.seq.N, { kre, kim, mask } = this.acq;
+    let a = 0, b = 0;
+    for (let q = 0; q < N; q++) for (let p = 0; p < N; p++) { const e = kre[q * N + p] ** 2 + kim[q * N + p] ** 2; a += e; if (mask[q]) b += e; }
+    return b / a;
+  }
+  /** For the tests: the period (mm) of the stripes in the phase map along y, from neighbouring spins' phases. */
+  stripePeriod() {
+    const n = 128, re = this.re, im = this.im, i = n / 2;
+    let sum = 0, cnt = 0;
+    for (let j = 20; j < n - 20; j++) {
+      const a = j * n + i, b = (j + 1) * n + i;
+      if (Math.hypot(re[a], im[a]) < 1e-9 || Math.hypot(re[b], im[b]) < 1e-9) continue;
+      const d = Math.atan2(im[a] * re[b] - re[a] * im[b], re[a] * re[b] + im[a] * im[b]);
+      sum += d; cnt++;
+    }
+    const perSpin = sum / cnt;
+    return Math.abs((2 * Math.PI) / perSpin) * (FOV / n);
   }
 
   probe() {

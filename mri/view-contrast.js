@@ -480,6 +480,19 @@ export class ContrastView {
     this.custom('TR'); this.rebuild(); this.app.kick();
   }
 
+  /** For the tests: the spread of the picture where there is nothing (the noise), as a fraction of its brightest. */
+  background() {
+    const img = this.img.mag, re = this.img.re, truth = this.acq.picture.total;
+    let s2 = 0, n = 0, max = 0;
+    for (let i = 0; i < img.length; i++) { max = Math.max(max, truth[i]); if (truth[i] === 0) { s2 += re[i] ** 2; n++; } }
+    return Math.sqrt(s2 / n) / max;
+  }
+  /** For the tests: the picture along y through x = 0, against the true values: [y (mm), picture, truth]. */
+  columnX0() {
+    const N = this.s.N, i = N / 2, dx = this.s.fov / N, img = this.img.mag, t = this.acq.picture.total;
+    return Array.from({ length: N }, (_, j) => [(N / 2 - j) * dx, img[j * N + i], t[j * N + i]]);
+  }
+
   probe() {
     return { s: { ...this.s }, weights: { ...this.weights }, measured: this.acq.measuredCount, folded: this.acq.picture.folded, fatShift: this.acq.fatShift, lb: { ...this.lb }, lay: this.lay,
       trHandle: this.trHandle, teHandle: this.teHandle };

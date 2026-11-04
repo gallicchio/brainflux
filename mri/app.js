@@ -85,9 +85,9 @@ function saveHash() { writeHash({ v: app.view, ...current().toHash() }); }
 
 // ----------------------------------------------------------------------- set-ups
 
-const AXIS = { G: 2, slow: 2, T2s: 20, B0: 1.5 };
+const AXIS = { G: 2, slow: 2, T2s: 200, B0: 1.5 };
 const SLICE = { Gz: 4, bw: 1.5, fc: 0, T: 3, flip: 90, rephase: true, slow: 1.5 };
-const KSP = { obj: 'head', type: 'se', TE: 20, TR: 500, N: 64, T2p: 60, order: 'centre', rate: 12, slow: 9, show: 'spins' };
+const KSP = { obj: 'head', type: 'se', TE: 20, TR: 500, N: 64, T2p: 200, order: 'centre', rate: 12, slow: 9, show: 'spins' };
 const CON = { obj: 'head', mode: 'fourier', type: 'se', TR: 500, TE: 15, N: 128, fov: 256, lines: 128, sigma: 0, nsa: 1, fat: false, Gx: 4, B0: 1.5, T2p: 60, nA: 12, filter: true, rate: 3 };
 /** The slice of views 3 and 4 back at the middle of the head (as view 2 opens). */
 const slice0 = () => { if (Math.abs(app.views.slice.centre) > 1e-9) app.views.slice.set({ ...SLICE, playing: app.views.slice.s.playing }); };
@@ -104,11 +104,11 @@ const setups = {
   thin: () => { setView('slice'); app.views.slice.set({ ...SLICE, bw: 0.75 }); },
   rephase: () => { setView('slice'); app.views.slice.set({ ...SLICE, rephase: false, fc: 3 }); },
   // 3 · The second axis
-  fill: () => { setView('kspace'); slice0(); app.views.kspace.set({ ...KSP }); },
   encode: () => { setView('kspace'); slice0(); const v = app.views.kspace; v.set({ ...KSP, cue: { q: 22, t: 0 } }); v.cue(22, v.seq.gyStart - 0.4); },
+  fill: () => { setView('kspace'); slice0(); app.views.kspace.set({ ...KSP }); },
   centre: () => { setView('kspace'); slice0(); app.views.kspace.set({ ...KSP, only: 'centre' }); },
   spinecho: () => { setView('kspace'); slice0(); const v = app.views.kspace; v.set({ ...KSP, T2p: 8, slow: 14, cue: { q: 32, t: 0 } }); v.cue(32, 0); },
-  motion: () => { setView('kspace'); app.views.kspace.set({ ...KSP, obj: 'disks', rate: 5, ramp: false }); },
+  motion: () => { setView('kspace'); app.views.kspace.set({ ...KSP, obj: 'disks', order: 'up', rate: 5, ramp: false }); },
   // 4 · Contrast and artefacts
   contrast: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON }); },
   wrap: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, fov: 180 }); },

@@ -33,7 +33,7 @@ export class AxisView {
   constructor(app) {
     this.app = app;
     this.canvas = $('#v1-main');
-    this.s = { G: 2, pieces: SAMPLES.two.pieces.map((p) => ({ ...p })), sample: 'two', slow: 2, T2s: 20, B0: 1.5, playing: true };
+    this.s = { G: 2, pieces: SAMPLES.two.pieces.map((p) => ({ ...p })), sample: 'two', slow: 2, T2s: 200, B0: 1.5, playing: true };
     this.clock = { stage: 'record', t: 0.35, u: 1, hold: 0 };   // (opens a little way into the record)
     this.sel = 0;
     this.hover = null;   // { kind: 'x' | 'f', x }
@@ -172,11 +172,11 @@ export class AxisView {
   toHash() {
     const s = this.s, r = (v) => +(+v).toPrecision(4);
     return { G: r(s.G), smp: s.sample || undefined, pc: s.sample ? undefined : s.pieces.map((p) => [p.x, p.w, p.rho].map(r).join('_')).join('~'),
-      sl: s.slow !== 2 ? r(s.slow) : undefined, t2: s.T2s !== 20 ? r(s.T2s) : undefined, B0: s.B0 !== 1.5 ? s.B0 : undefined };
+      sl: s.slow !== 2 ? r(s.slow) : undefined, t2: s.T2s !== 200 ? r(s.T2s) : undefined, B0: s.B0 !== 1.5 ? s.B0 : undefined };
   }
   fromHash(h) {
     const num = (v, d) => (v !== undefined && Number.isFinite(+v) ? +v : d);
-    const o = { G: Math.max(0, Math.min(GMAX, num(h.G, 2))), slow: num(h.sl, 2), T2s: num(h.t2, 20), B0: num(h.B0, 1.5) === 3 ? 3 : 1.5 };
+    const o = { G: Math.max(0, Math.min(GMAX, num(h.G, 2))), slow: num(h.sl, 2), T2s: num(h.t2, 200), B0: num(h.B0, 1.5) === 3 ? 3 : 1.5 };
     if (h.pc) {
       const pieces = h.pc.split('~').map((q) => q.split('_').map(Number)).filter((a) => a.length === 3 && a.every(Number.isFinite)).map(([x, w, rho]) => ({ x, w, rho }));
       if (pieces.length) o.pieces = pieces.slice(0, 4);
