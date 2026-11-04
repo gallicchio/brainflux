@@ -28,11 +28,17 @@ export const nextPow2 = (n) => 2 ** Math.ceil(Math.log2(Math.max(2, n)));
  */
 export function complexEnvelope(bursts, src, D0, h, N, re, im) {
   re.fill(0); im.fill(0);
-  const reach = src.reach, k0 = src.k0, s2 = 0.5 * src.sigk * src.sigk;
-  const cs = Math.cos(k0 * h), sn = Math.sin(k0 * h);
+  const k0 = src.k0, s2 = 0.5 * src.sigk * src.sigk;
+  const cs = Math.cos(k0 * h), sn = Math.sin(k0 * h), g = [0, 0];
   for (const b of bursts) {
+    const reach = src.reachWith(b.beta || 0);
     const j0 = Math.max(0, Math.ceil((b.D - reach - D0) / h)), j1 = Math.min(N - 1, Math.floor((b.D + reach - D0) / h));
     if (j1 < j0) continue;
+    if (b.beta) {
+      // A burst spread by dispersion: its chirped coherence function, sample by sample.
+      for (let j = j0; j <= j1; j++) { src.gamma(D0 + j * h - b.D, g, b.beta); re[j] += b.a * g[0]; im[j] += b.a * g[1]; }
+      continue;
+    }
     let u = D0 + j0 * h - b.D;
     let c = Math.cos(k0 * u) * b.a, s = Math.sin(k0 * u) * b.a;
     for (let j = j0; j <= j1; j++, u += h) {
@@ -43,7 +49,8 @@ export function complexEnvelope(bursts, src, D0, h, N, re, im) {
   }
 }
 
-/** The level with no fringes: 1 + Σ a_i² + the sample's reflections interfering with each other. */
+/** The level with no fringes: 1 + Σ a_i² + the sample's reflections interfering with each other
+ *  (they pass the same glass, so dispersion in the sample arm does not touch these terms). */
 export function dcLevel(bursts, src) {
   let dc = 1;
   for (const b of bursts) dc += b.a * b.a;

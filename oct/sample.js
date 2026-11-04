@@ -79,15 +79,27 @@ export function makeStack(name, opts = {}) {
 }
 
 /**
- * The bursts a stack makes: [{ D, a, z, r }] with D the round-trip path 2(offset + n z) and a the
- * amplitude r Π(1 − r_j²) over the interfaces above.  offset: the front face's distance (in air)
- * beyond the point where the two arms are equal.
+ * The plate of view 1: a front surface at a distance z1 (in air) beyond the point where the two
+ * arms are equal and, with two, a back surface behind a thickness t of glass of index n.  The
+ * front face reflects r = (n − 1)/(n + 1), the back face the same with the sign turned over.
  */
-export function bursts(stack, offset = 0) {
+export function plateStack({ two = false, t = 100, n = 1.5 } = {}) {
+  const layers = [{ z: 0, r: fresnel(1, n) }];
+  if (two) layers.push({ z: t, r: fresnel(n, 1) });
+  return { name: 'plate', n, depth: two ? t : 0, layers };
+}
+
+/**
+ * The bursts a stack makes: [{ D, a, z, r, beta }] with D the round-trip path 2(offset + n z) and
+ * a the amplitude r Π(1 − r_j²) over the interfaces above.  offset: the front face's distance (in
+ * air) beyond the point where the two arms are equal.  beta: the dispersion every burst gets from
+ * glass in the sample arm (source.js), 0 for none.
+ */
+export function bursts(stack, offset = 0, beta = 0) {
   const out = [];
   let through = 1;
   for (const l of [...stack.layers].sort((p, q) => p.z - q.z)) {
-    out.push({ D: 2 * (offset + stack.n * l.z), a: l.r * through, z: l.z, r: l.r });
+    out.push({ D: 2 * (offset + stack.n * l.z), a: l.r * through, z: l.z, r: l.r, beta });
     through *= 1 - l.r * l.r;
   }
   return out;
@@ -109,137 +121,199 @@ export function makeBeam(src, NA, n, zFocus) {
   };
 }
 
-// Gauss–Hermite quadrature across the beam, in t = √2 ρ/w: ∫ e^{−t²} f dt by five points, the
-// weights normalised to 1.  The amplitude the beam gives a point ρ off its axis is e^{−2ρ²/w²}
-// (out through the beam's profile and back into the same fibre), so a diffuse interface seen
-// through the beam adds its power with these weights at ρ = t w/√2.
+// Gauss–Hermite quadrature across the beam: ∫ e^{−t²} f dt by five points, the weights normalised
+// to 1.  The amplitude the beam gives a point ρ off its axis is e^{−2ρ²/w²} (out through the
+// beam's profile and back into the same fibre), its power e^{−4ρ²/w²}, so a diffuse interface
+// seen through the beam adds its power with these weights at ρ = t w/2 along each axis.
 const GH_T = [-2.0201828704561, -0.9585724646138, 0, 0.9585724646138, 2.0201828704561];
 const GH_W0 = [0.0199532420590, 0.3936193231522, 0.9453087204829, 0.3936193231522, 0.0199532420590];
 const GH_SUM = GH_W0.reduce((a, b) => a + b, 0);
 export const GH = { t: GH_T, w: GH_W0.map((w) => w / GH_SUM) };
 
+
 // ------------------------------------------------------------------------ scenes
 
 /**
- * A scene is layers of scattering material under curved interfaces, with a lesion, in a medium
- * of index n, over x (across the B-scan) and y (the second scan axis), both in μm, with z down.
- *   bands: from the top down, { name, thick, scatter (the mean amplitude of a scatterer), r (the
- *          interface's reflectivity at its top, diffuse), colour }.
- *   shape: the depth of the top interface z0(x, y) (a curve), to which the band thicknesses add.
- *   lesion: { x, y, z, rx, ry, rz, gain, rim }: an ellipsoid where the scatterers are gain times
- *           as strong (0: a fluid-filled cyst), with a diffuse rim of reflectivity rim.
- * The scene's settable parts (tilt, roughness, the lesion on or off, speckle) are options of
- * sceneAt and makeScene.
+ * Scenes to scan: bands of scattering material under curved interfaces, over x (across the
+ * B-scan) and y (the second scan axis), both in μm, with the geometric depth z down.
+ *   n0: the index above the first interface; nView: the index the instrument assumes when it
+ *       turns optical depth into depth (the B-scan's depth is optical depth ÷ nView).
+ *   base, curvature: the top interface at the centre, and its curvature (z = base + c ρ²/2:
+ *       c < 0 a bowl, c > 0 a dome).  pit: the standard deviation (μm) of the foveal pit, where
+ *       each band's thickness is multiplied by 1 − pit_i e^{−ρ²/2s²}.
+ *   bands, from the top down: { name, thick, scatter (the mean amplitude of a scatterer), r (the
+ *       reflectivity of the band's top, diffuse), n, pit, cells: { sx, sy, wall, inside } (cell
+ *       walls: the scatterers are as strong as `scatter` within wall/2 of a wall, `inside` times
+ *       as strong elsewhere) }.
+ *   lesion: { x, y, dz (its centre's depth below the top surface), rx, ry, rz, gain (the
+ *       scatterers inside are gain times as strong: 0 for a fluid-filled cyst), rim (the
+ *       reflectivity of its wall) }.
+ *   beads: { dx, dz, z0, z1, a }: point scatterers of amplitude a on a grid (x and y every dx,
+ *       z from z0 to z1 every dz).
+ *   NA, focus: the beam's numerical aperture and focal depth this scene opens with.
  */
 export const SCENES = {
   retina: {
-    label: 'Retina', title: 'Layers like the retina\'s, curved with the eye (n = 1.38), with a cyst in the inner layers',
-    n: 1.38, depth: 520, halfWidth: 1000, curvature: 1 / 12000, base: 70,
+    label: 'Retina', title: 'The layers of the retina at the back of the eye, with the foveal pit in the middle and a fluid-filled cyst beside it',
+    n0: 1.336, nView: 1.38, halfWidth: 1500, depth: 650, base: 120, curvature: -1 / 20000, pit: 300, NA: 0.03, focus: 260,
     bands: [
-      { name: 'nerve fibres', thick: 40, scatter: 0.040, r: 0.020, colour: '#c8a04a' },
-      { name: 'ganglion cells', thick: 80, scatter: 0.022, r: 0, colour: '#8f9a5b' },
-      { name: 'inner nuclear', thick: 40, scatter: 0.010, r: 0, colour: '#5f7f8f' },
-      { name: 'outer plexiform', thick: 30, scatter: 0.024, r: 0, colour: '#8f8a6a' },
-      { name: 'outer nuclear', thick: 90, scatter: 0.005, r: 0, colour: '#4a5a73' },
-      { name: 'photoreceptors', thick: 40, scatter: 0.020, r: 0.045, colour: '#c0b070' },
-      { name: 'pigment epithelium', thick: 20, scatter: 0.055, r: 0.030, colour: '#a06a3a' },
-      { name: 'choroid', thick: 200, scatter: 0.018, r: 0, colour: '#8a4a4a' },
+      { name: 'nerve fibre layer', thick: 45, scatter: 0.045, r: 0.02, n: 1.38, pit: 1, colour: '#d9b45a' },
+      { name: 'ganglion cells', thick: 55, scatter: 0.022, r: 0, n: 1.38, pit: 1, colour: '#a7a865' },
+      { name: 'inner plexiform', thick: 40, scatter: 0.03, r: 0, n: 1.38, pit: 0.95, colour: '#b9a46e' },
+      { name: 'inner nuclear', thick: 35, scatter: 0.009, r: 0, n: 1.38, pit: 0.85, colour: '#5f7f8f' },
+      { name: 'outer plexiform', thick: 25, scatter: 0.026, r: 0, n: 1.38, pit: 0.5, colour: '#a39a72' },
+      { name: 'outer nuclear', thick: 75, scatter: 0.005, r: 0, n: 1.38, pit: -0.45, colour: '#4a5a73' },
+      { name: 'photoreceptors', thick: 35, scatter: 0.012, r: 0.045, n: 1.38, pit: -0.15, colour: '#c9b878' },
+      { name: 'pigment epithelium', thick: 22, scatter: 0.06, r: 0.03, n: 1.38, pit: 0, colour: '#b0703a' },
+      { name: 'choroid', thick: 260, scatter: 0.02, r: 0, n: 1.38, pit: 0, colour: '#8a4a4a' },
     ],
-    lesion: { x: 250, y: 100, z: 140, rx: 170, ry: 140, rz: 55, gain: 0, rim: 0.015 },
+    lesion: { x: 450, y: 150, dz: 105, rx: 160, ry: 130, rz: 32, gain: 0, rim: 0.012 },
   },
   onion: {
-    label: 'Onion', title: 'Concentric curved shells, alternately bright and dark (n = 1.35), with a bright blob inside',
-    n: 1.35, depth: 520, halfWidth: 1000, curvature: 1 / 2500, base: 60,
+    label: 'Onion', title: 'An onion\'s skin and the rows of large cells under it: their walls scatter, their insides hardly at all',
+    n0: 1.0, nView: 1.35, halfWidth: 1000, depth: 600, base: 70, curvature: 1 / 4000, pit: 0, NA: 0.04, focus: 220,
     bands: [
-      { name: 'skin', thick: 30, scatter: 0.030, r: 0.030, colour: '#c8a04a' },
-      { name: 'shell 1', thick: 70, scatter: 0.008, r: 0.025, colour: '#5f7f8f' },
-      { name: 'shell 2', thick: 60, scatter: 0.028, r: 0.025, colour: '#8f9a5b' },
-      { name: 'shell 3', thick: 70, scatter: 0.008, r: 0.025, colour: '#5f7f8f' },
-      { name: 'shell 4', thick: 60, scatter: 0.028, r: 0.025, colour: '#8f9a5b' },
-      { name: 'core', thick: 300, scatter: 0.008, r: 0.025, colour: '#4a5a73' },
+      { name: 'skin', thick: 18, scatter: 0.035, r: 0.1, n: 1.35, pit: 0, colour: '#d9c48a' },
+      { name: 'first row of cells', thick: 95, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#b9b07a', cells: { sx: 150, sy: 150, wall: 5, inside: 0.08, shift: 0 } },
+      { name: 'second row', thick: 115, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#a9a06a', cells: { sx: 170, sy: 160, wall: 5, inside: 0.08, shift: 0.5 } },
+      { name: 'third row', thick: 135, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#b9b07a', cells: { sx: 190, sy: 170, wall: 5, inside: 0.08, shift: 0.25 } },
+      { name: 'fourth row', thick: 400, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#a9a06a', cells: { sx: 210, sy: 180, wall: 5, inside: 0.08, shift: 0.75 } },
     ],
-    lesion: { x: -200, y: -150, z: 260, rx: 120, ry: 120, rz: 60, gain: 3, rim: 0.0 },
+    lesion: null,
+  },
+  beads: {
+    label: 'Beads in gel', title: 'Tiny beads in clear gel on a grid 60 μm apart and 100 μm deep: each one shows how a single point is blurred, across and in depth',
+    n0: 1.33, nView: 1.33, halfWidth: 300, depth: 700, base: 30, curvature: 0, pit: 0, NA: 0.05, focus: 350,
+    bands: [{ name: 'gel', thick: 900, scatter: 0, r: 0.02, n: 1.33, pit: 0, colour: '#4a6a80' }],
+    lesion: null,
+    beads: { dx: 60, dz: 100, z0: 100, z1: 600, a: 0.05 },
   },
   plate: {
-    label: 'Glass plate', title: 'A 200 μm plate of glass (n = 1.5) with a scattering coat underneath: tilt it and the image tilts n times as much',
-    n: 1.5, depth: 420, halfWidth: 1000, curvature: 0, base: 80,
+    label: 'Glass plate', title: 'A plate of glass 200 μm thick (n = 1.5, its faces ground so they scatter light back at any tilt) on a painted backing: tilt it',
+    n0: 1.0, nView: 1.0, halfWidth: 1000, depth: 600, base: 120, curvature: 0, pit: 0, NA: 0.04, focus: 200,
     bands: [
-      { name: 'glass', thick: 200, scatter: 0.0, r: 0.2, colour: '#7fb3d5' },
-      { name: 'coat', thick: 150, scatter: 0.025, r: -0.1, colour: '#8f8a6a' },
+      { name: 'glass', thick: 200, scatter: 0, r: 0.2, n: 1.5, pit: 0, colour: '#7fb3d5' },
+      { name: 'paint', thick: 400, scatter: 0.025, r: -0.06, n: 1.45, pit: 0, colour: '#8f8a6a' },
     ],
     lesion: null,
   },
 };
 
-const SCENE_DEFAULTS = { tilt: 0, rough: 0, lesion: true, speckle: true, density: 1, seed: 1 };
+const SCENE_DEFAULTS = { tilt: 0, rough: 0, lesion: true, seed: 1 };
 
-/** A scene with its options: { ...preset, name, opts, zTop(x, y), tops: the depths of each band's top at (x, y) }. */
+/**
+ * A scene with its options (tilt: degrees, about the y axis; rough: the top surface's roughness,
+ * μm; lesion: on or off; seed: the scatterers).  Its methods take lateral positions (x, y):
+ *   profile(x, y): { tops, dtops } the geometric and optical depths of each band's top (and of
+ *     the last band's bottom), the latter n0 z₀ + Σ n_i (thickness_i): what OCT measures;
+ *   zToD(prof, z): optical depth of geometric depth z on that column;
+ *   bandAt(prof, z), scatterAt(x, y, z, prof), inLesion(x, y, z), lesionRim(x, y);
+ *   beadsNear(x, y, R): the beads within R laterally.
+ */
 export function makeScene(name, opts = {}) {
   const p = SCENES[name] || SCENES.retina;
   const o = { ...SCENE_DEFAULTS, ...opts };
   const nb = p.bands.length;
-  // The bands' thicknesses add up from the top interface.
-  const cum = [0];
-  for (let i = 0; i < nb; i++) cum.push(cum[i] + p.bands[i].thick);
-  // Roughness: a smooth random height field, a few sinusoids across x and y.
   const rng = mulberry32(o.seed * 7919 + 17), waves = [];
-  for (let i = 0; i < 6; i++) waves.push({ kx: (TWO_PI / (60 + 140 * rng())) * (rng() < 0.5 ? 1 : -1), ky: TWO_PI / (60 + 140 * rng()) * (rng() < 0.5 ? 1 : -1), ph: TWO_PI * rng() });
-  const tanT = Math.tan((o.tilt * Math.PI) / 180);
+  for (let i = 0; i < 6; i++) waves.push({ kx: (TWO_PI / (60 + 140 * rng())) * (rng() < 0.5 ? 1 : -1), ky: (TWO_PI / (60 + 140 * rng())) * (rng() < 0.5 ? 1 : -1), ph: TWO_PI * rng() });
+  const tanT = Math.tan((o.tilt * Math.PI) / 180), s2 = p.pit ? 2 * p.pit * p.pit : 0;
+  const nLast = p.bands[nb - 1].n;
   const scene = {
-    ...p, name, opts: o, cum,
-    /** The depth of the top interface at (x, y). */
+    ...p, name, opts: o, nb,
+    /** The smooth top surface (no roughness) at (x, y). */
+    zSmooth(x, y = 0) { return p.base + 0.5 * p.curvature * (x * x + y * y) + x * tanT; },
+    /** The top surface at (x, y), roughness included. */
     zTop(x, y = 0) {
-      let z = p.base + p.curvature * (x * x + y * y) * 0.5 + x * tanT;
-      if (o.rough > 0) { let s = 0; for (const w of waves) s += Math.sin(w.kx * x + w.ky * y + w.ph); z += o.rough * s * 0.4; }
+      let z = this.zSmooth(x, y);
+      if (o.rough > 0) { let s = 0; for (const w of waves) s += Math.sin(w.kx * x + w.ky * y + w.ph); z += o.rough * s * 0.41; }
       return z;
     },
-    /** The depth of band i's top at (x, y) (i = nb: the bottom of the last band). */
-    top(i, x, y = 0) { return this.zTop(x, y) + cum[i]; },
-    /** Which band holds the point (x, y, z): its index, or −1 above the sample, nb below. */
-    bandAt(x, y, z) {
-      const u = z - this.zTop(x, y);
-      if (u < 0) return -1;
-      for (let i = 0; i < nb; i++) if (u < cum[i + 1]) return i;
+    profile(x, y = 0, out = { tops: new Float64Array(nb + 1), dtops: new Float64Array(nb + 1) }) {
+      const { tops, dtops } = out, zs = this.zSmooth(x, y), g = s2 ? Math.exp(-(x * x + y * y) / s2) : 0;
+      tops[0] = this.zTop(x, y);
+      let cum = zs;
+      for (let i = 0; i < nb; i++) {
+        cum += p.bands[i].thick * (1 - p.bands[i].pit * g);
+        tops[i + 1] = Math.max(tops[i], cum);
+      }
+      dtops[0] = p.n0 * tops[0];
+      for (let i = 0; i < nb; i++) dtops[i + 1] = dtops[i] + p.bands[i].n * (tops[i + 1] - tops[i]);
+      return out;
+    },
+    zToD(prof, z) {
+      const { tops, dtops } = prof;
+      if (z < tops[0]) return p.n0 * z;
+      for (let i = 0; i < nb; i++) if (z < tops[i + 1]) return dtops[i] + p.bands[i].n * (z - tops[i]);
+      return dtops[nb] + nLast * (z - tops[nb]);
+    },
+    bandAt(prof, z) {
+      const { tops } = prof;
+      if (z < tops[0]) return -1;
+      for (let i = 0; i < nb; i++) if (z < tops[i + 1]) return i;
       return nb;
     },
-    /** Is (x, y, z) inside the lesion? */
     inLesion(x, y, z) {
       const L = p.lesion;
       if (!L || !o.lesion) return false;
-      const a = (x - L.x) / L.rx, b = (y - L.y) / L.ry, c = (z - L.z - this.zTop(x, y) + p.base) / L.rz;
+      const a = (x - L.x) / L.rx, b = (y - L.y) / L.ry, c = (z - this.zSmooth(x, y) - L.dz) / L.rz;
       return a * a + b * b + c * c < 1;
     },
-    /** The lesion's rim crossing at (x, y): the two depths where the beam enters and leaves it, or null. */
+    /** Where the beam at (x, y) enters and leaves the lesion (geometric depths), or null. */
     lesionRim(x, y = 0) {
       const L = p.lesion;
       if (!L || !o.lesion) return null;
       const a = (x - L.x) / L.rx, b = (y - L.y) / L.ry, s = 1 - a * a - b * b;
       if (s <= 0) return null;
-      const h = L.rz * Math.sqrt(s), zc = L.z + this.zTop(x, y) - p.base;
+      const h = L.rz * Math.sqrt(s), zc = this.zSmooth(x, y) + L.dz;
       return [zc - h, zc + h];
     },
-    /** The mean scatterer amplitude at (x, y, z): the band's, times the lesion's gain inside it. */
-    scatterAt(x, y, z) {
-      const i = this.bandAt(x, y, z);
+    /** The mean scatterer amplitude at (x, y, z). */
+    scatterAt(x, y, z, prof = this.profile(x, y)) {
+      const i = this.bandAt(prof, z);
       if (i < 0 || i >= nb) return 0;
-      let s = p.bands[i].scatter;
+      const b = p.bands[i];
+      let s = b.scatter;
+      if (b.cells) {
+        const c = b.cells, u = x / c.sx + c.shift, v = y / c.sy + 0.5 + c.shift;
+        const du = Math.abs(u - Math.round(u)) * c.sx, dv = Math.abs(v - Math.round(v)) * c.sy;
+        if (du > c.wall / 2 && dv > c.wall / 2) s *= c.inside;
+      }
       if (p.lesion && o.lesion && this.inLesion(x, y, z)) s *= p.lesion.gain;
       return s;
+    },
+    /** The beads within R of (x, y) laterally: [{ x, y, z, a }]. */
+    beadsNear(x, y, R) {
+      const B = p.beads, out = [];
+      if (!B) return out;
+      const lim = p.halfWidth - B.dx / 2;
+      for (let i = Math.ceil((x - R) / B.dx); i <= Math.floor((x + R) / B.dx); i++) {
+        const bx = i * B.dx;
+        if (Math.abs(bx) > lim) continue;
+        for (let j = Math.ceil((y - R) / B.dx); j <= Math.floor((y + R) / B.dx); j++) {
+          const by = j * B.dx;
+          if (Math.abs(by) > lim) continue;
+          for (let z = B.z0; z <= B.z1 + 1e-9; z += B.dz) out.push({ x: bx, y: by, z, a: B.a });
+        }
+      }
+      return out;
     },
   };
   return scene;
 }
 
 /**
- * The diffuse interfaces the beam meets at (x, y): [{ z, r }] from the top down (the bands'
- * tops with r ≠ 0, and the lesion's rim), each attenuated by the interfaces above it.
+ * The diffuse interfaces the beam meets at (x, y): [{ id, z, d, r, a }] from the top down (the
+ * bands' tops with r ≠ 0, and the lesion's rim), z geometric, d optical, each with a = r times
+ * what the interfaces above let through, there and back.
  */
-export function interfacesAt(scene, x, y = 0) {
+export function interfacesAt(scene, x, y = 0, prof = scene.profile(x, y)) {
   const out = [];
-  const nb = scene.bands.length;
-  for (let i = 0; i < nb; i++) if (scene.bands[i].r) out.push({ id: i, z: scene.top(i, x, y), r: scene.bands[i].r });
+  for (let i = 0; i < scene.nb; i++) if (scene.bands[i].r) out.push({ id: i, z: prof.tops[i], d: prof.dtops[i], r: scene.bands[i].r });
   const rim = scene.lesionRim(x, y);
-  if (rim && scene.lesion.rim) { out.push({ id: -2, z: rim[0], r: scene.lesion.rim }); out.push({ id: -3, z: rim[1], r: -scene.lesion.rim }); }
+  if (rim && scene.lesion.rim) {
+    out.push({ id: -2, z: rim[0], d: scene.zToD(prof, rim[0]), r: scene.lesion.rim });
+    out.push({ id: -3, z: rim[1], d: scene.zToD(prof, rim[1]), r: -scene.lesion.rim });
+  }
   out.sort((p, q) => p.z - q.z);
   let through = 1;
   for (const f of out) { f.a = f.r * through; through *= 1 - f.r * f.r; }
@@ -251,24 +325,26 @@ export const CELL = 10;
 
 /**
  * The scatterers in the lateral cell (i, j) (x in [iC, (i+1)C), y likewise), down to the scene's
- * depth: Float64Array of [x, y, z, amplitude (signed: a random phase of 0 or π is enough for
- * speckle), ...].  count: scatterers per cell per 100 μm of depth (the density); flat: a 2D scene
- * (the B-scan view): all the scatterers of the cell at y = yc, in a strip CELL wide.
+ * depth: Float64Array of [x, y, z, amplitude, ...].  count: scatterers per cell per 100 μm of
+ * depth.  The amplitudes are Rayleigh-distributed about the local mean `scatter` (scale
+ * s √(2/π), so their mean is s and their mean square (4/π) s²), with a random sign: a random phase
+ * of 0 or π is enough to make speckle.
  */
-export function cellScatterers(scene, i, j, { count = 24, flat = false, yc = 0 } = {}) {
+export function cellScatterers(scene, i, j, { count = 40 } = {}) {
   const rng = mulberry32(hashCell(i, j, 0, scene.opts.seed));
   const n = Math.round((count * scene.depth) / 100);
   const out = new Float64Array(4 * n);
+  const prof = scene.profile((i + 0.5) * CELL, (j + 0.5) * CELL);
   let m = 0;
   for (let q = 0; q < n; q++) {
-    const x = (i + rng()) * CELL, y = flat ? yc : (j + rng()) * CELL, z = rng() * scene.depth;
-    const s = scene.scatterAt(x, y, z);
-    // Rayleigh-distributed amplitudes of mean s (scale s √(2/π)), with a random sign (a random
-    // phase of 0 or π is enough to make speckle).
+    const x = (i + rng()) * CELL, y = (j + rng()) * CELL, z = rng() * scene.depth;
     const u = rng(), v = rng();
+    const s = scene.scatterAt(x, y, z, prof);
     if (s === 0) continue;
-    const a = s * 0.7978845608 * Math.sqrt(-2 * Math.log(1 - u)) * (v < 0.5 ? -1 : 1);
-    out[m++] = x; out[m++] = y; out[m++] = z; out[m++] = a;
+    out[m++] = x; out[m++] = y; out[m++] = z; out[m++] = s * 0.7978845608 * Math.sqrt(-2 * Math.log(1 - u)) * (v < 0.5 ? -1 : 1);
   }
   return out.subarray(0, m);
 }
+
+/** The mean square of a scatterer's amplitude, as a multiple of scatter²: 4/π. */
+export const SCATTER_MS = 4 / Math.PI;
