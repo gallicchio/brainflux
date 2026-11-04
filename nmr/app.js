@@ -6,9 +6,9 @@
 import { GAMMA_HZ, pulseField, pulseDuration, spinHalf, T2star, spreadT2, toLab, adiabaticity, coilAxis } from './bloch.js';
 import { Engine } from './engine.js';
 import { spectrum, fitShape } from './signal.js';
-import { PRESETS, buildSequence, runSequence, echoAmplitudes } from './sequence.js';
+import { PRESETS, buildSequence, runSequence, echoAmplitudes, startSequence, clockSample, clockFits, clockTrain } from './sequence.js';
 import { SphereView } from './sphere.js';
-import { drawSignal, drawRaw, drawSpectrum, drawCurve, drawTrace, drawTank, timeUnit, pulseName, duration, legend } from './charts.js';
+import { drawSignal, drawRaw, drawSpectrum, drawCurve, drawTrace, drawTank, drawClocks, timeUnit, pulseName, duration, legend } from './charts.js';
 import { TANK, RECEIVER, bankC, switchesOn, codeFor, resonance, capacitanceFor, quality, tankWidth, tuneFor, tankH, filterH, noiseDensity, receiverNoise, kTC, synthOut } from './receiver.js';
 import { el, $, $$, slider, segmented, drawer, readHash, writeHash, setSlots, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame } from '../lib/plot.js';
@@ -150,7 +150,7 @@ function readColors() {
     trail: g('--trail', '#e0607a'), b0: g('--b0', '#7b3fb5'), b1: g('--b1', '#b0307a'), beff: g('--beff', '#8a5a00'),
     raw: g('--raw', '#3b4a6b'), spec: g('--spec', '#0f7a8a'), fit: g('--fit', '#b8860b'), points: g('--points', '#000'),
     cone: g('--cone', '#d1243f'), sphereHi: g('--sphere-hi', '#fff'), sphereLo: g('--sphere-lo', '#eee'), coil: g('--coil', '#b87333'),
-    slow: g('--slow', '#5b3fc0'), fast: g('--fast', '#d07a00'),
+    slow: g('--slow', '#5b3fc0'), fast: g('--fast', '#d07a00'), perp: g('--perp', '#1d6fd1'),
   };
 }
 function mix(a, b, t) {
@@ -174,6 +174,8 @@ function timeParts(t, unit, dec = 2, w = 7) { return [{ v: t * unit.s, dec, w, c
 function sig3(v, cls = 'b') { const a = Math.abs(v); return { v, dec: a >= 99.95 ? 0 : a >= 9.995 ? 1 : 2, w: 6, class: cls }; }
 /** A time in the unit that suits it, to three figures: [{…}, ' unit']. */
 function time3(t) { if (!Number.isFinite(t)) return [{ text: '∞', w: 6, class: 'b' }, '']; const u = unitOf(t); return [sig3(t * u.s), ` ${u.u}`]; }
+/** A time to three figures in the unit that suits another (a time set, beside its measurement). */
+function timeLike(t, ref) { if (!Number.isFinite(t)) return time3(t); const u = unitOf(Number.isFinite(ref) ? ref : t); return [sig3(t * u.s), ` ${u.u}`]; }
 /** A time to three figures for a line drawn on a canvas. */
 function canvasTime(t) { const u = unitOf(t), v = sig3(t * u.s, ''); return [{ v: v.v, dec: v.dec, w: 5 }, ` ${u.u}`]; }
 /** The unit that puts a time between 1 and 1000 of it. */
@@ -202,6 +204,7 @@ sphereCanvas.addEventListener('pointerdown', (e) => {
   // the coil.)
   if (state.view !== 'earth' && Math.hypot(x - T[0], y - T[1]) < 18 && Math.hypot(...m) > 0.05) {
     drag = { kind: 'tip', back: T[2] < 0 };
+    leaveClocks();
     goFree();
     eng.queue = [];
   } else if (nearCoilEnd(x, y)) drag = { kind: 'coil' };
@@ -307,6 +310,8 @@ function drawSphere() {
     colors: C, axisLabels: lab ? ['x', 'y', 'z'] : ['x′', 'y′', 'z'],
     fields, spins, sum: m, sumWidth: state.ensemble ? 4.5 : 4,
     trail: E ? trail : trailPoints(), projections: true,
+    // (The three clocks: the ring the spins' tips lie on, its radius each one's own part across B₀.)
+    rings: clocks.on ? [{ z: m[2], r: eng.meanTransverse(), color: C.perp, width: 2.4, label: 'each spin\'s |M⊥|' }] : [],
     cone: lab && fast ? { axis: coneAxis, v: m } : null, coil: !!E && lab, coilAxis: nC, coilHover: hoverCoil || drag?.kind === 'coil',
     tipHover: hoverTip || drag?.kind === 'tip',
   });
@@ -328,6 +333,7 @@ function sphereNote(fast) {
     s = `${now}.  <span class="more">${lab ? `Lab frame: B_E along z, ${axis}.${cone ? `  The cone is the tip's path (${turns} turns a second on screen).` : ''}` : 'Rotating frame, at the Larmor frequency in the Earth\'s field.'}</span>`;
   } else if (lab) s = `<b>Lab frame</b>: the field B₀ along z, the coil along x.${fast ? `  <span class="more">At this speed the spin turns ${turns} times a second on screen, too fast to draw: the cone is the path of its tip.  </span>Slow the clock, or use the rotating frame.` : ''}`;
   else s = `<b>Rotating frame</b>: turning with the RF, at ${f.toFixed(u.dec)} ${u.u}, so B₀ is gone${state.offsetHz ? ' but for ΔB, as the RF is off resonance' : ''}.`;
+  if (clocks.on) s += '  <span class="more">The blue ring is where the spins\' tips lie: its radius is each spin\'s own part across B₀ (T₂ shrinks it), its height M<sub>z</sub> (T₁ lifts it); the red arrow is their sum, what the coil sees (the fan shortens it).</span>';
   const P = eng.pulse;
   if (P && !E) {
     const done = Math.min(1, Math.max(0, (eng.t - P.t0) / P.dur)), u = unitOf(P.dur);
@@ -365,6 +371,7 @@ let specCache = { key: '', spec: null, frame: 0 }, lastSpec = null;
 
 function drawPlots() {
   if (state.view === 'earth') { drawBoardPlots(); return; }
+  if (clocks.on) { drawClocksPlot(); return; }
   const [t0, t1] = windowNow(), sg = sigma();
   {
     const { ctx, width, height } = fitCanvas($('#signal'));
@@ -448,12 +455,18 @@ function readout() {
       `· ${NSIG} spins, ${state.arrows} drawn`]);
   }
   if (state.view === 'seq') seqReadout(lines);
+  if (clocks.on) clocksReadout(lines);
   const [a, b] = windowNow(), tu = timeUnit(b - a), pu = timeUnit(pulseDuration(Math.PI / 2, state.B1));
-  lines.push(['Slow motion:', ['time ×', { text: sci(state.speed), w: 8 }, ','], 'so one second here is', [...timeParts(state.speed, unitOf(state.speed), 2, 6)], 'of the real thing',
-    ['· t = ', ...timeParts(eng.t, tu, 2, 7)], '· a π/2 pulse lasts', [...timeParts(pulseDuration(Math.PI / 2, state.B1), pu, 2, 6)]]);
+  if (clocks.on) {
+    lines.push(['Slow motion:', ['time ×', { text: sci(speedNow()), w: 8 }], `now, faster as time goes on: a decade every ${CLOCKS.perDecade} s on screen, so the log axis fills evenly`,
+      ['· t = ', ...timeParts(eng.t, tu, 2, 7)], '· a π/2 pulse lasts', [...timeParts(pulseDuration(Math.PI / 2, state.B1), pu, 2, 6)]]);
+  } else {
+    lines.push(['Slow motion:', ['time ×', { text: sci(state.speed), w: 8 }, ','], 'so one second here is', [...timeParts(state.speed, unitOf(state.speed), 2, 6)], 'of the real thing',
+      ['· t = ', ...timeParts(eng.t, tu, 2, 7)], '· a π/2 pulse lasts', [...timeParts(pulseDuration(Math.PI / 2, state.B1), pu, 2, 6)]]);
+  }
   // Settling at this speed: how long T2 (or T1) takes on screen, when it is too long to watch.
   const tset = state.T2on ? state.T2 : state.T1on ? state.T1 : 0;
-  if (tset && tset / state.speed > 60) lines.push([`${state.T2on ? 'T₂' : 'T₁'} would take`, [{ text: sci(tset / state.speed), w: 8 }, ' s'], 'on screen at this speed: speed the clock up (in the rotating frame) to watch the spins settle']);
+  if (tset && !clocks.on && tset / state.speed > 60) lines.push([`${state.T2on ? 'T₂' : 'T₁'} would take`, [{ text: sci(tset / state.speed), w: 8 }, ' s'], 'on screen at this speed: speed the clock up (in the rotating frame) to watch the spins settle']);
   const box = $('#readout');
   if (box.children.length !== lines.length) box.replaceChildren(...lines.map(() => el('div')));
   lines.forEach((g, i) => setGroups(box.children[i], g));
@@ -482,15 +495,21 @@ let raf = 0, lastT = 0, testHold = false, needDraw = true;
 function dirty() { needDraw = true; kick(); }
 function kick() { if (!raf) raf = requestAnimationFrame(loop); }
 
-/** The page's clock speed now: simulated seconds per second. */
-function speedNow() { return state.view === 'earth' ? boardSpeed() : state.speed; }
+/** The page's clock speed now: simulated seconds per second (the three clocks' run speeds up in
+ *  step with the time since its pulse, so a decade takes as long on screen as the last). */
+function speedNow() {
+  if (state.view === 'earth') return boardSpeed();
+  if (run && run.clocks) return state.speed * Math.max(1, eng.t / clocks.lo);
+  return state.speed;
+}
 
 /** Move on by dt seconds of the page's time. */
 function tick(dt) {
   if (state.view === 'seq') scanStep();
   if (state.view === 'earth') boardScanStep();
+  if (clocks.on) clocksCheck();
   if (run && eng.done) {
-    if (!run.loop) { if (!run.earth) goFree(); return; }
+    if (!run.loop) { if (!run.earth && !run.clocks) goFree(); return; }
     if (pauseLeft <= 0) pauseLeft = 1.5;
     pauseLeft -= dt;
     if (pauseLeft <= 0) { if (run.seq) runSeq(); else if (run.earth) startBoard(); else startRun(run); }
@@ -498,6 +517,7 @@ function tick(dt) {
   }
   if (run && run.earth) { tickBoard(dt); return; }
   eng.advance(dt * speedNow(), BUDGET);
+  if (run && run.clocks) clocksTick();
   if (!run) {
     eng.trim(eng.t - 1.5 * SCREEN * state.speed);
     resample();
@@ -515,6 +535,7 @@ function loop(now) {
 
 function draw() {
   needDraw = false;
+  if (clocks.on) clocksCheck();
   readColors();
   drawSphere();
   drawPlots();
@@ -565,9 +586,12 @@ function updatePulseNote() {
 }
 
 function sendPulse(angle, phase) {
+  if (clocks.on && (!run || !run.clocks || eng.done)) leaveClocks();
   if (run) { run.loop = false; if (eng.done) goFree(); }
   if (eng.done) goFree();
-  eng.pulseNow(angle, phase, state.B1);
+  const q = eng.pulseNow(angle, phase, state.B1);
+  // (During the three clocks a pulse joins the run, and the fits stop where it starts.)
+  if (run && run.clocks && clocks.manual === null) clocks.manual = q.t;
   dirty();
 }
 
@@ -583,7 +607,7 @@ const arrowsSlider = slider({ label: 'arrows drawn', min: 4, max: 256, step: 1, 
 const ensembleBox = el('div', { class: 'stack' }, spreadSlider,
   el('div', { class: 'gloss' }, 'The field is not quite the same all through the sample, so the spins\' frequencies differ.'), arrowsSlider);
 spinsPanel.append(el('div', { class: 'label' }, 'The spin'), frameSeg,
-  el('div', { class: 'row', id: 'equilibrium-row' }, el('button', { type: 'button', title: 'Every spin back along B₀, as after waiting many T₁', onclick: () => { goFree(); eng.setVector([0, 0, 1], 'rot'); trail = []; dirty(); } }, 'Back to equilibrium')),
+  el('div', { class: 'row', id: 'equilibrium-row' }, el('button', { type: 'button', title: 'Every spin back along B₀, as after waiting many T₁', onclick: () => { leaveClocks(); goFree(); eng.setVector([0, 0, 1], 'rot'); trail = []; dirty(); } }, 'Back to equilibrium')),
   el('label', { class: 'check' }, ensembleCheck, 'Many spins (an ensemble)'), ensembleBox);
 function syncEnsemble() { ensembleCheck.checked = state.ensemble; ensembleBox.hidden = !state.ensemble; }
 
@@ -633,7 +657,7 @@ const playButton = el('button', { type: 'button', id: 'play', title: 'Stop or st
 } }, 'Pause');
 const speedSlider = slider({ label: 'time ×', min: 1e-9, max: 1, log: true, value: state.speed, title: 'Slow motion: seconds of the real thing per second on screen',
   onInput: (v) => { state.speed = v; if (!run) resample(); trail = []; scheduleHash(); dirty(); } });
-const restartButton = el('button', { type: 'button', title: 'Run the sequence again from the start', onclick: () => { if (run) startRun(run); else { startFree(eng.sum('rot')); } } }, 'Restart');
+const restartButton = el('button', { type: 'button', title: 'Run the sequence again from the start', onclick: () => { if (run && run.clocks) startClocks(); else if (run) startRun(run); else { startFree(eng.sum('rot')); } } }, 'Restart');
 clockPanel.append(el('div', { class: 'label' }, 'Slow motion'), speedSlider, el('div', { class: 'gloss' }, 'Seconds of the real thing per second on screen.'), el('div', { class: 'row' }, playButton, restartButton));
 
 // More: the magnet, the RF frequency, the samples.
@@ -685,6 +709,7 @@ const HINTS = {
   one: 'Drag the arrow\'s tip to tip the spin, or press a pulse button; drag anywhere else on the sphere to turn it',
   many: 'Press a pulse button and watch the spins fan out and the sum shrink; drag the sphere to turn it',
   seq: 'Watch the spins as the sequence runs (the timeline below sets it); drag the sphere to turn it',
+  clocks: 'Watch the spins fan out (T₂*), the ring of their tips shrink (T₂) and climb the axis (T₁); drag the sphere to turn it',
   earth: 'Press Polarize and listen; drag the coil\'s end to turn it against the Earth\'s field; slide the switch-off: fast leaves M across the field to ring, slow lets it follow',
 };
 function setView(v) {
@@ -700,6 +725,7 @@ function setView(v) {
   // The board's coil is seen from the side, as a solenoid is drawn; the others from the usual corner.
   if (v === 'earth') view.look(1.3, 0.22); else view.look(0.55, 0.32);
   for (const p of $$('#controls [data-views]')) p.hidden = !p.dataset.views.split(' ').includes(v);
+  syncClocks();
   scheduleHash(); dirty();
 }
 
@@ -1445,6 +1471,156 @@ function hearIt() {
   audioNote.textContent = `Playing ${(n / rate).toFixed(1)} s of OUT: the FID at ${eng.f0.toFixed(0)} Hz, ${peak.toFixed(2)} V at its start, and the receiver's hiss.`;
 }
 
+// ------------------------------------------------------------- view 2: the three clocks
+//
+// One π/2 pulse, then the three clocks on one plot against the time on a log scale: the sum of the
+// spins, what the coil sees (T2*); each spin's own part across the field (T2); M_z (T1).  On the
+// sphere, the ring the spins' tips lie on.  The clock speeds up in step with the time since the
+// pulse, a decade every CLOCKS.perDecade seconds on screen, so the log axis fills evenly.  A CPMG
+// run goes alongside in an engine of its own, kept level with the page's clock, so its echoes come
+// as the clock reaches them.
+
+// A made-up sample with its three times a decade apart; the spread is the Lorentzian whose T2′,
+// with T2, makes T2* exactly 1 ms (1/T2* = 1/T2 + πΔf: Δf = 900/π = 286.5 Hz).
+const CLOCKS = { T1: 0.1, T2: 0.01, T2s: 1e-3, perDecade: 3, lo: 1e-4, look: [0.55, 0.62] };
+CLOCKS.spread = (1 / CLOCKS.T2s - 1 / CLOCKS.T2) / Math.PI;
+CLOCKS.speed = (CLOCKS.lo * Math.LN10) / CLOCKS.perDecade;
+const clocks = { on: false, cpmg: true, lo: CLOCKS.lo, hi: 0.3, key: '', trace: null, echo: null, manual: null, fits: null, fitN: -1 };
+let clocksFrame = null;
+
+/** The log axis for the times set: from under T2* (0.1 ms at the most) to three times the
+ *  longest of T1 and T2 (0.3 s at the least). */
+function clocksRange() {
+  const t2s = T2star(T2eff(), state.ensemble ? state.spreadHz : 0);
+  const lo = Number.isFinite(t2s) ? Math.min(CLOCKS.lo, 10 ** Math.floor(Math.log10(t2s / 5))) : CLOCKS.lo;
+  const longest = Math.max(0, ...[T1eff(), T2eff()].filter(Number.isFinite));
+  return [lo, Math.max(0.3, longest > 0 ? niceUp(3 * longest) : 0)];
+}
+/** What the run depends on: when any of it changes, the run starts again. */
+function clocksKey() { return [T1eff(), T2eff(), state.ensemble, state.spreadHz, state.B1, state.offsetHz].join('|'); }
+
+/** Start the three clocks afresh: every spin along z, one π/2 pulse about x′ at t = 0. */
+function startClocks() {
+  [clocks.lo, clocks.hi] = clocksRange();
+  clocks.key = clocksKey();
+  clocks.trace = { t: [], sig: [], perp: [], mz: [] };
+  clocks.manual = null; clocks.fits = null; clocks.fitN = -1; clocks.echo = null;
+  startRun({ pulses: [{ t: 0, angle: 90, phase: 0 }], span: clocks.hi, loop: false, clocks: true });
+  if (clocks.cpmg) startClockEcho();
+}
+
+/** The CPMG run beside it (clockTrain lays it out), sampled finely enough for an echo's shape,
+ *  an eighth of T2*, on a grid that falls on every echo's top (at most 4000 samples). */
+function startClockEcho() {
+  const T2s = T2star(T2eff(), state.ensemble ? state.spreadHz : 0);
+  clocks.echo = null;
+  if (!Number.isFinite(T2s)) return;
+  const { tau, n } = clockTrain(T2s, T2eff(), clocks.hi), s = buildSequence('cpmg', tau, n, T2s);
+  const m = Math.min(Math.max(40, Math.ceil((2 * tau) / (T2s / 8))), Math.max(8, Math.floor((4000 * 2 * tau) / s.span)));
+  clocks.echo = { eng: startSequence(batchParams(), s.pulses, s.span, (2 * tau) / m, 5), tau, n, times: s.echoes, w: Math.min(tau / 2, T2s), peaks: null, done: -1, y: null, yN: -1 };
+  clockEchoLevel();
+}
+/** Bring the CPMG run level with the page's clock. */
+function clockEchoLevel() {
+  const E = clocks.echo;
+  if (!E) return;
+  const to = Math.min(eng.t, E.eng.tEnd);
+  if (to > E.eng.t) E.eng.advance(to - E.eng.t);
+}
+
+/** After each step of the clock: the three clocks now, and the CPMG run brought level. */
+function clocksTick() {
+  if (!clocks.trace) return;
+  clockSample(eng, clocks.trace);
+  clockEchoLevel();
+}
+/** A change to what the run depends on starts it again (once a frame, at most). */
+function clocksCheck() { if (run && run.clocks && clocksKey() !== clocks.key) startClocks(); }
+
+/** The fits so far, each once its clock has run (to the first pulse sent by hand, if any): made
+ *  again every third sample, and once the run is over. */
+function clocksFitsNow() {
+  const T = clocks.trace;
+  if (!T) return { T2s: null, T2: null, T1: null };
+  if (!clocks.fits || T.t.length >= clocks.fitN + 3 || (eng.done && T.t.length !== clocks.fitN)) {
+    clocks.fits = clockFits(T, { from: clocks.lo, until: clocks.manual ?? Infinity });
+    clocks.fitN = T.t.length;
+  }
+  return clocks.fits;
+}
+/** The CPMG run's echoes that have come, their tops, and the fit A e^{−t/T2} (from two on). */
+function clockEchoPeaks() {
+  const E = clocks.echo;
+  if (!E) return null;
+  const done = E.times.filter((t) => t < E.eng.t - E.w);
+  if (done.length !== E.done) { E.done = done.length; E.peaks = done.length ? echoAmplitudes(E.eng.record, done, E.w) : null; }
+  return E.peaks;
+}
+
+function drawClocksPlot() {
+  const { ctx, width, height } = fitCanvas($('#clocks'));
+  ctx.clearRect(0, 0, width, height);
+  const E = clocks.echo;
+  let echo = null;
+  if (E) {
+    const R = E.eng.record;
+    if (E.yN !== R.length) { E.y = Float64Array.from(R.x, (x, i) => Math.hypot(x, R.y[i])); E.yN = R.length; }
+    echo = { t: R.t, y: E.y, from: E.tau, peaks: clockEchoPeaks() };
+  }
+  clocksFrame = drawClocks(ctx, width, height, {
+    t0: clocks.lo, t1: clocks.hi, now: eng.t, trace: clocks.trace,
+    set: { T2s: T2star(T2eff(), state.ensemble ? state.spreadHz : 0), T2: T2eff(), T1: T1eff() },
+    fits: clocksFitsNow(), echo, pulses: eng.sent.slice(1), colors: C, short: width < 560,
+  });
+}
+
+function clocksReadout(lines) {
+  const F = clocksFitsNow(), P = clockEchoPeaks(), dash = [{ text: '–', w: 6, class: 'b' }, ''];
+  const t2s = T2star(T2eff(), state.ensemble ? state.spreadHz : 0), set = { T2s: t2s, T2: T2eff(), T1: T1eff() };
+  // (Each in the unit of the time set, so that 0.9999 ms reads 1.00 ms, not 1000 μs.)
+  const fit = (k) => (F[k] ? timeLike(F[k].tau, set[k]) : dash);
+  lines.push(['Fitted, each once its clock has run: the sum, what the coil sees,', ['T₂* = ', ...fit('T2s')], '· each spin\'s own part,', ['T₂ = ', ...fit('T2')],
+    ['· M', { html: '<sub>z</sub>' }, ','], ['T₁ = ', ...fit('T1')], '· set:', [...time3(t2s), ','], [...time3(T2eff()), ','], [...time3(T1eff())],
+    ...(clocks.echo ? ['· the CPMG run\'s echoes,', ['T₂ = ', ...(P && P.fit && P.t.length >= 3 ? timeLike(P.fit.T2, set.T2) : dash)]] : []),
+    ...(clocks.manual !== null ? ['(the fits stop at your pulse: Restart to measure again)'] : [])]);
+  lines.push(['T₂* ≤ T₂ ≤ 2T₁.  The coil sees the spins\' sum, which can be no longer than they are, and the fan only shortens it: an echo undoes the fan, never a spin\'s own loss.  And whatever turns a spin over to take its energy away (T₁) costs it its phase too: 1/T₂ ≥ 1/(2T₁).']);
+}
+
+/** Leave the three clocks (the reader has taken the spins over): the clock carries on freely at
+ *  the speed it had, but no faster than experiment 5's for this spread (the fan still watchable). */
+function leaveClocks() {
+  if (!clocks.on) return;
+  if (run && run.clocks) {
+    state.speed = Math.min(speedNow(), 0.628 * spreadT2(state.ensemble ? state.spreadHz : 0));
+    speedSlider.value = state.speed; goFree();
+  }
+  clocks.on = false; clocks.echo = null;
+  syncClocks(); scheduleHash(); dirty();
+}
+
+/** The layout and the panels for the three clocks (on only in view 2). */
+function syncClocks() {
+  clocks.on = clocks.on && state.view === 'many';
+  $('#main').classList.toggle('clocks', clocks.on);
+  clocksPanel.hidden = !clocks.on;
+  if (clocks.on) noisePanel.hidden = true;
+  else noisePanel.hidden = !noisePanel.dataset.views.split(' ').includes(state.view);
+  clocksEchoCheck.checked = clocks.cpmg;
+  $('#sphere-hint').textContent = clocks.on ? HINTS.clocks : HINTS[state.view];
+}
+
+const clocksPanel = $('#clocks-panel');
+const clocksEchoCheck = el('input', { type: 'checkbox', checked: true, onchange: () => {
+  clocks.cpmg = clocksEchoCheck.checked;
+  if (!clocks.cpmg) clocks.echo = null; else if (run && run.clocks && !clocks.echo) startClockEcho();
+  scheduleHash(); dirty();
+} });
+clocksPanel.append(el('div', { class: 'label' }, 'Three clocks'),
+  el('div', { class: 'gloss' }, 'One π/2 pulse, then the clock speeds up as it goes, a decade every 3 s, so the plot\'s log time axis fills evenly: T₂* first, then T₂, then T₁.'),
+  el('label', { class: 'check' }, clocksEchoCheck, 'Another run beside it: a CPMG train of π pulses about y′, its echoes'),
+  el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', title: 'Every spin back along B₀, and the π/2 pulse again', onclick: () => startClocks() }, 'Run it again')),
+  el('div', { class: 'gloss' }, 'Slide T₂, T₁ or the spread (Δf) and it starts again with them; a pulse sent now joins the run: try π about y′ at 3 ms.'));
+
 // ------------------------------------------------------------------------ the address
 
 let hashTimer = 0;
@@ -1463,18 +1639,21 @@ function saveHash() {
     q: state.view === 'seq' ? seq.preset : undefined, tau: state.view === 'seq' ? r4(seq.tau) : undefined,
     pn: state.view === 'seq' && (seq.preset === 'cpmg' || seq.preset === 'cp') ? seq.n : undefined,
     err: state.view === 'seq' && seq.error ? r4(seq.error) : undefined,
+    ck: clocks.on ? 1 : undefined, ce: clocks.on && !clocks.cpmg ? 0 : undefined,
     ...(state.view === 'earth' ? { tp: r4(board.tp), ramp: r4(board.ramp), tl: r4(board.tl), be: r4(board.BE), gr: r4(board.gradNT), I: r4(board.I), bs: board.speedMode, sp: undefined,
       sw: board.code, ang: board.angle !== 90 ? board.angle : undefined } : {}),
   });
 }
 function loadHash(h) {
   const num = (x, d) => (x !== undefined && x !== '' && Number.isFinite(+x) ? +x : d);
+  clocks.on = false;
   loadInstrument(INSTRUMENTS[h.i] ? h.i : 'teachspin');
   const I = inst();
   state.frame = h.fr === 'rot' ? 'rot' : 'lab';
   state.speed = num(h.sp, state.speed);
   state.ensemble = h.e === '1'; state.arrows = Math.round(num(h.n, 32)); state.spreadHz = num(h.df, I.spread);
   if (I.samples[h.s]) { state.sample = h.s; state.T1 = I.samples[h.s].T1; state.T2 = I.samples[h.s].T2; }
+  else if (h.ck === '1') state.sample = null;   // (the three clocks' made-up sample)
   state.T1on = h.t1 !== undefined && h.t1 !== 'off'; state.T1 = num(h.t1, state.T1);
   state.T2on = h.t2 !== undefined && h.t2 !== 'off'; state.T2 = num(h.t2, state.T2);
   state.noiseOn = h.nz !== undefined; state.snr = num(h.nz, 20); state.averages = num(h.av, 1);
@@ -1492,6 +1671,7 @@ function loadHash(h) {
     return;
   }
   setView(['one', 'many', 'seq', 'earth'].includes(h.v) ? h.v : 'one');
+  if (state.view === 'many' && h.ck === '1') { clocks.on = true; clocks.cpmg = h.ce !== '0'; syncClocks(); view.look(...CLOCKS.look); startClocks(); return; }
   if (state.view === 'seq') {
     seq.error = num(h.err, 0);
     setPreset(PRESETS[h.q] ? h.q : 'cpmg', { tau: num(h.tau, undefined) });
@@ -1509,18 +1689,20 @@ function loadHash(h) {
 function setup(o) {
   seedCount = 0;
   if (!o.keepInstrument || o.inst) loadInstrument(o.inst || 'teachspin');
+  if (o.sample !== undefined) state.sample = o.sample;
   state.frame = o.frame || 'lab';
   state.ensemble = !!o.ensemble; state.arrows = o.arrows ?? 32;
   state.spreadHz = o.spread ?? inst().spread;
   state.offsetHz = o.offset ?? 0;
   if (o.B1) state.B1 = o.B1;
   state.T1on = !!o.T1; state.T2on = !!o.T2;
-  const smp = inst().samples[state.sample];
+  const smp = inst().samples[state.sample] || inst().samples[inst().sample];
   state.T1 = typeof o.T1 === 'number' ? o.T1 : smp.T1; state.T2 = typeof o.T2 === 'number' ? o.T2 : smp.T2;
   state.noiseOn = !!o.snr; state.snr = o.snr || 20; state.averages = o.averages || 1;
   state.speed = o.speed ?? inst().speedLab;
   state.custom = { angle: o.angle ?? 45, phase: o.phase ?? 0 };
   state.playing = true; playButton.textContent = 'Pause';
+  clocks.on = !!o.clocks; clocks.cpmg = o.cpmg ?? true;
   applyEngine(); syncSliders();
   setView(o.view || 'one');
   if (o.view === 'seq') {
@@ -1528,7 +1710,8 @@ function setup(o) {
     setPreset(o.preset || 'cpmg', { tau: o.tau });
     if (o.n) { seq.n = o.n; buildSeq(); state.speed = seq.span / SCREEN; speedSlider.value = state.speed; syncSeq(); runSeq(); }
     if (o.scan) startScan();
-  } else if (o.script) startRun(o.script); else startFree(o.M || [0, 0, 1]);
+  } else if (o.clocks) { view.look(...CLOCKS.look); startClocks(); }
+  else if (o.script) startRun(o.script); else startFree(o.M || [0, 0, 1]);
   scheduleHash();
 }
 const S45 = Math.SQRT1_2;
@@ -1546,6 +1729,8 @@ const setups = {
   offres: (k = {}) => { const { p, nut } = scales(k); setup({ ...k, view: 'one', frame: 'rot', speed: 0.8 * p, offset: 0.5 * nut, script: { pulses: [{ t: 0.8 * p, angle: 90, phase: 0 }], span: 12 * p } }); },
   spread: (k = {}) => { const { T2p } = scales(k); setup({ ...k, view: 'many', frame: 'rot', ensemble: true, speed: 0.628 * T2p, script: { pulses: [{ t: 0, angle: 90, phase: 0 }], span: 6.28 * T2p } }); },
   echo: (k = {}) => { const { T2p } = scales(k); setup({ ...k, view: 'many', frame: 'rot', ensemble: true, T1: true, T2: true, speed: 0.785 * T2p, script: { pulses: [{ t: 0, angle: 90, phase: 0 }, { t: 2.356 * T2p, angle: 180, phase: 0 }], span: 7.85 * T2p } }); },
+  // (On the TeachSpin, whatever the instrument was: its 2.5 μs pulse, and a made-up sample.)
+  threeclocks: () => setup({ view: 'many', frame: 'rot', ensemble: true, sample: null, T1: CLOCKS.T1, T2: CLOCKS.T2, spread: CLOCKS.spread, speed: CLOCKS.speed, clocks: true }),
   cpmg: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'cpmg' }),
   mg: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'cp', error: 0.1 }),
   ir: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'ir', scan: true }),
@@ -1618,6 +1803,11 @@ window.__app = {
   /** Finish the τ scan now. */
   finishScan() { while (seq.scan && seq.scan.x.length < seq.scan.taus.length) scanStep(); draw(); return seq.scan; },
   sum: (frame = 'rot') => eng.sum(frame),
+  /** The three clocks: their state, the fits so far ({T2s, T2, T1}: {A, tau} or null) and the
+   *  CPMG run's echoes ({t, amp, fit: {A, T2}}), and the plot's frame (x: log10 of the time). */
+  clocks, CLOCKS, startClocks, leaveClocks,
+  clockFits: () => clocksFitsNow(), clockEchoes: () => clockEchoPeaks(),
+  get clocksFrame() { return clocksFrame && { left: clocksFrame.left, right: clocksFrame.right, top: clocksFrame.top, bottom: clocksFrame.bottom, x0: clocksFrame.x0, x1: clocksFrame.x1 }; },
   /** The spectrum last drawn (view 2 or 3): {peak, fwhm, df}. */
   get spec() { return lastSpec && { peak: lastSpec.peak, fwhm: lastSpec.fwhm, df: lastSpec.df }; },
   tip: () => tipScreen(),

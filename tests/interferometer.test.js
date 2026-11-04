@@ -1,7 +1,7 @@
 import { test, assert, close } from './harness.js';
 import { cmf, xyzToLinear, gamutFix, chromaticity } from '../interferometer/colour.js';
 import { Spectrum, SOURCES, LINE_DATA, lineSpectrum, gaussianLine, gridSpectrum, planckSigma, band, GRID } from '../interferometer/spectrum.js';
-import { ColourModel, FringeCounter, minMaxOver } from '../interferometer/fringes.js';
+import { ColourModel, FringeCounter, tracePlan, traceSamples } from '../interferometer/fringes.js';
 import { sampleInterferogram, recoverSpectrum } from '../interferometer/fts.js';
 import { MAS, airyAmp, airyAmpExact, diskVisibility, visibility, visibilityNumeric, makeModel, firstNull, bandSamples, bandVisibility } from '../interferometer/stars.js';
 import { besselJ } from '../lib/bessel.js';
@@ -129,12 +129,52 @@ test('the fringe counter counts one fringe per λ/2 of mirror travel', () => {
   return `10 μm of mirror travel: ${forward} fringes (Δ/λ = ${expected.toFixed(2)}); back again: ${c.count}`;
 });
 
-test('the detector trace: min and max over an interval', () => {
-  const he = lineSpectrum(LINE_DATA.hene);
-  const [lo, hi] = minMaxOver(he, 100, 130, 1.6);
-  close(lo, 0, 1e-3, 'min'); close(hi, 2, 1e-3, 'max');
-  const [a, b] = minMaxOver(he, 100, 100.01, 1.6);
-  assert(Math.abs(a - he.intensity(100)) < 0.05 && b - a < 0.2, `short interval ${a}, ${b}`);
+test('the detector trace: exact samples, 24 or more to a fringe (and 1.4, or 2 or more, to a pixel) wherever the fringes can be seen', () => {
+  const he = lineSpectrum(LINE_DATA.hene), sig = 1000 / 632.816;
+  const p = tracePlan(100, 130, 400, 1.6), v = traceSamples(he, p, 0, p.n - 1, new Float64Array(p.n));
+  assert(!p.synthetic && !p.line && p.n === 1201 && p.h <= 1 / (24 * sig), `${p.n} samples, ${(1 / (sig * p.h)).toFixed(1)} to a fringe`);
+  let err = 0, lo = Infinity, hi = -Infinity;
+  for (let k = 0; k < p.n; k++) { err = Math.max(err, Math.abs(v[k] - he.intensity(100 + k * p.h))); lo = Math.min(lo, v[k]); hi = Math.max(hi, v[k]); }
+  assert(err < 1e-9, `the samples are I(Δ) (largest error ${err})`);
+  const miss = 2 * (1 - Math.cos(Math.PI * sig * p.h));   // (at most this far from a crest, for samples h apart)
+  close(lo, 0, miss, 'min'); close(hi, 2, miss, 'max');
+  // A part computed again (as the record grows) is the same as the whole.
+  const w = traceSamples(he, p, 300, 420, new Float64Array(p.n).fill(NaN));
+  let d = 0; for (let k = 300; k <= 420; k++) d = Math.max(d, Math.abs(w[k] - v[k]));
+  assert(d < 1e-12 && Number.isNaN(w[299]) && Number.isNaN(w[421]), `a part: differs by ${d}, nothing outside it`);
+  // Fringes far apart: a line, 1.4 samples to a pixel.
+  const q = tracePlan(100, 100.01, 400, 1.6), u = traceSamples(he, q, 0, q.n - 1, new Float64Array(q.n));
+  const r = tracePlan(100, 110, 400, 1.6);
+  assert(r.line && r.n === 561 && r.h <= 1 / (24 * sig), `10 μm on 400 px: ${r.n} samples`);
+  assert(q.line && q.n === 561 && Math.abs(u[0] - he.intensity(100)) < 1e-9 && Math.max(...u) - Math.min(...u) < 0.2, `short window ${u[0]}, ${u[q.n - 1]}`);
+  // White light (a continuum), by direct sums and by FFT (to a few parts in a million: see sampleInterferogram).
+  const wl = SOURCES.white.make().normalize();
+  for (const [a, b, cols] of [[-4, 4, 800], [-100, 100, 1000]]) {
+    const r = tracePlan(a, b, cols, 2.8), x = traceSamples(wl, r, 0, r.n - 1, new Float64Array(r.n));
+    let e = 0; for (let k = 0; k < r.n; k += 7) e = Math.max(e, Math.abs(x[k] - wl.intensity(a + k * r.h)));
+    assert(!r.synthetic && e < 1e-5, `white light over ${b - a} μm: ${r.n} samples within ${e.toExponential(1)} of I(Δ)`);
+  }
+  return `HeNe over 30 μm, 400 px: ${p.n} samples (${(1 / (sig * p.h)).toFixed(1)} to a fringe), min ${lo.toFixed(4)}, max ${hi.toFixed(4)}`;
+});
+
+test('the detector trace: many fringes to a pixel are a band under the true envelope I0 ± |Γ|', () => {
+  const na = lineSpectrum(LINE_DATA.sodium), cols = 400;
+  const p = tracePlan(-1300, 1300, cols, 1.7), v = traceSamples(na, p, 0, p.n - 1, new Float64Array(p.n));
+  assert(p.synthetic && (p.n - 1) / cols === 32, `${(p.n - 1) / cols} samples to a pixel, synthetic ${p.synthetic}`);
+  // Each pixel's samples reach both edges of the band, and stay inside it.
+  let worst = 0, outside = 0;
+  for (let c = 0; c < cols; c++) {
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 32 * c; k <= 32 * c + 32; k++) { lo = Math.min(lo, v[k]); hi = Math.max(hi, v[k]); }
+    const D = p.a + (32 * c + 16) * p.h, g = na.visibility(D) * na.I0;
+    worst = Math.max(worst, Math.abs(hi - (na.I0 + g)), Math.abs(lo - (na.I0 - g)));
+    for (let k = 32 * c; k <= 32 * c + 32; k++) outside = Math.max(outside, Math.abs(v[k] - na.I0) - na.visibility(p.a + k * p.h) * na.I0);
+  }
+  assert(worst < 0.02 && outside < 0.01, `band edges within ${worst.toFixed(4)} of I0 ± |Γ|; at most ${outside.toFixed(4)} outside it`);
+  const w = traceSamples(na, { ...p, env: new Float64Array(p.env.length).fill(NaN) }, 5000, 5100, new Float64Array(p.n));
+  let d = 0; for (let k = 5000; k <= 5100; k++) d = Math.max(d, Math.abs(w[k] - v[k]));
+  assert(d < 1e-12, `a part computed again is the same (${d})`);
+  return `sodium over 2.6 mm on ${cols} px: a carrier of one cycle a pixel; edges within ${worst.toFixed(4)} of I0 ± |Γ|`;
 });
 
 // ------------------------------------------------------------------------- the screen's colours

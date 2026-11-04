@@ -20,6 +20,7 @@
 
 import { cmfSigma, xyzToLinear, gamutFix, ENCODE_TABLE, ENCODE_SCALE } from './colour.js';
 import { GRID, BROAD_W, TWO_PI, sinc, sinc2 } from './spectrum.js';
+import { sampleInterferogram } from './fts.js';
 
 const CMF_GRID = Array.from({ length: GRID.n }, (_, i) => cmfSigma(GRID.s0 + i * GRID.ds));
 
@@ -183,29 +184,53 @@ export function renderScreen(model, opts, img) {
   return { lo, hi, h, cells };
 }
 
-/**
- * The smallest and largest detector signal I(Δ) for Δ in [a, b]: sampled finely enough to follow
- * the fringes when there are few, the envelope I0 ± |Γ| when there are many.
- */
-export function minMaxOver(spec, a, b, sigmaTop, out = [0, 0]) {
-  const per = 1 / sigmaTop, L = b - a, g = [0, 0], I0 = spec.I0;
-  let lo = Infinity, hi = -Infinity;
-  // Few fringes: sample finely enough to follow them.  Many: the envelope at 16 points.
-  const many = L > 4 * per;
-  const n = L <= per / 8 ? 2 : many ? 16 : Math.ceil(L / (per / 8)) + 1;
-  for (let i = 0; i < n; i++) {
-    const D = n === 1 ? a : a + (L * i) / (n - 1);
-    spec.gamma(D, g);
-    const I = I0 + g[0];
-    if (I < lo) lo = I;
-    if (I > hi) hi = I;
-    if (many) {
-      const m = Math.hypot(g[0], g[1]);
-      if (I0 - m < lo) lo = I0 - m;
-      if (I0 + m > hi) hi = I0 + m;
-    }
+// The detector's trace, for drawing as a digital oscilloscope draws (lib/scope.js): samples of
+// I(Δ) evenly spaced across the window, PER_FRINGE to a fringe (of the highest wavenumber) or
+// more, so that the trace follows every fringe and the straight pieces between the samples cut
+// no crest by more than 1 − cos(π/24) ≈ 1% of its height; each sample is exact.  1.4 to a pixel
+// while that is enough (fringes 17 pixels apart or more: scope.js draws a line), else at least 2
+// (a trace dense enough for scope.js to grade, so that it cannot beat against the pixels).  That
+// needs more than TRACE_PER_PX samples to a pixel only when the fringes are closer than a pixel
+// and a third, which no screen can show one by one: there (synthetic) the samples are a carrier
+// of one cycle a pixel under the true envelope, I0 + |Γ(Δ)| cos(...), with |Γ| exact at every
+// fourth sample and straight between.  A band of many fringes looks the same on a scope whatever
+// their phase, brightest at its turning points I0 ± |Γ|, where the signal lingers; and a whole
+// number of cycles to a pixel cannot beat against the pixels.  (Each pixel's cycle starts a
+// fraction of a sample later than the last, by the golden ratio, so that the corners of the
+// straight pieces fall at different heights in each column instead of ruling the band with
+// level lines.)
+export const TRACE_PER_PX = 32;
+const PER_FRINGE = 24, ENV_STEP = 4, GOLDEN = (Math.sqrt(5) - 1) / 2;
+
+/** How to sample I(Δ) over [a, b] for a trace cols (device) pixels wide: { a, b, n, h, synthetic, line, f (fringes to a pixel) }. */
+export function tracePlan(a, b, cols, sigmaTop) {
+  cols = Math.max(1, Math.round(cols));
+  const f = ((b - a) * sigmaTop) / cols;              // fringes to a pixel, at most
+  const need = PER_FRINGE * f, synthetic = need > TRACE_PER_PX;
+  const perPx = synthetic ? TRACE_PER_PX : need <= 1.4 ? 1.4 : Math.max(2, Math.ceil(need));
+  const n = Math.round(perPx * cols) + 1;
+  return { a, b, n, h: (b - a) / (n - 1), f, synthetic, line: perPx < 1.5, env: synthetic ? new Float64Array(Math.ceil((n - 1) / ENV_STEP) + 1).fill(NaN) : null };
+}
+
+/** Samples k0 ... k1 of a plan (I at Δ = a + k h), written into out[k0 ... k1]. */
+export function traceSamples(spec, plan, k0, k1, out) {
+  k0 = Math.max(0, k0); k1 = Math.min(plan.n - 1, k1);
+  if (k1 < k0) return out;
+  const { a, h } = plan;
+  if (!plan.synthetic) {
+    // The continuum by direct sums when they are cheap, else by one FFT (fts.js).
+    const m = k1 - k0, span = spec.i1 - spec.i0 + 1;
+    const v = sampleInterferogram(spec, h, m, span * (m + 1) < 4e6 ? 'direct' : 'auto', { sides: 1, offset: a + k0 * h });
+    out.set(v, k0);
+    return out;
   }
-  out[0] = lo; out[1] = hi;
+  const env = plan.env, g = [0, 0], I0 = spec.I0, j0 = Math.floor(k0 / ENV_STEP), j1 = Math.min(env.length - 1, Math.floor(k1 / ENV_STEP) + 1);
+  for (let j = j0; j <= j1; j++) if (!(env[j] >= 0)) { spec.gamma(a + j * ENV_STEP * h, g); env[j] = Math.hypot(g[0], g[1]); }
+  for (let k = k0; k <= k1; k++) {
+    const u = k / ENV_STEP, j = Math.min(env.length - 2, Math.floor(u)), t = u - j;
+    const c = Math.floor(k / TRACE_PER_PX), ph = (k - c * TRACE_PER_PX + ((c * GOLDEN) % 1)) / TRACE_PER_PX;
+    out[k] = I0 + (env[j] * (1 - t) + env[j + 1] * t) * Math.cos(2 * Math.PI * ph);
+  }
   return out;
 }
 

@@ -8,9 +8,10 @@
 import { el, $, slider, segmented, toggle, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, niceTicks, tickLabel } from '../lib/plot.js';
 import { SOURCES, GRID, GRID_HI, BROAD_W, Spectrum, normalCdf } from './spectrum.js';
-import { ColourModel, renderScreen, minMaxOver, FringeCounter } from './fringes.js';
+import { ColourModel, renderScreen, tracePlan, traceSamples, FringeCounter } from './fringes.js';
 import { sampleInterferogram, recoverSpectrum, nextPow2 } from './fts.js';
 import { spectralFill, toBytes, xyzToLinear, gamutFix } from './colour.js';
+import { scopeTrace } from '../lib/scope.js';
 
 export const THETA_MAX = 0.1;      // half the field of view of the screen, rad (5.7°)
 export const MIRROR_HALF = 6000;   // half the width of mirror seen on the screen, μm
@@ -130,6 +131,8 @@ function followWindow(oldD, newD) {
 
 function addRecord(a, b) {
   const lo = Math.min(a, b), hi = Math.max(a, b);
+  // Seen already (the motor sweeping to and fro over its record): nothing new to draw.
+  if (record.some((iv) => iv[0] <= lo && iv[1] >= hi)) return;
   const out = [];
   let nlo = lo, nhi = hi, placed = false;
   for (const iv of record) {
@@ -718,7 +721,10 @@ export function viewPreset(which) {
 // --------------------------------------------------------------------- the interferogram plot
 
 const traceCanvas = $('#trace');
-const trace = { key: '', lo: null, hi: null, has: null, P: 0, pending: null, frame: null, fullKey: '', flo: null, fhi: null };
+// The detector's record as samples of I(Δ) across the window (NaN where nothing was recorded;
+// see tracePlan in fringes.js), and the true interferogram behind the spectrometer's samples.
+// ver and fullVer count the changes to them, naming the pictures scopeTrace keeps.
+const trace = { key: '', plan: null, vals: null, ver: 0, pending: null, frame: null, fullKey: '', fullPlan: null, fullVals: null, fullVer: 0 };
 let traceDrag = null;
 
 function pathUnit(W) { return W >= 2000 ? [1000, 'mm'] : W < 2 ? [1e-3, 'nm'] : [1, 'μm']; }
@@ -740,43 +746,36 @@ function traceAxis() {
 }
 const traceX = (px) => { const { unit, ref } = traceAxis(); return ref + trace.frame.invX(px) * unit; };
 
-function computeColumns(c0, c1, x0, W, P) {
-  const g = [0, 0];
-  for (let col = Math.max(0, c0); col <= Math.min(P - 1, c1); col++) {
-    const xa = x0 + (col * W) / P, xb = x0 + ((col + 1) * W) / P;
-    let lo = Infinity, hi = -Infinity;
-    // Binary search for the first interval ending after xa.
-    let a = 0, b = record.length;
-    while (a < b) { const m = (a + b) >> 1; if (record[m][1] < xa) a = m + 1; else b = m; }
-    for (let i = a; i < record.length && record[i][0] <= xb; i++) {
-      const p = Math.max(xa, record[i][0]), q = Math.min(xb, record[i][1]);
-      if (q < p) continue;
-      minMaxOver(spec, p, q, sigmaTop, g);
-      lo = Math.min(lo, g[0]); hi = Math.max(hi, g[1]);
-    }
-    trace.has[col] = lo <= hi ? 1 : 0;
-    trace.lo[col] = lo; trace.hi[col] = hi;
+/** The samples of the detector's record that lie in [a, b] (recorded parts only). */
+function recordSamples(a, b) {
+  const { plan, vals } = trace, { h } = plan, w0 = plan.a;
+  // Binary search for the first interval ending after a.
+  let i = 0, j = record.length;
+  while (i < j) { const m = (i + j) >> 1; if (record[m][1] < a) i = m + 1; else j = m; }
+  for (; i < record.length && record[i][0] <= b; i++) {
+    const p = Math.max(a, record[i][0]), q = Math.min(b, record[i][1]);
+    if (q >= p) traceSamples(spec, plan, Math.ceil((p - w0) / h - 1e-9), Math.floor((q - w0) / h + 1e-9), vals);
   }
 }
 
 function drawTrace() {
-  const { ctx, width, height } = fitCanvas(traceCanvas);
+  const { ctx, width, height, dpr } = fitCanvas(traceCanvas);
   const c = themeColors();
   ctx.clearRect(0, 0, width, height);
   const f = new Frame(ctx, width, height, { left: 40, right: 12, top: 12, bottom: 34 });
   trace.frame = f;
-  if (state.plot === 'fts') return drawFtsPlot(f, ctx, c);
-  const [w0, w1] = state.win, W = w1 - w0, P = Math.max(1, Math.floor(f.w));
-  const key = `${w0},${w1},${P},${version}`;
+  if (state.plot === 'fts') return drawFtsPlot(f, ctx, c, dpr);
+  const [w0, w1] = state.win, cols = Math.max(1, Math.round(f.w * dpr));
+  const key = `${w0},${w1},${cols},${version}`;
   if (trace.key !== key) {
-    trace.key = key; trace.P = P;
-    trace.lo = new Float64Array(P); trace.hi = new Float64Array(P); trace.has = new Uint8Array(P);
-    computeColumns(0, P - 1, w0, W, P);
-    trace.pending = null;
+    trace.key = key;
+    trace.plan = tracePlan(w0, w1, cols, sigmaTop);
+    trace.vals = new Float64Array(trace.plan.n).fill(NaN);
+    recordSamples(w0, w1);
+    trace.pending = null; trace.ver++;
   } else if (trace.pending) {
-    const [a, b] = trace.pending;
-    computeColumns(Math.floor(((a - w0) / W) * P), Math.floor(((b - w0) / W) * P), w0, W, P);
-    trace.pending = null;
+    recordSamples(trace.pending[0], trace.pending[1]);
+    trace.pending = null; trace.ver++;
   }
   const { unit, ref, label } = traceAxis(), norm = 1 / (2 * spec.I0 || 1);
   f.x0 = (w0 - ref) / unit; f.x1 = (w1 - ref) / unit; f.y0 = -0.04; f.y1 = 1.1;
@@ -786,12 +785,14 @@ function drawTrace() {
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(0.5) + 0.5); ctx.lineTo(f.right, f.Y(0.5) + 0.5); ctx.stroke(); ctx.setLineDash([]);
   // Zero path.
   if (w0 <= 0 && w1 >= 0) { const x0 = f.X(-ref / unit); ctx.strokeStyle = c.line; ctx.beginPath(); ctx.moveTo(x0 + 0.5, f.top); ctx.lineTo(x0 + 0.5, f.bottom); ctx.stroke(); }
-  ctx.fillStyle = c.accent;
-  for (let k = 0; k < P; k++) {
-    if (!trace.has[k]) continue;
-    const yt = f.Y(trace.hi[k] * norm), yb = f.Y(trace.lo[k] * norm);
-    ctx.fillRect(f.left + k, yt - 0.75, 1, Math.max(1.5, yb - yt + 1.5));
-  }
+  // The record, as a digital phosphor scope draws it (lib/scope.js): many fringes to a pixel are a
+  // band, brightest at its edges.  (The key: the samples, the window and the light change it.)
+  // Width: 1.5 px for a line, as before; 1 for a graded trace (scope.js thickens a graded trace
+  // piece by piece, which marks the corners between the pieces as beads when it is much thicker
+  // than a device pixel); a band of synthetic fringes one device pixel, so that the levels where
+  // the corners of its pieces fall don't show.
+  const vals = trace.vals, pl = trace.plan;
+  scopeTrace(ctx, f, { n: pl.n, y: (k) => f.Y(vals[k] * norm), x0: f.left, x1: f.right, color: c.accent, width: pl.line ? 1.5 : pl.synthetic ? 1 / dpr : 1, key: `michelson trace ${trace.ver}` });
   // The mirror's position.
   const Dn = D(), x = f.X((Dn - ref) / unit);
   ctx.strokeStyle = c.warn; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); ctx.stroke();
@@ -812,7 +813,7 @@ function ftsRange() {
   return [a, a + W, xlo, xhi];
 }
 
-function drawFtsPlot(f, ctx, c) {
+function drawFtsPlot(f, ctx, c, dpr) {
   ensureSamples();
   const z = fts.z, step = state.fts.step, eps = state.fts.zero, P = Math.max(1, Math.floor(f.w));
   // The spectrometer's axis: Δ as it counts it, kδ (the samples are truly at kδ + ε).
@@ -828,17 +829,15 @@ function drawFtsPlot(f, ctx, c) {
   f.clip();
   // The true interferogram, faintly, behind the samples.
   if (!fts.drawn) {
-    const key = `${version},${va},${vb},${eps},${P}`;
+    const cols = Math.max(1, Math.round(f.w * dpr)), key = `${version},${va},${vb},${eps},${cols}`;
     if (trace.fullKey !== key) {
-      trace.fullKey = key; trace.flo = new Float64Array(P); trace.fhi = new Float64Array(P);
-      const g = [0, 0], W = vb - va;
-      for (let col = 0; col < P; col++) { minMaxOver(spec, va + eps + (col * W) / P, va + eps + ((col + 1) * W) / P, sigmaTop, g); trace.flo[col] = g[0]; trace.fhi[col] = g[1]; }
+      trace.fullKey = key; trace.fullVer++;
+      trace.fullPlan = tracePlan(va + eps, vb + eps, cols, sigmaTop);
+      trace.fullVals = traceSamples(spec, trace.fullPlan, 0, trace.fullPlan.n - 1, new Float64Array(trace.fullPlan.n));
     }
-    ctx.fillStyle = c.line;
-    for (let k = 0; k < P; k++) {
-      const yt = f.Y(trace.fhi[k] * norm), yb = f.Y(trace.flo[k] * norm);
-      ctx.fillRect(f.left + k, yt - 0.5, 1, Math.max(1, yb - yt + 1));
-    }
+    const vals = trace.fullVals;
+    const pl = trace.fullPlan;
+    scopeTrace(ctx, f, { n: pl.n, y: (k) => f.Y(vals[k] * norm), x0: f.left, x1: f.right, color: c.line, width: pl.synthetic ? 1 / dpr : 1, key: `fts truth ${trace.fullVer} ${f.y0} ${f.y1}` });
   }
   // Zero path: where the spectrometer puts it, and (if that is off) where it truly is.
   const x0 = f.X(0);
@@ -861,17 +860,12 @@ function drawFtsPlot(f, ctx, c) {
       ctx.fillStyle = c.accent;
       for (let j = ja; j <= last; j++) { ctx.beginPath(); ctx.arc(xOf(j), f.Y(fts.samples[j] * norm), n <= P / 8 ? 3 : 2, 0, 2 * Math.PI); ctx.fill(); }
     }
-  } else {
-    ctx.fillStyle = c.accent;
-    const per = n / P;
-    for (let col = 0; col < P; col++) {
-      const a = ja + Math.floor(col * per), b = Math.min(last, ja + Math.floor((col + 1) * per));
-      if (a > last) break;
-      let lo = Infinity, hi = -Infinity;
-      for (let j = a; j <= b; j++) { const v = fts.samples[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
-      const yt = f.Y(hi * norm), yb = f.Y(lo * norm);
-      ctx.fillRect(f.left + col, yt - 0.75, 1, Math.max(1.5, yb - yt + 1.5));
-    }
+  } else if (last > ja) {
+    // More samples than pixels: as a digital phosphor scope draws them (lib/scope.js), joined
+    // straight as above.  (The key: what the samples are (every stroke drawn on them changes the
+    // light, so version), those in view, and the axes.)
+    const s = fts.samples, key = `fts samples ${version} ${fts.drawn ? 'drawn' : fts.samplesFor} ${ja} ${last} ${va} ${vb} ${unit} ${f.y0} ${f.y1} ${norm}`;
+    scopeTrace(ctx, f, { n: last - ja + 1, y: (i) => f.Y(s[ja + i] * norm), x0: xOf(ja), x1: xOf(last), color: c.accent, width: 1.5, key });
   }
   if (fts.scanning) {
     const x = xOf(fts.last);
@@ -1190,10 +1184,23 @@ export function schemPoints() {
     mirror: hits.mx, eq: hits.eq };
 }
 
-/** For the tests: the detector trace as drawn, column by column (lowest and highest I/I(0), and whether recorded). */
+/** For the tests: the detector trace as drawn, column by column (CSS pixels): the lowest and
+ *  highest I/I(0) of its samples, and whether any of them was recorded. */
 export function traceColumns() {
-  const norm = 1 / (2 * spec.I0 || 1);
-  return { win: state.win.slice(), lo: Array.from(trace.lo || [], (v) => v * norm), hi: Array.from(trace.hi || [], (v) => v * norm), has: Array.from(trace.has || []) };
+  const norm = 1 / (2 * spec.I0 || 1), out = { win: state.win.slice(), lo: [], hi: [], has: [] }, f = trace.frame, pl = trace.plan;
+  if (!f || !pl) return out;
+  const P = Math.max(1, Math.floor(f.w)), per = (pl.n - 1) / P, vals = trace.vals;
+  for (let col = 0; col < P; col++) {
+    // (Both ends of the column, so that a window symmetric about zero path gives symmetric columns.)
+    let lo = Infinity, hi = -Infinity;
+    for (let k = Math.ceil(col * per - 1e-6); k <= Math.min(pl.n - 1, Math.floor((col + 1) * per + 1e-6)); k++) {
+      const v = vals[k];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    out.has.push(lo <= hi ? 1 : 0); out.lo.push(lo * norm); out.hi.push(hi * norm);
+  }
+  return out;
 }
 
 /** For the tests: the handles of narrow lines on the spectrum plot. */

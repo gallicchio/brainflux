@@ -9,11 +9,12 @@ import {
   FreqGrid, kkImToRe, kkReToIm, impulseResponse, sampleOnGrid, sumRuleOscillators, sumRuleGrid, strength,
   drivenCharge, sliverRe, sliverTime,
 } from './medium.js';
-import { incident, planGrid, Propagator, peakTime, moments, maxBefore, causalEnvelope } from './pulse.js';
+import { incident, planGrid, Propagator, peakTime, moments, maxBefore, causalEnvelope, carrierTrace, cyclesPerSample } from './pulse.js';
 import { drawCharge, drawWave } from './pictures.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, setSlots } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, fillSlots } from '../lib/plot.js';
 import { texToMathML } from '../lib/mathml.js';
+import { scopeTrace } from '../lib/scope.js';
 
 // ------------------------------------------------------------------ units and media
 
@@ -755,7 +756,7 @@ function applyKK() {
 
 // ------------------------------------------------------------------------- pulses
 
-let prop = null, propKey = '', pulseMediumDirty = true, vacCache = null, traceCache = null;
+let prop = null, propKey = '', pulseMediumDirty = true, vacCache = null, traceCache = null, traceId = 0;
 
 /** The pulse's parameters in simulation units. */
 function pulseParams() { const p = state.pulse; return { w0: p.w0, T: p.T, tf: p.tf }; }
@@ -819,7 +820,7 @@ function trace() {
   const P = ensurePropagator(), z = state.pulse.z, key = `${z}|${state.pulse.frame}|${cache.ng0}`;
   if (!traceCache || traceCache.P !== P || traceCache.key !== key) {
     const d = pulseAt(z);
-    traceCache = { P, key, d, ms: measure(d, z) };
+    traceCache = { P, key, d, ms: measure(d, z), id: ++traceId };
   }
   return traceCache;
 }
@@ -848,7 +849,7 @@ const pulseCanvas = $('#pulse');
 let lastPulse = null;
 
 function drawPulse() {
-  const { ctx, width, height } = fitCanvas(pulseCanvas);
+  const { ctx, width, height, dpr } = fitCanvas(pulseCanvas);
   ctx.clearRect(0, 0, width, height);
   const f = new Frame(ctx, width, height, { left: 50, right: 14, top: 24, bottom: 34 });
   const z = state.pulse.z, tr = trace(), d = tr.d, sh = state.pulse.shape, tS = U().tS, log = state.pulse.log;
@@ -864,16 +865,13 @@ function drawPulse() {
   const causal = !(sh === 'gauss' && !log);
   if (causal && (!tr.envM || tr.win !== win)) { tr.envM = causalEnvelope(mr, win); tr.envV = causalEnvelope(vr, win); tr.win = win; }
   const envM = causal ? tr.envM : null, envV = causal ? tr.envV : null;
-  // Column extrema.
-  const fmin = new Float64Array(cols).fill(Infinity), fmax = new Float64Array(cols).fill(-Infinity);
-  const em = new Float64Array(cols), ev = new Float64Array(cols), wloc = new Float64Array(cols).fill(NaN);
+  // Column by column: the envelopes, and the local frequency at the top of the pulse's.
+  const seen = new Uint8Array(cols), em = new Float64Array(cols), ev = new Float64Array(cols), wloc = new Float64Array(cols).fill(NaN);
   let vmax = 0, mmax = 0;
   for (let n = 0; n < t.length; n++) {
     const c = colOf(t[n]);
     if (c < 0 || c >= cols) continue;
-    const v = mr[n];
-    if (v < fmin[c]) fmin[c] = v;
-    if (v > fmax[c]) fmax[c] = v;
+    seen[c] = 1;
     const amp = envM ? envM[n] : Math.sqrt(mr[n] * mr[n] + mi[n] * mi[n]), vamp = envV ? envV[n] : Math.sqrt(vr[n] * vr[n] + vi[n] * vi[n]);
     if (amp > em[c]) {
       em[c] = amp;
@@ -889,7 +887,7 @@ function drawPulse() {
   // The scale is the incident pulse's peak, wherever the vacuum pulse is (it may be out of view).
   for (let n = 0; n < t.length; n++) vmax = Math.max(vmax, Math.sqrt(d.br[n] * d.br[n] + d.bi[n] * d.bi[n]));
   // A column no sample fell in borrows from the one before (only on very wide plots).
-  for (let c = 1; c < cols; c++) if (!(fmax[c] >= fmin[c])) { fmin[c] = fmin[c - 1]; fmax[c] = fmax[c - 1]; em[c] = em[c - 1]; ev[c] = ev[c - 1]; wloc[c] = wloc[c - 1]; }
+  for (let c = 1; c < cols; c++) if (!seen[c]) { em[c] = em[c - 1]; ev[c] = ev[c - 1]; wloc[c] = wloc[c - 1]; }
   // Scale the pulse in the medium up if it is small, and say so.
   // Below a millionth, nothing is drawn: the medium has absorbed the pulse.
   let scale = 1;
@@ -898,7 +896,7 @@ function drawPulse() {
     const want = (0.8 * vmax) / mmax, p = 10 ** Math.floor(Math.log10(want)), m = want / p;
     scale = (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p;
   }
-  if (absorbed) { scale = 0; em.fill(0); fmin.fill(0); fmax.fill(0); }
+  if (absorbed) { scale = 0; em.fill(0); }
   // Y: the pulse in the medium, scaled up (or down) to be seen; Yv: the vacuum pulse, never scaled.
   const Y = log ? (v) => Math.log10(Math.max(v, 1e-14) / vmax) : (v) => v * scale / vmax;
   const Yv = log ? Y : (v) => v / vmax;
@@ -923,27 +921,32 @@ function drawPulse() {
   }
   ctx.setLineDash([]);
   // The field in the medium (or, on the log scale, its envelope).
-  ctx.strokeStyle = colors.ink; ctx.lineWidth = log ? 1.6 : 1.1;
-  ctx.beginPath();
   if (log) {
+    ctx.strokeStyle = colors.ink; ctx.lineWidth = 1.6;
+    ctx.beginPath();
     let pen = false;
     for (let c = 0; c < cols; c++) {
       if (!(em[c] > 0)) { pen = false; continue; }
       const y = f.Y(Y(em[c]));
       if (pen) ctx.lineTo(X(c), y); else { ctx.moveTo(X(c), y); pen = true; }
     }
+    ctx.stroke();
   } else {
-    let prev = null;
-    for (let c = 0; c < cols; c++) {
-      if (!(fmax[c] >= fmin[c])) continue;
-      const a = f.Y(Y(fmax[c])), b = f.Y(Y(fmin[c]));
-      if (prev === null) ctx.moveTo(X(c), a);
-      else ctx.lineTo(X(c), prev > a ? a : b);
-      ctx.lineTo(X(c), b < a ? a : b); ctx.lineTo(X(c), a);
-      prev = b;
+    // As a digital phosphor scope draws it (lib/scope.js): a carrier of many cycles to a pixel is
+    // a band, brightest at its edges.  The samples in view, and one either side.
+    const ia = Math.max(0, Math.floor((lo - t[0]) / dt)), ib = Math.min(t.length - 1, Math.ceil((hi - t[0]) / dt));
+    const x0 = f.X(t[ia] * tS), x1 = f.X(t[ib] * tS), ck = `${ia},${ib},${Math.round((x1 - x0) * dpr)},${sh}`;
+    if (tr.carrierKey !== ck) {
+      // A Gaussian pulse is a carrier under its envelope: redrawn finely enough to show every crest
+      // (pulse.js); a front or a switched-on carrier has every frequency, and is drawn through its
+      // samples (interpolated as a band-limited signal where they are sparse).
+      tr.carrier = sh === 'gauss' ? carrierTrace(mr, mi, ia, ib, (x1 - x0) * dpr, cyclesPerSample(mr, mi, ia, ib)) : { y: mr.subarray(ia, ib + 1), plain: true };
+      tr.carrierKey = ck;
     }
+    const cv = tr.carrier, yv = cv.y;
+    scopeTrace(ctx, f, { n: yv.length, y: (k) => f.Y(Y(yv[k])), x0, x1, color: colors.ink, width: cv.synthetic ? 1 / dpr : cv.plain || cv.perPx >= 1.5 ? 1 : 1.1,
+      bandlimited: !!cv.plain, key: `pulse field ${tr.id} ${ck} ${scale} ${lo} ${hi} ${tS}` });
   }
-  ctx.stroke();
   // Markers: when light through vacuum arrives, the group-velocity prediction, the front, Brillouin.
   const tc = d.tc, ms = tr.ms;
   lastPulse = { ...ms, z, scale, absorbed };
@@ -1040,14 +1043,15 @@ function pulseRun() {
 
 const snapCanvas = $('#snap');
 function drawSnapshot() {
-  const { ctx, width, height } = fitCanvas(snapCanvas);
+  const { ctx, width, height, dpr } = fitCanvas(snapCanvas);
   ctx.clearRect(0, 0, width, height);
   const f = new Frame(ctx, width, height, { left: 50, right: 14, top: 24, bottom: 34 });
   const P = ensurePropagator(), Pp = state.pulse, sh = Pp.shape, L = Pp.z, t = anim.t, zS = U().zS, win = snapWindow(t);
   f.x0 = win.z0 * zS; f.x1 = win.z1 * zS; f.y0 = -1.15; f.y1 = 1.15;
   const cols = Math.max(60, Math.round(f.w)), carrierPx = (2 * Math.PI / Pp.w0) / ((win.z1 - win.z0) / cols);
-  // Samples per column: enough to catch every crest when they are close together (a Gaussian's
-  // few frequencies are cheap); one for a sharp front or a switch-on, which have them all.
+  // Samples per column: 8 to a wavelength (in vacuum), at most 4, for a Gaussian, whose few
+  // frequencies are cheap (crests closer than that are drawn as a band, which needs only the
+  // envelope); one for a sharp front or a switch-on, which have them all.
   const spc = sh === 'gauss' ? clamp(Math.ceil(8 / carrierPx), 1, 4) : 1, M = cols * spc, dz = (win.z1 - win.z0) / M;
   const re = new Float64Array(M), im = new Float64Array(M), wl = new Float64Array(M).fill(NaN), vac = new Float64Array(M);
   let first = M;
@@ -1060,13 +1064,10 @@ function drawSnapshot() {
     const s = P.snapshot(t, win.z0 + (first + 0.5) * dz, dz, M - first, sh === 'gauss' ? 0 : 6 * state.wmax + 3 * Pp.w0);
     re.set(s.re, first); im.set(s.im, first); wl.set(s.w, first);
   }
-  // Per column: the extremes of E, the envelope, the local frequency at the envelope's top.
-  const fmin = new Float64Array(cols).fill(Infinity), fmax = new Float64Array(cols).fill(-Infinity);
+  // Per column: the envelope, the local frequency at the envelope's top.
   const em = new Float64Array(cols), ev = new Float64Array(cols), wc = new Float64Array(cols).fill(NaN);
   for (let j = 0; j < M; j++) {
-    const c = Math.floor(j / spc), v = re[j], a = Math.hypot(re[j], im[j]);
-    if (v < fmin[c]) fmin[c] = v;
-    if (v > fmax[c]) fmax[c] = v;
+    const c = Math.floor(j / spc), a = Math.hypot(re[j], im[j]);
     if (a > em[c]) { em[c] = a; wc[c] = wl[j]; }
     if (vac[j] > ev[c]) ev[c] = vac[j];
   }
@@ -1086,19 +1087,19 @@ function drawSnapshot() {
     ctx.stroke();
   }
   ctx.setLineDash([]);
-  // The field.
-  ctx.strokeStyle = colors.ink; ctx.lineWidth = 1.2; ctx.beginPath();
-  let prev = null;
-  for (let c = 0; c < cols; c++) {
-    if (!(fmax[c] >= fmin[c])) continue;
-    const a = f.Y(fmax[c]), b = f.Y(fmin[c]);
-    if (spc === 1) { prev === null ? ctx.moveTo(X(c), a) : ctx.lineTo(X(c), a); prev = a; continue; }
-    if (prev === null) ctx.moveTo(X(c), a); else ctx.lineTo(X(c), prev > a ? a : b);
-    ctx.lineTo(X(c), b < a ? a : b); ctx.lineTo(X(c), a); prev = b;
-  }
-  ctx.stroke();
-  // A crest, riding at c/n, and the peak of the envelope, at c/n_g (a Gaussian going forwards).
+  // The field, as a digital phosphor scope draws it (lib/scope.js).  A Gaussian pulse is a carrier
+  // under its envelope, redrawn finely enough to show every crest or, when they are closer than a
+  // pixel, as a band brightest at its edges (pulse.js; the carrier's wavelength is shortest where
+  // the index is highest); a front or a switched-on carrier, which has every frequency, through
+  // its samples.
   const ng = cache.ng0, op = optics(resp, Float64Array.of(Pp.w0)), n = op.n[0];
+  const x0 = f.left + (0.5 * f.w) / M, x1 = f.left + ((M - 0.5) * f.w) / M;
+  if (sh === 'gauss') {
+    const cyc = Math.max((Math.max(1, n) * Pp.w0 * dz) / (2 * Math.PI), cyclesPerSample(re, im, 0, M - 1));
+    const cv = carrierTrace(re, im, 0, M - 1, (x1 - x0) * dpr, cyc), yv = cv.y;
+    scopeTrace(ctx, f, { n: yv.length, y: (k) => f.Y(yv[k]), x0, x1, color: colors.ink, width: cv.synthetic ? 1 / dpr : cv.perPx >= 1.5 ? 1 : 1.2 });
+  } else scopeTrace(ctx, f, { n: M, y: (j) => f.Y(re[j]), x0, x1, color: colors.ink, width: 1.2 });
+  // A crest, riding at c/n, and the peak of the envelope, at c/n_g (a Gaussian going forwards).
   const envAt = (z) => { const c = Math.floor(((z - win.z0) / (win.z1 - win.z0)) * cols); return c >= 0 && c < cols ? em[c] : 0; };
   if (sh === 'gauss' && n > 0.05 && Number.isFinite(ng)) {
     const zg = t < 0 ? t : t / ng, half = 0.75 * Pp.T / Math.max(ng, 1), lam = (2 * Math.PI) / Pp.w0;

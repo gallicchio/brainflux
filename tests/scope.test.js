@@ -1,5 +1,5 @@
 import { test, assert } from './harness.js';
-import { depositTrace, shadeTrace, powLut, upsample, scopeMode, setScopeMode } from '../lib/scope.js';
+import { depositTrace, shadeTrace, powLut, upsample, scopeMode, setScopeMode, scopeTrace } from '../lib/scope.js';
 
 const near = (got, want, tol, what) => assert(Math.abs(got - want) <= tol, `${what}: expected ${want} ± ${tol}, got ${got}`);
 const grid = (W, H) => new Float32Array(W * H);
@@ -119,4 +119,15 @@ test('scope: smoothing across columns only where the trace turns about once a co
   assert(same(run(8, 'auto'), run(8, false)), 'eight pixels a cycle: drawn sharp, as without smoothing');
   assert(!same(run(8, 'auto'), run(8, true)), '(and smoothing would have changed it)');
   assert(same(run(1.5, 'auto'), run(1.5, true)), 'one and a half pixels a cycle: a band, smoothed in full');
+});
+
+test('scope: the fast way leaves a gap where the samples are not numbers, as the other ways do', () => {
+  // A context that only records the path.
+  const path = [], ctx = { getTransform: () => ({ a: 1, d: 1, e: 0, f: 0 }), save() {}, restore() {}, setTransform() {}, beginPath() {}, stroke() {},
+    moveTo: (x, y) => path.push(['M', x, y]), lineTo: (x, y) => path.push(['L', x, y]), globalAlpha: 1 };
+  const Y = Array.from({ length: 300 }, (_, i) => (i >= 120 && i < 180 ? NaN : 50 + 10 * Math.sin(i)));
+  scopeTrace(ctx, { left: 0, top: 0, w: 100, h: 100 }, { n: 300, y: Y, x0: 0, x1: 99.99, mode: 'fast' });
+  const across = path.filter(([op, x]) => op === 'L' && x > 41 && x < 59);
+  const restart = path.find(([op, x]) => op === 'M' && x > 59 && x < 61);
+  assert(path.length > 100 && !across.length && restart, `nothing drawn across the gap (${across.length} pieces), the pen put down again after it (${!!restart})`);
 });

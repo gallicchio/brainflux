@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bloch sphere and NMR · BrainFlux</title>
-<meta name="description" content="Send pulses into a spin and watch it on the Bloch sphere: precession, the rotating frame, the free induction decay, spin echoes, T1 and T2, noise and averaging, and the Earth's-field NMR board's polarize-and-listen, its tuned tank and its coil's angle.">
+<meta name="description" content="Send pulses into a spin and watch it on the Bloch sphere: precession, the rotating frame, the free induction decay, spin echoes, T2*, T2 and T1 side by side, noise and averaging, and the Earth's-field NMR board's polarize-and-listen, its tuned tank and its coil's angle.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../lib/style.css">
 <link rel="stylesheet" href="nmr.css">
@@ -50,6 +50,7 @@
         <div class="plot-wrap curve-wrap" id="curve-wrap"><canvas id="curve" aria-label="What the sequence measures, against the delay or the time, with the fitted time constant"></canvas></div>
       </div>
     </div>
+    <div class="plot-wrap clocks-wrap" id="clocks-wrap"><canvas id="clocks" aria-label="The three clocks after one π/2 pulse, against the time on a log scale: what the coil sees (it dies with T₂*), each spin's own part across the field (it fades with T₂), and M_z climbing back (with T₁)"></canvas></div>
     <div class="readout small" id="readout" aria-live="off"></div>
     <div class="plot-wrap timeline-wrap v-seq" id="timeline-wrap"><canvas id="timeline" aria-label="The pulse sequence: drag a pulse to move it in time, click one to choose it"></canvas></div>
     <div class="hint v-seq" id="timeline-hint">Drag a pulse along the timeline to move it; click one to choose it and set its angle and axis on the right</div>
@@ -63,6 +64,7 @@
   </section>
 
   <aside class="controls" id="controls">
+    <div class="panel" id="clocks-panel" hidden></div>
     <div class="panel" id="seq-panel" data-views="seq"></div>
     <div class="panel" id="earth-panel" data-views="earth"></div>
     <div class="panel" id="tank-panel" data-views="earth"></div>
@@ -90,8 +92,8 @@
     what the instrument records: the voltage the spinning arrow makes in a coil.  Switch to the
     <b>rotating frame</b> to turn with the arrow: then only the pulses and the slow changes are
     left to watch.</p>
-    <p>The tabs go on from one spin to many (why the signal dies away, and how an echo brings
-    it back), to the pulse sequences that measure a sample, and to the Earth's-field board,
+    <p>The tabs go on from one spin to many (why the signal dies away, how an echo brings it
+    back, and the three times T₂*, T₂ and T₁ side by side), to the pulse sequences that measure a sample, and to the Earth's-field board,
     which tips the protons without any radio pulse.  The buttons at the top load the numbers
     of the TeachSpin (5 MHz) or of the board (2 kHz).</p>
   </section>
@@ -162,8 +164,29 @@
     pulls the sum's $M_z$ back up all the while: 0.08 by 5 ms.</p>
   </article>
 
+  <article class="exp" data-setup="threeclocks" data-frame="720x470">
+    <h3>7. Three clocks: T₂*, T₂ and T₁ on one plot</h3>
+    <p>A made-up sample whose three times lie a decade apart: $T_1=100$ ms, $T_2=10$ ms, and a
+    spread of the field (a Lorentzian, $\Delta f=286.5$ Hz wide) that makes $T_2^*=1.00$ ms, as
+    $1/T_2^*=1/T_2+\pi\Delta f$.  One π/2 pulse, then the clock speeds up as it goes, a decade
+    every three seconds, and the plot's time axis is logarithmic, so each clock is a step of its
+    own.  The sum of the spins, what the coil sees, dies first, with $T_2^*$: the spins fan out
+    and cancel.  At 1 ms the sum is down to 0.37 while each spin's own part across the field
+    (blue) is still 0.90 long: the fan shortens no spin.  That part fades only with $T_2$, exactly
+    as $e^{-t/T_2}$; on the sphere it is the radius of the blue ring the spins' tips lie on.  Last,
+    $M_z$ (green) climbs back as $1-e^{-t/T_1}$ and lifts the ring until it closes on the axis.
+    Fitted to the curves: 1.00, 10.0 and 100 ms.  The teeth are another run, a CPMG train with a
+    π pulse about $y'$ every 5 ms: each echo closes the fan, and its top lands on the blue curve
+    (the second, at 10 ms, on its $1/e$), never above it, as a sum can be no longer than the spins
+    it adds.  The echoes undo the fan, not $T_2$: their fit gives 10.0 ms.  The bar over the plot
+    is the rule $T_2^*\le T_2\le2T_1$.  Slide $T_2$ and its mark moves along it; push it past
+    $2T_1$ and $T_1$ follows.  Narrow the spread and $T_2^*$ closes up on $T_2$; untick <em>Many
+    spins</em> and it is $T_2$: one spin has no fan.  Why $2T_1$: whatever turns a spin over to take
+    its energy away, which is $T_1$, costs it its phase too, at half that rate.</p>
+  </article>
+
   <article class="exp" data-setup="cpmg" data-frame="720x531">
-    <h3>7. T₂ from a train of echoes</h3>
+    <h3>8. T₂ from a train of echoes</h3>
     <p>A π/2 pulse, then sixteen π pulses about $y'$, at $\tau$, $3\tau$, $5\tau$… with
     $\tau=2$ ms.  Each refocuses the fan, so an echo comes every 4 ms, out to 64 ms, and the
     echoes' heights fall as $e^{-t/T_2}$: one run measures $T_2$.  The fit beside the sphere gives
@@ -173,7 +196,7 @@
   </article>
 
   <article class="exp" data-setup="mg" data-frame="720x531">
-    <h3>8. Why Meiboom and Gill: pulses that are slightly wrong</h3>
+    <h3>9. Why Meiboom and Gill: pulses that are slightly wrong</h3>
     <p>The same train with the π pulses about $x'$ (Carr–Purcell), and every pulse 10% too
     long: a π that is really 198°, as a width set by hand can be.  About $x'$ each pulse's error
     adds to the last, the echoes alternate in sign, and they die in half the time: the fit says
@@ -183,7 +206,7 @@
   </article>
 
   <article class="exp" data-setup="ir" data-frame="720x240">
-    <h3>9. T₁ by inversion recovery</h3>
+    <h3>10. T₁ by inversion recovery</h3>
     <p>A π pulse turns $M$ to $-z$; it climbs back with $T_1$, as $1-2e^{-\tau/T_1}$; a π/2 at
     $\tau$ tips what it has reached over, and the FID's start reads it, with its sign on the
     mixer.  The scan runs it for fifteen delays and plots the readings: below zero for short
@@ -196,7 +219,7 @@
   </article>
 
   <article class="exp" data-setup="noise" data-frame="720x531">
-    <h3>10. Noise, and averaging it away</h3>
+    <h3>11. Noise, and averaging it away</h3>
     <p>An FID with thermal noise: a signal-to-noise ratio of 5, so the noise is 0.20 of the full
     signal, r.m.s.  Repeat and average: the signal is the same each time and adds up, the noise
     does not, and the average of $N$ runs has $1/\sqrt N$ of the noise: 0.050 after 16, 0.012
@@ -208,7 +231,7 @@
   </article>
 
   <article class="exp" data-setup="board" data-frame="720x201">
-    <h3>11. The Earth's-field board: polarize, switch off, listen</h3>
+    <h3>12. The Earth's-field board: polarize, switch off, listen</h3>
     <p>No magnet and no RF pulse.  A litre of water sits in a coil whose axis lies across the
     Earth's field (east–west).  For 3 s a current of 1.5 A makes 7.84 mT along the coil, 170
     times the Earth's 46.0 μT, and the protons build a magnetization along it, as
@@ -222,7 +245,7 @@
   </article>
 
   <article class="exp" data-setup="adiabatic" data-frame="720x201">
-    <h3>12. Sudden or adiabatic: switch it off slowly and nothing rings</h3>
+    <h3>13. Sudden or adiabatic: switch it off slowly and nothing rings</h3>
     <p>The same, with the current switched off in 300 ms instead of 0.4.  As it falls, the
     total field turns from the coil's axis to the Earth's; slowly enough, the spins follow it
     round, and $M$ ends up along $B_E$, with nothing across it to ring: 4.5% is left, an FID of
@@ -234,7 +257,7 @@
   </article>
 
   <article class="exp" data-setup="angle" data-frame="393x331">
-    <h3>13. Which way to lay the coil: the FID goes as sin² of its angle to the field</h3>
+    <h3>14. Which way to lay the coil: the FID goes as sin² of its angle to the field</h3>
     <p>Here the coil lies level, pointing north–south.  In Claremont the field dips 58.9° below
     the horizontal towards magnetic north, so the coil's axis is at $\alpha=58.9°$ to $B_E$.  The
     current builds $M$ along the coil; switched off suddenly, only its part across the field,
@@ -255,7 +278,7 @@
   </article>
 
   <article class="exp" data-setup="tune" data-frame="359x331">
-    <h3>14. Tune the tank to the protons</h3>
+    <h3>15. Tune the tank to the protons</h3>
     <p>The coil and the capacitors that the eight switches of SW1 put across it make a resonant
     circuit, a tank: it multiplies the FID by $|H|$, up to $Q=\omega L/R=37$ at its resonance
     $f_T=1/2\pi\sqrt{LC}$, in a band 52.6 Hz wide.  Here every switch is OFF, as a new board
@@ -271,7 +294,7 @@
   </article>
 
   <article class="exp" data-setup="elsewhere" data-frame="359x331">
-    <h3>15. Another place: the protons slide off the tank</h3>
+    <h3>16. Another place: the protons slide off the tank</h3>
     <p>The board, tuned in Claremont, taken where the Earth's field is 50.0 μT, as further north.
     The protons are now at 2129 Hz, 173 Hz above the tank, more than three of its widths: on the
     tank's plot the red line stands out on the tail.  The gain there is ×5.34, not ×36.6, and the
@@ -284,7 +307,7 @@
   </article>
 
   <article class="exp" data-setup="tanknoise" data-frame="359x331">
-    <h3>16. The tank narrows the noise band</h3>
+    <h3>17. The tank narrows the noise band</h3>
     <p>Here the tank is tuned 55 Hz below the protons (switches 1 2 3 4 7).  The coil's 8.9 Ω has
     thermal noise, $\sqrt{4kTR}$ = 0.38 nV/√Hz, in series with the EMF, so the tank multiplies it
     just as it multiplies the FID: read on the right axis, the tank's curve is that noise, 14
@@ -302,7 +325,7 @@
   </article>
 
   <article class="exp" data-setup="t1board" data-frame="265x331">
-    <h3>17. T₁ from the polarizing time</h3>
+    <h3>18. T₁ from the polarizing time</h3>
     <p>The FID's start is the magnetization built while the current flowed, $1-e^{-t_p/T_1}$.
     <em>Measure T₁</em> runs the cycle polarizing for 0.2 to 4.7 s, the board's range, and fits
     the starts: $T_1=2.49$ s for tap water's 2.5.  Each cycle you run adds its own point.  Try
@@ -311,18 +334,18 @@
   </article>
 
   <article class="exp" data-setup="field" data-frame="513x134">
-    <h3>18. The Earth's field to a nanotesla</h3>
+    <h3>19. The Earth's field to a nanotesla</h3>
     <p>Listening for 4.8 s, the spectrum's line is 0.37 Hz wide, $1/(\pi T_2^*)$, and its peak
     falls at 1959.82 Hz: $B=f/42.577$ Hz/μT = 46 030.0 nT, the field that was set.  One
     nanotesla moves the line 0.043 Hz, a tenth of its width, and an FID this clean locates the
     peak far better than that, so the board reads the field to a few nanotesla: enough to watch it
     drift through the day.  Set the Earth's field to 50 μT, as further north: the peak gives
     49 999.8 nT, a little less cleanly, as the tank, still tuned for Claremont, gives the FID
-    only ×5.3 there (experiment 15).</p>
+    only ×5.3 there (experiment 16).</p>
   </article>
 
   <article class="exp" data-setup="steel" data-frame="720x222">
-    <h3>19. A steel tool nearby</h3>
+    <h3>20. A steel tool nearby</h3>
     <p>Steel near the coil bends the field, so it differs across the bottle: 100 nT here, not
     5.  The protons' frequencies spread over 4.26 Hz, $T_2'=1/(\pi\Delta f)$ falls from 1.5 s to
     75 ms, and the FID dies within a tenth of a second ($T_2^*=72$ ms), its line 4.4 Hz wide.
@@ -369,6 +392,26 @@
   The power spectrum $|S(f)|^2$ of $A\,e^{-t/T_2^*}$ is a Lorentzian $1/(\pi T_2^*)$ wide at half
   height.  The pulses act on the spins far out in the Lorentzian's tails less well than on the
   rest: with 2.5 μs pulses an echo is 0.4% lower than $e^{-2\tau/T_2}$.</p>
+  <p><b>The three clocks.</b>  After a π/2 pulse the field in the rotating frame is along $z$
+  for every spin ($\delta\omega_i/\gamma$ of it), so each spin's own part across the field only
+  turns and fades: $|\mathbf M_{\perp i}(t)|=|\mathbf M_{\perp i}(0)|\,e^{-t/T_2}$ whatever
+  $T_1$ and the spread are, and $M_z(t)=1-(1-M_z(0))\,e^{-t/T_1}$.  The plot draws three
+  things: the mean of the first over the 4096 spins; $M_z$; and the length of the sum's part,
+  $|\sum_i\mathbf M_{\perp i}|/N$, which for a Lorentzian spread is $e^{-t/T_2^*}$ (to the
+  0.4% residue of a finite ensemble).  The 2.5 μs pulse tips the line's far tails a little less:
+  just after it the spins' mean part across is 0.9994, and $M_z$ is 0.0009.  By the triangle
+  inequality the sum's part is never longer than the mean of the spins' own; an echo can bring
+  it back up to that and no further, so $T_2^*\le T_2$.  Each time is the $\tau$ of
+  $A\,e^{-t/\tau}$ fitted by least squares to its curve from 0.1 ms ($1-M_z$ for $T_1$; for
+  $T_2^*$ down to 3% of the start, past which only the residue is left), shown once the curve
+  has fallen to $1/e$.  Why $T_2\le2T_1$: for a spin ½ the relaxation that moves it between
+  ↑ and ↓, at the rates that make $1/T_1$, destroys the coherence between them at half that
+  rate, and anything else that scrambles the phase only adds to it:
+  $1/T_2=1/(2T_1)+1/T_\varphi$.  On the page's sphere, whose top is the equilibrium: a state
+  tipped a small $\theta$ from it has $d|\mathbf M|^2/dt=\theta^2(1/T_1-2/T_2)$, which a $T_2$
+  longer than $2T_1$ would make positive, carrying the state out of the sphere.  The page keeps
+  $T_2\le2T_1$ as either is slid.  The experiment's clock runs at $v_0\max(1,t/t_0)$, with
+  $t_0=0.1$ ms: a decade of $t$ every 3 s on screen.</p>
   <p><b>The board.</b>  While the current flows, the protons relax towards the polarizing
   field, $B_p\approx170\,B_E$ along the coil; during the switch-off they relax towards the field of
   the moment.  A linear ramp of $B_p$ to zero in $\tau$ turns the total field from the coil's

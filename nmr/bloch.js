@@ -192,6 +192,18 @@ export class Ensemble {
   }
 
   /**
+   * The mean length of each spin's own part across the field, the mean of |M⊥ᵢ|.  Turning about
+   * ẑ, at whatever rate, leaves it alone: only T2 (and the pulses) change it.  It is never less
+   * than the length of the sum's part, |ΣM⊥ᵢ|/N (the triangle inequality), and equal to it only
+   * when the spins all point one way.
+   */
+  meanTransverse() {
+    let s = 0;
+    for (let i = 0, k = 0; i < this.N; i++, k += 3) s += Math.hypot(this.M[k], this.M[k + 1]);
+    return s / this.N;
+  }
+
+  /**
    * Advance every spin by dt in the rotating frame.  Beff is the field common to all (tesla,
    * [Bx, By, Bz]: B1 and the RF offset's ΔB); each spin adds its own offset along z.  Exact for
    * any dt while Beff has no transverse part; during a pulse the relaxation is split about it.
