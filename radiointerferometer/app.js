@@ -18,6 +18,7 @@ import { memStart, memSteps, windowIndices, rmsError } from './imaging.js';
 import { colorize, colorOf, cssColorOf, MODES } from '../lib/complexcolor.js';
 import { el, $, slider, segmented, toggle, drawer, toast, readHash, writeHash, setGroups, fixedNum } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, niceTicks, tickLabel, fillSlots } from '../lib/plot.js';
+import { scopeTrace, scopeMode } from '../lib/scope.js';
 import { squareArea, blit, pictureAxes, edgeTicks, arrow, line, fillSigned, complexPlane, valueDot, ring, cross, haloText } from './plots.js';
 
 const DEG = Math.PI / 180;
@@ -373,9 +374,7 @@ function drawStreams(canvas, traces, { lanes = 1, labels = null } = {}) {
         ctx.strokeStyle = colours.env; ctx.lineWidth = 1;
         for (const sg of [1, -1]) line(ctx, s.n, X, (i) => f.Y(off + sg * Math.SQRT2 * Math.hypot(s.re[i], s.im[i])));
       }
-      ctx.strokeStyle = t.colour; ctx.lineWidth = t.width || 1.3; ctx.setLineDash(t.dash || []);
-      line(ctx, s.n, X, (i) => f.Y(off + s.x[i]));
-      ctx.setLineDash([]);
+      voltageTrace(ctx, f, s, off, t);
     } else {
       ctx.strokeStyle = t.colour; ctx.lineWidth = t.width || 1.3;
       ctx.setLineDash(t.dash || []); line(ctx, s.n, X, (i) => f.Y(off + Math.SQRT2 * s.re[i]));
@@ -390,6 +389,52 @@ function drawStreams(canvas, traces, { lanes = 1, labels = null } = {}) {
     ctx.restore();
   }
   return f;
+}
+
+// A trace of many carrier cycles (one in five device pixels or more) is drawn as a digital
+// phosphor scope draws it (lib/scope.js): 300 cycles across a plot are a band, brightest at its
+// edges where the voltage turns.  It is drawn from at least 16 samples a cycle and 6 a device
+// pixel (at the streams' 8 a cycle, the straight pieces between samples show in the band as
+// bright and dim layers, and cycles a few pixels apart get ragged peaks), the carrier exact and
+// the envelope interpolated (it changes over many cycles: these are narrow bands); not a whole
+// number of samples a cycle, so that they don't fall at the same phases cycle after cycle; and
+// one device pixel wide (a band has no line width, and a wider trace in lib/scope.js brightens
+// the rows of every sample).  Fewer cycles: lines, as before.  (With ?scope=fast, the old
+// per-column min/max from 8 samples a cycle: as cheap as before.)
+const manyCycles = (ctx, f, cycles) => cycles >= 0.2 * f.w * ctx.getTransform().a;
+const deviceLine = (ctx) => 1 / ctx.getTransform().d;
+const fineCount = (ctx, f, cycles) => 1 + Math.ceil(scopeMode() === 'fast' ? 8 * cycles : Math.max(16.618 * cycles, 6.18 * f.w * ctx.getTransform().a));
+
+/** A stream's real voltage, its points evenly over the plot.  A dashed trace (the shifted copy)
+ *  is a dashed line while its cycles stand apart; in a band a dash means nothing, and it is drawn
+ *  translucent instead. */
+function voltageTrace(ctx, f, s, off, t) {
+  const width = t.width || 1.3;
+  if (!manyCycles(ctx, f, s.t1 - s.t0)) {
+    ctx.strokeStyle = t.colour; ctx.lineWidth = width; ctx.setLineDash(t.dash || []);
+    line(ctx, s.n, (i) => f.X(s.t0 + ((s.t1 - s.t0) * i) / (s.n - 1)), (i) => f.Y(off + s.x[i]));
+    ctx.setLineDash([]);
+    return;
+  }
+  let m = s.n, v = s.x;
+  if (scopeMode() !== 'fast') { m = Math.max(s.n, fineCount(ctx, f, s.t1 - s.t0)); v = fineVoltage(s, m, buf('fine', m)[0]); }
+  scopeTrace(ctx, f, { n: m, y: (j) => f.Y(off + v[j]), x0: f.X(s.t0), x1: f.X(s.t1), color: t.colour, width: deviceLine(ctx), alpha: t.dash ? 0.6 : 1 });
+}
+/** A stream's real voltage √2 Re[s(t) e^{2πiν₀t}] at m times evenly over its span, into out: the
+ *  envelope s interpolated between its points, the carrier exact.  (s.tc: the time of its first
+ *  point, when it is drawn against other times, as the shifted copy is.) */
+function fineVoltage(s, m, out) {
+  const n = s.n, dt = (s.t1 - s.t0) / (m - 1), re = s.re, im = s.im, tc = s.tc ?? s.t0;
+  const wc = Math.cos(TWO_PI * dt), ws = Math.sin(TWO_PI * dt);
+  let c = 0, d = 0;                                   // e^{2πiν₀t}, turned on by a step each sample
+  for (let j = 0; j < m; j++) {
+    if (j % 256 === 0) { const ph = TWO_PI * (tc + j * dt); c = Math.cos(ph); d = Math.sin(ph); }
+    const u = (j * (n - 1)) / (m - 1), i = Math.min(n - 2, Math.floor(u)), fr = u - i;
+    const a = re[i] + (re[i + 1] - re[i]) * fr, b = im[i] + (im[i + 1] - im[i]) * fr;
+    out[j] = Math.SQRT2 * (a * c - b * d);
+    const nc = c * wc - d * ws; d = c * ws + d * wc; c = nc;
+  }
+  return out;
 }
 
 /** A bar along the bottom of a time plot, `length` cycles long, with its label. */
@@ -462,8 +507,20 @@ function drawLags(canvas, series, { marker = null, dotAt = null, tmax = lagMax()
     if (real) {
       ctx.strokeStyle = colours.env; ctx.lineWidth = 1;
       for (const sg of [1, -1]) line(ctx, pts, X, (p) => f.Y(sg * Math.hypot(R[0][p], R[1][p])));
-      ctx.strokeStyle = s.colour; ctx.lineWidth = 1.3;
-      line(ctx, pts, X, (p) => f.Y(realCorr([R[0][p], R[1][p]], tau(p))));
+      if (manyCycles(ctx, f, 2 * tmax)) {
+        // Up to 600 cycles of the carrier under the envelope, as a scope draws them (see
+        // manyCycles): at the points' two a pixel they would alias into lobes.  The envelope
+        // interpolated between its points, the carrier exact.  (Faint: the globalAlpha above.)
+        const nf = Math.max(pts, fineCount(ctx, f, 2 * tmax)), v = buf('lagfine', nf)[0], R0 = R[0], R1 = R[1];
+        for (let j = 0; j < nf; j++) {
+          const t = -tmax + (2 * tmax * j) / (nf - 1), u = (j * (pts - 1)) / (nf - 1), i = Math.min(pts - 2, Math.floor(u)), fr = u - i;
+          v[j] = (R0[i] + (R0[i + 1] - R0[i]) * fr) * Math.cos(TWO_PI * t) + (R1[i] + (R1[i + 1] - R1[i]) * fr) * Math.sin(TWO_PI * t);
+        }
+        scopeTrace(ctx, f, { n: nf, y: (j) => f.Y(v[j]), x0: f.X(-tmax), x1: f.X(tmax), color: s.colour, width: deviceLine(ctx) });
+      } else {
+        ctx.strokeStyle = s.colour; ctx.lineWidth = 1.3;
+        line(ctx, pts, X, (p) => f.Y(realCorr([R[0][p], R[1][p]], tau(p))));
+      }
     } else {
       ctx.strokeStyle = s.colour; ctx.lineWidth = 1.3;
       line(ctx, pts, X, (p) => f.Y(R[0][p]));
@@ -592,7 +649,7 @@ function drawOne() {
   const a = stream('x1', [{ tape: tapes.src[0], delay: 0, amp: 1 }], null, 0, T - W, T, P);
   const b = stream('x2', [{ tape: self ? tapes.src[0] : tapes.src[1], delay: 0, amp: 1 }], null, 0, T - W + tau, T + tau, P);
   // The copy is drawn against the same times as the original: x(t + τ) above t.
-  const copy = { ...b, t0: a.t0, t1: a.t1 };
+  const copy = { ...b, t0: a.t0, t1: a.t1, tc: b.t0 };
   drawStreams($('#stream1'), [
     { s: a, colour: colours.src[0], width: 1.4 },
     { s: copy, colour: self ? C.ink : colours.src[1], dash: [5, 3], envelope: false, width: 1.1 },
