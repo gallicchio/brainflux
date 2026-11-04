@@ -37,6 +37,12 @@ export const PRESETS = {
     span: (tau, n) => (2 * n + 1) * tau,
     echoes: (tau, n) => Array.from({ length: n }, (_, k) => 2 * (k + 1) * tau),
   },
+  cp: {
+    label: 'Carr–Purcell', title: 'As CPMG, but the π pulses about x′, the axis of the π/2: an error in the π pulses adds up from echo to echo',
+    pulses: (tau, n) => [{ t: 0, angle: 90, phase: 0 }, ...Array.from({ length: n }, (_, k) => ({ t: (2 * k + 1) * tau, angle: 180, phase: 0 }))],
+    span: (tau, n) => (2 * n + 1) * tau,
+    echoes: (tau, n) => Array.from({ length: n }, (_, k) => 2 * (k + 1) * tau),
+  },
 };
 
 /** A sequence from a preset: its pulses, the time it spans and where its echoes fall. */

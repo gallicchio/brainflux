@@ -5,11 +5,12 @@
 
 import { GAMMA, GAMMA_HZ, pulseField, pulseDuration, spinHalf, T2star, spreadT2, toLab } from './bloch.js';
 import { Engine } from './engine.js';
-import { spectrum } from './signal.js';
+import { spectrum, fitShape, noiseRms } from './signal.js';
+import { PRESETS, buildSequence, runSequence, echoAmplitudes } from './sequence.js';
 import { SphereView } from './sphere.js';
-import { drawSignal, drawRaw, drawSpectrum, timeUnit, pulseName } from './charts.js';
+import { drawSignal, drawRaw, drawSpectrum, drawCurve, timeUnit, pulseName } from './charts.js';
 import { el, $, $$, slider, segmented, drawer, readHash, writeHash, setSlots, setGroups } from '../lib/ui.js';
-import { fitCanvas } from '../lib/plot.js';
+import { fitCanvas, Frame } from '../lib/plot.js';
 import { renderMath } from '../lib/mathml.js';
 
 const DEG = Math.PI / 180;
@@ -168,6 +169,8 @@ function timeParts(t, unit, dec = 2, w = 7) { return [{ v: t * unit.s, dec, w, c
 function sig3(v, cls = 'b') { const a = Math.abs(v); return { v, dec: a >= 99.95 ? 0 : a >= 9.995 ? 1 : 2, w: 6, class: cls }; }
 /** A time in the unit that suits it, to three figures: [{…}, ' unit']. */
 function time3(t) { if (!Number.isFinite(t)) return [{ text: '∞', w: 6, class: 'b' }, '']; const u = unitOf(t); return [sig3(t * u.s), ` ${u.u}`]; }
+/** A time to three figures for a line drawn on a canvas. */
+function canvasTime(t) { const u = unitOf(t), v = sig3(t * u.s, ''); return [{ v: v.v, dec: v.dec, w: 5 }, ` ${u.u}`]; }
 /** The unit that puts a time between 1 and 1000 of it. */
 function unitOf(t) {
   const a = Math.abs(t) * 1.0000001;
@@ -325,6 +328,7 @@ function drawPlots() {
     });
   }
   if (state.view === 'many') drawSpec(t0, t1);
+  if (state.view === 'seq') { drawTimeline(); drawSpec(t0, t1, seq.acq); drawSeqCurve(); }
 }
 
 /** The spectrum of the signal since the last pulse ended (or of the whole window), sampled
@@ -338,11 +342,11 @@ function specOf(a, b, span) {
   while (N < 65536 && N * dt < 150 / span) N *= 2;
   return spectrum(eng.record, a, b, sigma(), n, N / n);
 }
-function drawSpec(t0, t1) {
+function drawSpec(t0, t1, acq = null) {
   const { ctx, width, height } = fitCanvas($('#spec'));
   ctx.clearRect(0, 0, width, height);
   const last = eng.sent.length ? eng.sent[eng.sent.length - 1].t1 : t0;
-  const a = Math.max(t0, last), b = Math.min(t1, eng.t);
+  const a = acq ? acq[0] : Math.max(t0, last), b = Math.min(acq ? acq[1] : t1, eng.t);
   const line = 1 / (Math.PI * T2star(T2eff(), state.ensemble ? state.spreadHz : 0));
   const span = Math.max(state.inst === 'earth' ? 2 : 200, 3 * (Number.isFinite(line) && line > 0 ? line : 0) + 1.2 * Math.abs(state.offsetHz));
   let spec = null;
@@ -379,8 +383,9 @@ function readout() {
       [state.T2on ? '· with T₂, T₂* = ' : '· with no T₂, T₂* = ', ...time3(t2s)],
       [`· ${NSIG} spins, ${state.arrows} drawn`]]);
   }
+  if (state.view === 'seq') seqReadout(lines);
   const [a, b] = windowNow(), tu = timeUnit(b - a), pu = timeUnit(pulseDuration(Math.PI / 2, state.B1));
-  lines.push([['Slow motion: time ×', { text: sci(state.speed), w: 6 }, ', so one second here is ', ...timeParts(state.speed, unitOf(state.speed), 2, 6), ' of the real thing'],
+  lines.push([['Slow motion: time ×', { text: sci(state.speed), w: 8 }, ', so one second here is ', ...timeParts(state.speed, unitOf(state.speed), 2, 6), ' of the real thing'],
     ['· t = ', ...timeParts(eng.t, tu, 2, 7)],
     ['· a π/2 pulse lasts ', ...timeParts(pulseDuration(Math.PI / 2, state.B1), pu, 2, 6)]]);
   const box = $('#readout');
@@ -416,11 +421,12 @@ function speedNow() { return state.speed; }
 
 /** Move on by dt seconds of the page's time. */
 function tick(dt) {
+  if (state.view === 'seq') scanStep();
   if (run && eng.done) {
     if (!run.loop) { goFree(); return; }
     if (pauseLeft <= 0) pauseLeft = 1.5;
     pauseLeft -= dt;
-    if (pauseLeft <= 0) startRun(run);
+    if (pauseLeft <= 0) { if (run.seq) runSeq(); else startRun(run); }
     return;
   }
   eng.advance(dt * speedNow(), BUDGET);
@@ -607,13 +613,301 @@ function setView(v) {
 
 /** What each view starts with when its tab is pressed: its first experiment. */
 function defaultsFor(v) {
-  const first = { one: 'larmor', many: 'spread', seq: 'larmor', earth: 'larmor' }[v];
+  const first = { one: 'larmor', many: 'spread', seq: 'cpmg', earth: 'larmor' }[v];
   if (setups[first]) setups[first]({ keepInstrument: true });
 }
 
 window.addEventListener('resize', dirty);
 document.addEventListener('visibilitychange', () => { lastT = 0; kick(); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', dirty);
+
+// ------------------------------------------------------------------ view 3: pulse sequences
+
+const SEQ = {
+  teachspin: { tau: { fid: 1e-3, echo: 1.5e-3, ir: 10e-3, cpmg: 2e-3, cp: 2e-3 }, n: 16, tauRange: [5e-5, 0.2] },
+  earth: { tau: { fid: 0.1, echo: 0.5, ir: 1, cpmg: 0.15, cp: 0.15 }, n: 12, tauRange: [5e-3, 10] },
+};
+const seq = { preset: 'cpmg', tau: 2e-3, n: 16, error: 0, pulses: [], span: 1, echoes: [], acq: [0, 1], sel: -1, loop: true, edited: false, scan: null };
+const pulseEndT = (q) => q.t + pulseDuration(q.angle * DEG, state.B1) / 2;
+
+/** T2* for laying out a sequence (a stand-in when nothing decays). */
+function layoutT2s() {
+  const t = T2star(T2eff(), state.ensemble ? state.spreadHz : 0);
+  return Number.isFinite(t) ? t : 4 * seq.tau;
+}
+
+/** The preset's pulses, span, echoes and acquisition window for the present τ and n. */
+function buildSeq() {
+  const T2s = layoutT2s(), s = buildSequence(seq.preset, seq.tau, seq.n, T2s);
+  seq.pulses = s.pulses.map((p) => ({ ...p }));
+  seq.span = s.span; seq.echoes = s.echoes; seq.edited = false; seq.sel = -1;
+  const p = seq.pulses;
+  if (seq.preset === 'echo') seq.acq = [Math.max(pulseEndT(p[1]), 2 * seq.tau - 3 * T2s), Math.min(s.span, 2 * seq.tau + 3 * T2s)];
+  else if (seq.preset === 'cpmg' || seq.preset === 'cp') seq.acq = [pulseEndT(p[0]), s.span];
+  else seq.acq = [pulseEndT(p[p.length - 1]), s.span];
+  seq.scan = null;
+}
+
+/** Run the sequence on the sphere, with the pulse error applied. */
+function runSeq() {
+  const k = 1 + seq.error;
+  startRun({ pulses: seq.pulses.map((q) => ({ ...q, angle: q.angle * k })), span: seq.span, loop: seq.loop, seq: true });
+}
+
+function setPreset(name, { tau } = {}) {
+  seq.preset = name;
+  seq.tau = tau ?? SEQ[state.inst].tau[name];
+  seq.n = SEQ[state.inst].n;
+  buildSeq();
+  state.speed = seq.span / SCREEN; speedSlider.value = state.speed;
+  syncSeq(); runSeq(); scheduleHash();
+}
+
+// The timeline: pulses as bars (height by angle, colour by axis), the acquisition window as a band.
+const tlCanvas = $('#timeline');
+let tlFrame = null, tlDrag = null;
+function axisColor(phase) { const p = ((phase % 360) + 360) % 360; return p === 90 || p === 270 ? C.my : C.mx; }
+
+function drawTimeline() {
+  const { ctx, width, height } = fitCanvas(tlCanvas);
+  ctx.clearRect(0, 0, width, height);
+  const f = new Frame(ctx, width, height, { left: 48, right: 12, top: 34, bottom: 34 });
+  f.x0 = run ? run.t0 : 0; f.x1 = seq.span; f.y0 = 0; f.y1 = 1;
+  tlFrame = f;
+  const tu = timeUnit(seq.span);
+  // The acquisition window.
+  const xa = f.X(seq.acq[0]), xb = f.X(seq.acq[1]);
+  ctx.fillStyle = C.spec; ctx.globalAlpha = 0.10; ctx.fillRect(xa, f.top, xb - xa, f.h); ctx.globalAlpha = 0.5;
+  ctx.fillRect(xa, f.bottom - 8, xb - xa, 8); ctx.globalAlpha = 1;
+  ctx.fillStyle = C.spec; ctx.fillRect(xa - 2, f.bottom - 14, 4, 14); ctx.fillRect(xb - 2, f.bottom - 14, 4, 14);
+  ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
+  ctx.fillText('acquisition (the spectrum)', Math.min(xa + 4, f.right - 130), f.bottom - 10);
+  // The echoes expected.
+  ctx.strokeStyle = C.ink3; ctx.setLineDash([2, 3]);
+  for (const te of seq.echoes) { const x = f.X(te); ctx.beginPath(); ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); ctx.stroke(); }
+  ctx.setLineDash([]);
+  // The pulses.
+  ctx.textAlign = 'center';
+  seq.pulses.forEach((q, i) => {
+    const dur = pulseDuration(q.angle * DEG, state.B1), x0 = f.X(q.t - dur / 2), x1 = f.X(q.t + dur / 2);
+    const w = Math.max(6, x1 - x0), xm = (x0 + x1) / 2, hgt = f.h * Math.min(1, 0.3 + (0.7 * q.angle) / 180);
+    ctx.fillStyle = axisColor(q.phase);
+    ctx.fillRect(xm - w / 2, f.bottom - hgt, w, hgt);
+    if (i === seq.sel) { ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.strokeRect(xm - w / 2 - 2, f.bottom - hgt - 2, w + 4, hgt + 4); ctx.lineWidth = 1; }
+    ctx.fillStyle = C.ink2; ctx.fillText(pulseName(q.angle, q.phase), xm, f.bottom - hgt - 3);
+  });
+  if (run && eng.t >= f.x0 && eng.t <= f.x1) {
+    ctx.strokeStyle = C.m; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(f.X(eng.t), f.top - 4); ctx.lineTo(f.X(eng.t), f.bottom); ctx.stroke(); ctx.lineWidth = 1;
+  }
+  const g = new Frame(ctx, width, height, { left: 48, right: 12, top: 34, bottom: 34 });
+  g.x0 = f.x0 * tu.s; g.x1 = f.x1 * tu.s; g.y0 = 0; g.y1 = 1;
+  g.axes({ xlabel: `time (${tu.u}): drag a pulse, or the ends of the acquisition band`, yTicks: false, colors: C });
+  ctx.fillStyle = C.ink; ctx.font = '600 12px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText(`The sequence: ${PRESETS[seq.preset].label}${seq.edited ? ' (edited)' : ''}`, f.right, 3);
+}
+
+function tlHit(x, y) {
+  const f = tlFrame;
+  if (!f) return null;
+  let best = null, bd = 9;
+  seq.pulses.forEach((q, i) => { const d = Math.abs(f.X(q.t) - x) - (i === seq.sel ? 2 : 0); if (d < bd && y > f.top - 16 && y < f.bottom + 2) { bd = d; best = { kind: 'pulse', i }; } });
+  if (best) return best;
+  if (Math.abs(f.X(seq.acq[0]) - x) < 7) return { kind: 'acqA' };
+  if (Math.abs(f.X(seq.acq[1]) - x) < 7) return { kind: 'acqB' };
+  if (x > f.X(seq.acq[0]) && x < f.X(seq.acq[1]) && y > f.bottom - 16 && y < f.bottom + 4) return { kind: 'acq', t: f.invX(x) };
+  return null;
+}
+tlCanvas.addEventListener('pointerdown', (e) => {
+  const r = tlCanvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, h = tlHit(x, y);
+  if (!h) { seq.sel = -1; syncSeq(); dirty(); return; }
+  tlCanvas.setPointerCapture(e.pointerId);
+  tlDrag = { ...h, moved: false };
+  if (h.kind === 'pulse') { seq.sel = h.i; syncSeq(); }
+  dirty();
+});
+tlCanvas.addEventListener('pointermove', (e) => {
+  const r = tlCanvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (!tlDrag) { const h = tlHit(x, y); tlCanvas.style.cursor = h ? (h.kind === 'pulse' || h.kind === 'acq' ? 'ew-resize' : 'col-resize') : 'default'; return; }
+  const f = tlFrame, t = Math.max(0, Math.min(seq.span, f.invX(x)));
+  tlDrag.moved = true;
+  if (tlDrag.kind === 'pulse') { seq.pulses[tlDrag.i].t = t; seq.edited = true; seq.scan = null; }
+  else if (tlDrag.kind === 'acqA') seq.acq[0] = Math.min(t, seq.acq[1] - seq.span / 200);
+  else if (tlDrag.kind === 'acqB') seq.acq[1] = Math.max(t, seq.acq[0] + seq.span / 200);
+  else { const d = t - tlDrag.t, w = seq.acq[1] - seq.acq[0]; let a = Math.max(0, Math.min(seq.span - w, seq.acq[0] + d)); seq.acq = [a, a + w]; tlDrag.t = t; }
+  syncSeq(); dirty();
+});
+const tlEnd = () => {
+  if (tlDrag && tlDrag.kind === 'pulse' && tlDrag.moved) {
+    const q = seq.pulses[tlDrag.i];
+    seq.pulses.sort((a, b) => a.t - b.t); seq.sel = seq.pulses.indexOf(q);
+    runSeq();
+  }
+  tlDrag = null; scheduleHash();
+};
+tlCanvas.addEventListener('pointerup', tlEnd);
+tlCanvas.addEventListener('pointercancel', tlEnd);
+
+// The sequence's panel.
+const seqPanel = $('#seq-panel');
+const presetButtons = {};
+const presetGrid = el('div', { class: 'button-grid' });
+for (const [id, P] of Object.entries(PRESETS)) {
+  presetButtons[id] = el('button', { type: 'button', title: P.title, 'aria-pressed': 'false', onclick: () => setPreset(id) }, P.label);
+  presetGrid.append(presetButtons[id]);
+}
+const tauSlider = slider({ label: 'delay τ', min: 1, max: 2, log: true, value: 1, title: 'The spacing of the pulses',
+  onInput: (v) => { seq.tau = v / timeUnit(SEQ[state.inst].tauRange[1]).s; buildSeq(); state.speed = seq.span / SCREEN; speedSlider.value = state.speed; syncSeq(); runSeq(); scheduleHash(); } });
+const nSlider = slider({ label: 'π pulses', min: 1, max: 40, step: 1, value: 16, title: 'How many π pulses in the train (how many echoes)',
+  onInput: (v) => { seq.n = Math.round(v); buildSeq(); state.speed = seq.span / SCREEN; speedSlider.value = state.speed; syncSeq(); runSeq(); scheduleHash(); } });
+const errorSlider = slider({ label: 'pulses off by (%)', min: -25, max: 25, step: 1, value: 0, title: 'Every pulse turns the spins this much too far (or too little): a miscalibrated pulse width or B₁',
+  onInput: (v) => { seq.error = v / 100; seq.scan = null; runSeq(); scheduleHash(); } });
+const selBox = el('div', { class: 'stack' });
+const selNote = el('div', { class: 'note' });
+const selAngle = slider({ label: 'its angle (°)', min: 0, max: 360, step: 1, value: 90, onInput: (v) => { const q = seq.pulses[seq.sel]; if (!q) return; q.angle = v; seq.edited = true; seq.scan = null; runSeq(); syncSeq(); } });
+const selAxis = segmented([{ value: 0, label: 'x′' }, { value: 90, label: 'y′' }, { value: 180, label: '−x′' }, { value: 270, label: '−y′' }], 0, (v) => { const q = seq.pulses[seq.sel]; if (!q) return; q.phase = v; seq.edited = true; seq.scan = null; runSeq(); syncSeq(); }, { label: 'Its axis' });
+const selDelete = el('button', { type: 'button', onclick: () => { if (seq.sel < 0) return; seq.pulses.splice(seq.sel, 1); seq.sel = -1; seq.edited = true; seq.scan = null; runSeq(); syncSeq(); } }, 'Delete it');
+selBox.append(selNote, selAngle, el('div', { class: 'row' }, el('span', { class: 'small muted' }, 'about'), selAxis, selDelete));
+const addButton = el('button', { type: 'button', title: 'A π pulse about y′ halfway along, to drag where you want it', onclick: () => {
+  seq.pulses.push({ t: seq.span / 2, angle: 180, phase: 90 }); seq.pulses.sort((a, b) => a.t - b.t);
+  seq.sel = seq.pulses.findIndex((q) => q.t === seq.span / 2); seq.edited = true; seq.scan = null; runSeq(); syncSeq();
+} }, 'Add a pulse');
+const loopButton = el('button', { type: 'button', 'aria-pressed': 'true', title: 'Run the sequence again and again, each time from equilibrium (as the instrument does, waiting many T₁ between runs)',
+  onclick: () => { seq.loop = !seq.loop; loopButton.setAttribute('aria-pressed', String(seq.loop)); if (run) run.loop = seq.loop; } }, 'Repeat');
+const runButton = el('button', { type: 'button', class: 'primary', onclick: () => runSeq() }, 'Run it');
+const scanButton = el('button', { type: 'button', title: 'Run the sequence for many delays τ and plot what it measures against τ', onclick: () => startScan() }, 'Scan τ');
+const seqResult = el('div', { class: 'note', id: 'seq-result' });
+seqPanel.append(el('div', { class: 'label' }, 'The sequence'), presetGrid, tauSlider, nSlider, errorSlider,
+  el('div', { class: 'gloss' }, 'A pulse error is a π pulse that is really, say, 170°: the TeachSpin\'s widths are set by hand.'),
+  el('div', { class: 'row' }, runButton, loopButton, scanButton, addButton), selBox, seqResult);
+
+function syncSeq() {
+  for (const [id, b] of Object.entries(presetButtons)) b.setAttribute('aria-pressed', String(id === seq.preset && !seq.edited));
+  const R = SEQ[state.inst].tauRange, tu = timeUnit(R[1]);
+  tauSlider.setRange(R[0] * tu.s, R[1] * tu.s); tauSlider.value = +(seq.tau * tu.s).toPrecision(5);
+  tauSlider.querySelector('label').textContent = `delay τ (${tu.u})`;
+  nSlider.value = seq.n; nSlider.hidden = !(seq.preset === 'cpmg' || seq.preset === 'cp');
+  errorSlider.value = Math.round(seq.error * 100);
+  scanButton.hidden = !(seq.preset === 'ir' || seq.preset === 'echo');
+  const q = seq.pulses[seq.sel];
+  selBox.hidden = !q;
+  if (q) { const tu2 = timeUnit(seq.span); setSlots(selNote, ['Chosen: ', { text: pulseName(q.angle, q.phase), w: 7 }, ' at ', { v: q.t * tu2.s, dec: 3, w: 7 }, ` ${tu2.u}`]); selAngle.value = q.angle; selAxis.value = q.phase; }
+  loopButton.setAttribute('aria-pressed', String(seq.loop));
+}
+
+// Scanning τ: one run per frame, silently, the points added to the plot as they come.
+function batchParams() {
+  return { B0: state.B0, B1: state.B1, offsetHz: state.offsetHz, T1: T1eff(), T2: T2eff(), N: state.ensemble ? NSIG : 1, spreadHz: state.ensemble ? state.spreadHz : 0, averages: state.averages };
+}
+function startScan() {
+  const kind = seq.preset, T2s = layoutT2s();
+  let taus;
+  if (kind === 'ir') {
+    const T = Number.isFinite(T1eff()) ? T1eff() : 10 * seq.tau;
+    taus = Array.from({ length: 15 }, (_, i) => 0.04 * T * (100 ** (i / 14)));
+  } else {
+    const T = Number.isFinite(T2eff()) ? T2eff() : 20 * T2s, lo = Math.max(2 * T2s, 0.03 * T);
+    taus = Array.from({ length: 12 }, (_, i) => lo + ((1.2 * T - lo) * i) / 11);
+  }
+  seq.scan = { kind, taus, x: [], y: [], fit: null, params: batchParams(), sigma: sigma(), seed: 101 };
+  dirty();
+}
+function scanStep() {
+  const S = seq.scan;
+  if (!S || S.x.length >= S.taus.length) return;
+  const tau = S.taus[S.x.length], k = 1 + seq.error, P = S.params, T2s = layoutT2s();
+  const pulses = buildSequence(S.kind, tau, 1, T2s).pulses.map((q) => ({ ...q, angle: q.angle * k }));
+  if (S.kind === 'ir') {
+    const t0 = pulseEndT(pulses[1]), w = Math.min(0.05 * T2s, 0.1 * tau), e = runSequence(P, pulses, t0 + w, w / 20, S.seed++, [[t0, t0 + w]]);
+    S.x.push(tau); S.y.push(e.record.meanY(t0, t0 + w, S.sigma));
+  } else {
+    const w = Math.min(T2s, tau / 2), e = runSequence(P, pulses, 2 * tau + w, w / 40, S.seed++, [[2 * tau - w, 2 * tau + w]]);
+    S.x.push(2 * tau); S.y.push(e.record.envelopeMax(2 * tau - w, 2 * tau + w, S.sigma).max);
+  }
+  if (S.x.length >= 3) {
+    const fit = fitShape(S.x, S.y, S.kind === 'ir' ? 'recovery' : 'decay');
+    S.fit = { A: fit.A, tau: fit.tau, null: fit.tau * Math.LN2 };
+  }
+}
+
+/** The echoes so far in this run's record, and their fit A e^{−t/T2}. */
+function trainEchoes() {
+  if (!(seq.preset === 'cpmg' || seq.preset === 'cp') || !run) return null;
+  const done = seq.echoes.filter((t) => t < eng.t - seq.tau / 4);
+  if (!done.length) return { t: [], amp: [], fit: null };
+  return echoAmplitudes(eng.record, done, Math.min(seq.tau / 2, layoutT2s()), sigma());
+}
+
+/** The FID's envelope in the acquisition window, and its fit A e^{−(t − t0)/T2*}. */
+function fidFit() {
+  const [a, b0] = seq.acq, b = Math.min(b0, eng.t);
+  if (b - a < (seq.acq[1] - seq.acq[0]) * 0.3) return null;
+  // The mixer's output in phase with the FID's start: unlike the envelope it averages noise to
+  // zero (the envelope of noise alone is σ√(π/2) on average, which would lengthen the fit).
+  const m0 = eng.record.at(a, 0), ph = Math.atan2(m0[1], m0[0]), ux = Math.cos(ph), uy = Math.sin(ph);
+  const t = [], y = [], tmp = [0, 0, 0], sg = sigma();
+  for (let k = 0; k < 40; k++) { const tk = a + ((b - a) * k) / 39, m = eng.record.at(tk, sg, tmp); t.push(tk - a); y.push(m[0] * ux + m[1] * uy); }
+  const f = fitShape(t, y, 'decay');
+  return { t0: a, A: f.A, tau: f.tau, t, y };
+}
+
+function drawSeqCurve() {
+  const { ctx, width, height } = fitCanvas($('#curve'));
+  ctx.clearRect(0, 0, width, height);
+  const S = seq.scan;
+  if (seq.preset === 'ir' || seq.preset === 'echo') {
+    const ir = seq.preset === 'ir';
+    const xmax = S ? S.taus[S.taus.length - 1] * (ir ? 1.05 : 2.1) : (ir ? 4 : 2.4) * (Number.isFinite(ir ? T1eff() : T2eff()) ? (ir ? T1eff() : T2eff()) : seq.tau);
+    const xu = timeUnit(xmax);
+    const fit = S && S.fit ? (ir ? (x) => S.fit.A * (1 - 2 * Math.exp(-x / S.fit.tau)) : (x) => S.fit.A * Math.exp(-x / S.fit.tau)) : null;
+    const tq = (v) => [{ v: v * xu.s, dec: 2, w: 6 }, ` ${xu.u}`];
+    drawCurve(ctx, width, height, {
+      x: S ? S.x : [], y: S ? S.y : [], fit, xmax, ymin: ir ? -1.1 : 0, ymax: 1.1, colors: C, xunit: xu,
+      title: ir ? 'The FID\'s start against τ (the mixer, with its sign)' : 'The echo\'s height against 2τ',
+      xlabel: ir ? `delay τ (${xu.u})` : `time of the echo, 2τ (${xu.u})`,
+      current: ir ? seq.tau : 2 * seq.tau,
+      marks: S && S.fit && ir ? [{ x: S.fit.null, label: 'null: T₁ ln 2' }] : [],
+      note: S && S.fit ? (ir ? ['fit: T₁ = ', ...canvasTime(S.fit.tau)] : ['fit: T₂ = ', ...canvasTime(S.fit.tau)]) : (S ? null : ['press Scan τ']),
+    });
+    return;
+  }
+  if (seq.preset === 'cpmg' || seq.preset === 'cp') {
+    const tr = trainEchoes(), xmax = seq.span, xu = timeUnit(xmax);
+    const fit = tr && tr.fit ? (x) => tr.fit.A * Math.exp(-x / tr.fit.T2) : null;
+    drawCurve(ctx, width, height, {
+      x: tr ? tr.t : [], y: tr ? tr.amp : [], fit, xmax, ymin: 0, ymax: 1.1, colors: C, xunit: xu,
+      title: 'The echoes\' heights', xlabel: `time (${xu.u})`,
+      note: tr && tr.fit ? ['fit: T₂ = ', ...canvasTime(tr.fit.T2)] : null,
+    });
+    return;
+  }
+  // The FID: its envelope and the fit.
+  const ff = fidFit(), xmax = seq.acq[1] - seq.acq[0], xu = timeUnit(xmax);
+  drawCurve(ctx, width, height, {
+    x: ff ? ff.t : [], y: ff ? ff.y : [], fit: ff ? (x) => ff.A * Math.exp(-x / ff.tau) : null, xmax, ymin: 0, ymax: 1.1, colors: C, xunit: xu,
+    title: 'The FID (the mixer in phase with its start)', xlabel: `time after the window opens (${xu.u})`,
+    note: ff ? ['fit: T₂* = ', ...canvasTime(ff.tau)] : null,
+  });
+}
+
+function seqReadout(lines) {
+  const S = seq.scan, tu = (t) => time3(t);
+  if (seq.preset === 'ir') {
+    lines.push(S && S.fit
+      ? [[`T₁ from the fit to ${S.x.length} delays: `, ...tu(S.fit.tau)], ['· the null at τ = ', ...tu(S.fit.null), ' = T₁ ln 2'], ['· set: T₁ = ', ...tu(T1eff())]]
+      : [['Inversion recovery: π flips M to −z; it climbs back with T₁; the π/2 at τ reads how far it got.'], ['Press Scan τ to measure T₁.']]);
+  } else if (seq.preset === 'echo') {
+    lines.push(S && S.fit
+      ? [[`T₂ from ${S.x.length} echoes: `, ...tu(S.fit.tau)], ['· set: T₂ = ', ...tu(T2eff())], ['· the FID decays with T₂* = ', ...tu(T2star(T2eff(), state.ensemble ? state.spreadHz : 0))]]
+      : [['The echo at 2τ = ', ...tu(2 * seq.tau)], ['· e^(−2τ/T₂) = ', { v: Math.exp(-2 * seq.tau / T2eff()), dec: 3, w: 5, class: 'b' }], ['· Scan τ to measure T₂']]);
+  } else if (seq.preset === 'cpmg' || seq.preset === 'cp') {
+    const tr = trainEchoes();
+    lines.push([[`${tr ? tr.t.length : 0} echoes so far`], ['· fit T₂ = ', ...(tr && tr.fit ? tu(tr.fit.T2) : [{ text: '–', w: 6, class: 'b' }, ''])], ['· set: T₂ = ', ...tu(T2eff())]]);
+  } else {
+    const ff = fidFit();
+    lines.push([['The FID\'s envelope: fit T₂* = ', ...(ff ? tu(ff.tau) : [{ text: '–', w: 6, class: 'b' }, ''])], ['· 1/T₂* = 1/T₂ + πΔf gives ', ...tu(T2star(T2eff(), state.ensemble ? state.spreadHz : 0))]]);
+  }
+}
 
 // ------------------------------------------------------------------------ the address
 
@@ -630,6 +924,9 @@ function saveHash() {
     b0: state.B0 !== inst().B0 ? r4(state.B0) : undefined, b1: r4(state.B1), off: state.offsetHz ? r4(state.offsetHz) : undefined,
     a: state.custom.angle !== 45 ? state.custom.angle : undefined, ph: state.custom.phase || undefined,
     m: !run ? `${r4(s.theta / DEG)}_${r4(s.phi / DEG)}` : undefined,
+    q: state.view === 'seq' ? seq.preset : undefined, tau: state.view === 'seq' ? r4(seq.tau) : undefined,
+    pn: state.view === 'seq' && (seq.preset === 'cpmg' || seq.preset === 'cp') ? seq.n : undefined,
+    err: state.view === 'seq' && seq.error ? r4(seq.error) : undefined,
   });
 }
 function loadHash(h) {
@@ -647,6 +944,13 @@ function loadHash(h) {
   state.custom.angle = num(h.a, 45); state.custom.phase = num(h.ph, 0);
   applyEngine(); syncSliders();
   setView(['one', 'many', 'seq', 'earth'].includes(h.v) ? h.v : 'one');
+  if (state.view === 'seq') {
+    seq.error = num(h.err, 0);
+    setPreset(PRESETS[h.q] ? h.q : 'cpmg', { tau: num(h.tau, undefined) });
+    if (h.pn) { seq.n = num(h.pn, seq.n); buildSeq(); syncSeq(); runSeq(); }
+    state.speed = num(h.sp, state.speed); speedSlider.value = state.speed;
+    return;
+  }
   const [th, ph] = (h.m || '0_0').split('_').map(Number);
   startFree([Math.sin(th * DEG) * Math.cos(ph * DEG), Math.sin(th * DEG) * Math.sin(ph * DEG), Math.cos(th * DEG)]);
 }
@@ -670,7 +974,12 @@ function setup(o) {
   state.playing = true; playButton.textContent = 'Pause';
   applyEngine(); syncSliders();
   setView(o.view || 'one');
-  if (o.script) startRun(o.script); else startFree(o.M || [0, 0, 1]);
+  if (o.view === 'seq') {
+    seq.error = o.error ?? 0; seq.loop = true;
+    setPreset(o.preset || 'cpmg', { tau: o.tau });
+    if (o.n) { seq.n = o.n; buildSeq(); state.speed = seq.span / SCREEN; speedSlider.value = state.speed; syncSeq(); runSeq(); }
+    if (o.scan) startScan();
+  } else if (o.script) startRun(o.script); else startFree(o.M || [0, 0, 1]);
   scheduleHash();
 }
 const S45 = Math.SQRT1_2;
@@ -681,6 +990,10 @@ const setups = {
   offres: (k = {}) => setup({ ...k, view: 'one', frame: 'rot', speed: 2e-6, offset: 50e3, script: { pulses: [{ t: 2e-6, angle: 90, phase: 0 }], span: 30e-6 } }),
   spread: (k = {}) => setup({ ...k, view: 'many', frame: 'rot', ensemble: true, speed: 4e-4, script: { pulses: [{ t: 0, angle: 90, phase: 0 }], span: 4e-3 } }),
   echo: (k = {}) => setup({ ...k, view: 'many', frame: 'rot', ensemble: true, T1: true, T2: true, speed: 5e-4, script: { pulses: [{ t: 0, angle: 90, phase: 0 }, { t: 1.5e-3, angle: 180, phase: 0 }], span: 5e-3 } }),
+  cpmg: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'cpmg' }),
+  mg: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'cp', error: 0.1 }),
+  ir: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'ir', scan: true }),
+  noise: (k = {}) => setup({ ...k, view: 'seq', frame: 'rot', ensemble: true, T1: true, T2: true, preset: 'fid', snr: 5 }),
 };
 drawer($('#help'), $('#help-button'), setups);
 
@@ -706,6 +1019,9 @@ window.__app = {
   /** Run the clock until the simulated time t (in steps of the page's frames), and draw. */
   runTo(t, maxSteps = 1e5) { for (let i = 0; i < maxSteps && eng.t < t && !(run && eng.done); i++) tick(1 / 60); draw(); return eng.t; },
   setView, sendPulse, startRun, startFree, goFree, loadInstrument, loadSample, windowNow, sigma, turnsPerFrame,
+  seq, setPreset, buildSeq, runSeq, startScan, scanStep, trainEchoes, fidFit,
+  /** Finish the τ scan now. */
+  finishScan() { while (seq.scan && seq.scan.x.length < seq.scan.taus.length) scanStep(); draw(); return seq.scan; },
   sum: (frame = 'rot') => eng.sum(frame),
   tip: () => tipScreen(),
 };

@@ -88,14 +88,19 @@
 
 .signal-wrap { height: max(150px, calc(21vh - 10px)); }
 .plots2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-.raw-wrap, .spec-wrap, .curve-wrap, .zoom-wrap { height: max(130px, calc(16vh - 10px)); }
+.raw-wrap, .spec-wrap, .zoom-wrap { height: max(130px, calc(16vh - 10px)); }
 .timeline-wrap { height: 104px; }
 #timeline { cursor: pointer; }
 
 /* Which pictures each view has. */
 .nmr .plot-wrap.v-seq, .nmr .plot-wrap.v-earth, .nmr .spec-wrap, .nmr .curve-wrap, .nmr .zoom-wrap { display: none; }
 .nmr[data-view="many"] .spec-wrap { display: block; }
-.nmr[data-view="seq"] .v-seq, .nmr[data-view="seq"] .curve-wrap { display: block; }
+.nmr[data-view="seq"] .v-seq, .nmr[data-view="seq"] .curve-wrap, .nmr[data-view="seq"] .spec-wrap { display: block; }
+/* In views 3 and 4 the plot of what is measured stands beside the sphere, in place of the spin. */
+.nmr[data-view="seq"] .sphere-area, .nmr[data-view="earth"] .sphere-area { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.nmr[data-view="seq"] #spin-half, .nmr[data-view="earth"] #spin-half { display: none; }
+.nmr[data-view="seq"] .sphere-wrap, .nmr[data-view="earth"] .sphere-wrap { height: max(270px, calc(36vh - 20px)); }
+.nmr .side .curve-wrap { height: max(270px, calc(36vh - 20px)); }
 .nmr[data-view="earth"] .v-earth, .nmr[data-view="earth"] .spec-wrap, .nmr[data-view="earth"] .zoom-wrap, .nmr[data-view="earth"] .curve-wrap { display: block; }
 .nmr[data-view="one"] .plots2 { grid-template-columns: minmax(0, 1fr); }
 .nmr[data-view="earth"] .raw-wrap { display: none; }
@@ -127,5 +132,6 @@ details[open] summary { margin-bottom: 6px; }
   .sphere-wrap { height: min(92vw, 380px); }
   .plots2 { grid-template-columns: minmax(0, 1fr); }
   .signal-wrap { height: 170px; }
-  .raw-wrap, .spec-wrap, .curve-wrap, .zoom-wrap { height: 140px; }
+  .raw-wrap, .spec-wrap, .zoom-wrap { height: 140px; }
+  .nmr .side .curve-wrap { height: 220px; }
 }
