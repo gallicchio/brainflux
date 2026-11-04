@@ -3,9 +3,9 @@
 // polarize-and-listen.  The physics is in bloch.js, engine.js, signal.js and sequence.js; the
 // sphere is drawn by sphere.js and the plots by charts.js; this file is the page.
 
-import { GAMMA, GAMMA_HZ, pulseField, pulseDuration, spinHalf, T2star, spreadT2, toLab, adiabaticity } from './bloch.js';
+import { GAMMA_HZ, pulseField, pulseDuration, spinHalf, T2star, spreadT2, toLab, adiabaticity } from './bloch.js';
 import { Engine } from './engine.js';
-import { spectrum, fitShape, noiseRms, rawAt } from './signal.js';
+import { spectrum, fitShape, rawAt } from './signal.js';
 import { PRESETS, buildSequence, runSequence, echoAmplitudes } from './sequence.js';
 import { SphereView } from './sphere.js';
 import { drawSignal, drawRaw, drawSpectrum, drawCurve, timeUnit, pulseName, duration, legend } from './charts.js';
@@ -340,7 +340,6 @@ function trailPoints() {
   out.push(eng.sum(state.frame));
   return out;
 }
-function pushTrail() {}
 
 // ---------------------------------------------------------------------------- the plots
 
@@ -485,7 +484,6 @@ function tick(dt) {
     eng.trim(eng.t - 1.5 * SCREEN * state.speed);
     resample();
   }
-  pushTrail();
 }
 
 function loop(now) {
