@@ -211,7 +211,7 @@ export class KspaceView {
       el('button', { type: 'button', title: 'Measure only the middle quarter of the rows (the low spatial frequencies)', onclick: () => this.only('centre') }, 'Only the centre'),
       el('button', { type: 'button', title: 'Measure all but the middle quarter (the high spatial frequencies)', onclick: () => this.only('edges') }, 'Only the edges'));
     this.typeSeg = segmented([{ value: 'se', label: 'Spin echo', title: 'π/2, then a π pulse at TE/2: the echo at TE refocuses an uneven field' }, { value: 'gre', label: 'Gradient echo', title: 'π/2 only: the gradient alone makes the echo; an uneven field is not undone' }], s.type,
-      (v) => { s.type = v; s.TE = v === 'se' ? Math.max(s.TE, 12) : Math.min(s.TE, 10); this.teSl.value = s.TE; this.changed(); }, { label: 'Sequence' });
+      (v) => { s.type = v; this.changed(); }, { label: 'Sequence' });
     $('#v3-seq-row').append(this.typeSeg);
     this.teSl = slider({ label: 'echo time TE (ms)', min: 4, max: 120, value: s.TE, step: 0.5, title: 'From the π/2 pulse to the middle of the readout, where k = 0', onInput: (v) => { s.TE = v; this.changed(); } });
     this.trSl = slider({ label: 'repeat time TR (ms)', min: 100, max: 4000, log: true, value: s.TR, title: 'The time from one line\'s π/2 pulse to the next: how much the spins recover along z between lines', onInput: (v) => { s.TR = v; this.changed(); } });

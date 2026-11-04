@@ -113,6 +113,13 @@ export class ContrastView {
     this.dirty = true;
   }
   get animating() { return this.s.mode === 'lauterbur' && this.s.playing; }
+  /** Lauterbur: measure one more angle and stop. */
+  step() {
+    if (this.s.mode !== 'lauterbur') return;
+    this.setPlaying(false);
+    if (this.lb.j < this.s.nA) { this.lb.j++; this.lb.u = 0; this.bp = null; }
+    this.dirty = true; this.app.kick();
+  }
   setPlaying(on) { this.s.playing = on; if (this.playBtn) this.playBtn.textContent = on ? 'Pause' : this.lb.j >= this.s.nA ? 'Again' : 'Go on'; this.app.kick(); }
 
   // ------------------------------------------------------------------- controls
@@ -151,7 +158,7 @@ export class ContrastView {
     // Lauterbur.
     this.playBtn = el('button', { type: 'button', class: 'primary play', onclick: () => { if (this.lb.j >= s.nA) { this.lb.j = 0; this.lb.u = 0; this.bp = null; } this.setPlaying(!s.playing); } }, 'Pause');
     $('#v4-lb-row').append(this.playBtn,
-      el('button', { type: 'button', title: 'One more angle', onclick: () => { this.setPlaying(false); if (this.lb.j < s.nA) { this.lb.j++; this.bp = null; } this.dirty = true; this.app.kick(); } }, 'Step'),
+      el('button', { type: 'button', title: 'One more angle (→ key)', onclick: () => this.step() }, 'Step'),
       el('button', { type: 'button', title: 'Every angle at once', onclick: () => { this.lb.j = s.nA; this.bp = null; this.setPlaying(false); this.dirty = true; this.app.kick(); } }, 'Finish'));
     this.nASl = slider({ label: 'angles', min: 2, max: 180, step: 1, value: s.nA, title: 'How many directions the gradient is turned to, over half a turn', onInput: (v) => { s.nA = Math.round(v); this.lb.j = Math.min(this.lb.j, s.nA); this.buildLauterbur(); this.dirty = true; this.app.kick(); this.app.scheduleHash(); } });
     this.filterBtn = toggle('Ramp filter', s.filter, (on) => { s.filter = on; this.bp = null; this.dirty = true; this.app.kick(); this.app.scheduleHash(); }, 'Sharpen each projection before smearing it back (filtered back-projection); off, the plain back-projection is blurred');

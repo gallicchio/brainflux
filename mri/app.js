@@ -76,6 +76,8 @@ document.addEventListener('visibilitychange', () => { lastT = 0; kick(); });
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === ' ' && current().setPlaying) { e.preventDefault(); current().setPlaying(!current().s.playing); }
+  // (Views 3 and 4 measure one more line, or angle, on the right arrow.)
+  if (e.key === 'ArrowRight' && current().step) { e.preventDefault(); current().step(); }
 });
 
 // ------------------------------------------------------------------- the address

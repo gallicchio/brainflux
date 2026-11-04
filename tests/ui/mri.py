@@ -252,6 +252,10 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     check(near(p['k'][0], 0, 1e-9) and near(p['k'][1], -10 / 256, 1e-6) and near(per, 25.6, 0.15) and quoted(gy, '0.459') and '25.6' in ro and '−0.46 mT/m' in ro,
           f"after row +10's lobe: k = ({p['k'][0]:.4f}, {p['k'][1]:.4f}) per mm (the π pulse will make it +0.0391), G_y = {gy:.3f} mT/m; the stripes in the spins are {per:.2f} mm apart")
     b.screenshot('build/mri-exp-encode.png')
+    # The right arrow key plays one more line in slow motion.
+    setup(b, 'fill'); b.eval('__app.views.kspace.setPlaying(false)'); n0 = b.eval('__app.views.kspace.acq.measuredCount')
+    b.key('ArrowRight', 'ArrowRight'); cur = b.eval('__app.views.kspace.scan.cur')
+    check(cur is not None and cur['slow'] and not b.eval('__app.views.kspace.s.playing'), f"the → key plays the next line in slow motion and stops ({n0} lines before; row {cur and cur['q']})")
     # The centre and the edges.
     setup(b, 'centre'); e = b.eval('__app.views.kspace.energyMeasured()'); m1 = b.eval('__app.views.kspace.imageStats().mean')
     b.eval("__app.views.kspace.only('edges')"); m2 = b.eval('__app.views.kspace.imageStats().mean'); e2 = b.eval('__app.views.kspace.energyMeasured()')
@@ -261,7 +265,7 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     # The spin echo against the gradient echo, in an 8 ms T2' magnet.
     setup(b, 'spinecho')
     se = b.eval('__app.views.kspace.echoAt(32)')
-    b.eval("(() => { const v = __app.views.kspace; v.typeSeg.querySelectorAll('button')[1].click(); v.teSl.value = 20; v.s.TE = 20; v.changed(); })()")
+    b.eval("__app.views.kspace.typeSeg.querySelectorAll('button')[1].click()")
     ge = b.eval('__app.views.kspace.echoAt(32)'); te = b.eval('__app.views.kspace.seq.TE')
     check(near(se, 1, 1e-9) and quoted(100 * ge, '7.3') and te == 20, f'T₂′ = 8 ms: the spin echo is {100 * se:.1f}% at TE, the gradient echo (TE 20 ms) {100 * ge:.1f}% (help: 100%, 7.3%; e^(-20/8) = 8.2%)')
     b.eval('__app.views.kspace.cue(32, __app.views.kspace.seq.tEcho)'); b.eval('__app.draw()'); b.screenshot('build/mri-exp-gre-echo.png')
