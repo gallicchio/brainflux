@@ -254,3 +254,65 @@ export function causalEnvelope(field, window, out = new Float64Array(field.lengt
   }
   return out;
 }
+
+// --------------------------------------------------------------------- drawing
+
+const PER_CYCLE = 24, MOST_PER_PX = 32, GOLDEN = (Math.sqrt(5) - 1) / 2;
+
+/**
+ * A carrier under its envelope, made ready for a trace drawn as a digital oscilloscope draws it
+ * (lib/scope.js): the field Re a, a = re + i im the analytic signal at the evenly spaced samples
+ * i0 ... i1, at n points evenly spaced over the same span (point 0 at sample i0, point n − 1 at
+ * sample i1), which is cols device pixels wide.  cyc: the most carrier cycles between two
+ * samples.  Returns { y (length n), synthetic, perPx, f (cycles to a pixel) }.
+ *   - Cycles at least three quarters of a pixel apart: PER_CYCLE points to a cycle or more (the
+ *     straight pieces between them cut no crest by more than 1%), from the samples by their
+ *     modulus and phase, each interpolated in a straight line (exact at the samples, and right
+ *     between them for a carrier under a slow envelope, however few samples there are to a
+ *     cycle).  1.4 points to a pixel where that is enough (scope.js draws a line), else at least
+ *     2 (scope.js grades the trace).
+ *   - Closer (synthetic): no screen shows them one by one, and the samples may not tell them
+ *     apart (fewer than three to a cycle).  A band of many cycles looks the same whatever their
+ *     phase, brightest at its edges ±|a|, so the points are a carrier of one cycle to a pixel
+ *     under the true envelope |a| (MOST_PER_PX points to a pixel; each pixel's cycle starts later
+ *     than the last by a fraction of a point, by the golden ratio, so that the corners of the
+ *     straight pieces fall at different heights in each column).
+ */
+export function carrierTrace(re, im, i0, i1, cols, cyc) {
+  const m = i1 - i0 + 1;
+  cols = Math.max(1, cols);
+  const f = (cyc * (m - 1)) / cols, need = PER_CYCLE * f, synthetic = need > MOST_PER_PX || cyc > 0.35;
+  const perPx = synthetic ? MOST_PER_PX : need <= 1.4 ? 1.4 : Math.max(2, Math.ceil(need));
+  const n = Math.max(2, Math.round(perPx * cols) + 1), y = new Float64Array(n), step = (m - 1) / (n - 1);
+  const amp = (j) => Math.hypot(re[j], im[j]);
+  for (let k = 0; k < n; k++) {
+    const u = k * step, j = Math.min(i0 + Math.floor(u), i1 - 1), t = i0 + u - j;
+    if (m < 2) { y[k] = re[i0]; continue; }
+    if (synthetic) {
+      const c = Math.floor(k / MOST_PER_PX), ph = (k - c * MOST_PER_PX + ((c * GOLDEN) % 1)) / MOST_PER_PX;
+      y[k] = (amp(j) * (1 - t) + amp(j + 1) * t) * Math.cos(2 * Math.PI * ph);
+    } else if (t === 0) y[k] = re[j];
+    else {
+      // The phase from sample j to j + 1: the angle of a(j + 1) a*(j), less than π.
+      const a0 = amp(j), a1 = amp(j + 1);
+      if (!(a0 > 0 && a1 > 0)) { y[k] = re[j] * (1 - t) + re[j + 1] * t; continue; }
+      const cr = re[j + 1] * re[j] + im[j + 1] * im[j], ci = im[j + 1] * re[j] - re[j + 1] * im[j];
+      const p = Math.atan2(im[j], re[j]) + t * Math.atan2(ci, cr);
+      y[k] = (a0 * (1 - t) + a1 * t) * Math.cos(p);
+    }
+  }
+  return { y, synthetic, perPx, f };
+}
+
+/** The most cycles between two of the samples i0 ... i1 of an analytic signal (where it is not negligible). */
+export function cyclesPerSample(re, im, i0, i1) {
+  let top = 0;
+  for (let j = i0; j <= i1; j++) top = Math.max(top, re[j] * re[j] + im[j] * im[j]);
+  let c = 0;
+  for (let j = i0; j < i1; j++) {
+    if (!(re[j] * re[j] + im[j] * im[j] > 1e-6 * top)) continue;
+    const cr = re[j + 1] * re[j] + im[j + 1] * im[j], ci = im[j + 1] * re[j] - re[j + 1] * im[j];
+    c = Math.max(c, Math.abs(Math.atan2(ci, cr)));
+  }
+  return c / (2 * Math.PI);
+}

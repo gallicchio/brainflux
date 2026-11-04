@@ -4,7 +4,7 @@ import {
   FreqGrid, kkImToRe, kkReToIm, impulseResponse, sampleOnGrid, sumRuleOscillators, sumRuleGrid, simpson,
   drivenCharge, fresnel, surfaceWave, sliverRe, sliverTime,
 } from '../dispersion/medium.js';
-import { incident, planGrid, Propagator, peakTime, moments, maxBefore } from '../dispersion/pulse.js';
+import { incident, planGrid, Propagator, peakTime, moments, maxBefore, carrierTrace, cyclesPerSample } from '../dispersion/pulse.js';
 
 // Largest |a - b| over the indices whose frequency is within |w| < wmax.
 function maxErr(grid, a, b, wmax, skip = () => false) {
@@ -430,4 +430,39 @@ test('a picture in space (the field at one moment at every depth) agrees with th
   const [vr] = P.incidentAt(10 - (-3)), E0 = incident('gauss', p, Float64Array.of(13))[0];
   close(vr, E0, 1e-4, 'incident pulse in vacuum (3 samples a period here)');
   return `snapshot vs field(): ${notes.join(', ')}; the envelope peak at t = ${(z * ng).toFixed(2)} is at z = ${(jmax * 0.05).toFixed(2)} (t/n_g = ${z})`;
+});
+
+// ------------------------------------------------------------------ drawing
+
+test('drawing a carrier under its envelope: every crest from three samples a cycle, or a band of many cycles to a pixel', () => {
+  // a(t) = e^{−t²/T²} e^{−iωt}, sampled 3 times a cycle.
+  const w = 1, T = 30, dt = (2 * Math.PI) / (3 * w), N = 301, re = new Float64Array(N), im = new Float64Array(N);
+  const at = (t) => [Math.exp(-(t * t) / (T * T)) * Math.cos(w * t), -Math.exp(-(t * t) / (T * T)) * Math.sin(w * t)];
+  for (let n = 0; n < N; n++) [re[n], im[n]] = at((n - 150) * dt);
+  const cyc = cyclesPerSample(re, im, 0, N - 1);
+  close(cyc, 1 / 3, 1e-9, 'cycles between samples');
+  // 100 cycles on 1000 pixels: resolved, 24 points or more to a cycle, right between the samples.
+  const r = carrierTrace(re, im, 0, N - 1, 1000, cyc);
+  assert(!r.synthetic && r.perPx >= 2.4 && r.y.length === Math.round(r.perPx * 1000) + 1, `${r.perPx} points to a pixel`);
+  let err = 0, top = 0;
+  for (let k = 0; k < r.y.length; k++) {
+    const u = (k * (N - 1)) / (r.y.length - 1);
+    err = Math.max(err, Math.abs(r.y[k] - at((u - 150) * dt)[0])); top = Math.max(top, r.y[k]);
+  }
+  assert(err < 0.01 && top > 0.995, `largest error ${err.toFixed(4)} (straight lines through the samples: ${(1 - Math.cos(Math.PI / 3)).toFixed(2)}); the peak ${top.toFixed(4)}`);
+  // 100 cycles on 30 pixels: a band, its edges ±|a| in every pixel.
+  const b = carrierTrace(re, im, 0, N - 1, 30, cyc);
+  assert(b.synthetic && b.y.length === 30 * 32 + 1, `synthetic ${b.synthetic}, ${b.y.length} points`);
+  let edge = 0, out = 0;
+  for (let c = 0; c < 30; c++) {
+    // (The envelope changes across a pixel here: each pixel's band reaches the least of it there.)
+    let lo = Infinity, hi = -Infinity, eMin = Infinity;
+    for (let k = 32 * c; k <= 32 * c + 32; k++) {
+      const u = (k * (N - 1)) / (b.y.length - 1), env = Math.exp(-(((u - 150) * dt) ** 2) / (T * T));
+      lo = Math.min(lo, b.y[k]); hi = Math.max(hi, b.y[k]); out = Math.max(out, Math.abs(b.y[k]) - env); eMin = Math.min(eMin, env);
+    }
+    edge = Math.max(edge, eMin * Math.cos(Math.PI / 16) - hi, eMin * Math.cos(Math.PI / 16) + lo);
+  }
+  assert(edge < 0.01 && out < 0.01, `every pixel's band reaches ±|a| (short by at most ${edge.toFixed(4)}); at most ${out.toFixed(4)} outside`);
+  return `3 samples a cycle: within ${err.toFixed(4)} between them; 3 cycles a pixel: a band out to ±|a|, short by at most ${edge.toFixed(4)}`;
 });
