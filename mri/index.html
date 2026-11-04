@@ -34,6 +34,13 @@
       <div class="hint" id="v2-hint">Drag the pulse's band of frequencies (its middle, or an edge) or the ● on the field line; or click the head where you want the slice</div>
       <div class="readout small" id="v2-readout" aria-live="off"></div>
     </div>
+
+    <!-- 3 · The second axis: phase encoding -->
+    <div class="view" id="view-kspace">
+      <div class="plot-wrap v3-main"><canvas id="v3-main" tabindex="0" aria-label="Phase encoding: the slice's spins as a map of their phase, k-space filling line by line, and the picture from the lines measured so far, with the pulse sequence underneath. Click a row of k-space to measure it; point at k-space to see the plane wave that point measures."></canvas></div>
+      <div class="hint" id="v3-hint">Watch the stripes wind as the gradients play and k-space fill row by row; click a row of k-space to measure it, or point at k-space to see its plane wave</div>
+      <div class="readout small" id="v3-readout" aria-live="off"></div>
+    </div>
   </section>
 
   <aside class="controls" id="controls">
@@ -74,6 +81,30 @@
         <div class="stack" id="v2-more-box"></div>
       </details>
     </div>
+    <!-- view 3 -->
+    <div class="panel only-kspace">
+      <div class="label">The scan</div>
+      <div class="row" id="v3-scan-row"></div>
+      <div id="v3-rate-box" class="stack"></div>
+      <div class="row" id="v3-order-row"></div>
+      <div class="row" id="v3-only-row"></div>
+    </div>
+    <div class="panel only-kspace">
+      <div class="label">The sequence</div>
+      <div class="row" id="v3-seq-row"></div>
+      <div id="v3-seq-box" class="stack"></div>
+      <div class="row" id="v3-n-row"></div>
+      <div class="small muted">The matrix: how many lines are measured, and how many samples each, so how many pixels across.</div>
+    </div>
+    <div class="panel only-kspace">
+      <div class="label">What is scanned</div>
+      <div class="row" id="v3-obj-row"></div>
+      <div class="row" id="v3-show-row"></div>
+      <details id="v3-more">
+        <summary class="small">More: the magnet's evenness</summary>
+        <div class="stack" id="v3-more-box"></div>
+      </details>
+    </div>
   </aside>
 </main>
 
@@ -91,6 +122,11 @@
     <p><b>2 · A slice.</b>  A head, and a gradient along the body.  A pulse that holds only a
     narrow band of frequencies tips only the spins whose frequency is in the band: one slice.
     Drag the band, or click the head where you want the slice; watch the spins tip over.</p>
+    <p><b>3 · The second axis.</b>  The slice's spins, coloured by their phase; k-space, filling
+    one row each time the sequence plays; and the picture made from the rows measured so far,
+    which sharpens as they come in.  Watch the stripes the gradients wind in the spins: each row
+    of k-space is the slice measured against one set of stripes.  Click a row to measure it;
+    point at k-space to see its stripes.</p>
   </section>
 
   <article class="exp" data-setup="axis">
@@ -205,6 +241,76 @@
     the tipping happens).  The slab ends in step, 95.5% (a 90° tip leaves a little twist).  The
     page watches from a frame that turns with the slab's centre, so its spins end along $x'$
     wherever the slice is.</p>
+  </article>
+
+  <article class="exp" data-setup="encode">
+    <h3>10. One step of phase encoding winds one plane wave across the slice</h3>
+    <p>One line in slow motion, row +10 of k-space.  Watch the spins as the $G_y$ lobe plays
+    (the third row of the sequence): for 2 ms the field rises along $y$ by $G_y=0.459$ mT/m, the
+    spins high in the slice turn faster than those low down, and the phase winds into stripes
+    along $y$,
+    $$k_y=\bar\gamma\,G_y\,T_{pe}=0.0391\ \mathrm{per\ mm},$$
+    one turn every 25.6 mm.  Then the lobe stops and the stripes stay: the spins remember.  That is
+    the whole trick of the second axis.  Each line winds a different number of turns across $y$,
+    one step of the ladder of $G_y$ lobes, and the signal measures how much of the slice is in
+    step with those stripes, exactly as a plane wave $e^{-2\pi i\vec k\cdot\vec r}$ of the
+    <a href="../planewave/">plane-wave demo</a> picks out one Fourier component.  The readout then
+    adds stripes along $x$ that sweep while the ADC listens, so one line measures a whole row of
+    k-space, at one $k_y$.  (In a spin echo the lobe winds $-k_y$ and the π pulse turns it into
+    $+k_y$: the dot in k-space jumps through the centre.)  Point at any pixel of k-space to see the
+    stripes it stands for: the <a href="../fft2d/">2D Fourier transform demo</a>'s pixels mean the
+    same.</p>
+  </article>
+
+  <article class="exp" data-setup="fill">
+    <h3>11. Line by line, the picture forms</h3>
+    <p>The scan from the start, as the view opens: the first lines slowly, then faster.  Each line
+    fills one row of k-space (in the FFT demo's colours: hue for the phase, brightness for the
+    size), and the picture on the right is the inverse 2D Fourier transform of the rows measured
+    so far, the rest taken as zero.  The middle rows come first (<em>Centre out</em>): after 7 of
+    them the head is a blur, detail along $y$ only down to 36.6 mm, but already as bright as it
+    will be; with every pair of rows the detail along $y$ improves, to 4.0 mm with all 64, as fine
+    as the readout gives along $x$.  A real scanner waits a repeat time, TR = 500 ms here, between
+    lines, so this 64-line picture takes 32 s; the page skips the waiting.</p>
+  </article>
+
+  <article class="exp" data-setup="centre">
+    <h3>12. The middle of k-space holds the picture; the edges hold its edges</h3>
+    <p>Only the middle 16 rows of 64.  They hold 86.8% of the signal's energy, and with them alone
+    the picture has its brightness right (its mean is 1.06 of the true one) but no sharp edges:
+    the middle of k-space is the slow variations, the contrast between tissues.  Press <em>Only the
+    edges</em>: the other 48 rows, 13% of the energy, give only outlines, a picture whose mean is
+    31% of the true one.  Fine detail lives far from the centre of k-space, because a sharp edge
+    needs stripes close together to describe it.  (Fast scans use this: measure the middle often
+    and the edges once.)</p>
+  </article>
+
+  <article class="exp" data-setup="spinecho">
+    <h3>13. The π pulse: why a spin echo sits in the middle of k-space</h3>
+    <p>A poor magnet: every spin is a little off its frequency (a spread of width
+    $1/\pi T_2'$ with $T_2'=8$ ms), so after the π/2 pulse the spins drift out of step, speckling
+    the phase picture with random colours, and the signal would fade as $e^{-t/T_2'}$.  At TE/2
+    comes the π pulse.  It turns every spin's phase around, $\varphi\to-\varphi$, so a spin that
+    had run ahead is now as far behind, and it goes on running ahead at the same rate: at TE they
+    are all back in step, whatever their offsets.  The same π pulse turns the gradients' phase
+    around too, $\vec k\to-\vec k$ (the dot jumps through the centre of k-space), so the readout
+    passes through $k=0$ exactly at TE.  There the speckle has gone and the echo is 100% of what
+    the spins give; then it fades again.  Choose <em>Gradient echo</em> (no π pulse; TE kept at
+    20 ms): the gradient still makes an echo at $k=0$, but nothing undoes the magnet's spread,
+    and the echo is 7.3% of the spin echo's (about $e^{-TE/T_2'}=8\%$).  That is the difference
+    between $T_2$ and $T_2^*$ weighting (experiment 15), and the reason the π pulse is there.</p>
+  </article>
+
+  <article class="exp" data-setup="motion">
+    <h3>14. Move during the scan</h3>
+    <p>Three disks, scanned at 5 lines a second.  While it scans, drag a disk to another place on
+    the left picture.  The rows measured before the move saw it in one place, the rest in the
+    other, and no single picture has that k-space: the disk shows twice, faint, and ghosts of it
+    are smeared along $y$, the phase-encoding direction, where each row is a different moment.
+    Along $x$ the picture is sharp, because each row was read out in 3 ms.  This is why patients
+    are asked to hold still, and why breathing and the heartbeat smear MRI pictures along the
+    phase-encoding direction.  (Once a scan is over, any change measures every row again at
+    once.)</p>
   </article>
 
   <section class="theory">

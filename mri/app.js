@@ -6,11 +6,13 @@
 
 import { AxisView } from './view-axis.js';
 import { SliceView } from './view-slice.js';
+import { KspaceView } from './view-kspace.js';
 import { $, segmented, drawer, readHash, writeHash } from '../lib/ui.js';
 
 const VIEWS = [
   { id: 'axis', label: '1 · One axis', make: (app) => new AxisView(app) },
   { id: 'slice', label: '2 · A slice', make: (app) => new SliceView(app) },
+  { id: 'kspace', label: '3 · The second axis', make: (app) => new KspaceView(app) },
 ];
 
 // (Declared before the views are made: they schedule the address and the clock as they start.)
@@ -79,6 +81,9 @@ function saveHash() { writeHash({ v: app.view, ...current().toHash() }); }
 
 const AXIS = { G: 2, slow: 2, T2s: 20, B0: 1.5 };
 const SLICE = { Gz: 4, bw: 1.5, fc: 0, T: 3, flip: 90, rephase: true, slow: 1.5 };
+const KSP = { obj: 'head', type: 'se', TE: 20, TR: 500, N: 64, T2p: 60, order: 'centre', rate: 12, slow: 9, show: 'spins' };
+/** The slice of views 3 and 4 back at the middle of the head (as view 2 opens). */
+const slice0 = () => { if (Math.abs(app.views.slice.centre) > 1e-9) app.views.slice.set({ ...SLICE, playing: app.views.slice.s.playing }); };
 const setups = {
   // 1 · One axis
   axis: () => { setView('axis'); app.views.axis.set({ ...AXIS, sample: 'two', t: 0.35 }); },
@@ -91,6 +96,12 @@ const setups = {
   moveslice: () => { setView('slice'); app.views.slice.set({ ...SLICE, fc: -6.47 }); },
   thin: () => { setView('slice'); app.views.slice.set({ ...SLICE, bw: 0.75 }); },
   rephase: () => { setView('slice'); app.views.slice.set({ ...SLICE, rephase: false, fc: 3 }); },
+  // 3 · The second axis
+  fill: () => { setView('kspace'); slice0(); app.views.kspace.set({ ...KSP }); },
+  encode: () => { setView('kspace'); slice0(); const v = app.views.kspace; v.set({ ...KSP, cue: { q: 22, t: 0 } }); v.cue(22, v.seq.gyStart - 0.4); },
+  centre: () => { setView('kspace'); slice0(); app.views.kspace.set({ ...KSP, only: 'centre' }); },
+  spinecho: () => { setView('kspace'); slice0(); const v = app.views.kspace; v.set({ ...KSP, T2p: 8, slow: 14, cue: { q: 32, t: 0 } }); v.cue(32, 0); },
+  motion: () => { setView('kspace'); app.views.kspace.set({ ...KSP, obj: 'disks', rate: 5, ramp: false }); },
 };
 drawer($('#help'), $('#help-button'), setups);
 

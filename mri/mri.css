@@ -38,8 +38,8 @@
 
 /* One view at a time, and only its controls. */
 .view { display: none; flex-direction: column; gap: 6px; }
-.mri[data-view="axis"] #view-axis, .mri[data-view="slice"] #view-slice { display: flex; }
-.mri:not([data-view="axis"]) .only-axis, .mri:not([data-view="slice"]) .only-slice { display: none; }
+.mri[data-view="axis"] #view-axis, .mri[data-view="slice"] #view-slice, .mri[data-view="kspace"] #view-kspace { display: flex; }
+.mri:not([data-view="axis"]) .only-axis, .mri:not([data-view="slice"]) .only-slice, .mri:not([data-view="kspace"]) .only-kspace { display: none; }
 
 /* 1 · One axis: one canvas, the field, the sample and its spins, the spectrum and the signal */
 .v1-main { height: max(540px, calc(100vh - 230px)); max-height: 720px; }
@@ -47,6 +47,10 @@
 
 /* 2 · A slice */
 .v2-main { height: max(560px, calc(100vh - 230px)); max-height: 760px; }
+
+/* 3 · The second axis */
+.v3-main { height: max(580px, calc(100vh - 230px)); max-height: 780px; }
+#v3-main { touch-action: pan-y; }
 
 .readout { color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 3em; line-height: 1.5; }
 .readout b, .readout .fixnum.b { color: var(--ink); font-weight: 600; }
@@ -64,4 +68,5 @@ details[open] summary { margin-bottom: 6px; }
   .mri { grid-template-columns: minmax(0, 1fr); padding: 8px; }
   .v1-main { height: 860px; max-height: none; }
   .v2-main { height: 1060px; max-height: none; }
+  .v3-main { height: 1460px; max-height: none; }
 }

@@ -12,7 +12,7 @@
 // s(k) = sum of m(r) exp(-2 pi i k . r) (times 1/N: the transform is unitary).
 
 import { fft2Centered } from '../lib/fft.js';
-import { GB } from './bloch.js';
+import { GB, lorentzOffsets } from './bloch.js';
 import { rasterize, weightedImage, projection, shapesExtent } from './phantom.js';
 import { prepareRaster, backproject, padRow, filterResponse, filterRow, filterWork, circleRows } from '../tomography/radon.js';
 
@@ -22,45 +22,42 @@ import { prepareRaster, backproject, padRow, filterResponse, filterRow, filterWo
  * A spin-echo or gradient-echo sequence for one line of k-space.
  *   p: { type: 'se' | 'gre', TE, TR, N (matrix), fov (mm), Gx (the readout gradient, mT/m),
  *        Tpe (the phase-encode lobe's length, ms), Trf (the RF pulses' length), Gz (the
- *        slice-select gradient), bw (the pulses' bandwidth, kHz), flip (radians) }
+ *        slice-select gradient), bw (the pulses' bandwidth, kHz), flip (radians), T2prime }
  * Times are ms from the start of the TR.  The pi/2 pulse is centred at t90 = Trf/2; TE is
  * measured from there to the centre of the readout; k = 0 at t90.
  *
- * Gradient echo: after the pulse (and the slice rephaser), the phase-encode lobe Gy and the
- * readout prephaser -Gx run together; the readout +Gx, with the ADC on, is centred at TE.
- * Spin echo: the prephaser is +Gx and comes before the pi pulse at TE/2, which turns k into -k
- * (it conjugates the transverse magnetization), so that the readout then runs through k = 0 at
- * TE; the phase-encode lobe follows the pi pulse.
+ * The parts follow one another, so that each can be watched alone: after the pulse and the
+ * slice's rephasing lobe, the phase-encoding lobe Gy (stripes along y), then the readout's
+ * prephasing lobe (k moves along x to one end of the row), then the readout +Gx, with the ADC
+ * on, centred at TE.  Gradient echo: the prephaser is -Gx.  Spin echo: the prephaser is +Gx and
+ * the pi pulse at TE/2 turns k into -k (it conjugates the transverse magnetization), so the
+ * phase-encoding lobe winds -ky for the readout to run along +ky, through k = 0 at TE.
  */
 export function sequence(p) {
-  const { type = 'se', TR = 500, N = 128, fov = 256, Gx = 10, Tpe = 1, Trf = 3, Gz = 6, bw = 1.3, flip = Math.PI / 2 } = p;
+  const { type = 'se', TR = 500, N = 128, fov = 256, Gx = 10, Tpe = 1, Trf = 3, Gz = 6, bw = 1.3, flip = Math.PI / 2, T2prime = 40 } = p;
   const dk = 1 / fov, Tro = N * dk / (GB * Gx);           // the readout sweeps N dk = N / fov cycles/mm
   const t90 = Trf / 2;
-  const TEmin = type === 'gre' ? Trf / 2 + Math.max(Tpe, Tro / 2, Trf / 2) + Tro / 2 + 0.05
-    : Math.max(2 * Trf + Math.max(Tro, Trf), Trf + 2 * Tpe + Tro) + 0.1;
+  // The phase-encoding lobe right after the slice's rephasing lobe, then the prephaser.
+  const gyStart = 1.5 * Trf, preStart = gyStart + Tpe, preEnd = preStart + Tro / 2;
+  const TEmin = (type === 'gre' ? preEnd + Tro / 2 - t90 : 2 * Math.max(preEnd + Trf / 2 - t90, Trf / 2 + Tro / 2)) + 0.05;
   const TE = Math.max(p.TE ?? 20, TEmin);
   const tEcho = t90 + TE, t180 = type === 'se' ? t90 + TE / 2 : null;
   const adc = [tEcho - Tro / 2, tEcho + Tro / 2];
   const rf = [{ t0: 0, t1: Trf, flip, label: flip === Math.PI / 2 ? 'π/2' : `${Math.round((flip * 180) / Math.PI)}°` }];
   const gz = [[0, Trf, Gz], [Trf, 1.5 * Trf, -Gz]];
-  const gx = [];
-  let gyStart;
+  const gx = [[preStart, preEnd, type === 'se' ? Gx : -Gx]];
   if (type === 'se') {
     rf.push({ t0: t180 - Trf / 2, t1: t180 + Trf / 2, flip: Math.PI, label: 'π' });
     gz.push([t180 - Trf / 2, t180 + Trf / 2, Gz]);
-    gx.push([Trf, Trf + Tro / 2, Gx]);
-    gyStart = t180 + Trf / 2;
-  } else {
-    gx.push([Trf, Trf + Tro / 2, -Gx]);
-    gyStart = Trf;
   }
   gx.push([adc[0], adc[1], Gx]);
   const ky = (q) => (N / 2 - q) * dk;                       // the ky of k-space row q
-  const Gy = (q) => ky(q) / (GB * Tpe);                     // the lobe that winds it
-  const gyLobe = (q) => [[gyStart, gyStart + Tpe, Gy(q)]];
+  const Gy = (q) => ky(q) / (GB * Tpe);                     // the size of the lobe that winds it
+  // (For a spin echo it winds -ky, which the pi pulse turns into +ky.)
+  const gyLobe = (q) => [[gyStart, gyStart + Tpe, (type === 'se' ? -1 : 1) * Gy(q)]];
   const tEnd = adc[1] + 0.3;
   const seq = {
-    type, TE, TR, N, fov, dk, Gx, Tro, Tpe, Trf, Gz, bw, flip, t90, t180, tEcho, tEnd, TEmin, rf, gz, gx, adc, ky, Gy, gyLobe, gyStart,
+    type, TE, TR, N, fov, dk, Gx, Tro, Tpe, Trf, Gz, bw, flip, T2prime, t90, t180, tEcho, tEnd, TEmin, rf, gz, gx, adc, ky, Gy, gyLobe, gyStart, preStart, preEnd,
     readoutBandwidth: GB * Gx * fov,                        // kHz across the field of view
     /** The gradients [Gx, Gy] at time t for the line of row q. */
     gradientsAt(q, t) {
@@ -92,6 +89,10 @@ export function sequence(p) {
     },
     /** The time at which the readout reaches kx (within the ADC window). */
     tOfKx(kx) { return tEcho + kx / (GB * Gx); },
+    /** How long an uneven field has had to dephase the spins at time t: t - t90 for a gradient
+     *  echo; for a spin echo the pi pulse turns that around, so it is t - tEcho after it (zero at
+     *  the echo, which is the point of the pi pulse). */
+    dephaseTime(t) { return t180 !== null && t >= t180 ? t - tEcho : t - t90; },
   };
   return seq;
 }
@@ -202,12 +203,16 @@ export class Acquisition {
   /**
    * Set everything: shapes, the sequence (from sequence()), B0, and the sampling: noise sigma
    * (as a fraction of the brightest pixel of the full picture), nsa averages, the fat shift
-   * on or off (3.4 ppm of f0 under the readout gradient), seed.  Keeps the mask if N is the
-   * same (a changed object is measured again at once for the rows already done).
+   * on or off (3.4 ppm of f0 under the readout gradient), seed.  The rows measured so far keep
+   * what they measured (a row is a copy, taken when it is measured), so an object that changes
+   * during a scan gives the artefacts of motion; call remeasure() to measure them all again.
    */
   set({ shapes, seq, B0 = 1.5, sigma = 0, nsa = 1, chemicalShift = false, seed = 7 }) {
     const N = seq.N;
-    if (N !== this.N) { this.N = N; this.mask = new Uint8Array(N); }
+    if (N !== this.N) {
+      this.N = N; this.mask = new Uint8Array(N);
+      this.mre = new Float64Array(N * N); this.mim = new Float64Array(N * N);
+    }
     this.seq = seq; this.B0 = B0; this.sigma = sigma; this.nsa = nsa;
     const pic = pictureOf(shapes, seq, B0, N, seq.fov);
     this.picture = pic;
@@ -227,13 +232,21 @@ export class Acquisition {
   }
 
   get measuredCount() { let n = 0; for (const m of this.mask) n += m; return n; }
-  measure(q) { if (!this.mask[q]) { this.mask[q] = 1; this.stale = true; } }
-  clear() { this.mask.fill(0); this.stale = true; }
-  measureAll() { this.mask.fill(1); this.stale = true; }
+  /** Measure row q now: copy what the scanner would record into the rows measured. */
+  measure(q) {
+    const N = this.N;
+    this.mre.set(this.nre.subarray(q * N, (q + 1) * N), q * N);
+    this.mim.set(this.nim.subarray(q * N, (q + 1) * N), q * N);
+    this.mask[q] = 1; this.stale = true;
+  }
+  clear() { this.mask.fill(0); this.mre.fill(0); this.mim.fill(0); this.stale = true; }
+  measureAll() { for (let q = 0; q < this.N; q++) this.measure(q); }
+  /** Measure again every row measured so far (after a change, once a scan is over). */
+  remeasure() { for (let q = 0; q < this.N; q++) if (this.mask[q]) this.measure(q); }
 
   /** The picture from the measured rows (cached until something changes). */
   image() {
-    if (this.stale || !this._image) { this._image = reconstruct(this.nre, this.nim, this.N, this.mask); this.stale = false; }
+    if (this.stale || !this._image) { this._image = reconstruct(this.mre, this.mim, this.N, this.mask); this.stale = false; }
     return this._image;
   }
 
@@ -243,6 +256,101 @@ export class Acquisition {
     for (let p = 0; p < N; p++) out[p] = Math.hypot(this.nre[q * N + p], this.nim[q * N + p]);
     return out;
   }
+}
+
+// ------------------------------------------------------ the spins, for the live pictures
+
+/**
+ * The slice's spins for the live pictures: the weighted picture on an n x n grid (m, one spin
+ * per pixel), and each spin's offset df (kHz) in a field that is not quite even, drawn from a
+ * Lorentzian of half-width 1/(2 pi T2') so that together they dephase as exp(-|t|/T2').
+ */
+export function spinsOf(shapes, seq, B0, n, fov, seed = 11) {
+  // (Weighted with T2 alone, as for a spin echo: the offsets themselves do the dephasing that
+  // makes T2* in a gradient echo.)
+  const pic = pictureOf(shapes, { ...seq, type: 'se' }, B0, n, fov, 2);
+  return { n, dx: fov / n, m: pic.total, df: lorentzOffsets(n * n, seq.T2prime ?? 40, seed) };
+}
+
+/** The times to draw a line's signal at: nBefore from t90 to the readout, then the N instants
+ *  at which the ADC samples (kx = (p - N/2) dk: the k-space samples themselves), then a few. */
+export function traceTimes(seq, nBefore = 100, nAfter = 8) {
+  const out = [];
+  for (let i = 0; i < nBefore; i++) out.push(seq.t90 + ((seq.adc[0] - seq.t90) * i) / nBefore);
+  for (let p = 0; p < seq.N; p++) out.push(seq.tOfKx((p - seq.N / 2) * seq.dk));
+  const last = out[out.length - 1];
+  for (let i = 1; i <= nAfter; i++) out.push(last + ((seq.tEnd - last) * i) / nAfter);
+  return Float64Array.from(out);
+}
+
+/** The spins' transverse magnetization at time t of row q's sequence, m e^{-2 pi i (k.r + df tau)},
+ *  into re, im (n x n).  tip: the part of the pi/2 pulse played so far (0 to 1), if t < t90. */
+export function phaseMap(sp, seq, q, t, re, im, tip = 1) {
+  const { n, dx, m, df } = sp, [kx, ky] = t <= seq.t90 ? [0, 0] : seq.kOf(q, t), tau = t <= seq.t90 ? 0 : seq.dephaseTime(t);
+  const a = t < seq.t90 ? Math.sin((tip * Math.PI) / 2) : 1;
+  const cx = new Float64Array(n), sx = new Float64Array(n);
+  for (let i = 0; i < n; i++) { const ph = -2 * Math.PI * kx * (i - n / 2) * dx; cx[i] = Math.cos(ph); sx[i] = Math.sin(ph); }
+  for (let j = 0; j < n; j++) {
+    const py = -2 * Math.PI * ky * (n / 2 - j) * dx, cy = Math.cos(py), sy = Math.sin(py);
+    for (let i = 0, o = j * n; i < n; i++, o++) {
+      const v = m[o] * a;
+      if (v === 0) { re[o] = 0; im[o] = 0; continue; }
+      const pd = -2 * Math.PI * df[o] * tau, cd = Math.cos(pd), sd = Math.sin(pd);
+      // e^{i(px + py + pd)}
+      const c1 = cx[i] * cy - sx[i] * sy, s1 = sx[i] * cy + cx[i] * sy;
+      re[o] = v * (c1 * cd - s1 * sd); im[o] = v * (s1 * cd + c1 * sd);
+    }
+  }
+}
+
+/**
+ * The signal of row q's sequence at the times ts (ms, increasing, from t90 on): the sum over
+ * the spins of m e^{-2 pi i (k(t).r + df tau(t))}, divided by the sum of m (so 1 when they are
+ * all in step).  The k part factorizes (rows, then columns); the offsets' phases are turned on
+ * from sample to sample and conjugated by the pi pulse.  Returns {re, im}.
+ */
+export function echoTrace(sp, seq, q, ts) {
+  const { n, dx, m, df } = sp, N2 = n * n, nt = ts.length, outRe = new Float64Array(nt), outIm = new Float64Array(nt);
+  let total = 0;
+  for (let o = 0; o < N2; o++) total += m[o];
+  if (!(total > 0)) return { re: outRe, im: outIm };
+  // The offsets' phasors at the first sample, and the turn per unit of tau (recomputed if the step changes).
+  const Pr = new Float64Array(N2), Pi = new Float64Array(N2);
+  let tau0 = seq.dephaseTime(ts[0]);
+  for (let o = 0; o < N2; o++) { const a = -2 * Math.PI * df[o] * tau0; Pr[o] = Math.cos(a); Pi[o] = Math.sin(a); }
+  const Rr = new Float64Array(N2), Ri = new Float64Array(N2);
+  let step = NaN;
+  const cx = new Float64Array(n), sx = new Float64Array(n), rowRe = new Float64Array(n), rowIm = new Float64Array(n);
+  for (let s = 0; s < nt; s++) {
+    const t = ts[s], tau = seq.dephaseTime(t);
+    if (s > 0) {
+      const d = tau - tau0;
+      if (Math.abs(d - step) > 1e-9 || !Number.isFinite(step)) {
+        if (Math.abs(tau + tau0) < 1e-9 * Math.max(1, Math.abs(tau))) { for (let o = 0; o < N2; o++) Pi[o] = -Pi[o]; tau0 = tau; }   // the pi pulse
+        else { step = d; for (let o = 0; o < N2; o++) { const a = -2 * Math.PI * df[o] * d; Rr[o] = Math.cos(a); Ri[o] = Math.sin(a); } }
+      }
+      if (tau !== tau0) {
+        for (let o = 0; o < N2; o++) { const a = Pr[o], b = Pi[o]; Pr[o] = a * Rr[o] - b * Ri[o]; Pi[o] = a * Ri[o] + b * Rr[o]; }
+        tau0 = tau;
+      }
+    }
+    const [kx, ky] = seq.kOf(q, t);
+    for (let i = 0; i < n; i++) { const ph = -2 * Math.PI * kx * (i - n / 2) * dx; cx[i] = Math.cos(ph); sx[i] = Math.sin(ph); }
+    let sr = 0, si = 0;
+    for (let j = 0; j < n; j++) {
+      let ar = 0, ai = 0;
+      for (let i = 0, o = j * n; i < n; i++, o++) {
+        const v = m[o];
+        if (v === 0) continue;
+        const pr = v * Pr[o], pi = v * Pi[o];
+        ar += pr * cx[i] - pi * sx[i]; ai += pr * sx[i] + pi * cx[i];
+      }
+      const py = -2 * Math.PI * ky * (n / 2 - j) * dx, cy = Math.cos(py), sy = Math.sin(py);
+      sr += ar * cy - ai * sy; si += ar * sy + ai * cy;
+    }
+    outRe[s] = sr / total; outIm[s] = si / total;
+  }
+  return { re: outRe, im: outIm };
 }
 
 // ------------------------------------------------------------- Lauterbur's way (1973)
