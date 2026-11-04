@@ -26,6 +26,8 @@ DEMOS = {
     'tomography': ('#obj=phantom&panels=all', 1, '__app.state.playing = false; while (__app.sc.count < 120) __app.stepScan()'),
     'arrays': ('#setup=steer', 3),
     'radiointerferometer': ('#setup=uv', 4),
+    'oct': ('#setup=volume', 1, '__app.hold(true); __app.B.finishNow(); __app.step(0, 1)'),
+    'nmr': ('#setup=echo', 1, '__app.hold(true); __app.runTo(2.55e-3)'),
     'beams': ('#setup=start', 3),
     'drums': ('#setup=filter', 10),
     'phasespace': ('#setup=anharmonic&t=8', 3),

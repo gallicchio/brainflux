@@ -22,12 +22,14 @@ beta are new and still being checked.
 - [Interfaces and thin films](https://gallicchio.github.io/brainflux/thinfilms/) (beta)
 - [Dispersion and Kramers–Kronig](https://gallicchio.github.io/brainflux/dispersion/) (beta)
 - [Interferometers and coherence](https://gallicchio.github.io/brainflux/interferometer/) (beta)
+- [Optical coherence tomography](https://gallicchio.github.io/brainflux/oct/) (beta)
 - [Imaging: Abbe and phase contrast](https://gallicchio.github.io/brainflux/imaging/) (beta)
 - [Holography](https://gallicchio.github.io/brainflux/holography/) (beta)
 - [Tomography](https://gallicchio.github.io/brainflux/tomography/) (beta)
 - [Gaussian beams and laser cavities](https://gallicchio.github.io/brainflux/beams/) (beta)
 - [Drums and billiards](https://gallicchio.github.io/brainflux/drums/) (beta)
 - [Quantum phase space](https://gallicchio.github.io/brainflux/phasespace/) (beta)
+- [Bloch sphere and NMR](https://gallicchio.github.io/brainflux/nmr/) (beta)
 - [The principle of least action](https://gallicchio.github.io/brainflux/action/) (beta)
 
 They are static pages with no frameworks, no build step and no server code: serve this folder
