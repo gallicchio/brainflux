@@ -17,6 +17,7 @@ import { drawSqueezer, drawHomodyne, drawLigo } from './pictures.js';
 import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, setSlots, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, fillSlots, slotsWidth, niceTicks, tickLabel } from '../lib/plot.js';
 import { fft } from '../lib/fft.js';
+import { scopeTrace } from '../lib/scope.js';
 
 const DEG = Math.PI / 180;
 const EXTENT = 5;                 // the quadrature plane shows |X| < 5
@@ -538,20 +539,8 @@ function drawChirp() {
   ctx.fillStyle = c.panel; ctx.fillRect(f.left, f.top, f.w, f.h);
   f.clip();
   ctx.strokeStyle = c.line; ctx.beginPath(); ctx.moveTo(f.left, f.Y(0) + 0.5); ctx.lineTo(f.right, f.Y(0) + 0.5); ctx.stroke();
-  // Draw min/max per pixel column (the chirp has thousands of cycles).
-  ctx.strokeStyle = c.chirp; ctx.lineWidth = 1;
-  ctx.beginPath();
-  const cols = Math.max(1, Math.floor(f.w));
-  for (let px = 0; px < cols; px++) {
-    const i0 = Math.floor((px / cols) * s.n), i1 = Math.max(i0 + 1, Math.floor(((px + 1) / cols) * s.n));
-    let lo = Infinity, hi = -Infinity;
-    for (let i = i0; i < i1 && i < s.n; i++) { const v = s.h[i] / d; lo = Math.min(lo, v); hi = Math.max(hi, v); }
-    if (!Number.isFinite(lo)) continue;
-    const x = f.left + px + 0.5;
-    if (i1 - i0 < 3) { const y = f.Y(hi); px ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-    else { ctx.moveTo(x, f.Y(lo)); ctx.lineTo(x, f.Y(hi)); }
-  }
-  ctx.stroke();
+  // Thousands of cycles: drawn as a digital phosphor scope draws them (lib/scope.js).
+  scopeTrace(ctx, f, { n: s.n, y: (i) => f.Y(s.h[i] / d), x0: f.X(0), x1: f.X((s.n - 1) * s.dt), color: c.chirp, bandlimited: true, key: `chirp ${state.source} ${d} ${s.n}` });
   ctx.restore();
   const scale = 10 ** Math.floor(Math.log10(hm));
   f.y0 /= scale; f.y1 /= scale;
@@ -594,19 +583,11 @@ function detectorFindings() {
   return out;
 }
 
-/** Min to max of value(j) for the samples under each pixel column of f, for j < jEnd: a dense trace. */
-function columnTrace(ctx, f, N, value, jEnd = N) {
-  const cols = Math.max(1, Math.floor(f.w));
-  ctx.beginPath();
-  for (let px = 0; px < cols; px++) {
-    const i0 = Math.floor((px / cols) * N), i1 = Math.min(jEnd, Math.max(i0 + 1, Math.floor(((px + 1) / cols) * N)));
-    if (i0 >= jEnd) break;
-    let lo = Infinity, hi = -Infinity;
-    for (let i = i0; i < i1; i++) { const v = value(i); if (v < lo) lo = v; if (v > hi) hi = v; }
-    const x = f.left + px + 0.5;
-    ctx.moveTo(x, f.Y(lo) + 0.5); ctx.lineTo(x, f.Y(hi) - 0.5);
-  }
-  ctx.stroke();
+/** value(j) for j < jEnd, sample j at time j/DET_FS, as a dense trace (lib/scope.js) in the given colour. */
+function columnTrace(ctx, f, N, value, jEnd = N, color, width = 1, alpha = 1, floor) {
+  const n = Math.min(N, jEnd);
+  if (n < 2) return;
+  scopeTrace(ctx, f, { n, y: (j) => f.Y(value(j)), x0: f.X(0), x1: f.X(((n - 1) * DET_T) / N), color, width, alpha, floor });
 }
 
 let detectorFrame = null;
@@ -631,13 +612,8 @@ function drawDetector() {
   ctx.fillStyle = c.panel; ctx.fillRect(f1.left, f1.top, f1.w, f1.h);
   f1.clip();
   seconds(f1);
-  ctx.strokeStyle = c.seismic; ctx.lineWidth = 1;
-  columnTrace(ctx, f1, N, (j) => noise[j] + g * sig[j]);
-  if (state.template) {
-    ctx.strokeStyle = c.chirp; ctx.lineWidth = 1; ctx.globalAlpha = 0.9;
-    columnTrace(ctx, f1, N, (j) => { const i = j - lagShift; return i >= 0 && i < N ? g * sig[i] : 0; });
-    ctx.globalAlpha = 1;
-  }
+  columnTrace(ctx, f1, N, (j) => noise[j] + g * sig[j], N, c.seismic);
+  if (state.template) columnTrace(ctx, f1, N, (j) => { const i = j - lagShift; return i >= 0 && i < N ? g * sig[i] : 0; }, N, c.chirp, 1, 0.9);
   ctx.restore();
   let scale = 1;
   if (raw) { scale = 10 ** Math.floor(Math.log10(F.rawRms)); f1.y0 /= scale; f1.y1 /= scale; }
@@ -673,8 +649,7 @@ function drawDetector() {
   // The template's place, under the output.
   const lx2 = Math.round(f2.X(state.lag)) + 0.5;
   ctx.strokeStyle = c.chirp; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(lx2, f2.top); ctx.lineTo(lx2, f2.bottom); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
-  ctx.strokeStyle = state.sq.on ? c.sq : c.ink; ctx.lineWidth = 1.5;
-  columnTrace(ctx, f2, N, (j) => det.mfNoise[j] + g * det.mfSignal1[j], zEnd);
+  columnTrace(ctx, f2, N, (j) => det.mfNoise[j] + g * det.mfSignal1[j], zEnd, state.sq.on ? c.sq : c.ink, 1.5, 1, 0.8);   // the peak is the point
   // Without squeezing (the same noise): where the peak would be.
   if (F.without && !anim.sliding) { ctx.fillStyle = c.ink3; ctx.beginPath(); ctx.arc(f2.X(F.tMerge), f2.Y(F.without.atMerger), 3.5, 0, 2 * Math.PI); ctx.fill(); }
   ctx.fillStyle = c.chirp; ctx.beginPath(); ctx.arc(lx2, f2.Y(F.zAtLag), 3.5, 0, 2 * Math.PI); ctx.fill();
