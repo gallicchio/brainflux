@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MRI: from spins to an image · BrainFlux</title>
+<meta name="description" content="How magnetic resonance makes a picture: a gradient turns position into frequency, a shaped pulse picks a slice, phase encoding fills k-space line by line and the inverse Fourier transform makes the image; then contrast from T1 and T2, and the artefacts of a real scan.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="mri.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>MRI: from spins to an image</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="mri" id="main" data-view="axis">
+  <section class="stage">
+    <div class="row view-row" id="view-row"></div>
+
+    <!-- 1 · One axis: frequency encoding -->
+    <div class="view" id="view-axis">
+      <div class="plot-wrap v1-main"><canvas id="v1-main" tabindex="0" aria-label="The field along the sample, the sample with its spins seen from above and their phase as colour, the spectrum of the signal with lines from each piece of the sample to its frequencies, and the signal itself, the sum of the spins' arrows. Drag the pieces of the sample; drag the round handle at the end of the field line to change the gradient."></canvas></div>
+      <div class="hint" id="v1-hint">Drag a piece of the sample (its sides to widen it); drag the ● at the end of the field line to tilt it, and watch the spectrum</div>
+      <div class="readout small" id="v1-readout" aria-live="off"></div>
+    </div>
+
+    <!-- 2 · A slice: slice selection -->
+    <div class="view" id="view-slice">
+      <div class="plot-wrap v2-main"><canvas id="v2-main" tabindex="0" aria-label="Slice selection: the pulse and the gradient against time; the frequencies in the pulse; the field's line, height against frequency, where the pulse's band picks a slab; the head from the side with the slab lit; the spins across the slab, magnified; and the slice seen from above. Drag the band of frequencies (its middle to move it, its edges to widen it), the handle on the field's line to tilt it, or click the head to put the slice there."></canvas></div>
+      <div class="hint" id="v2-hint">Drag the pulse's band of frequencies (its middle, or an edge) or the ● on the field line; or click the head where you want the slice</div>
+      <div class="readout small" id="v2-readout" aria-live="off"></div>
+    </div>
+
+    <!-- 3 · The second axis: phase encoding -->
+    <div class="view" id="view-kspace">
+      <div class="plot-wrap v3-main"><canvas id="v3-main" tabindex="0" aria-label="Phase encoding: the slice's spins as a map of their phase, k-space filling line by line, and the picture from the lines measured so far, with the pulse sequence underneath. Click a row of k-space to measure it; point at k-space to see the plane wave that point measures."></canvas></div>
+      <div class="hint" id="v3-hint">Watch the stripes wind as the gradients play and k-space fill row by row; click a row of k-space to measure it, or point at k-space to see its plane wave</div>
+      <div class="readout small" id="v3-readout" aria-live="off"></div>
+    </div>
+
+    <!-- 4 · Contrast and artefacts -->
+    <div class="view" id="view-contrast">
+      <div class="plot-wrap v4-main"><canvas id="v4-main" tabindex="0" aria-label="The picture of the slice; the tissues' recovery along z after each pulse, with the repeat time TR; the echo's decay, with the echo time TE; k-space as measured; and each tissue's brightness. Drag the TR and TE lines."></canvas></div>
+      <div class="hint" id="v4-hint">Drag the TR line on the recovery curves and the TE line on the echo's: the dots where they cross are each tissue's brightness in the picture</div>
+      <div class="readout small" id="v4-readout" aria-live="off"></div>
+    </div>
+  </section>
+
+  <aside class="controls" id="controls">
+    <!-- view 1 -->
+    <div class="panel only-axis" id="v1-gradient-panel">
+      <div class="label">The gradient</div>
+      <div id="v1-gradient-box" class="stack"></div>
+      <div class="small muted">How fast the field rises along x.  The Larmor frequency rises with it: <span id="v1-gloss"></span></div>
+    </div>
+    <div class="panel only-axis">
+      <div class="label">Listening</div>
+      <div class="row" id="v1-play-row"></div>
+      <div id="v1-speed-box"></div>
+    </div>
+    <div class="panel only-axis">
+      <div class="label">The sample</div>
+      <div class="small muted">Tubes of water along x, seen from above.  Drag them about.</div>
+      <div class="button-grid" id="v1-samples"></div>
+      <div class="row" id="v1-piece-row"></div>
+      <details id="v1-more">
+        <summary class="small">More: the magnet's evenness, the field</summary>
+        <div class="stack" id="v1-more-box"></div>
+      </details>
+    </div>
+    <!-- view 2 -->
+    <div class="panel only-slice">
+      <div class="label">The slice</div>
+      <div id="v2-slice-box" class="stack"></div>
+      <div class="small muted">The pulse is a sinc in time, so its frequencies are a band, f₀ + f_c ± Δf/2.  Only the spins whose Larmor frequency falls in the band are tipped.</div>
+      <div class="row" id="v2-rephase-row"></div>
+    </div>
+    <div class="panel only-slice">
+      <div class="label">Playing it</div>
+      <div class="row" id="v2-play-row"></div>
+      <div id="v2-speed-box"></div>
+      <details id="v2-more">
+        <summary class="small">More: the pulse's length and tip angle</summary>
+        <div class="stack" id="v2-more-box"></div>
+      </details>
+    </div>
+    <!-- view 3 -->
+    <div class="panel only-kspace">
+      <div class="label">The scan</div>
+      <div class="row" id="v3-scan-row"></div>
+      <div id="v3-rate-box" class="stack"></div>
+      <div class="row" id="v3-order-row"></div>
+      <div class="row" id="v3-only-row"></div>
+    </div>
+    <div class="panel only-kspace">
+      <div class="label">The sequence</div>
+      <div class="row" id="v3-seq-row"></div>
+      <div id="v3-seq-box" class="stack"></div>
+      <div class="row" id="v3-n-row"></div>
+      <div class="small muted">The matrix: how many lines are measured, and how many samples each, so how many pixels across.</div>
+    </div>
+    <div class="panel only-kspace">
+      <div class="label">What is scanned</div>
+      <div class="row" id="v3-obj-row"></div>
+      <div class="row" id="v3-show-row"></div>
+      <details id="v3-more">
+        <summary class="small">More: the magnet's evenness</summary>
+        <div class="stack" id="v3-more-box"></div>
+      </details>
+    </div>
+    <!-- view 4 -->
+    <div class="panel only-contrast">
+      <div class="label">The picture, made by</div>
+      <div class="row" id="v4-mode-row"></div>
+    </div>
+    <div class="panel only-contrast only-fourier">
+      <div class="label">Contrast</div>
+      <div class="row" id="v4-contrast-row"></div>
+      <div id="v4-contrast-box" class="stack"></div>
+      <div class="row" id="v4-type-row"></div>
+    </div>
+    <div class="panel only-contrast only-fourier">
+      <div class="label">The scan</div>
+      <div id="v4-scan-box" class="stack"></div>
+      <div class="small muted">A field of view smaller than the head wraps it round along y; fewer phase lines blur along y; averaging lowers the noise as 1/√n.</div>
+      <div id="v4-fat-box" class="stack"></div>
+    </div>
+    <div class="panel only-contrast only-lauterbur">
+      <div class="label">Lauterbur's projections</div>
+      <div class="row" id="v4-lb-row"></div>
+      <div id="v4-lb-box" class="stack"></div>
+      <div class="small muted">No phase encoding: the readout gradient is turned to one angle after another, and the spectrum of each FID is the slice projected along that direction.</div>
+    </div>
+    <div class="panel only-contrast">
+      <div class="label">What is scanned</div>
+      <div class="row" id="v4-obj-row"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>An MRI scanner makes its picture from the radio signal of the protons in water.  The page
+    builds that up in four steps, one per tab.</p>
+    <p><b>1 · One axis.</b>  A row of spins, tipped over by a pulse, turns in a magnetic field.
+    The field rises along the sample (the tilted line), so each spin turns at a rate that tells
+    where it is, and the signal's spectrum is a picture of the sample along that line.  Drag the
+    pieces of the sample and watch the spectrum follow; tilt the field line and watch it widen.</p>
+    <p><b>2 · A slice.</b>  A head, and a gradient along the body.  A pulse that holds only a
+    narrow band of frequencies tips only the spins whose frequency is in the band: one slice.
+    Drag the band, or click the head where you want the slice; watch the spins tip over.</p>
+    <p><b>3 · The second axis.</b>  The slice's spins, coloured by their phase; k-space, filling
+    one row each time the sequence plays; and the picture made from the rows measured so far,
+    which sharpens as they come in.  Watch the stripes the gradients wind in the spins: each row
+    of k-space is the slice measured against one set of stripes.  Click a row to measure it;
+    point at k-space to see its stripes.</p>
+    <p><b>4 · Contrast and artefacts.</b>  The finished picture, with its settings: drag the TR
+    and TE lines and watch which tissues turn bright; shrink the field of view, drop lines, add
+    noise, shift the fat.  And how MRI began, in 1973, without phase encoding.</p>
+  </section>
+
+  <article class="exp" data-setup="axis">
+    <h3>1. A field that rises along x turns position into frequency</h3>
+    <p>Two tubes of water, 12 mm and 6 mm wide, in a field that rises by $G=2$ mT/m along $x$.
+    A π/2 pulse tips every spin into the plane (the <a href="../nmr/#setup=pulse90">NMR demo</a> shows how), and
+    then each turns at its own Larmor frequency,
+    $$f(x)=\bar\gamma\,(B_0+Gx),\qquad \bar\gamma=\frac{\gamma}{2\pi}=42.58\ \mathrm{MHz/T}.$$
+    The page watches from a frame that turns at $f_0=\bar\gamma B_0$ (63.87 MHz at 1.5 T), as the
+    receiver does, so what is left is $\bar\gamma Gx$: 85.2 Hz for every millimetre.  Watch the
+    arrows: those on the right turn clockwise, those on the left the other way, the faster the
+    further out.  The signal is the sum of all the arrows, and its spectrum is the sample: each
+    tube becomes a band of frequencies as wide as it is, $\Delta f=\bar\gamma G\,w$ (1.02 kHz
+    for the 12 mm tube).  Read it backwards, $x=\Delta f/\bar\gamma G$, and you have a picture
+    along one line: a one-dimensional image.  Now drag the gradient to zero: every spin turns at
+    $f_0$, the arrows stay together, and the spectrum is one line.</p>
+  </article>
+
+  <article class="exp" data-setup="drag">
+    <h3>2. Move a tube, and its frequencies move with it</h3>
+    <p>One tube, 20 mm wide, 10 mm left of the centre.  Drag it about by its middle, or widen it by
+    its sides: its band in the spectrum follows, through the lines that join each edge to its
+    frequency.  Every 10 mm it moves, its band moves $10\,\bar\gamma G=0.852$ kHz; at the
+    centre it sits at $f_0$, and its spins stand still in this frame.  Point at the spectrum: the
+    dashed line goes back up to the spins that turn at that frequency.  Drag the top of a tube
+    down to give it fewer protons (a tube of oil, or of a gel): its band is lower in proportion,
+    since the spectrum counts the spins at each frequency.</p>
+  </article>
+
+  <article class="exp" data-setup="stronger">
+    <h3>3. A stronger gradient spreads the same tubes over more frequencies</h3>
+    <p>The same two tubes at $G=5$ mT/m: 212.9 Hz per mm, so the spectrum is 2.5 times as wide and
+    1 kHz is now 4.70 mm, not 11.74 mm.  The lines from the tubes to the spectrum fan out further.
+    The arrows also wind up 2.5 times as fast, so the record needed for the same detail is shorter,
+    1.174 ms instead of 2.936 ms (the page stops listening when neighbouring arrows, 2 mm apart,
+    point opposite ways: experiment 5).  Scanners use gradients of tens of mT/m, and a field of
+    1.5 T rises by only $5\times32=0.16$ mT across this sample, about a ten-thousandth of
+    itself; that is enough.</p>
+  </article>
+
+  <article class="exp" data-setup="winding">
+    <h3>4. The phase winds across the sample, and the signal is how much of it is left</h3>
+    <p>One tube, 20 mm wide, slowed down.  Under the gradient the phase winds along $x$ (the
+    colours in the strip): after a time $t$ it has wound once every $1/k$ mm, with
+    $$k=\bar\gamma G\,t,$$
+    the turns per millimetre (the top axis of the signal's record).  The signal is the sum of the
+    arrows, so it is the overlap of the tube with that winding.  At $t=1/(\bar\gamma G w)=0.587$
+    ms exactly one turn fits in the tube: its arrows point every way, and the signal is zero.
+    Half a turn more and the signal comes back, upside down, to 21.6% at 0.840 ms (the first lobe
+    of a sinc, the transform of a block, is 21.7%; the magnet's slight unevenness takes the
+    rest).  So each moment of the record measures one spatial frequency $k$ of the
+    sample: its Fourier component $\int\rho(x)\,e^{-2\pi ikx}dx$.  That is why its spectrum is
+    the profile: the record is the profile's Fourier transform, written down one $k$ at a time.</p>
+  </article>
+
+  <article class="exp" data-setup="resolution">
+    <h3>5. The longer you listen, the finer the detail</h3>
+    <p>Three tubes 3 mm wide and 7 mm apart.  The spectrum so far starts as one blob, and only
+    later splits into three: a record that has reached $k$ can show detail down to $1/2k$ (the
+    readout says how fine, as it goes).  The page stops at $k=0.25$ per mm, when neighbouring
+    arrows 2 mm apart point opposite ways, and the detail is 2 mm: the arrows are the pixels of
+    this one-dimensional image.  Listening longer would show finer detail, but only for spins
+    closer together than the arrows.  (Under <em>More</em>, a magnet whose field is not quite
+    even: with $T_2^*=2$ ms neighbouring spins drift apart even with no gradient, and the signal
+    falls by $e$ every 2 ms; in the spectrum each edge blurs by about $1/\pi T_2^*=159$ Hz, 1.9 mm
+    at this gradient.)</p>
+  </article>
+
+  <article class="exp" data-setup="slice">
+    <h3>6. A pulse with a band of frequencies tips one slice</h3>
+    <p>Now a gradient along the body, $G_z=4$ mT/m: the Larmor frequency rises 170.3 Hz for every
+    millimetre up the head (the line on the left).  The pulse is a sinc in time, 3 ms long, so its
+    frequencies are a band, nearly a box (the close-up): it holds $f_0\pm0.75$ kHz and almost
+    nothing else.  A spin is tipped only if the pulse holds its frequency, so only the spins
+    where the band meets the line are tipped (the arrows on the right fall over; the rest stay
+    up along $B_0$), a slab
+    $$\Delta z=\frac{\Delta f}{\bar\gamma G_z}=\frac{1.5\ \mathrm{kHz}}{170.3\ \mathrm{Hz/mm}}=8.81\ \mathrm{mm}$$
+    thick.  The slab the spins show is 9.45 mm wide at half height: the rule holds for small
+    tips (8.86 mm at 30°, under <em>More</em>), and a 90° pulse tips a little wider.  This is a
+    resonance doing the work: a spin out of the band is driven at the wrong frequency, and the
+    pulse only makes it wobble.</p>
+  </article>
+
+  <article class="exp" data-setup="moveslice">
+    <h3>7. Tune the pulse, and the slice moves</h3>
+    <p>The slice is wherever the spins' frequency matches the pulse's, at
+    $z=f_c/\bar\gamma G_z$.  The pulse is tuned to $f_c=-6.47$ kHz below $f_0$, which puts the
+    slice 38 mm down, through the eyes (the picture from above, top right).  Drag the band, or
+    click the head: up at $z=+40$ mm ($f_c=+6.81$ kHz) the ventricles have gone, and above the top
+    of the head there is nothing to tip.  A scanner moves its slices this way, by retuning the
+    pulse, not by moving the patient.</p>
+  </article>
+
+  <article class="exp" data-setup="thin">
+    <h3>8. Two ways to a thinner slice</h3>
+    <p>The band at half its width, $\Delta f=0.75$ kHz: the rule says 4.40 mm, but the spins show
+    5.60 mm.  A sinc 3 ms long that holds so few frequencies has hardly any lobes beside its
+    middle (look at the pulse), and its band is rounded rather than a box.  Instead put the band
+    back to 1.5 kHz and double the gradient to 8 mT/m: the slice is again 4.40 mm by the rule,
+    and 4.72 mm as tipped, because the pulse is the same.  A sharp band needs a pulse that lasts
+    many times $1/\Delta f$: under <em>More</em>, a 0.5 kHz band takes an 8 ms pulse to tip
+    3.22 mm (2.94 by the rule; 4.75 with 3 ms).  Strong gradients are how scanners make thin
+    slices quickly.</p>
+  </article>
+
+  <article class="exp" data-setup="rephase">
+    <h3>9. The gradient twists the slab; the reversed lobe untwists it</h3>
+    <p>The rephasing lobe is off.  While the pulse plays, the gradient is on, so the spins across
+    the slab keep turning at their different frequencies: the slab ends twisted, its phase
+    changing from one face to the other (the colours across it).  Twisted, its spins add up to
+    only 3.0% of what they would in step, and the slice would give almost no signal.  Turn the
+    lobe on: after the pulse the gradient is reversed for half the pulse's length, and every
+    spin turns back by the twist it gained since the middle of the pulse (where, for a sinc,
+    the tipping happens).  The slab ends in step, 95.5% (a 90° tip leaves a little twist).  The
+    page watches from a frame that turns with the slab's centre, so its spins end along $x'$
+    wherever the slice is.</p>
+  </article>
+
+  <article class="exp" data-setup="encode">
+    <h3>10. One step of phase encoding winds one plane wave across the slice</h3>
+    <p>One line in slow motion, row +10 of k-space.  Watch the spins as the $G_y$ lobe plays
+    (the third row of the sequence): for 2 ms the field rises along $y$ by $G_y=0.459$ mT/m, the
+    spins high in the slice turn faster than those low down, and the phase winds into stripes
+    along $y$,
+    $$k_y=\bar\gamma\,G_y\,T_{pe}=0.0391\ \mathrm{per\ mm},$$
+    one turn every 25.6 mm.  Then the lobe stops and the stripes stay: the spins remember.  That is
+    the whole trick of the second axis.  Each line winds a different number of turns across $y$,
+    one step of the ladder of $G_y$ lobes, and the signal measures how much of the slice is in
+    step with those stripes, exactly as a plane wave $e^{-2\pi i\vec k\cdot\vec r}$ of the
+    <a href="../planewave/">plane-wave demo</a> picks out one Fourier component.  The readout then
+    adds stripes along $x$ that sweep while the ADC listens, so one line measures a whole row of
+    k-space, at one $k_y$.  (In a spin echo the lobe winds $-k_y$ and the π pulse turns it into
+    $+k_y$: the dot in k-space jumps through the centre.)  Point at any pixel of k-space to see the
+    stripes it stands for: the <a href="../fft2d/">2D Fourier transform demo</a>'s pixels mean the
+    same.</p>
+  </article>
+
+  <article class="exp" data-setup="fill">
+    <h3>11. Line by line, the picture forms</h3>
+    <p>The scan from the start, as the view opens: the first lines slowly, then faster.  Each line
+    fills one row of k-space (in the FFT demo's colours: hue for the phase, brightness for the
+    size), and the picture on the right is the inverse 2D Fourier transform of the rows measured
+    so far, the rest taken as zero.  The middle rows come first (<em>Centre out</em>): after 7 of
+    them the head is a blur, detail along $y$ only down to 36.6 mm, but already as bright as it
+    will be; with every pair of rows the detail along $y$ improves, to 4.0 mm with all 64, as fine
+    as the readout gives along $x$.  A real scanner waits a repeat time, TR = 500 ms here, between
+    lines, so this 64-line picture takes 32 s; the page skips the waiting.</p>
+  </article>
+
+  <article class="exp" data-setup="centre">
+    <h3>12. The middle of k-space holds the picture; the edges hold its edges</h3>
+    <p>Only the middle 16 rows of 64.  They hold 86.7% of the signal's energy, and with them alone
+    the picture has its brightness right (its mean is 1.06 of the true one) but no sharp edges:
+    the middle of k-space is the slow variations, the contrast between tissues.  Press <em>Only the
+    edges</em>: the other 48 rows, 13% of the energy, give only outlines, a picture whose mean is
+    31% of the true one.  Fine detail lives far from the centre of k-space, because a sharp edge
+    needs stripes close together to describe it.  (Fast scans use this: measure the middle often
+    and the edges once.)</p>
+  </article>
+
+  <article class="exp" data-setup="spinecho">
+    <h3>13. The π pulse: why a spin echo sits in the middle of k-space</h3>
+    <p>A poor magnet: every spin is a little off its frequency (a spread of width
+    $1/\pi T_2'$ with $T_2'=8$ ms), so after the π/2 pulse the spins drift out of step, speckling
+    the phase picture with random colours, and the signal would fade as $e^{-t/T_2'}$.  At TE/2
+    comes the π pulse (one spin's view of it in the <a href="../nmr/#setup=echo">NMR demo</a>).  It turns every spin's phase around, $\varphi\to-\varphi$, so a spin that
+    had run ahead is now as far behind, and it goes on running ahead at the same rate: at TE they
+    are all back in step, whatever their offsets.  The same π pulse turns the gradients' phase
+    around too, $\vec k\to-\vec k$ (the dot jumps through the centre of k-space), so the readout
+    passes through $k=0$ exactly at TE.  There the speckle has gone and the echo is 100% of what
+    the spins give; then it fades again.  Choose <em>Gradient echo</em> (no π pulse; TE kept at
+    20 ms): the gradient still makes an echo at $k=0$, but nothing undoes the magnet's spread,
+    and the echo is 7.3% of the spin echo's (about $e^{-TE/T_2'}=8\%$).  That is the difference
+    between $T_2$ and $T_2^*$ weighting (experiment 15), and the reason the π pulse is there.</p>
+  </article>
+
+  <article class="exp" data-setup="motion">
+    <h3>14. Move during the scan</h3>
+    <p>Three disks, scanned at 5 lines a second from the bottom row of k-space to the top, as most
+    scanners go.  Half-way through, drag a disk (the bright one, fat) to another place on the left
+    picture.  The rows measured before the move saw it in one place, the rest in the other, and no
+    single picture has that k-space: the disk shows twice, each half as bright, and ghosts of it are
+    smeared along $y$, the phase-encoding direction, where each row is a different moment.
+    Along $x$ the picture is sharp, because each row was read out in 3 ms.  This is why patients
+    are asked to hold still, and why breathing and the heartbeat smear MRI pictures along the
+    phase-encoding direction.  (Once a scan is over, any change measures every row again at
+    once.)</p>
+  </article>
+
+  <article class="exp" data-setup="contrast">
+    <h3>15. TR and TE choose what is bright</h3>
+    <p>The same slice; only two times change, and as the view opens they glide by themselves
+    from T₁- to T₂-weighting and back (drag either line to take over; <em>Sweep</em> restarts it).  After each π/2 pulse the spins recover along $z$
+    at their own pace, $1-e^{-t/T_1}$ (left), and the next pulse, a repeat time TR later, can only
+    tip what has come back.  After the pulse the echo fades as $e^{-t/T_2}$ (right), and it is
+    read at the echo time TE.  So each tissue's brightness is
+    $$S=\rho\,(1-e^{-TR/T_1})\,e^{-TE/T_2},$$
+    the dots where the lines cross the curves.  <em>T₁-weighted</em>, TR 500 ms and TE 15 ms:
+    the tissues differ in how far they have recovered, and fat (T₁ 260 ms) is brightest, 0.672,
+    the fluid in the ventricles (T₁ 4 s) darkest, 0.117; white matter (0.318) is brighter than
+    grey (0.282), and the lesion is dark (0.237).  <em>T₂-weighted</em>, TR 3000 ms and TE 100 ms:
+    all have nearly recovered, and what differs is the fading, so fluid with its long T₂ is
+    brightest, 0.502, with the oedema of the lesion close behind (0.472): this is how lesions are
+    found.  <em>Proton density</em>, TR 3000 ms and TE 15 ms: little fading and much recovery,
+    so the count of protons shows (fat 0.788, grey 0.659, white 0.587); the fluid is still only
+    0.524, because 3 s is not long for its T₁, and a TR of 8 s makes it the brightest (0.858).
+    Drag the lines; the picture follows at once.</p>
+  </article>
+
+  <article class="exp" data-setup="wrap">
+    <h3>16. A field of view smaller than the head wraps it round</h3>
+    <p>The field of view is 180 mm, and the head is 220 mm from front to back.  K-space is sampled
+    every $1/\mathrm{FOV}$ along $k_y$, and a signal sampled that often cannot tell $y$ from
+    $y\pm\mathrm{FOV}$ (the phase it winds differs by whole turns), so what lies outside the
+    field of view is folded in, 180 mm away: the scalp at the back of the head, $y=-110$ to
+    $-104$ mm, shows at $+70$ to $+76$ mm, inside the front of the picture, and the front of
+    the head at the back.  Along $x$ nothing folds: the receiver samples the readout faster than
+    it needs and filters out frequencies from outside the field of view (the head's sides are
+    simply cut off).  Widen the field of view to 220 mm and the wrap goes; scanners choose the
+    phase-encoding direction along the shorter side of the body to keep it short.</p>
+  </article>
+
+  <article class="exp" data-setup="lines">
+    <h3>17. Fewer phase-encoding lines: blur and ringing along y</h3>
+    <p>Only the middle 32 rows of 128.  Along $x$ the readout still gives 2 mm pixels, but along
+    $y$ the highest spatial frequency measured is 16 rows from the centre, so detail along $y$ is
+    only $256/32=8$ mm: the thin scalp is smeared to 74% of its height, and the edges ring, in
+    ripples along $y$ that make the white matter swing from 95% to 106% of its value (the Gibbs
+    ripple of a Fourier series cut short).  Along $x$ there is no ringing.  A scan with fewer lines
+    is faster in proportion, which is the usual trade; the lines can be chosen cleverly, the
+    middle ones most (experiment 12).</p>
+  </article>
+
+  <article class="exp" data-setup="noise">
+    <h3>18. Noise, and averaging it away</h3>
+    <p>The receiver adds noise to every sample, here 5% of the brightest pixel's signal; since the
+    inverse FFT is unitary, the picture's pixels get the same 5%, the grain in the dark around
+    the head.  Measure every line 4 times and average: the signal stays, the noise falls as
+    $1/\sqrt4$, to 2.5%, and the scan takes 4 times as long.  Signal-to-noise is the currency of
+    MRI: it grows with the volume of a pixel and with $\sqrt{\text{time}}$, and with the field,
+    which is why scanners went from 0.15 T to 3 T and more.</p>
+  </article>
+
+  <article class="exp" data-setup="fat">
+    <h3>19. Fat's chemical shift moves it along the readout</h3>
+    <p>Fat's protons sit in molecules whose electrons shield them a little more than water's, so
+    they turn 3.4 parts per million slower: 217 Hz at 1.5 T.  The readout reads frequency as
+    position, $x=f/\bar\gamma G_x$, so fat is drawn $217\ \mathrm{Hz}/\bar\gamma G_x$ too
+    far to the low side: about 1.3 mm with $G_x=4$ mT/m, hardly a pixel.  Here $G_x$ is 0.5 mT/m, and
+    the shift is 10.2 mm: the scalp's fat slides off the skull to the left (a bright band where
+    it overlaps the brain's edge, a dark gap on the right), and the pocket of fat leaves its
+    place (dashed: where the fat is).  A weak readout gradient also means a long readout, so TE
+    cannot be shorter than 31.5 ms.  Along $y$ nothing moves: phase encoding is the same for fat
+    and water.  At 3 T the shift doubles.</p>
+  </article>
+
+  <article class="exp" data-setup="lauterbur">
+    <h3>20. How it began: Lauterbur's projections (1973)</h3>
+    <p>The first MR image, of two tubes of water, was made without phase encoding.  Paul
+    Lauterbur put the sample in a gradient, which by view 1 makes the FID's spectrum the sample's
+    profile along the gradient: its projection.  Then he turned the gradient and measured again,
+    and made the picture from the projections by back-projection, as a CT scanner does (the
+    <a href="../tomography/">tomography demo</a>).  He used four angles; here they are 4, 45° apart:
+    see how little four projections say.  Raise the angles to 12, 60, 180: the picture sharpens, as
+    in the tomography demo, and turn the ramp filter off to see the plain back-projection's blur.
+    Phase encoding, filling k-space on a grid so that one FFT makes the picture, came two years
+    later (Kumar, Welti and Ernst, 1975; Edelstein and others' "spin warp", 1980), and every scanner
+    since has used it.  Lauterbur and Mansfield shared the Nobel prize in 2003.</p>
+  </article>
+
+  <section class="theory">
+  <h3>How it works</h3>
+  <p><b>The signal.</b>  Protons in a field $B$ precess at the Larmor frequency
+  $f=\bar\gamma B$, with $\bar\gamma=\gamma/2\pi=42.58$ MHz/T.  A π/2 pulse tips them into
+  the transverse plane (the <a href="../nmr/#setup=pulse90">NMR demo</a>); in a frame turning at
+  $f_0=\bar\gamma B_0$, as the receiver demodulates, a spin at $\vec r$ in a gradient $\vec G$
+  turns at $\bar\gamma\,\vec G\cdot\vec r$, clockwise for positive offsets (protons have
+  $\gamma>0$).  Its transverse magnetization $M_x+iM_y$ goes as $e^{-2\pi i\bar\gamma\int\vec G\cdot\vec r\,dt}$,
+  and the signal is the sum over the slice,
+  $$s(t)=\int m(\vec r)\,e^{-2\pi i\,\vec k(t)\cdot\vec r}\,d^2r,\qquad \vec k(t)=\bar\gamma\int_0^t\vec G(t')\,dt',$$
+  where $m$ is the proton density times the weighting.  So the signal at time $t$ is the Fourier
+  transform of the slice at the spatial frequency $\vec k(t)$, and the gradients steer $\vec k$
+  through k-space: this is the whole of MRI.  The units here: mm, ms, mT/m, kHz, and
+  $\bar\gamma=0.042577$ kHz per (mT/m·mm), or turns per mm per (mT/m·ms).</p>
+  <p><b>Frequency encoding</b> (view 1).  A constant gradient $G_x$ during the readout moves $k_x$
+  steadily, $k_x=\bar\gamma G_x t$, so the record is the profile's Fourier transform and its
+  spectrum is the profile, $x=f/\bar\gamma G_x$.  Recording until $k_x$ reaches $k_{\max}$ gives
+  detail $\Delta x=1/2k_{\max}$, and sampling every $\Delta k=1/\mathrm{FOV}$ covers a field of
+  view FOV.  In view 1 the record starts at $k=0$ (an FID); a real readout first moves $k$ to
+  $-k_{\max}$ with a prephasing lobe, so the echo, $k=0$, comes in the middle (view 3).</p>
+  <p><b>Slice selection</b> (view 2).  While a gradient $G_z$ is on, a pulse tips only the spins
+  whose frequency it contains.  For small tips the tip angle at offset $\Delta f$ is
+  $2\pi$ times the pulse's Fourier transform there, so a sinc in time, whose transform is a box,
+  tips a slab $\Delta z=\Delta f/\bar\gamma G_z$ thick at $z=f_c/\bar\gamma G_z$.  The gradient
+  winds a phase across the slab while the pulse plays (as if all from the pulse's middle), and a
+  lobe of $-G_z$ for half the pulse unwinds it.  The page solves the Bloch equations for 501
+  spins through the pulse (the profile is a little wider than the rule at 90°).</p>
+  <p><b>Phase encoding</b> (view 3).  Before each readout a lobe of $G_y$ lasting $T_{pe}$ moves
+  $k_y$ to $\bar\gamma G_yT_{pe}$, a different step of the ladder each repeat; the readout then
+  sweeps one row of k-space.  With $N$ rows $\Delta k$ apart, the inverse 2D FFT gives an $N\times N$
+  picture of the slice, the same in both directions.  The page's sequence plays the parts one
+  after another: the slice's pulse and its rephasing lobe, the phase-encoding lobe, the readout's
+  prephaser, for a spin echo the π pulse at TE/2, and the readout centred at TE.  A π pulse about
+  $x'$ turns every spin's phase around ($M_x+iM_y\to M_x-iM_y$), so it turns $\vec k$ into
+  $-\vec k$, and phases wound by an uneven field are undone at TE: the spin echo.  The live
+  pictures use 128 × 128 spins, each with an offset drawn from a Lorentzian of width
+  $1/\pi T_2'$; the k-space data are the FFT of the weighted picture on the scan's own grid.</p>
+  <p><b>Contrast</b> (view 4).  With a repeat time TR, a spin-echo picture weights each tissue by
+  $\rho\,(1-e^{-TR/T_1})\,e^{-TE/T_2}$ (for a 90° pulse); a gradient echo has
+  $1/T_2^*=1/T_2+1/T_2'$ instead of $T_2$.  The tissues' values, at 1.5 T: water (CSF)
+  $\rho=1$, $T_1=4000$, $T_2=2000$ ms; fat 0.95, 260, 80; grey matter 0.8, 950, 100; white matter
+  0.7, 650, 90; a lesion (oedema) 0.9, 1500, 200.  $T_1$ grows with the field (to 4300, 370,
+  1330, 830, 2000 at 3 T); $T_2$ hardly does.</p>
+  <p><b>Approximations.</b>  The slice is a plane (no partial volume across its thickness); $T_2$
+  decay during a readout and the time between lines are left out; the field's unevenness is a
+  spread of offsets with no shape in space; noise is added to each k-space sample, independent
+  and Gaussian.  The page skips the waiting between lines, which a scanner spends recovering
+  along $z$: a 64-line spin-echo picture with TR = 500 ms takes 32 s.</p>
+  </section>
+
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
