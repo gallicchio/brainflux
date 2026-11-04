@@ -526,9 +526,16 @@ function drawSlice(canvas, img, o) {
   // The other two slices, as lines in their colours (the en-face slab, when it follows a layer,
   // as the curve it follows).
   for (const ln of o.lines) {
+    if (ln.curve) {
+      // The slab following a layer: a solid curve on a dark halo, to be seen on the bright layers.
+      ctx.beginPath();
+      ln.curve.forEach((v, i) => { const x = ox + ((i + 0.5) / ln.curve.length) * iw, y = oy + v * ih; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.strokeStyle = 'rgba(13,15,20,0.75)'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.strokeStyle = ln.colour; ctx.lineWidth = 1.5; ctx.stroke();
+      continue;
+    }
     ctx.strokeStyle = ln.colour; ctx.lineWidth = 1; ctx.setLineDash([4, 3]); ctx.beginPath();
-    if (ln.curve) ln.curve.forEach((v, i) => { const x = ox + ((i + 0.5) / ln.curve.length) * iw, y = oy + v * ih; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
-    else if (ln.u !== undefined) { const x = ox + ln.u * iw; ctx.moveTo(x, oy); ctx.lineTo(x, oy + ih); }
+    if (ln.u !== undefined) { const x = ox + ln.u * iw; ctx.moveTo(x, oy); ctx.lineTo(x, oy + ih); }
     else { const y = oy + ln.v * ih; ctx.moveTo(ox, y); ctx.lineTo(ox + iw, y); }
     ctx.stroke(); ctx.setLineDash([]);
   }

@@ -164,7 +164,10 @@ function dbFloor() { return Math.max(-90, Math.min(state.noise - 12, -40)); }
 function drawScan(c) {
   const { ctx, f } = frameFor(scanC, { top: 10, bottom: 34 });
   const db = state.scale === 'db', top = Math.max(...B.map((b) => Math.abs(b.a)));
-  if (db) { f.y0 = dbFloor(); f.y1 = Math.min(5, Math.ceil((20 * Math.log10(top) + 6) / 10) * 10); } else { f.y0 = 0; f.y1 = Math.max(top * 1.2, 4 * Math.SQRT2 * sigmaR()); }
+  // (Linear: room for the A-scan itself too, which two close layers' fields in step lift above either.)
+  let aMax = 0;
+  for (const v of pass.A) if (v > aMax) aMax = v;
+  if (db) { f.y0 = dbFloor(); f.y1 = Math.min(5, Math.ceil((20 * Math.log10(top) + 6) / 10) * 10); } else { f.y0 = 0; f.y1 = Math.max(top * 1.2, aMax * 1.08, 4 * Math.SQRT2 * sigmaR()); }
   const Y = (a) => f.Y(db ? (a > 0 ? Math.max(f.y0 - 5, 20 * Math.log10(a)) : f.y0 - 5) : a);
   f.axes({ colors: c, xlabel: 'mirror position d = optical depth n z (μm)', ylabel: db ? 'reflection (dB)' : 'reflectivity |r|', grid: db });
   f.clip();
