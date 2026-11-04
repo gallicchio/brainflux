@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantum optics: squeezed light and LIGO · BrainFlux</title>
+<meta name="description" content="One mode of light as a cloud in the quadrature plane: the vacuum's noise, coherent states, squeezed states and the crystal that makes them, homodyne detection choosing a quadrature with the local oscillator's phase, a phase measured at and below the standard quantum limit, and LIGO's noise curve with a squeezed vacuum at its dark port, frequency-dependent or not, with a chirp's signal-to-noise ratio as the payoff.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="quantumoptics.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Quantum optics: squeezed light and LIGO</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="qo" id="main" data-view="mode">
+  <section class="stage">
+    <div class="row view-row" id="view-row"></div>
+
+    <!-- 2 · Squeezing: the crystal -->
+    <div class="plot-wrap" id="squeezer-wrap"><canvas id="squeezer" aria-label="How squeezed light is made: the vacuum (or a laser's field) goes through a crystal pumped at twice its frequency, which squeezes its noise cloud; a grey box after it is loss, which rounds the ellipse out again"></canvas></div>
+
+    <!-- 1 · One mode and 2 · Squeezing: the plane and the field -->
+    <div class="pair" id="top-pair">
+      <div class="plot-wrap" id="plane-wrap"><div class="cap" id="plane-cap"><b>The quadrature plane</b>, turning at ω (slowed)</div><canvas id="plane" tabindex="0" aria-label="The quadrature plane X1, X2 with the state's noise cloud (its Wigner function) turning at the light's frequency: drag the dot to set the mean field α"></canvas></div>
+      <div class="plot-wrap" id="trace-wrap"><div class="cap"><b>The field E(t)</b>: the cloud's shadow on the X₁ axis, one point of the cloud per period</div><canvas id="trace" aria-label="The field against time: the projection on X1 of a point drawn from the cloud as it turns, over the band of the cloud's noise"></canvas></div>
+    </div>
+    <div class="hint" id="hint-mode">Drag the dot in the plane to set the laser's field α: the wave on the right grows, its noise band does not</div>
+    <div class="hint" id="hint-squeeze">Drag the <b>squeezing</b> slider and its <b>angle</b>: the cloud becomes an ellipse, and the wave's noise band breathes twice a period</div>
+    <div class="plot-wrap" id="photons-wrap"><div class="cap"><b>Photon numbers</b>: the chance P(n) of counting n photons in the mode</div><canvas id="photons" aria-label="The photon-number distribution of the state"></canvas></div>
+
+    <!-- 3 · Homodyne -->
+    <div class="pair" id="hom-pair">
+      <div class="plot-wrap" id="apparatus-wrap"><div class="cap"><b>Homodyne detection</b>: the signal beats against a strong local oscillator</div><canvas id="apparatus" aria-label="The homodyne detector: the signal and the local oscillator meet on a 50:50 beam splitter, two photodiodes catch the outputs, and their photocurrents are subtracted"></canvas></div>
+      <div id="plane-slot"></div>
+    </div>
+    <div class="hint" id="hint-homodyne">Drag the yellow axis in the plane (or the <b>LO phase</b> slider) to choose the quadrature read; <b>Scan</b> turns it by motor</div>
+    <div class="pair even" id="hom-pair2">
+      <div class="plot-wrap" id="strip-wrap"><div class="cap"><b>The photocurrent</b> i₋ ∝ |α<sub>LO</sub>| X<sub>θ</sub>, sample by sample</div><canvas id="strip" aria-label="The difference photocurrent against time: samples of the quadrature X_theta with their mean and noise"></canvas></div>
+      <div class="plot-wrap" id="variance-wrap"><div class="cap"><b>Noise against the LO's phase</b>: measured (dots) and theory (line), 0 dB is the vacuum's</div><canvas id="variance" tabindex="0" aria-label="The variance of the photocurrent against the local oscillator's phase: the measured record and the theory curve; click to set the phase"></canvas></div>
+    </div>
+
+    <!-- 4 · LIGO -->
+    <div class="plot-wrap" id="ligo-wrap"><div class="cap"><b>LIGO</b>: a Michelson with 4 km Fabry–Pérot arms; the dark port reads the arms' difference as a phase</div><canvas id="ligo" aria-label="The interferometer: laser, power-recycling mirror, beam splitter, two 4 km arm cavities, the dark port with its photodiode, and the squeezer that injects a squeezed vacuum into the dark port, through a filter cavity when the squeezing is frequency-dependent"></canvas></div>
+    <div class="hint" id="hint-ligo">Turn <b>Squeezed light</b> on and drag its <b>dB</b> slider: the quantum noise (blue) moves and the total (black) follows; the chirp's signal-to-noise ratio is the number at the bottom</div>
+    <div class="plot-wrap" id="sens-wrap"><div class="cap"><b>Strain sensitivity</b> √S<sub>h</sub>(f), the smallest strain seen in 1 Hz of bandwidth</div><canvas id="sens" aria-label="The strain noise amplitude spectral density against frequency: shot noise, radiation pressure, their sum, the standard quantum limit, the seismic wall, thermal noise and the total, with and without squeezing, and the chirp's spectrum"></canvas></div>
+    <div class="plot-wrap" id="chirp-wrap"><div class="cap"><b>The signal</b> h(t): a binary's chirp, face on and overhead</div><canvas id="chirp" aria-label="The gravitational-wave strain against time for the chosen binary: the Newtonian chirp up to the innermost stable orbit"></canvas></div>
+
+    <div class="legend small" id="legend"></div>
+    <div class="readout small" id="readout" aria-live="off"></div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel" id="state-panel">
+      <div class="label" id="state-label">The state of the mode</div>
+      <div class="row" id="kind-row"></div>
+      <div class="note" id="kind-note">A laser makes a coherent state: the vacuum's cloud displaced to the mean field α.</div>
+      <div id="state-box" class="stack"></div>
+    </div>
+    <div class="panel" id="squeeze-panel">
+      <div class="label">Squeezing</div>
+      <div class="row" id="sq-presets"></div>
+      <div class="note">Along the field: amplitude-squeezed.  Across it: phase-squeezed.  Squeezing r in dB: 10 log₁₀ e<sup>2r</sup> (10 dB is r = 1.15).</div>
+      <div id="sq-box" class="stack"></div>
+      <div class="note" id="sq-note"></div>
+    </div>
+    <div class="panel" id="lo-panel">
+      <div class="label">Local oscillator (LO)</div>
+      <div class="note">A strong laser beam of the same frequency; its phase θ sets which quadrature X<sub>θ</sub> the photocurrent reads.</div>
+      <div id="lo-box" class="stack"></div>
+      <div class="row"><span class="small muted">Motor</span><span id="motor-box"></span><button type="button" id="clear" title="Forget the measured noise record">Clear record</button></div>
+      <div id="shift-box" class="stack"></div>
+      <div class="note" id="shift-note">A small extra phase on the signal, as an interferometer's arm would give: can the detector see it?</div>
+    </div>
+    <div class="panel" id="ligo-panel">
+      <div class="label">Squeezed light at the dark port</div>
+      <div class="row" id="sq-row"></div>
+      <div id="ligo-box" class="stack"></div>
+      <div class="note">Angle: 90° squeezes the phase quadrature (the readout's), 0° the amplitude one (the mirrors' push).  Loss: the fraction of the squeezed light lost between the squeezer and the photodiode.</div>
+      <div id="fd-row" class="row"></div>
+      <div class="note">A filter cavity turns the squeezing angle with frequency: phase-squeezed at high frequency, amplitude-squeezed at low.</div>
+      <details id="more-ligo"><summary class="small">More: the interferometer</summary><div id="ifo-box" class="stack"></div></details>
+    </div>
+    <div class="panel" id="chirp-panel">
+      <div class="label">The signal: a binary's chirp</div>
+      <div class="row" id="source-row"></div>
+      <div id="chirp-box" class="stack"></div>
+      <div class="note" id="chirp-note"></div>
+    </div>
+    <div class="panel" id="anim-panel">
+      <div class="label">Animation</div>
+      <div class="row"><button type="button" id="run" class="primary" title="Stop or start the clock (space)">Pause</button><span id="show-row" class="row"></span></div>
+      <div id="anim-box" class="stack"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>Light of one colour is a wave with a cosine part and a sine part.  This page draws those
+    two parts as a point in a plane, the quadrature plane (it is the phase-space demo's position
+    and momentum, scaled).  Quantum mechanics will not let that point be sharp: the state of the
+    light is a cloud, and even the vacuum, with no light at all, is a cloud of radius ½ at the
+    centre.  The cloud turns once per period of the light, and the field you would measure, on
+    the right, is the cloud's shadow on the horizontal axis: a sine wave with noise on it.</p>
+    <p><b>Drag the dot</b> in the plane to set the laser's field and watch the wave grow while
+    its noise band stays the same width: that is the shot noise of light, and it is the same
+    for a laser as for the dark.  Look for the cloud's angle as seen from the centre: that angle
+    is how well the wave's phase is known, and it shrinks as the field grows.</p>
+    <p>The views across the top are the four steps of the story.  <b>2 · Squeezing</b> runs the
+    light through a crystal that makes the cloud an ellipse, thin one way and fat the other.
+    <b>3 · Homodyne</b> is how one direction of the cloud is measured, with a second laser whose
+    phase you turn.  <b>4 · LIGO</b> is the payoff: why an ellipse at the right port lets a
+    gravitational-wave detector hear further, as a number.  Each view has experiments below;
+    the first of each is its opening state.</p>
+  </section>
+
+  <article class="exp" data-setup="vacuum">
+    <h3>1. The vacuum's noise is real: the shot noise of light</h3>
+    <p>No light at all.  The mean field is zero, and the state is a round cloud of radius
+    $\Delta X_1=\Delta X_2=\tfrac12$ at the origin: the colours are its Wigner function $W$,
+    drawn as in the phase-space demo, full red at its largest value, $2/\pi$.  On the right is
+    what a detector would see.  Each period a point of the cloud is drawn (the ring on the stick)
+    and its shadow on the $X_1$ axis is traced as the cloud turns: a sine wave of random size and
+    phase, inside the grey band $\pm\tfrac12$.  That band is the vacuum's noise, the zero-point
+    motion of the field's oscillator, and when light falls on a photodiode this is what it
+    records as shot noise.  The uncertainty product $\Delta X_1\Delta X_2=0.250$ is the least the
+    commutator $[X_1,X_2]=i/2$ allows: the vacuum is a minimum-uncertainty state.  Its photon
+    number is exactly 0 (the bar chart): noise, with no photons in it.</p>
+  </article>
+
+  <article class="exp" data-setup="coherent">
+    <h3>2. A laser's light: the classical wave plus the vacuum's noise</h3>
+    <p>$|\alpha|=3$ at phase 0: the same cloud, displaced to the point $\alpha=3$ on the $X_1$
+    axis.  The field is a clean cosine of amplitude 3 with the same $\pm\tfrac12$ of noise on
+    it.  A coherent state is the classical field plus the vacuum's noise, which is why a laser
+    beam is the most classical light there is and still has shot noise.  Its photon number is not
+    fixed: the bar chart is a Poisson distribution with mean $|\alpha|^2=9.00$ and spread
+    $\sqrt{9}=3.00$ (the readout gives $\langle n\rangle$ and $\Delta n$).  Drag the dot round the
+    origin: the phase of $\alpha$ is where the cosine starts.  Drag it outwards: more photons,
+    the same noise.</p>
+  </article>
+
+  <article class="exp" data-setup="phase">
+    <h3>3. More photons, the same noise, a sharper phase: $\Delta\varphi=1/(2|\alpha|)$</h3>
+    <p>The cloud's radius $\tfrac12$ never changes, so the angle it fills as seen from the
+    origin, which is the uncertainty of the field's phase, shrinks as the mean field grows.  The
+    two dashed lines from the origin touch the cloud: $\pm\Delta\varphi$ with
+    $\Delta\varphi\approx\Delta X/|\alpha|=1/(2|\alpha|)$.  At $|\alpha|=1$ (one photon on average)
+    $\Delta\varphi=0.50$ rad $=28.6^\circ$; at $|\alpha|=2$ (4 photons) 0.25 rad; at $|\alpha|=4$
+    (16 photons) 0.125 rad.  Four times the photons, half the phase noise:
+    $\Delta\varphi=1/(2\sqrt N)$.  This is the standard quantum limit of a phase measured with
+    ordinary light, and in view 4 it is what limits an interferometer.</p>
+  </article>
+
+  <article class="exp" data-setup="squeezevac">
+    <h3>4. Squeeze the vacuum: an ellipse with no field and photons in pairs</h3>
+    <p>The crystal above is pumped at twice the light's frequency.  It amplifies one quadrature
+    of whatever comes in and de-amplifies the other, and here nothing comes in but the vacuum.
+    Out comes the <em>squeezed vacuum</em>: the circle has become an ellipse,
+    $\Delta X_1=e^{-r}/2=0.250$ along the squeezed direction and $\Delta X_2=e^{r}/2=1.000$
+    across it, with $r=0.693$, and the product still $\tfrac14$: squeezing moves the uncertainty,
+    it does not remove it.  In decibels, $10\log_{10}e^{2r}=6.0$ dB: the squeezed quadrature's
+    noise power is a quarter of the vacuum's.  The field on the right still has zero mean, but
+    its noise band breathes twice per period, narrow when the thin side of the ellipse faces the
+    $X_1$ axis and wide a quarter period later.  And the state is not empty:
+    $\langle n\rangle=\sinh^2r=0.563$ photons on average, in pairs only, because the pump's
+    photon of energy $2\hbar\omega$ splits into two of $\hbar\omega$ (parametric
+    down-conversion): the bar chart has no odd numbers.</p>
+  </article>
+
+  <article class="exp" data-setup="phasesq">
+    <h3>5. A phase-squeezed laser field</h3>
+    <p>The ellipse at $\alpha=3$, squeezed across the field (angle 90°): narrow in the phase
+    direction, $\Delta X_2=0.250$, and wide along it, $\Delta X_1=1.000$.  On the right the
+    wave's zero crossings are sharper than a coherent state's and its crests noisier: the band is
+    narrow where the wave crosses zero and wide at its peaks.  The phase uncertainty is
+    $\Delta\varphi=e^{-r}/(2|\alpha|)=0.083$ rad instead of 0.167: the same light, a twice sharper
+    phase.  The price is amplitude noise, and photon-number noise: $\Delta n=6.1$ against the
+    Poisson spread of 3.1 (super-Poissonian).  Set the angle to 0°, squeezing along the field:
+    amplitude-squeezed light, $\Delta n=2.0$, fewer than Poisson, sub-Poissonian, which no
+    classical wave can be.</p>
+  </article>
+
+  <article class="exp" data-setup="loss">
+    <h3>6. Ten decibels, and what loss does to them</h3>
+    <p>10 dB is $r=1.151$: the squeezed quadrature's noise power is a tenth of the vacuum's,
+    $\Delta X=0.158$.  Now the grey box: loss.  Half the light escapes ($\eta=0.5$), and wherever
+    light can leave, the vacuum can come in: the beam splitter that stands for the loss mixes
+    the vacuum's round cloud into the ellipse, which rounds out.  In units of the vacuum's
+    variance the squeezed quadrature now reads
+    $$V=\eta\,e^{-2r}+1-\eta=0.55,$$
+    only 2.6 dB of squeezing left.  The rule: the squeezing you measure can never beat the loss,
+    $-10\log_{10}(1-\eta)=3.0$ dB for $\eta=0.5$, however hard the crystal is pumped (drag $r$ to
+    1.5: still only 2.9 dB).  That is why squeezers, their photodiodes and LIGO's optics are built
+    for every last per cent of efficiency.  Loss also breaks the pairs: odd photon numbers appear
+    in the bar chart.</p>
+  </article>
+
+  <article class="exp" data-setup="quadrature">
+    <h3>7. The local oscillator's phase chooses what is read</h3>
+    <p>The signal (red: a coherent state with $\alpha=2$) meets a strong local oscillator (the
+    LO, yellow) on a 50:50 beam splitter.  Two photodiodes catch the outputs and the difference
+    of their currents is the photocurrent on the strip chart: $i_-\propto|\alpha_\mathrm{LO}|X_\theta$
+    (How it works), the signal's quadrature along the LO's phase $\theta$, the yellow axis in
+    the plane.  At $\theta=0$ it reads $X_1$: samples around the mean 2.00 with noise
+    $\Delta X=0.500$, the histogram along the axis.  Drag the axis to 90°: now it reads $X_2$,
+    mean 0, the same noise.  The LO is the big classical wave that lets a tiny field be measured,
+    and its phase picks the direction in the plane.  The noise against $\theta$ (bottom right) is
+    flat at the vacuum's level, 0 dB: a coherent state is as noisy in every direction.</p>
+  </article>
+
+  <article class="exp" data-setup="scan">
+    <h3>8. Scan the LO and find the squeezing</h3>
+    <p>The signal is the squeezed vacuum of experiment 4 ($r=0.693$, 6 dB, thin along $X_1$).
+    The motor turns the LO's phase steadily, and the photocurrent's noise shrinks and grows twice
+    per turn: the histogram is thin at $\theta=0^\circ$ and $180^\circ$, fat at $90^\circ$ and
+    $270^\circ$.  The bottom-right plot is the measured noise power against $\theta$ (dots, from
+    the samples) over the theory curve
+    $$\Delta X_\theta^2=\tfrac14\left(e^{-2r}\cos^2\theta+e^{2r}\sin^2\theta\right),$$
+    which dips below the vacuum's 0 dB to $-6.0$ dB and rises to $+6.0$ dB.  This is the trace
+    by which squeezed light was first recognised (Slusher et al. 1985; Wu, Kimble, Hall and Wu
+    1986): noise below the shot-noise level, in one direction only.  Add loss ($\eta=0.5$ in the
+    signal panel): the dips fill in to $-2.6$ dB.</p>
+  </article>
+
+  <article class="exp" data-setup="phaseshift">
+    <h3>9. A small phase shift, measured at the standard quantum limit and below it</h3>
+    <p>A phase shift $\varphi$ turns the signal's cloud about the origin, so it moves sideways by
+    $|\alpha|\sin\varphi\approx|\alpha|\varphi$; the dashed circle is where it was.  Reading the
+    phase quadrature ($\theta=90^\circ$), the photocurrent's mean moves from 0 to 0.300 for
+    $\varphi=0.1$ rad on $|\alpha|=3$, while its noise is $\Delta X_2=0.500$: the shift is seen
+    with a signal-to-noise ratio of 0.60 per sample, and the smallest shift seen at ratio 1 is
+    $$\Delta\varphi_\mathrm{min}=\frac{\Delta X_2}{|\alpha|}=\frac1{2|\alpha|}=0.167\ \mathrm{rad},$$
+    the standard quantum limit for this much light (averaging $M$ samples, or using $M$ times
+    the photons, improves it as $1/\sqrt M$).  Now press <em>Phase-squeezed</em> in the signal
+    panel: with 6 dB the noise is 0.268 (the turned ellipse shows a sliver of its wide side; it
+    would be 0.250 for a tiny shift), the histogram thins, and the same shift is seen at a ratio
+    of 1.12: $\Delta\varphi_\mathrm{min}=0.083$ rad, twice as good with the same light, or as
+    good with a quarter of it.  Turn the LO to $\theta=0$ to see the price: the amplitude
+    quadrature is now four times noisier in power.</p>
+  </article>
+
+  <article class="exp" data-setup="darkport">
+    <h3>10. The dark port's vacuum sets the shot noise</h3>
+    <p>Above: LIGO as a Michelson whose arms are 4 km Fabry–Pérot cavities holding 400 kW of
+    light each (the power-recycling mirror and the arm cavities build that up from a laser of
+    a few hundred watts).  Its output port is kept dark, the two arms' light interfering
+    destructively there, so that a gravitational wave shows up as the difference of the arm
+    lengths, read as a phase: a strain $h=10^{-21}$ changes the difference by
+    $hL=4\times10^{-18}$ m and the dark port's phase by $4\pi hL/\lambda=4.7\times10^{-11}$ rad.
+    What limits reading so small a phase?  Not the laser's own noise, which the beam splitter
+    sends back out of the bright port.  The dark port is dark, which means the vacuum enters it
+    from outside (the dashed arrow and the round cloud), and that vacuum, beating against the
+    arms' light at the photodiode, is the shot noise of the readout: the blue curve, flat up to
+    the arm cavities' bandwidth and rising above it, $2.7\times10^{-24}/\sqrt{\mathrm{Hz}}$ at
+    100 Hz.  Drag the arm power up (under <em>More</em>): shot noise falls as $1/\sqrt P$, but the
+    purple curve, radiation pressure, the same vacuum's amplitude quadrature pushing the 40 kg
+    mirrors about, rises as $\sqrt P$.  The two cross on the dotted line, the standard quantum
+    limit, at 48 Hz for 400 kW: no choice of power gets below it.</p>
+  </article>
+
+  <article class="exp" data-setup="inject">
+    <h3>11. Inject a squeezed vacuum (2019)</h3>
+    <p>Since the dark port's vacuum is the noise, replace it.  A squeezer (an OPO, the crystal of
+    view 2) sends its squeezed vacuum in through the dark port, phase-squeezed, so that the
+    quadrature the readout beats against is the quiet one; a Faraday isolator lets it in while
+    the signal comes out.  The blue curve drops at high frequency: with 6 dB from the squeezer
+    and 35% of the light lost on the way (the isolator, mode matching, the photodiodes), the shot
+    noise is 2.9 dB lower, about what GEO600 first ran with (2010) and what LIGO and Virgo
+    used through their third observing run (2019), about 3 dB.  The total (thick) follows where
+    shot noise dominates, above about 100 Hz.  Set the loss to 0 and the squeezing to 10 dB to
+    see what a perfect squeezer would do...</p>
+  </article>
+
+  <article class="exp" data-setup="radiation">
+    <h3>12. Radiation pressure takes it back at low frequency</h3>
+    <p>...and look below 50 Hz: the purple curve has gone up by the same 10 dB.  The squeezed
+    vacuum's phase quadrature is quiet, so its amplitude quadrature is ten times louder, and the
+    amplitude quadrature is what pushes the mirrors: radiation-pressure noise grows by the factor
+    the shot noise shrank, and below the frequency where the two cross (48 Hz) the detector is
+    worse than with no squeezing at all.  Drag the angle from 90° to 0°: amplitude squeezing,
+    which quietens the mirrors and spoils the readout, the opposite trade.  No single angle helps
+    everywhere, because at low frequency the readout sees the mirrors' motion, driven by the
+    amplitude quadrature, and at high frequency it sees the phase quadrature directly.</p>
+  </article>
+
+  <article class="exp" data-setup="fdsqz">
+    <h3>13. Frequency-dependent squeezing (2023)</h3>
+    <p>The cure is an angle that changes with frequency: phase-squeezed above about 50 Hz,
+    amplitude-squeezed below, turning through the crossing.  Reflecting the squeezed vacuum off
+    a detuned filter cavity does exactly that (LIGO's are 300 m long, with a bandwidth of a few
+    tens of hertz), because the cavity turns the two sidebands of the squeezed field by
+    different amounts.  With the angle following the readout's own combination at every
+    frequency, the whole quantum-noise curve drops by the full factor: 10 dB everywhere,
+    radiation pressure included.  LIGO and Virgo installed filter cavities for their fourth
+    observing run (2023).  Turn the loss up to a realistic 20%: the gain is 5.2 dB at high
+    frequency, and still a gain at low.</p>
+  </article>
+
+  <article class="exp" data-setup="chirp">
+    <h3>14. Detect a chirp: the payoff as a number</h3>
+    <p>The bottom plot is $h(t)$ from two neutron stars of 1.4 solar masses spiralling together
+    40 Mpc away (GW170817's distance), seen face on and overhead: the Newtonian chirp, from
+    70 Hz up to the innermost stable orbit at 1570 Hz in 5.6 s, louder and faster as it goes.
+    Its spectrum is the green band on the sensitivity plot, falling as $f^{-7/6}$; the
+    signal-to-noise ratio a matched filter achieves is the area between it and the noise,
+    $\rho^2=4\int|\tilde h(f)|^2/S_n(f)\,df$.  Without squeezing $\rho=72$; with 6 dB of
+    frequency-dependent squeezing through 20% loss, $\rho=89$: the same event 1.24 times as loud,
+    or heard 1.24 times as far, which is a volume of space 1.9 times as big, that many times
+    more events a year.  Drag the distance out until $\rho$ falls to 8, the usual threshold:
+    about 360 Mpc without squeezing, 440 Mpc with.  Try the two black holes: heavier, so
+    louder, and over in 6 s from 20 Hz.</p>
+  </article>
+
+  <section class="theory">
+  <h3>How it works</h3>
+  <p><b>One mode is an oscillator.</b>  A single mode of the field, with ladder operator $a$,
+  has the quadratures
+  $$X_1=\frac{a+a^\dagger}2,\qquad X_2=\frac{a-a^\dagger}{2i},\qquad [X_1,X_2]=\frac i2,\qquad \Delta X_1\Delta X_2\ge\frac14,$$
+  the cosine and sine parts of the field, $E(t)\propto X_1\cos\omega t+X_2\sin\omega t$.  In the
+  Heisenberg picture $a(t)=a\,e^{-i\omega t}$, so $X_1(t)=X_1\cos\omega t+X_2\sin\omega t=X_{\omega t}$:
+  the field at time $t$ is the quadrature at angle $\omega t$, and the cloud turns clockwise.
+  The phase-space demo's $x,p$ with $\hbar=m=\omega=1$ are $x=\sqrt2X_1$, $p=\sqrt2X_2$, and its
+  Wigner function is the same picture, $W(x,p)=W(X_1,X_2)/2$: the vacuum is
+  $W=(2/\pi)\,e^{-2(X_1^2+X_2^2)}$, a Gaussian of width $\tfrac12$, and every state here is a
+  Gaussian, so $W$ is never negative.</p>
+  <p><b>Coherent and squeezed states.</b>  $|\alpha\rangle=D(\alpha)|0\rangle$ with
+  $D(\alpha)=e^{\alpha a^\dagger-\alpha^*a}$: the vacuum displaced to $\langle X_1\rangle+i\langle X_2\rangle=\alpha$,
+  photon number Poisson with mean $|\alpha|^2$, phase uncertainty $\Delta\varphi\approx\Delta X/|\alpha|=1/(2|\alpha|)$.
+  The squeeze operator $S(\xi)=\exp\!\left[\tfrac12(\xi^*a^2-\xi a^{\dagger2})\right]$ with
+  $\xi=re^{2i\psi}$ makes $\Delta X_\psi=e^{-r}/2$ and $\Delta X_{\psi+90^\circ}=e^{r}/2$, the
+  product kept; it is what a crystal with a $\chi^{(2)}$ nonlinearity, pumped at $2\omega$, does
+  to the mode (the parametric interaction $i\hbar\kappa(a^2e^{2i\omega t}-\mathrm{h.c.})$,
+  $r=\kappa t$).  The states here are $D(\alpha)S(\xi)|0\rangle$; their photon numbers come from
+  the three-term recurrence that $(a-\alpha)\cosh r+(a^\dagger-\alpha^*)e^{2i\psi}\sinh r$
+  annihilates them, and for $\alpha=0$ only even $n$ survive, with
+  $P(2m)=\frac{(2m)!}{4^m(m!)^2}\frac{\tanh^{2m}r}{\cosh r}$ and $\langle n\rangle=\sinh^2r$.
+  Loss $1-\eta$ is a beam splitter with the vacuum at its other port: the covariance becomes
+  $\eta\Sigma+\tfrac14(1-\eta)I$, so the squeezed quadrature reads $\eta e^{-2r}+1-\eta$ in units
+  of the vacuum's variance, never below $1-\eta$.</p>
+  <p><b>Homodyne detection.</b>  With the signal $a$ and the local oscillator in the coherent
+  state $\beta=|\beta|e^{i\theta}$, a 50:50 beam splitter gives $c=(a+\beta)/\sqrt2$ and
+  $d=(a-\beta)/\sqrt2$, and the difference of the photocurrents is
+  $$c^\dagger c-d^\dagger d=\beta^*a+\beta a^\dagger=2|\beta|\,X_\theta,\qquad X_\theta=X_1\cos\theta+X_2\sin\theta .$$
+  The LO's phase chooses the quadrature; its strength only scales the current, and the LO's own
+  noise cancels in the difference.  For a Gaussian state the samples are Gaussian with mean
+  $\langle X_\theta\rangle$ and variance $\Delta X_\theta^2=\tfrac14(e^{-2r}\cos^2(\theta-\psi)+e^{2r}\sin^2(\theta-\psi))$,
+  flat $\tfrac14$ for coherent states.  The page draws its samples from that Gaussian (a seeded
+  generator; the record bins them by $\theta$ and shows each bin's sample variance).</p>
+  <p><b>Measuring a phase.</b>  A shift $\varphi$ sends $\alpha\to\alpha e^{i\varphi}$, moving
+  the cloud by $|\alpha|\sin\varphi$ across the field.  Read in the phase quadrature against
+  noise $\Delta X_2$, it is resolved when $|\alpha|\varphi>\Delta X_2$:
+  $\Delta\varphi_\mathrm{min}=1/(2|\alpha|)=1/(2\sqrt N)$, the standard quantum limit, with the
+  phase-squeezed state's $e^{-r}/(2|\alpha|)$ below it; squeezing is bounded by the photons it
+  costs ($\sinh^2r$ of them), and the best any state can do is the Heisenberg limit
+  $\Delta\varphi\sim1/N$.</p>
+  <p><b>LIGO's noise budget.</b>  A Michelson with Fabry–Pérot arms of length $L$ and
+  half-bandwidth $\gamma=2\pi f_c$, mirrors of mass $M$ and circulating power $P$ in each arm,
+  reading its phase quadrature, has the quantum noise (Kimble, Levin, Matsko, Thorne and
+  Vyatchanin 2001)
+  $$S_h=\frac{h_\mathrm{SQL}^2}2\left[\frac{V_2}{\mathcal K}-2C_{12}+\mathcal K\,V_1\right],\qquad
+  h_\mathrm{SQL}^2=\frac{8\hbar}{M\Omega^2L^2},\qquad \mathcal K=\frac{16\,\omega_0\gamma P}{MLc\,\Omega^2(\gamma^2+\Omega^2)},$$
+  where $V_1$, $V_2$ and $C_{12}$ are the variances of the amplitude and phase quadratures of
+  the field entering the dark port, and their covariance, in units of the vacuum's.  For the
+  vacuum ($V_1=V_2=1$, $C_{12}=0$) the first term is shot noise, $\propto1/\sqrt P$, flat below
+  $f_c$ and rising as $f$ above it; the last is radiation pressure, $\propto\sqrt P$, falling as
+  $1/f^2$; their product is $h_\mathrm{SQL}^4/4$ whatever $P$, so $h_\mathrm{SQL}$ is their
+  envelope, touched where $\mathcal K=1$.  A squeezed vacuum at angle $\lambda$ from the
+  amplitude quadrature has $V_1=e^{-2r}\cos^2\lambda+e^{2r}\sin^2\lambda$, $V_2$ the same with
+  sine and cosine swapped, $C_{12}=(e^{-2r}-e^{2r})\sin\lambda\cos\lambda$, each mixed with the
+  vacuum by the loss; phase squeezing ($\lambda=90^\circ$) divides the shot noise by $e^{2r}$ and
+  multiplies radiation pressure by it.  The readout's combination $a_2-\mathcal Ka_1$ is the
+  input quadrature at angle $90^\circ+\arctan\mathcal K$, so a squeezer that keeps $\lambda$ there
+  at every frequency (a filter cavity) lowers the whole curve by $e^{-2r}$.  The classical
+  curves are fixed models: a seismic wall $\propto f^{-10}$ below 10 Hz, and thermal noise from
+  the suspensions ($\propto f^{-5/2}$) and the mirror coatings ($\propto f^{-1/2}$).  Numbers
+  here are Advanced-LIGO-like: $L=4$ km, $M=40$ kg, $\lambda=1064$ nm, 400 kW in each arm, and
+  $f_c=400$ Hz for the bandwidth the signal-recycling mirror gives the arms; the simplified
+  model has no signal recycling of its own.</p>
+  <p><b>The chirp.</b>  Two masses in a circular orbit radiate at twice the orbital frequency,
+  which runs away as the orbit shrinks: for a chirp mass $\mathcal M=(m_1m_2)^{3/5}/(m_1+m_2)^{1/5}$,
+  $$f(\tau)=\frac1\pi\left(\frac5{256\,\tau}\right)^{3/8}\left(\frac{G\mathcal M}{c^3}\right)^{-5/8},\qquad
+  h(t)=\frac{4}{d}\left(\frac{G\mathcal M}{c^2}\right)^{5/3}\left(\frac{\pi f}{c}\right)^{2/3}\cos\Phi(t),$$
+  $\tau$ the time to merger and $d$ the distance, stopped at the innermost stable orbit,
+  $f_\mathrm{ISCO}=c^3/(6^{3/2}\pi GM)$.  Its spectrum $|\tilde h(f)|\propto f^{-7/6}$ is taken by
+  an FFT of the sampled $h(t)$ (the one FFT on this page), and the optimal signal-to-noise ratio
+  is $\rho^2=4\int|\tilde h|^2/S_n\,df$; the distance at which $\rho=8$ is the horizon for a
+  face-on binary, and the volume inside it grows as its cube.</p>
+  </section>
+
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
