@@ -27,7 +27,7 @@
         <figcaption id="cap-stream1">The noise one source sends, x(t), and a copy of it τ later (dashed)</figcaption>
         <div class="plot-wrap tall"><canvas id="stream1" aria-label="The voltage a source of noise sends, against time, with a copy of it shifted by the lag τ"></canvas></div>
       </figure>
-      <div class="hint" id="hint-one">Drag the lag τ on the autocorrelation (bottom right): the copy slides along, and the average of the product follows the curve.  Drag the band’s edge on the spectrum to change Δν</div>
+      <div class="hint" id="hint-one">Drag the lag τ on the autocorrelation plot: the copy slides along, and the average of the product follows the curve.  Drag the band’s edge on the spectrum to change Δν</div>
       <figure class="plot" id="fig-product1">
         <figcaption id="cap-product1">Multiply them: x(t) × x(t + τ), and its average (the line)</figcaption>
         <div class="plot-wrap mid"><canvas id="product1" aria-label="The product of the signal and its shifted copy, filled above and below zero, with its average"></canvas></div>
@@ -61,7 +61,7 @@
           <div class="foot" id="plane2-foot"></div>
         </figure>
         <figure class="plot" id="fig-fringe">
-          <figcaption>The fringe: the correlation as B moves (black), and the power B receives (orange)</figcaption>
+          <figcaption>The fringe: the correlation as B moves (the heavy curve), and the power B receives (orange)</figcaption>
           <div class="plot-wrap fringe-wrap"><canvas id="fringe" aria-label="The correlation of A and B against B’s position, and the power at B; drag to move B"></canvas></div>
           <div class="foot" id="fringe-foot"></div>
         </figure>
@@ -119,7 +119,7 @@
           <div class="canvas-wrap"><canvas id="ground" aria-label="The antennas on the ground, from above: drag one"></canvas></div>
           <div class="foot" id="ground-foot"></div>
         </figure>
-        <div class="hint" id="hint-uv">Drag the ● on the uv plane: the pair’s separation (its mirror ○ follows).  The live dot on the right settles on the colour under the ●</div>
+        <div class="hint" id="hint-uv">Drag the ● on the uv plane: the pair’s separation (its mirror ○ follows).  The live dot in “What the pair measures” settles on the colour under the ●</div>
         <div class="flow-caption small" id="flow-caption">The flow: the sky → one correlation for each pair → the sampled uv plane → its inverse Fourier transform → the image</div>
         <figure class="plot live" id="fig-streams3"><figcaption><span class="sw a"></span>A and <span class="sw b"></span>B hear</figcaption><div class="plot-wrap"><canvas id="streams3" aria-label="What antennas A and B hear, against time"></canvas></div></figure>
         <figure class="plot live" id="fig-spec3"><figcaption>Spectra, and A·B* coloured by phase</figcaption><div class="plot-wrap"><canvas id="spec3" aria-label="The spectra of A and B, and their cross-spectrum coloured by its phase"></canvas></div></figure>
@@ -301,7 +301,8 @@
   <article class="exp" data-setup="young">
     <h3>8. Coherent sources: fringes at one antenna, and no longer a sum</h3>
     <p>The same two sources, but one transmitter feeds both: they send the same noise.  Now the
-    power at one antenna has fringes (the orange curve): this is Young's double slit, the two
+    power at one antenna has fringes (the orange curve, from 0.4 to 3.2, a fringe every
+    $\lambda/(\sin\theta_1-\sin\theta_2)$ = 55 cm): this is Young's double slit, the two
     waves adding in step at some places and out of step at others, a pattern fixed on the
     ground.  And the correlation is no longer the sum of two fringes: the cross terms stay.
     Drag A as well: with incoherent sources only the separation matters; here the correlation
@@ -376,13 +377,17 @@
   </article>
 
   <article class="exp" data-setup="nearfield">
-    <h3>14. The lab bench's near field: where the pair sits matters a little</h3>
+    <h3>14. The lab bench's near field: where the pair sits matters</h3>
     <p>The sources 5 m above the antennas and 3 m from the axis, as on the lab bench and in the
-    notebook: the exact distances now, not plane waves.  The plot <em>Slide the pair</em>
-    shows the correlation as the pair moves sideways, keeping its separation.  In the far field
-    it would be flat; here the wavefronts are still curved and it drifts.  Drag on it to move
-    the pair: the dot leaves the colour under the ●, which is the far-field transform.  This
-    is the notebook's plot of the correlation against ΔX and the mean X.</p>
+    notebook: the exact distances now, not plane waves.  The plane-wave picture needs sources
+    much farther away than $D^2/\lambda$, 12 m for this 2 m baseline, and these are not: their
+    wavefronts are still curved across the pair.  So the correlation is no longer the far-field
+    transform under the ● (4.13): the × in the complex plane, what the exact distances give,
+    is at 2.72.  And <em>Slide the pair</em>, the correlation as the pair moves sideways with
+    its separation kept, is far from flat: its real part swings between −2.3 and 2.7 as the
+    pair moves a metre either way.  This is the notebook's plot of the correlation against ΔX
+    and the mean X.  Drag on it to move the pair.  Radio sources in the sky are so far away
+    that only the separation matters.</p>
   </article>
 
   <article class="exp" data-setup="coherent">
@@ -445,9 +450,10 @@
   <article class="exp" data-setup="resolution">
     <h3>20. Long baselines see fine detail, short ones the broad shapes</h3>
     <p>Two point sources 5″ apart at 5 GHz ($\lambda$ = 6 cm), and a small Y whose longest
-    baseline is 2.0 km: the finest fringe, $\lambda/B$ = 6.1″, is coarser than their
-    separation, and the image shows one blob.  Make the array spread out: at 6 km
-    ($\lambda/B$ = 2.1″) they come apart.  The longest baseline sets the resolution, as the
+    baseline is 1.8 km: the finest fringe, $\lambda/B$ = 6.8″, is coarser than their
+    separation, and the image shows one blob with a shoulder.  Spread the array out: at a
+    spread of 0.1 (2.8 km, $\lambda/B$ = 4.4″) a dip opens between them, and at 0.2 (5.6 km,
+    2.2″) they stand apart.  The longest baseline sets the resolution, as the
     diameter of a mirror does: an interferometer is a huge telescope with most of its mirror
     missing.  The shortest baseline sets the other limit: anything larger than
     $\lambda/B_\mathrm{min}$ lives at separations no pair measures.</p>

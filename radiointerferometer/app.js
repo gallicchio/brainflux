@@ -22,7 +22,7 @@ import { squareArea, blit, pictureAxes, edgeTicks, arrow, line, fillSigned, comp
 const DEG = Math.PI / 180;
 const TWO_PI = 2 * Math.PI;
 const POINTS_FOR_PICTURE = 200;     // points that stand in for a picture in the correlator
-const DISPLAY_SOURCES = 40;         // of which the time streams on the screen use this many
+const DISPLAY_SOURCES = 24;         // of which the time streams on the screen use this many
 const SCENE_HALF = 4;               // view 2: the ground reaches ±4 m
 const SPEED = 0.1;                  // the streams scroll a tenth of their window each second
 
@@ -39,7 +39,7 @@ const DEFAULTS = () => ({
   pair: { bx: 1.2, by: 0.5, cx: 0, cy: 0, fixA: false },                  // view 3: metres
   tracking: true, hbt: false, sketch: false, autopilot: false, mode: 'complex',
   layout: 'y', n: 8, arm: 1, earth: false, hours: 8, dec: 40, lat: 34, weighting: 'uniform',
-  clean: false, gain: 0.1, cleanRun: 100, tNow: 1,
+  clean: false, cleanAuto: true, gain: 0.1, cleanRun: 100, tNow: 1,
 });
 let state = DEFAULTS();
 const anim = { playing: true, t: 200, earthPlaying: false, pen: true, frames: 0, pilot: 0, lastPaint: 0 };
@@ -229,7 +229,8 @@ function computeArray() {
   dirtyImg = dirtyImage(sampled.S, g, N);
   fit = null; restored = null;
   cs = cleanStart(dirtyImg);
-  if (state.clean && state.cleanRun > 0) runClean(state.cleanRun);
+  // (CLEAN runs by itself on every change, unless the experiment wants it stepped by hand.)
+  if (state.clean && state.cleanAuto) runClean(state.cleanRun);
 }
 function runClean(steps) {
   if (!cs || !beam) return;
@@ -740,7 +741,10 @@ function drawTwo() {
   drawLags($('#cross2'), [{ key: 'lagAB', colour: C.ink }], { tmax: tm, marker: rel });
   // The complex plane, with each source's own term and the cross terms.
   const F = sim.sources.reduce((s, q) => s + q.I, 0);
-  drawMeasured($('#plane2'), { R: F / 2, extent: planeExtent(), ideal: sim.ideal(...sim.baseline()), expected: sim.expected(), selfTerms: !sim.coherent && sim.sources.length > 1, crossTerm: !sim.coherent && sim.sources.length > 1 });
+  // (Its axes in the handout's terms: the real part is the average of the two real voltages'
+  // product, the imaginary part the same with B a quarter cycle later.)
+  drawMeasured($('#plane2'), { R: F / 2, extent: planeExtent(), ideal: sim.ideal(...sim.baseline()), expected: sim.expected(), selfTerms: !sim.coherent && sim.sources.length > 1, crossTerm: !sim.coherent && sim.sources.length > 1,
+    titles: ['real part: ⟨x_A x_B⟩ →', 'imaginary: B ¼ cycle later ↑'] });
   drawFringe();
 }
 
@@ -773,8 +777,8 @@ function planeExtent() {
 /** The correlator's output: the running average as a dot in its own colour, the last chunks as a
  *  scatter, the exact V as a ring and what this band and these delays give as a cross; and, for
  *  a few sources, each one's share as arrows laid end to end (live in view 2, exact in view 3). */
-function drawMeasured(canvas, { R, extent, ideal, expected, selfTerms = false, crossTerm = false, phasors = null, hbt = false }) {
-  const { ctx, X, Y, area } = complexPlane(canvas, { extent, R, mode: hbt ? 'magnitude' : 'complex', C, alpha: hbt ? 0.35 : 0.55 });
+function drawMeasured(canvas, { R, extent, ideal, expected, selfTerms = false, crossTerm = false, phasors = null, hbt = false, titles }) {
+  const { ctx, X, Y, area } = complexPlane(canvas, { extent, R, mode: hbt ? 'magnitude' : 'complex', C, alpha: hbt ? 0.35 : 0.55, titles });
   ctx.save();
   ctx.beginPath(); ctx.rect(area.x, area.y, area.s, area.s); ctx.clip();
   ctx.fillStyle = C.ink; ctx.globalAlpha = 0.45;
@@ -840,11 +844,15 @@ function drawSky() {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = '#000'; ctx.fillRect(g.x, g.y, g.s, g.s);
   if (skyModel.kind === 'picture') {
-    const sky = skyModel.sky, img = new ImageData(NS, NS);
-    let top = 0;
-    for (const v of sky) top = Math.max(top, v);
-    for (let i = 0; i < NS * NS; i++) { const q = Math.round(255 * Math.sqrt(sky[i] / (top || 1))); img.data[4 * i] = q; img.data[4 * i + 1] = q; img.data[4 * i + 2] = q; img.data[4 * i + 3] = 255; }
-    blit(ctx, g, img, NS, true);
+    const sky = skyModel.sky;
+    if (!drawSky.img || drawSky.sky !== sky) {
+      const img = new ImageData(NS, NS);
+      let top = 0;
+      for (const v of sky) top = Math.max(top, v);
+      for (let i = 0; i < NS * NS; i++) { const q = Math.round(255 * Math.sqrt(sky[i] / (top || 1))); img.data[4 * i] = q; img.data[4 * i + 1] = q; img.data[4 * i + 2] = q; img.data[4 * i + 3] = 255; }
+      drawSky.img = img; drawSky.sky = sky;
+    }
+    blit(ctx, g, drawSky.img, NS, true);
   }
   const [u, v] = sim.baseline(), showStripes = state.stripes && state.view === 'uv' && !state.hbt;
   // The pair's stripes: e^{−2πi(ul + vm)} over the sky, coloured by phase, and their crests.
@@ -1101,15 +1109,24 @@ function groundHalf() {
 /** How far the pair slides each way: as far as the ground reaches, or 1 m in the near field (as
  *  the notebook's mean X). */
 const slideHalf = () => (U().nearField ? 1 : U().uvMax / 2);
+let slideCache = null;
 function drawSlide() {
   const { ctx, width, f } = plotFrame($('#slide3'), { left: 36, bottom: 26, top: 10 });
-  const p = state.pair, half = slideHalf(), n = Math.max(120, Math.round(width)), re = new Float64Array(n), im = new Float64Array(n), xs = new Float64Array(n);
-  let top = 0;
-  for (let i = 0; i < n; i++) {
-    const c = -half + (2 * half * i) / (n - 1), A = p.fixA ? [c, p.cy] : [c - p.bx / 2, p.cy - p.by / 2], B = p.fixA ? [c + p.bx, p.cy + p.by] : [c + p.bx / 2, p.cy + p.by / 2];
-    const V = sim.hbt ? (() => { const z = sim.expectedAt(posWaves(A), posWaves(B)); return [z[0] ** 2 + z[1] ** 2, 0]; })() : sim.expectedAt(posWaves(A), posWaves(B));
-    xs[i] = c; re[i] = V[0]; im[i] = V[1]; top = Math.max(top, Math.hypot(V[0], V[1]));
+  const p = state.pair, half = slideHalf(), n = Math.max(120, Math.round(width));
+  // (The curve changes only when the pair's separation or the sources do: kept until then.)
+  const key = [n, half, p.bx, p.by, p.cy, p.fixA, sim.hbt, sim.coherent, sim.coherentPhase, sim.band, sim.tracking, sim.nearField, sim.lambda, sim.sources.length, ...sim.sources.slice(0, 8).flatMap((q) => [q.l, q.m, q.x, q.y, q.I]), sim.sources[0]?.l].join('|');
+  if (!slideCache || slideCache.key !== key || slideCache.sources !== sim.sources) {
+    const re = new Float64Array(n), im = new Float64Array(n), xs = new Float64Array(n);
+    let top = 0;
+    for (let i = 0; i < n; i++) {
+      const c = -half + (2 * half * i) / (n - 1), A = p.fixA ? [c, p.cy] : [c - p.bx / 2, p.cy - p.by / 2], B = p.fixA ? [c + p.bx, p.cy + p.by] : [c + p.bx / 2, p.cy + p.by / 2];
+      const V = sim.hbt ? (() => { const z = sim.expectedAt(posWaves(A), posWaves(B)); return [z[0] ** 2 + z[1] ** 2, 0]; })() : sim.expectedAt(posWaves(A), posWaves(B));
+      xs[i] = c; re[i] = V[0]; im[i] = V[1]; top = Math.max(top, Math.hypot(V[0], V[1]));
+    }
+    slideCache = { key, sources: sim.sources, re, im, xs, top };
   }
+  const { re, im, xs } = slideCache;
+  let top = slideCache.top;
   const F = totalFlux(skyModel), avg = sim.hbt ? [sim.avgHbt, 0] : sim.avg;
   top = Math.max(top, Math.hypot(...avg), (sim.hbt ? F * F : F) * 0.3, 0.05) * 1.15;
   f.x0 = -lenIn(half); f.x1 = lenIn(half); f.y0 = -top; f.y1 = top;
@@ -1159,8 +1176,15 @@ function lenText(m) {
 }
 /** An angle (a direction cosine, or a small angle) as text: "14.6°", "0.42″", "21 µas". */
 function angleText(l) {
-  const v = angleOf(l), a = Math.abs(v);
-  return (a >= 100 ? a.toFixed(0) : a >= 10 ? a.toFixed(1) : a.toFixed(2)) + angleSym();
+  // In the preset's unit, unless the angle is far out of its range (the EHT's shortest baseline
+  // sees arcseconds): then in the unit that suits it.
+  let v = angleOf(l), sym = angleSym();
+  if (U().angle !== 'deg' && (Math.abs(v) >= 1e4 || Math.abs(v) < 0.01)) {
+    const r = Math.abs(l), order = ['deg', 'arcmin', 'arcsec', 'mas', 'uas'], pick = order.find((k) => r >= ANGLE[k][0]) || 'uas';
+    v = l / ANGLE[pick][0]; sym = pick === 'deg' ? '°' : ANGLE[pick][1];
+  }
+  const a = Math.abs(v);
+  return (a >= 100 ? a.toFixed(0) : a >= 10 ? a.toFixed(1) : a.toFixed(2)) + sym;
 }
 const wavesText = (x) => { const a = Math.abs(x), s = x < 0 ? '−' : ''; return s + (a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e4 ? `${(a / 1e3).toFixed(0)}k` : a >= 100 ? a.toFixed(0) : a.toFixed(1)); };
 
@@ -1254,7 +1278,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 const UV_HINTS = {
-  uv: 'Drag the ● on the uv plane: the pair’s separation (its mirror ○ follows).  The live dot on the right settles on the colour under the ●; drag a source on the sky',
+  uv: 'Drag the ● on the uv plane: the pair’s separation (its mirror ○ follows).  The live dot in “What the pair measures” settles on the colour under the ●; drag a source on the sky',
   array: 'Drag a dish on the ground: its baselines move in the uv plane, and the sampled plane and the image follow.  Turn on Earth rotation to sweep the tracks',
 };
 function setView(v) {
@@ -1485,7 +1509,8 @@ function syncPanels() {
 function legends() {
   const items = (list) => list.map(([sw, text]) => `<span class="key"><span class="sw ${sw}"></span>${text}</span>`).join(' ');
   $('#legend2').innerHTML = items([['dot', 'one chunk'], ['ring', 'the exact V'], ['', '× with this band, ● the running average']]) + (state.scene.sources.length > 1 && !state.coherent ? '<br>' + items([['s1', 'source 1’s share'], ['s2', 'source 2’s'], ['dot', 'grey: the cross terms']]) : '');
-  $('#legend3').innerHTML = items([['dot', 'one chunk'], ['ring', 'V under the ●'], ['', '× what the correlator’s points give']]) + (skyModel.kind === 'points' && !state.coherent && !state.hbt ? '<br>arrows: each source’s share, in its stripe’s colour' : '');
+  $('#legend3').innerHTML = items([['dot', 'one chunk'], ['ring', 'V under the ●'], ['', '× what the correlator’s points give']]) + (skyModel.kind === 'points' && !state.coherent && !state.hbt ? '<br>arrows: each source’s share, in its stripe’s colour' : '')
+    + (state.hbt ? '' : '<br>The colours are the uv plane’s: the hue is the phase, the lightness the size');
 }
 
 // ------------------------------------------------------------------------- pointer interaction
@@ -1717,7 +1742,7 @@ const setups = {
   rotation: () => setup({ view: 'array', units: 'vla', sky: { kind: 'picture', picture: 'portrait' }, layout: 'y', arm: 1, earth: true, hours: 8, dec: 40 }),
   resolution: () => setup({ view: 'array', units: 'vla', sky: { preset: 'binary' }, layout: 'y', arm: 0.065, earth: true, hours: 4, dec: 40 }),
   eht: () => setup({ view: 'array', units: 'eht', sky: { kind: 'picture', picture: 'ring', size: 1 }, layout: 'eht', earth: true, hours: 12, dec: 12, weighting: 'uniform' }),
-  clean: () => setup({ view: 'array', units: 'vla', sky: { preset: 'binary' }, layout: 'y', arm: 0.3, earth: true, hours: 2, dec: 40, clean: true, cleanRun: 0 }),
+  clean: () => setup({ view: 'array', units: 'vla', sky: { preset: 'binary' }, layout: 'y', arm: 0.3, earth: true, hours: 2, dec: 40, clean: true, cleanAuto: false }),
 };
 // The old antenna-arrays demo's synthesis experiments (its addresses now lead here) open the
 // nearest one here.
@@ -1770,7 +1795,7 @@ window.__app = {
   paint: () => paint, paintedImage,
   array: () => { computeArray(); return { dishes, tr, sampled, beam, dirtyImg, cs }; },
   grid: ensureGrid,
-  runClean, clearPaint, loadPicture, setBand, movePair, moveScene, applySim,
+  runClean, clearPaint, loadPicture, setBand, movePair, moveScene, applySim, writeAddress: updateHash, syncPanels,
   view1: () => ({ ...v1 }),
   scene: () => ({ ...scene }), sourcePoint, sceneX,
   area: () => area,

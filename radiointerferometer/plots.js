@@ -109,7 +109,7 @@ export function wheel(n, extent, R, mode = 'complex') {
  * The complex plane: the colour wheel behind it (faintly), the axes, and a function to place
  * points.  Returns {X, Y, area} for drawing on it.
  */
-export function complexPlane(canvas, { extent, R, mode = 'complex', C, alpha = 0.5 }) {
+export function complexPlane(canvas, { extent, R, mode = 'complex', C, alpha = 0.5, titles = ['real part →', 'imaginary part ↑'] }) {
   const area = squareArea(canvas, { left: 38, right: 8, top: 8, bottom: 26 });
   const { ctx, width, height, x, y, s } = area;
   ctx.clearRect(0, 0, width, height);
@@ -123,7 +123,7 @@ export function complexPlane(canvas, { extent, R, mode = 'complex', C, alpha = 0
   ctx.beginPath(); ctx.moveTo(x, Y(0) + 0.5); ctx.lineTo(x + s, Y(0) + 0.5); ctx.moveTo(X(0) + 0.5, y); ctx.lineTo(X(0) + 0.5, y + s); ctx.stroke();
   ctx.restore();
   const ticks = edgeTicks(-extent, extent, Math.max(3, Math.round(s / 70)));
-  pictureAxes(ctx, area, { bottom: { ticks, title: 'real part →' }, left: { ticks, title: 'imaginary part ↑' } }, C);
+  pictureAxes(ctx, area, { bottom: { ticks, title: titles[0] }, left: { ticks, title: titles[1] } }, C);
   return { ctx, X, Y, area };
 }
 

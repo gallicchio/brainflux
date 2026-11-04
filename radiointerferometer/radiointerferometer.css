@@ -88,7 +88,7 @@ figure.plot figcaption { font-size: 12.5px; line-height: 1.3; color: var(--ink);
 figure.live .plot-wrap { aspect-ratio: 1 / 1; }
 
 /* Which cells each view shows, and where. */
-.uvgrid > * { display: none; }
+.uvgrid > *, .uvgrid > figure.plot { display: none; }
 .uvgrid > .hint { display: block; }
 .rif[data-view="uv"] #sky-cell, .rif[data-view="uv"] #uv-cell, .rif[data-view="uv"] #plane-cell, .rif[data-view="uv"] #ground-cell,
 .rif[data-view="uv"] .uvgrid > figure.live { display: flex; }
