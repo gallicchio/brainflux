@@ -122,10 +122,11 @@ magnitude with arctan, as the old applet did.
   - the scattered wave alone, psi - psi_incident (the incident packet is known in closed form),
     showing the outgoing circular wave and the shadow, i.e. the forward interference that is the
     optical theorem;
-  - momentum space, where elastic scattering puts the probability on the circle |k| = k0 (the
-    Born prediction |V~(k - k0)|^2 is stated in the help, not drawn on it: still to do);
-  - dsigma/dtheta measured from the flux through a circle, against the Born approximation (the
-    classical cross section is not drawn either: still to do);
+  - momentum space, where elastic scattering puts the probability on the circle |k| = k0, with
+    the Born prediction |V~(k - k0)|^2 and the measured dsigma/dtheta drawn round it and the
+    momentum transfer q = k - k0 as an arrow (drawn 2026-11-04);
+  - dsigma/dtheta measured from the flux through a circle, against the Born approximation and,
+    for the disk, the classical cross section (r/2)|sin(theta/2)|, sigma = 2r (2026-11-04);
   - energy-resolved partial waves on that circle: S_m = exp(2i delta_m), unitarity |S_m| = 1, the
     phase shifts against the exact hard-disk ones, and sigma_total three ways (flux, partial
     waves, Im f(0)): the optical theorem as a number.
@@ -347,4 +348,3 @@ Left for later, besides the lists above:
   and a shaped field map (MRI); averaging B-scans against speckle, a flattened en-face slab,
   a Web Worker for the volume scan on slow machines (OCT); more imaging algorithms than
   Högbom's CLEAN, and the help for the Etch-a-Sketch with HBT on (radio).
-- 2D scattering: Born's |V~(k − k0)|² on the momentum circle and the classical dσ/dθ.
