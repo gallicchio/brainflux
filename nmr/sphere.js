@@ -138,7 +138,7 @@ export class SphereView {
         ctx.beginPath(); ctx.moveTo(o[0], o[1]); ctx.lineTo(Z[0], Z[1]); ctx.stroke();
         ctx.globalAlpha = 1;
       }
-      if (!scene.cone || this.narrow(scene.cone)) this.arrow(ctx, m, c.m, scene.sumWidth ?? 4, 12, 1);
+      if (!scene.cone || this.narrow(scene.cone)) this.arrow(ctx, m, c.m, scene.sumWidth ?? 4, 12, 1, [0, 0, 0], 0.8);
       if (scene.tipHover && len > 0.05) {
         const T = this.P(m);
         ctx.strokeStyle = c.m; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.6;
@@ -195,11 +195,11 @@ export class SphereView {
   }
 
   /** An arrow from the origin to v: a line and a head in the screen plane. */
-  arrow(ctx, v, color, width, head, alpha = 1, from = [0, 0, 0]) {
+  arrow(ctx, v, color, width, head, alpha = 1, from = [0, 0, 0], behind = 0.55) {
     const o = this.P(from), t = this.P([from[0] + v[0], from[1] + v[1], from[2] + v[2]]);
     const dx = t[0] - o[0], dy = t[1] - o[1], l = Math.hypot(dx, dy);
     ctx.save();
-    ctx.globalAlpha = alpha * (t[2] < -0.05 ? 0.55 : 1);
+    ctx.globalAlpha = alpha * (t[2] < -0.05 ? behind : 1);
     ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width;
     if (l < 1) { ctx.beginPath(); ctx.arc(t[0], t[1], width, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); return; }
     const ux = dx / l, uy = dy / l, h = Math.min(head, l * 0.5);

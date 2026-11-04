@@ -252,7 +252,8 @@ function drawSphere() {
         fields.push({ v: [0.15 + 0.3 * s, 0, 0], from: [1.16, 0, 0], color: C.coil, label: `B_p = ${(Bp() * s / board.BE).toFixed(Bp() * s / board.BE < 9.95 ? 1 : 0)} B_E`, dy: -16, dx: 10 });
         const b = [Bp() * s, 0, board.BE], n = Math.hypot(...b);
         coneAxis = b.map((x) => x / n);
-        if (eng.t >= E.tp) fields.push({ v: coneAxis.map((x) => 1.12 * x), color: C.beff, label: 'B (total)', dash: [6, 4], dy: -16 });
+        // (Labelled once it has turned off the coil's axis, where B_p's label is.)
+        if (eng.t >= E.tp) fields.push({ v: coneAxis.map((x) => 1.12 * x), color: C.beff, label: coneAxis[2] > 0.3 ? 'B (total)' : '', dash: [6, 4], dy: -16 });
       }
     }
   } else if (lab) {
@@ -522,7 +523,7 @@ for (const [angle, phase, title] of [[90, 0, 'Turn the spin a quarter turn about
 }
 pulsePanel.append(pbox);
 const angleSlider = slider({ label: 'angle θ (°)', min: 0, max: 360, step: 1, value: state.custom.angle, onInput: (v) => { state.custom.angle = v; updatePulseNote(); scheduleHash(); } });
-const phaseSeg = segmented([{ value: 0, label: 'x′' }, { value: 90, label: 'y′' }, { value: 180, label: '−x′' }, { value: 270, label: '−y′' }], 0, (v) => { state.custom.phase = v; scheduleHash(); }, { label: 'Axis' });
+const phaseSeg = segmented([{ value: 0, label: 'x′' }, { value: 90, label: 'y′' }, { value: 180, label: '−x′' }, { value: 270, label: '−y′' }], 0, (v) => { state.custom.phase = v; if (typeof phaseSlider !== 'undefined') phaseSlider.value = v; scheduleHash(); }, { label: 'Axis' });
 const sendButton = el('button', { type: 'button', class: 'primary', onclick: () => sendPulse(state.custom.angle, state.custom.phase) }, 'Send');
 pulsePanel.append(el('div', { class: 'small muted' }, 'Or one of your own:'), angleSlider, el('div', { class: 'row' }, el('span', { class: 'small muted' }, 'about'), phaseSeg, sendButton));
 const b1Slider = slider({ label: 'RF field B₁', min: 1, max: 2, log: true, value: 1, title: 'The RF field\'s strength: a weaker one takes longer to turn the spin, τ = θ/γB₁',
@@ -605,6 +606,9 @@ const restartButton = el('button', { type: 'button', title: 'Run the sequence ag
 clockPanel.append(el('div', { class: 'label' }, 'Slow motion'), speedSlider, el('div', { class: 'gloss' }, 'Seconds of the real thing per second on screen.'), el('div', { class: 'row' }, playButton, restartButton));
 
 // More: the magnet, the RF frequency, the samples.
+const phaseSlider = slider({ label: 'your pulse\'s phase (°)', min: 0, max: 360, step: 1, value: 0, title: 'The phase of the RF in your pulse: 0° turns the spin about x′, 90° about y′, and any angle between',
+  onInput: (v) => { state.custom.phase = v; phaseSeg.value = [0, 90, 180, 270].includes(v) ? v : -1; scheduleHash(); } });
+$('#more-box').append(phaseSlider, el('div', { class: 'gloss' }, 'The axis of a pulse is the phase of its RF: x′ is 0°, y′ is 90°.'));
 const b0Slider = slider({ label: 'field B₀', min: 1, max: 2, value: 1, title: 'The magnet\'s field: the Larmor frequency is γB₀/2π',
   onInput: (v) => { state.B0 = v / inst().B0unit.s; applyEngine(); trail = []; scheduleHash(); dirty(); } });
 $('#more-box').append(b0Slider, el('div', { class: 'gloss' }, 'The Larmor frequency follows the field: f₀ = γB₀/2π, γ/2π = 42.577 MHz/T.'));
@@ -621,7 +625,7 @@ function syncSliders() {
   spreadSlider.querySelector('label').textContent = `spread Δf (${I.spreadUnit.u})`;
   t1Slider.setRange(I.T1range[0] * 1000, I.T1range[1] * 1000); t2Slider.setRange(I.T2range[0] * 1000, I.T2range[1] * 1000);
   speedSlider.setRange(I.speedRange[0], I.speedRange[1]); speedSlider.value = state.speed;
-  angleSlider.value = state.custom.angle; phaseSeg.value = state.custom.phase;
+  angleSlider.value = state.custom.angle; phaseSeg.value = state.custom.phase; phaseSlider.value = state.custom.phase;
   frameSeg.value = state.frame; arrowsSlider.value = state.arrows;
   syncEnsemble(); syncSettle(); syncNoise(); updatePulseNote();
   sampleRow.replaceChildren(...Object.entries(I.samples).map(([id, s]) => el('button', { type: 'button', title: s.title, 'aria-pressed': String(id === state.sample), onclick: () => loadSample(id) }, s.label)));
@@ -658,6 +662,7 @@ function setView(v) {
   $('#main').dataset.view = v;
   $('#sphere-hint').textContent = HINTS[v];
   b0Slider.hidden = v === 'earth'; currentSlider.hidden = v !== 'earth';
+  phaseSlider.hidden = v === 'earth'; phaseSlider.nextElementSibling.hidden = v === 'earth';
   spreadSlider.hidden = v === 'earth'; spreadSlider.nextElementSibling.hidden = v === 'earth';
   // The board's coil is seen from the side, as a solenoid is drawn; the others from the usual corner.
   if (v === 'earth') view.look(1.3, 0.22); else view.look(0.55, 0.32);
@@ -1188,6 +1193,10 @@ const tlSlider = slider({ label: 'listen (s)', min: 0.2, max: 4.8, step: 0.05, v
   onInput: (v) => { board.tl = v; startBoard(); scheduleHash(); } });
 const beSlider = slider({ label: 'Earth\'s field (μT)', min: 20, max: 70, value: board.BE * 1e6, title: 'The Earth\'s field where the board is: 22 to 67 μT round the world, 46.0 μT in Claremont',
   onInput: (v) => { board.BE = v / 1e6; startBoard(); scheduleHash(); } });
+{ // A tick on the Earth's-field slider at Claremont's 46.0 μT.
+  const list = el('datalist', { id: 'claremont-tick' }, el('option', { value: String(Math.round(((46.03 - 20) / 50) * 1000)), label: 'Claremont' }));
+  beSlider.append(list); beSlider.input.setAttribute('list', 'claremont-tick');
+}
 const claremont = el('button', { type: 'button', title: 'Harvey Mudd, Claremont: 46.0 μT (IGRF-14), protons at 1960 Hz', onclick: () => { board.BE = BOARD.claremont; beSlider.value = board.BE * 1e6; startBoard(); scheduleHash(); } }, 'Claremont: 46.0 μT');
 const gradSlider = slider({ label: 'field spread (nT)', min: 0.5, max: 500, log: true, value: board.gradNT, title: 'How much the field differs across the bottle: steel nearby (a tool, a desk, a car) makes it far more',
   onInput: (v) => { board.gradNT = v; state.spreadHz = GAMMA_HZ * v * 1e-9; startBoard(); scheduleHash(); } });
