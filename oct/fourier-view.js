@@ -67,8 +67,10 @@ export function tick(dt) {
     return true;
   }
   if (state.mode === 'bscan' && state.motor) {
-    let s = state.shift + motorDir * dt * 40;
-    if (s > 260) { s = 260; motorDir = -1; } else if (s < -260) { s = -260; motorDir = 1; }
+    // Far enough each way to fold the retina's top over zero path and its bottom past the range.
+    const lo = -380, hi = Math.max(200, dMax() - 750);
+    let s = state.shift + motorDir * dt * 60;
+    if (s > hi) { s = hi; motorDir = -1; } else if (s < lo) { s = lo; motorDir = 1; }
     state.shift = s; shiftS.value = +s.toFixed(1); dirty = true;
     return true;
   }
@@ -139,7 +141,7 @@ function drawSpectrum(c) {
   ctx.textAlign = 'left'; ctx.fillText(`λ = ${nm(spec.kLo).toFixed(0)} nm`, f.left, 4);
   ctx.textAlign = 'right'; ctx.fillText(`${nm(spec.kHi).toFixed(0)} nm`, f.right, 4);
   ctx.textAlign = 'center'; ctx.fillStyle = c.ink2;
-  ctx.fillText(`${spec.N} pixels, δk = ${spec.dk.toExponential(2).replace('e-', ' × 10⁻').replace(/(\d)$/, '$1')} rad/μm apart`, (f.left + f.right) / 2, 4);
+  if (f.w > 480) ctx.fillText(`${spec.N} pixels, δk = ${(spec.dk * 1000).toFixed(2)} × 10⁻³ rad/μm apart`, (f.left + f.right) / 2, 4);
   if (pk) { ctx.fillStyle = c.layer; ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText(`purple: the fringe the ${pk.name} makes by itself`, f.right - 4, f.top + 4); }
 }
 
@@ -154,7 +156,7 @@ function drawScan(c) {
   if (db) { f.y0 = Math.max(-100, Math.min(state.noise - 12, -60)); f.y1 = state.subtract ? Math.ceil((20 * Math.log10(top) + 6) / 10) * 10 : 10; }
   else { f.y0 = 0; f.y1 = state.subtract ? top * 1.25 : Math.max(top * 1.25, 1.1); }
   const Y = (a) => f.Y(db ? (a > 0 ? Math.max(f.y0 - 5, 20 * Math.log10(a)) : f.y0 - 5) : a);
-  f.axes({ colors: c, xlabel: 'optical depth n z beyond zero path (μm) — all of it from one camera frame', ylabel: db ? 'reflection (dB)' : 'reflectivity |r|', grid: db });
+  f.axes({ colors: c, xlabel: width > 700 ? 'optical depth n z beyond zero path (μm) — all of it from one camera frame' : 'optical depth n z beyond zero path (μm)', ylabel: db ? 'reflection (dB)' : 'reflectivity |r|', grid: db });
   f.clip();
   // The other side of zero path, shaded: where the mirror image lands.
   if (state.both) { ctx.fillStyle = c.faint; ctx.fillRect(f.left, f.top, f.X(0) - f.left, f.h); }
@@ -207,7 +209,7 @@ function drawScan(c) {
   legend('···· the fall-off with depth', c.noise);
   legend('▼ the layers (click one to see its fringe)', c.layer);
   if (B.length > 1 && B.length <= 4) legend('▽ two layers\' light interfering with each other', c.ink3);
-  ctx.textAlign = 'left'; ctx.fillStyle = c.mirror; ctx.fillText('zero path', x0 + 4, f.top + 3);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = c.mirror; ctx.fillText('zero path', x0 + 4, f.bottom - 3);
   scanFrame = f;
 }
 
@@ -342,7 +344,8 @@ export function init(shared) {
   subT = toggle('Subtract the reference spectrum', state.subtract, (on) => { state.subtract = on; compute(); fdKey = ''; S.onChange(); }, 'Take away the spectrum measured with the sample arm blocked: the big peak at zero path goes');
   bothT = toggle('Show both sides of zero path', state.both, (on) => { state.both = on; dirty = true; S.onChange(); }, 'Show the transform for negative depths too: the mirror image');
   tdT = toggle('Compare with the time-domain A-scan', state.td, (on) => { state.td = on; dirty = true; S.onChange(); }, 'Draw, in grey, what view 2\'s scanning mirror would measure');
-  $('#q-show-box').append(subT, bothT, tdT);
+  $('#q-show-box').append(subT);
+  $('#q-show-a').append(bothT, tdT);
   scaleSeg = segmented([{ value: 'lin', label: 'linear' }, { value: 'db', label: 'dB' }], state.scale, (v) => { state.scale = v; dirty = true; S.onChange(); }, { label: 'Scale' });
   $('#q-scale-box').append(scaleSeg);
   noiseS = slider({ label: 'noise floor (dB)', min: -120, max: -20, step: 0.5, value: state.noise, title: 'The camera\'s noise, as the reflection it equals (−120: none)', onInput: (v) => { state.noise = v; compute(); S.onChange(); } });

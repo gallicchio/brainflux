@@ -220,8 +220,26 @@ function drawBscan(c) {
   for (let z = 0; z <= scene.depth; z += scene.depth > 400 ? 200 : 100) ctx.fillText(`${z}`, L.left - 5, Zd(z));
   ctx.save(); ctx.translate(12, L.top + h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center';
   ctx.fillText(scene.nView > 1 ? `depth = optical depth ÷ ${scene.nView} (μm)` : 'depth = optical depth (μm)', 0, 0); ctx.restore();
-  if (pointer && pointer.where === 'bscan') { ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.beginPath(); ctx.arc(X(pointer.x), Zd(pointer.z), 5, 0, 2 * Math.PI); ctx.stroke(); }
+  if (pointer && pointer.where === 'bscan') drawLoupe(ctx, X(pointer.x), Zd(pointer.z), w, h);
   void c;
+}
+
+/** A magnifier at the pointer: the B-scan's own pixels, four times larger than drawn. */
+function drawLoupe(ctx, px, py, w, h) {
+  const L = BSCAN_LAYOUT, size = Math.min(150, Math.floor(h * 0.6)), mag = 4;
+  const sx = (w / bs.nx) * mag, sy = (h / bs.nz) * mag, cols = size / sx, rows = size / sy;
+  const ix = ((px - L.left) / w) * bs.nx, m = ((py - L.top) / h) * bs.nz;
+  const dx = px < L.left + w / 2 ? px + 24 : px - 24 - size, dy = Math.max(L.top + 2, Math.min(L.top + h - size - 2, py - size / 2));
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#000'; ctx.fillRect(dx, dy, size, size);
+  ctx.drawImage(bImg, ix - cols / 2, m - rows / 2, cols, rows, dx, dy, size, size);
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.5; ctx.strokeRect(dx - 0.5, dy - 0.5, size + 1, size + 1);
+  ctx.lineWidth = 1; ctx.strokeRect(px - (size / mag) / 2, py - (size / mag) / 2, size / mag, size / mag);
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  const across = cols * bs.pitch, deep = (rows * bs.hd) / scene.nView;
+  ctx.fillText(`×${mag}: ${across.toFixed(0)} × ${deep.toFixed(0)} μm`, dx + 4, dy + 3);
+  ctx.restore();
 }
 
 function drawColumn(c) {

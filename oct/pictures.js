@@ -233,13 +233,13 @@ export function drawScene(canvas, o) {
   }
   ctx.restore();
   // The galvo mirror and the scan lens above the sample; the beam.
-  const bx = X(o.x), bm = o.beam, gy = Math.max(10, top * 0.25), lensY = top * 0.68, gx = left + 0.06 * w;
+  const bx = X(o.x), bm = o.beam, gy = Math.max(16, top * 0.36), lensY = top * 0.72, gx = left + 0.06 * w;
   ctx.strokeStyle = BEAM; ctx.lineWidth = 1.6; ctx.globalAlpha = 0.9;
   ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(gx, gy); ctx.lineTo(bx, lensY); ctx.stroke();
   ctx.save(); ctx.translate(gx, gy); ctx.rotate(Math.atan2(lensY - gy, bx - gx) / 2); ctx.fillStyle = '#e6e9f0'; ctx.fillRect(-8, -1.5, 16, 3); ctx.restore();
   ctx.globalAlpha = 1;
   ctx.fillStyle = TEXT; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText(w > 560 ? 'galvo mirror: turns to step the beam across' : 'galvo mirror', gx + 12, gy + 11);
+  ctx.fillText(w > 560 ? 'galvo mirror: turns to step the beam across' : 'galvo mirror', gx + 12, gy - 9);
   ctx.strokeStyle = 'rgba(180,200,255,0.85)'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(left + 4, lensY); ctx.quadraticCurveTo(left + w / 2, lensY - 6, left + w - 4, lensY); ctx.quadraticCurveTo(left + w / 2, lensY + 6, left + 4, lensY); ctx.stroke();
   ctx.fillStyle = DIM; ctx.textAlign = 'right'; ctx.fillText('scan lens', left + w - 6, lensY - 10);
