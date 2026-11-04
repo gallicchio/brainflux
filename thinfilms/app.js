@@ -939,7 +939,7 @@ function frame(now) {
   }
   time('stack', () => drawStack(now));
   comp.drawMs = t;             // milliseconds per drawing step, likewise
-  if (animating()) raf = requestAnimationFrame(frame); else lastT = 0;
+  if (animating()) { if (!raf) raf = requestAnimationFrame(frame); } else lastT = 0;
 }
 
 // ------------------------------------------------------------------------- controls

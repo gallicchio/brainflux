@@ -11,7 +11,8 @@
 
 For each experiment it opens the demo, presses the experiment's "Set it up" button, lets it
 settle, then for two seconds records every animation frame's interval (requestAnimationFrame)
-and the main thread's busy time (DevTools Performance.getMetrics TaskDuration), and then drags
+and the main thread's busy time (DevTools Performance.getMetrics TaskDuration), and counts the
+page's own animation-frame callbacks (a loop started twice runs two a frame), and then drags
 up to two of the visible sliders in steps, timing each step from the input event to the end of
 the frame that shows the change (the next animation frame, its style, layout and paint).  The CPU is slowed with DevTools'
 Emulation.setCPUThrottlingRate, which stands in for an older laptop.
@@ -36,11 +37,23 @@ from cdp import Browser, ROOT  # noqa: E402
 
 SKIP = {'tests', 'build', 'tools', 'lib', 'docs', '.claude', '.git'}
 
-# Injected into each page: a requestAnimationFrame clock, and the slider drag.
+# Before any page script: count the page's own animation-frame callbacks, so a demo that has
+# started a second copy of its loop (two callbacks a frame where it means one) shows up.
+COUNT_RAF = r"""
+(() => {
+  const orig = window.requestAnimationFrame.bind(window);
+  window.__origRAF = orig; window.__rafCount = 0;
+  window.requestAnimationFrame = (cb) => orig((t) => { window.__rafCount++; cb(t); });
+})();
+"""
+
+# Injected into each page: a requestAnimationFrame clock (on the real one), and the slider drag.
 HELPERS = r"""
 window.__perf = {
   frames: [], on: false,
-  start() { this.frames = []; this.on = true; const tick = (t) => { if (!this.on) return; this.frames.push(t); requestAnimationFrame(tick); }; requestAnimationFrame(tick); },
+  start() { const raf = window.__origRAF || requestAnimationFrame; this.frames = []; this.on = true; this.c0 = window.__rafCount || 0;
+    const tick = (t) => { if (!this.on) return; this.frames.push(t); raf(tick); }; raf(tick); },
+  callbacks() { return (window.__rafCount || 0) - this.c0; },
   stop() { this.on = false; const f = this.frames, d = []; for (let i = 1; i < f.length; i++) d.push(f[i] - f[i - 1]); return d; },
   sliders() {
     const all = [...document.querySelectorAll('input[type=range]')].filter((e) => {
@@ -59,7 +72,7 @@ window.__perf = {
   },
   async drag(steps = 8) {
     const out = [];
-    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    const frame = () => new Promise((r) => (window.__origRAF || requestAnimationFrame)(r));
     for (const s of this.sliders()) {
       const min = +s.min || 0, max = +s.max || 100, v0 = +s.value, span = max - min;
       const dir = v0 - min > span / 2 ? -1 : 1;
@@ -133,6 +146,7 @@ def measure(b, settle=0.8, run=2.0, steps=8):
     s0 = metric(b, 'ScriptDuration')
     b.eval('__perf.start()')
     time.sleep(run)
+    cb = b.eval('__perf.callbacks()') or 0
     d = b.eval('__perf.stop()') or []
     t1, w1 = metric(b, 'TaskDuration'), metric(b, 'Timestamp')
     s1 = metric(b, 'ScriptDuration')
@@ -140,7 +154,7 @@ def measure(b, settle=0.8, run=2.0, steps=8):
     lat = b.eval(f'__perf.drag({steps})') or []
     return {
         'frames': len(d), 'median_ms': pct(d, 0.5), 'p90_ms': pct(d, 0.9), 'max_ms': max(d) if d else None,
-        'busy': busy, 'script': (s1 - s0) / max(1e-6, (w1 - w0)),
+        'busy': busy, 'script': (s1 - s0) / max(1e-6, (w1 - w0)), 'callbacks_per_frame': cb / max(1, len(d)),
         'slider_ms': pct(lat, 0.5), 'slider_max_ms': max(lat) if lat else None, 'slider_steps': len(lat),
     }
 
@@ -158,6 +172,7 @@ def run_all(args):
     results = {}
     with Browser('index.html', size=(args.width, args.height)) as b:
         b.call('Performance.enable')
+        b.call('Page.addScriptToEvaluateOnNewDocument', source=COUNT_RAF)
         b.call('Emulation.setDeviceMetricsOverride', width=args.width, height=args.height, deviceScaleFactor=args.dpr, mobile=False)
         for demo in names:
             exps = experiments(demo)
@@ -178,8 +193,10 @@ def run_all(args):
             errs = [c for c in b.console if c.startswith('EXCEPTION')]
             b.console.clear()
             results[demo] = {'experiments': res, 'exceptions': errs[:5], 'seconds': time.time() - t_demo}
+            loops = max((v.get('callbacks_per_frame', 0) for v in res.values() if 'error' not in v), default=0)
+            results[demo]['callbacks_per_frame'] = loops
             worst = max(((k, score(v)) for k, v in res.items() if 'error' not in v), key=lambda kv: kv[1], default=('-', 0))
-            print(f'{demo:20s} {len(exps):3d} experiments, worst {worst[1]:6.1f} ms ({worst[0]}), {time.time() - t_demo:5.1f} s', flush=True)
+            print(f'{demo:20s} {len(exps):3d} experiments, worst {worst[1]:6.1f} ms ({worst[0]}), most animation callbacks a frame {loops:.1f}, {time.time() - t_demo:5.1f} s', flush=True)
             json.dump({'rate': args.rate, 'dpr': args.dpr, 'query': args.query, 'size': [args.width, args.height], 'results': results},
                       open(os.path.join(ROOT, 'build', 'perf', label + '.json'), 'w'), indent=1)
     write_md(results, args, label)
@@ -195,15 +212,17 @@ def write_md(results, args, label):
         worst = max(scores, key=scores.get)
         med = statistics.median(scores.values())
         busiest = max(ex, key=lambda k: ex[k]['busy'])
-        rows.append((demo, med, scores[worst], worst, ex[busiest]['busy'], busiest, len(ex), r['exceptions']))
+        rows.append((demo, med, scores[worst], worst, ex[busiest]['busy'], busiest, len(ex), r['exceptions'], r.get('callbacks_per_frame', 0)))
     rows.sort(key=lambda x: (x[2], x[1]))
     out = [f'# Responsiveness: CPU slowed {args.rate:g}x, {args.width}x{args.height} at {args.dpr:g}x{(", " + args.query) if args.query else ""}', '',
            'Per experiment, sluggishness = the worse of its 90th-percentile frame interval (while it runs on its own) and its',
            'median slider step (input event to the end of the frame showing it).  16.7 ms is 60 frames a second.', '',
-           '| rank | demo | median experiment (ms) | worst experiment (ms) | worst | busiest main thread | experiments |',
-           '|---:|---|---:|---:|---|---|---:|']
-    for i, (demo, med, w, wn, busy, bn, n, errs) in enumerate(rows, 1):
-        out.append(f'| {i} | {demo} | {med:.0f} | {w:.0f} | {wn} | {100 * busy:.0f}% ({bn}) | {n} |' + (f' exceptions: {len(errs)}' if errs else ''))
+           'Loops: the most animation-frame callbacks the page ran in a frame (more than one or two means a loop',
+           'started twice).', '',
+           '| rank | demo | median experiment (ms) | worst experiment (ms) | worst | busiest main thread | experiments | loops |',
+           '|---:|---|---:|---:|---|---|---:|---:|']
+    for i, (demo, med, w, wn, busy, bn, n, errs, loops) in enumerate(rows, 1):
+        out.append(f'| {i} | {demo} | {med:.0f} | {w:.0f} | {wn} | {100 * busy:.0f}% ({bn}) | {n} | {loops:.1f} |' + (f' exceptions: {len(errs)}' if errs else ''))
     open(os.path.join(ROOT, 'build', 'perf', label + '.md'), 'w').write('\n'.join(out) + '\n')
     print('\n'.join(out))
 
@@ -212,6 +231,7 @@ def profile(args):
     demo, name = args.profile
     with Browser('index.html', size=(args.width, args.height)) as b:
         b.call('Performance.enable')
+        b.call('Page.addScriptToEvaluateOnNewDocument', source=COUNT_RAF)
         b.call('Emulation.setDeviceMetricsOverride', width=args.width, height=args.height, deviceScaleFactor=args.dpr, mobile=False)
         open_demo(b, demo, args.query, args.rate)
         if name != '-' and not setup(b, name):

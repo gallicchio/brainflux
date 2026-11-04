@@ -1345,7 +1345,7 @@ function loop(now) {
   if (animating && !testHold) advance(dtReal);
   if (needDraw || (state.view === 'medium' && state.sweep)) { needDraw = false; drawNow(); }
   else if (animating) { readColors(); if (state.view === 'medium') drawPictures(); else { drawSnapshot(); drawPulse(); } }
-  if (animating) raf = requestAnimationFrame(loop); else lastT = 0;
+  if (animating) { if (!raf) raf = requestAnimationFrame(loop); } else lastT = 0;
 }
 let testHold = false; // (set by the tests, which move the clocks themselves)
 

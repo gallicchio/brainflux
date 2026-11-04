@@ -229,7 +229,7 @@ function loop(now) {
     if (finished) analyse();
   }
   draw();
-  if (state.running) raf = requestAnimationFrame(loop);
+  if (state.running && !raf) raf = requestAnimationFrame(loop);
   else last = 0;
 }
 let frames = 0;

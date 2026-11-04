@@ -429,7 +429,7 @@ function loop(now) {
     compute(); drawPolar(); readouts();
   }
   if (active) drawField();
-  if (active && (A.running || A.sweep)) raf = requestAnimationFrame(loop); else last = 0;
+  if (active && (A.running || A.sweep)) { if (!raf) raf = requestAnimationFrame(loop); } else last = 0;
 }
 function kick() { if (!raf && active) raf = requestAnimationFrame(loop); }
 let active = false;

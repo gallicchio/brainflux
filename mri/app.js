@@ -71,7 +71,7 @@ function loop(now) {
   const v = current(), animating = !document.hidden && v.animating;
   if (animating && !testHold) v.advance(dt);
   if (v.dirty || animating) v.draw();
-  if (animating && !testHold) raf = requestAnimationFrame(loop); else lastT = 0;
+  if (animating && !testHold) { if (!raf) raf = requestAnimationFrame(loop); } else lastT = 0;
 }
 window.addEventListener('resize', () => { current().dirty = true; kick(); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { readColors(); current().dirty = true; kick(); });

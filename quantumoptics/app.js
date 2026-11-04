@@ -808,7 +808,7 @@ function loop(now) {
   const animating = !document.hidden && (state.view === 'ligo' ? anim.sliding : state.running);
   if (animating && !testHold) advance(dtReal);
   if (needDraw || animating) { needDraw = false; drawNow(); }
-  if (animating) raf = requestAnimationFrame(loop); else lastT = 0;
+  if (animating) { if (!raf) raf = requestAnimationFrame(loop); } else lastT = 0;
 }
 
 function drawNow() {

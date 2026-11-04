@@ -530,7 +530,7 @@ function loop(now) {
   lastT = now;
   if (state.playing && !testHold && !document.hidden) tick(dt);
   draw();
-  if (!document.hidden) raf = requestAnimationFrame(loop); else lastT = 0;
+  if (!document.hidden) { if (!raf) raf = requestAnimationFrame(loop); } else lastT = 0;
 }
 
 function draw() {

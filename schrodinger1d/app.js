@@ -642,7 +642,7 @@ function loop(now) {
     updateClock();
   }
   draw();
-  if (state.running) raf = requestAnimationFrame(loop);
+  if (state.running && !raf) raf = requestAnimationFrame(loop);
   else last = 0;
 }
 function kick() { if (!raf) raf = requestAnimationFrame(loop); }

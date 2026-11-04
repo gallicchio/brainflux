@@ -748,7 +748,7 @@ function loop(now) {
   frameCount++;
   draw();
   if (frameCount % 3 === 0 || !state.running) { updateReadouts(); drawTrace(); }
-  if (state.running) raf = requestAnimationFrame(loop);
+  if (state.running && !raf) raf = requestAnimationFrame(loop);
   else last = 0;
 }
 function kick() { if (!raf) raf = requestAnimationFrame(loop); updateHint(); }
