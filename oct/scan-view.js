@@ -51,6 +51,87 @@ const BSCAN_LAYOUT = { left: 50, right: 10, top: 6, bottom: 28 };
 const sigmaR = () => (state.noise <= -119 ? 0 : 10 ** (state.noise / 20) / Math.SQRT2);
 const opts = () => ({ beam, speckle: state.speckle, noise: sigmaR(), seed: state.seed });
 
+// --------------------------------------------------------------------- the worker
+// While the clock runs, the A-scans are computed off the page's thread (scan-worker.js), ahead
+// of the scan, and the page only reveals them at the scan's speed and paints: a frame costs a
+// few milliseconds however slow the machine.  With the clock held (the tests, the still
+// pictures) or without a worker, the page computes them itself, a frame's budget at a time.  A
+// job is one scan from one task on, with everything that decides its numbers; `epoch` counts the
+// scans started afresh, so a job from an older one is replaced.
+let worker = null, job = null, jobSeq = 0, epoch = 0;
+try {
+  worker = new Worker(new URL('./scan-worker.js', import.meta.url), { type: 'module' });
+  worker.onmessage = onWorker;
+  worker.onerror = (e) => { e.preventDefault?.(); worker = null; job = null; };
+} catch (e) { worker = null; }
+const useWorker = () => !!worker && !S.held;
+
+/** The job for the scan of the current mode, from its next task (started if it is not running). */
+function currentJob() {
+  const kind = state.mode, grid = kind === 'bscan' ? bs : vol, from = kind === 'bscan' ? next : vnext;
+  if (job && job.kind === kind && job.grid === grid && job.epoch === epoch && from <= job.have + 64) return job;
+  const id = ++jobSeq, o = opts();
+  delete o.beam;
+  const msg = { type: 'job', id, kind, from, scene: state.scene, sceneOpts: { tilt: state.tilt, rough: state.rough, lesion: state.lesion, seed: state.seed },
+    lam: S.src.lamNm, fwhm: S.src.fwhmNm, NA: state.NA, focus: state.focus, opts: o, nz: grid.nz, nx: grid.nx };
+  if (kind === 'bscan') Object.assign(msg, { y: bs.y, N: bs.N, how: bs.how, step: bs.step, ref: !ref });
+  else msg.ny = vol.ny;
+  job = { id, kind, grid, epoch, from, have: from, chunks: [] };
+  worker.postMessage(msg);
+  return job;
+}
+
+function onWorker(e) {
+  const m = e.data;
+  // (A job's results are dropped when its scan has gone: a new scene, a new set-up.)
+  if (!job || m.id !== job.id || job.grid !== (job.kind === 'volume' ? vol : bs)) return;
+  if (m.type === 'ref') {
+    if (ref || job.grid !== bs) return;
+    const nz = bs.nz;
+    ref = new Float32Array(bs.nx * nz); refCols = m.cols; cWidths = null;
+    m.cols.forEach((ix, i) => ref.set(m.data.subarray(i * nz, (i + 1) * nz), ix * nz));
+    return;
+  }
+  if (job.kind === 'volume') vol.data.set(m.data, m.from * vol.nz);   // hidden until the scan reaches it
+  else job.chunks.push(m);
+  job.have = m.to;
+}
+
+/** The B-scan's task t from the worker's results (dropping those before it). */
+function take(t) {
+  const c = job.chunks;
+  while (c.length && c[0].to <= t) c.shift();
+  if (!c.length || c[0].from > t) return null;
+  const nz = bs.nz;
+  return c[0].data.subarray((t - c[0].from) * nz, (t - c[0].from + 1) * nz);
+}
+
+/** Reveal the worker's results up to `upto` (within a few milliseconds), as the page's own
+ *  computing would have measured them. */
+function revealB(upto) {
+  const j = currentJob(), t0 = performance.now();
+  let did = 0;
+  while (next < Math.min(upto, j.have, bs.tasks) && (did === 0 || performance.now() - t0 < 6)) {
+    const A = take(next);
+    if (!A) break;
+    bs.add(next % bs.nx, A, Math.floor(next / bs.nx)); paintColumn(next % bs.nx); next++; did++;
+    if (next % bs.nx === 0) repeatDone(next / bs.nx);
+  }
+  if (next >= bs.tasks) { state.playing = false; fast = false; updatePlay(); }
+  return did;
+}
+function revealV(upto) {
+  const j = currentJob(), total = vol.nx * vol.ny, to = Math.min(Math.floor(upto), j.have, total);
+  if (to <= vnext) return 0;
+  const did = to - vnext;
+  vnext = to;
+  for (let iy = 0; iy < vol.ny; iy++) if (!vol.done[iy] && vnext >= (iy + 1) * vol.nx) { vol.done[iy] = 1; vol.count++; }
+  if (vnext >= total) { state.playing = false; vfast = false; updatePlay(); }
+  return did;
+}
+/** The volume starts again (its next scan is a new job). */
+function resetVolume() { vol.reset(); vnext = 0; vprogress = 0; epoch++; }
+
 // --------------------------------------------------------------------- the scene and the scans
 
 function makeAll() {
@@ -77,12 +158,12 @@ function autoLevel() {
 
 /** Start the B-scan again from the first column; quick: as fast as the machine allows. */
 export function restart(quick = false) {
-  next = 0; progress = 0; fast = quick;
+  next = 0; progress = 0; fast = quick; epoch++;
   bs.reset();
   chist = []; ref = null;
   if (!quick) bImgStale = true;
   state.playing = true;
-  if (vol) { vol.reset(); vnext = 0; vprogress = 0; vfast = false; }
+  if (vol) { resetVolume(); vfast = false; }
   updatePlay();
   dirty = true;
 }
@@ -120,13 +201,14 @@ function measureV(upto) {
 
 export function tick(dt) {
   if (!state.playing) return false;
+  const w = useWorker();
   if (state.mode === 'bscan') {
     progress = fast ? bs.tasks : progress + state.rate * Math.min(dt, 0.1);
-    if (measureB(Math.floor(progress))) dirty = true;
+    if (w ? revealB(Math.floor(progress)) : measureB(Math.floor(progress))) dirty = true;
   } else {
     ensureVolume();
     vprogress = vfast ? vol.nx * vol.ny : vprogress + state.vrate * vol.nx * Math.min(dt, 0.1);
-    if (measureV(Math.floor(vprogress))) dirty = true;
+    if (w ? revealV(vprogress) : measureV(Math.floor(vprogress))) dirty = true;
   }
   return true;
 }
@@ -135,7 +217,7 @@ export function tick(dt) {
 export function stepScan() {
   state.playing = false;
   if (state.mode === 'bscan') { if (next >= bs.tasks) restart(); state.playing = false; measureB(next + 1); progress = next; }
-  else { ensureVolume(); if (vnext >= vol.nx * vol.ny) { vol.reset(); vnext = 0; } const end = (Math.floor(vnext / vol.nx) + 1) * vol.nx; while (vnext < end) measureV(end); vprogress = vnext; }
+  else { ensureVolume(); if (vnext >= vol.nx * vol.ny) resetVolume(); const end = (Math.floor(vnext / vol.nx) + 1) * vol.nx; while (vnext < end) measureV(end); vprogress = vnext; }
   state.playing = false; updatePlay(); dirty = true;
 }
 
@@ -620,7 +702,7 @@ export function setMode(m) {
 }
 
 function rebuildScene() { makeAll(); syncSlices(); drawLegend(); S.onChange(); }
-function rescan() { if (state.mode === 'volume') { ensureVolume(); vol.reset(); vnext = 0; vprogress = 0; vfast = true; state.playing = true; } else restart(next >= bs.tasks); updatePlay(); S.onChange(); }
+function rescan() { if (state.mode === 'volume') { ensureVolume(); resetVolume(); vfast = true; state.playing = true; } else restart(next >= bs.tasks); updatePlay(); S.onChange(); }
 
 /** A new number of repeats, or a new way for them to differ: the B-scan starts again. */
 export function setAverage(N = state.avg, how = state.how, step = state.step) {
@@ -708,7 +790,7 @@ export function init(shared) {
   $('#s-play').addEventListener('click', () => {
     const done = state.mode === 'bscan' ? next >= bs.tasks : vol && vnext >= vol.nx * vol.ny;
     if (state.playing) state.playing = false;
-    else if (done) { if (state.mode === 'bscan') restart(); else { vol.reset(); vnext = 0; vprogress = 0; state.playing = true; } }
+    else if (done) { if (state.mode === 'bscan') restart(); else { resetVolume(); state.playing = true; } }
     else { state.playing = true; state.probe = null; if (state.mode === 'bscan') progress = next; else vprogress = vnext; }
     updatePlay(); dirty = true;
   });

@@ -183,11 +183,28 @@ function fmtUm(d) { return `${+d.toFixed(2)}`; }
  *       top (the tissue's top in px: the galvo and the lens are above), bottom }, pointer: { x, z } }
  * Returns { X(x), Z(z), invX(px), invZ(py), left, top, w, h }.
  */
+// The scene's still part (its bands, painted a pixel column at a time, the lesion, the beads),
+// kept on a canvas of its own while nothing about it changes, so that a frame only copies it.
+const sceneCache = { key: null, canvas: null };
 export function drawScene(canvas, o) {
-  const { ctx, width, height } = fitCanvas(canvas);
+  const { ctx, width, height, dpr } = fitCanvas(canvas);
   const sc = o.scene, L = o.layout, y = o.y || 0, hw = sc.halfWidth;
   const left = L.left, w = width - L.left - L.right, top = L.top, h = height - L.top - L.bottom;
   const X = (x) => left + ((x + hw) / (2 * hw)) * w, Z = (z) => top + (z / sc.depth) * h;
+  const key = [sc, y, canvas.width, canvas.height, left, top, w, h];
+  if (!sceneCache.key || key.some((v, i) => v !== sceneCache.key[i])) {
+    const c = sceneCache.canvas || (sceneCache.canvas = document.createElement('canvas'));
+    c.width = canvas.width; c.height = canvas.height;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawSceneStill(g, { sc, y, hw, width, height, left, top, w, h, X, Z });
+    sceneCache.key = key;
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(sceneCache.canvas, 0, 0); ctx.restore();
+  return drawSceneMoving(ctx, o, { sc, hw, left, top, w, h, X, Z });
+}
+
+function drawSceneStill(ctx, { sc, y, hw, width, height, left, top, w, h, X, Z }) {
   ctx.fillStyle = '#0d0f14'; ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = '#12151c'; ctx.fillRect(left, top, w, h);
   // The bands, pixel column by pixel column (their tops are curves).
@@ -232,6 +249,9 @@ export function drawScene(canvas, o) {
     for (const bd of sc.beadsNear(0, y, hw)) if (Math.abs(bd.y - y) < 1) { ctx.beginPath(); ctx.arc(X(bd.x), Z(bd.z), 1.6, 0, 2 * Math.PI); ctx.fill(); }
   }
   ctx.restore();
+}
+
+function drawSceneMoving(ctx, o, { sc, hw, left, top, w, h, X, Z }) {
   // The galvo mirror and the scan lens above the sample; the beam.
   const bx = X(o.x), bm = o.beam, gy = Math.max(16, top * 0.36), lensY = top * 0.72, gx = left + 0.06 * w;
   ctx.strokeStyle = BEAM; ctx.lineWidth = 1.6; ctx.globalAlpha = 0.9;

@@ -440,6 +440,23 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     st = b.eval('[__app.B.state.mode, __app.B.state.follow, __app.B.state.layer, __app.B.state.below]')
     check(st == ['volume', True, 0, 95], f'the address keeps the slab following the surface 95 μm down through a reload ({st})')
 
+    # ---------------------------------------------------------------- the worker
+    # With the clock running, view 3's A-scans come from its worker; they must be the very numbers
+    # the page computes itself with the clock held.  (Waits for the worker to finish, however long
+    # that takes on a busy machine; nothing here depends on how fast it is.)
+    sums = """(() => { const p = __app.B.peek(), a = __app.B.state.mode === 'bscan' ? p.bs.img : p.vol.data; let s = 0, s2 = 0;
+      for (let i = 0; i < a.length; i++) { s += a[i]; s2 += a[i] * a[i] * ((i % 7) + 1); } return [s, s2, p.chist]; })()"""
+    got = {}
+    for name, extra in (('average', "__app.B.setAverage(2)"), ('volume', '')):
+        b.eval(f'__app.setups.{name}(); {extra}; __app.hold(false); document.querySelector("#s-finish").click()')
+        b.wait("__app.B.state.mode === 'bscan' ? __app.B.peek().next >= __app.B.peek().bs.tasks : __app.B.peek().vnext >= 4096", timeout=300)
+        live = b.eval(sums)
+        b.eval(f'__app.hold(true); __app.setups.{name}(); {extra}; __app.B.finishNow()')
+        held = b.eval(sums)
+        got[name] = (live, held)
+    check(all(abs(l[0] - h[0]) <= 1e-9 * abs(h[0]) and abs(l[1] - h[1]) <= 1e-9 * abs(h[1]) and l[2] == h[2] for l, h in got.values()),
+          'the worker computes the same A-scans as the page: ' + '; '.join(f'{n}: Σ {l[0]:.6g} and {h[0]:.6g}' for n, (l, h) in got.items()) + f"; contrasts {got['average'][0][2]} and {got['average'][1][2]}")
+
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 

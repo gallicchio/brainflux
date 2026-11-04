@@ -160,8 +160,9 @@ document.addEventListener('keydown', (e) => {
 window.__app = {
   ready: true, setups, setView, views: VIEWS, F, A, B, Q, src: shared.src, shared,
   get view() { return app.view; },
-  /** Hold the clock (the tests move it with step) or let it run again. */
-  hold(on = true) { held = on; last = 0; },
+  /** Hold the clock (the tests move it with step) or let it run again.  Held, view 3 computes its
+   *  A-scans itself as the clock is stepped, rather than in its worker. */
+  hold(on = true) { held = on; shared.held = on; last = 0; },
   /** Move the clock on by dt seconds, n times, and draw. */
   step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) VIEWS[app.view].tick(dt); VIEWS[app.view].draw(true); },
 };
