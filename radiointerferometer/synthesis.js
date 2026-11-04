@@ -164,36 +164,43 @@ export function dirtyImage(S, V, n) {
 
 // ------------------------------------------------------------------ CLEAN
 
-/** Start a CLEAN: the residual is the dirty image, the model empty. */
-export function cleanStart(dirty) {
-  return { residual: Float64Array.from(dirty), model: new Float64Array(dirty.length), iterations: 0, components: 0, done: false };
+/** Start a CLEAN: the residual is the dirty image, the model empty.  box: the window
+ *  [i0, j0, i1, j1) (columns i0..i1−1, rows j0..j1−1) where CLEAN looks for peaks and keeps the
+ *  residual (the field of view; outside it the residual is left as it was). */
+export function cleanStart(dirty, box = null) {
+  return { residual: Float64Array.from(dirty), model: new Float64Array(dirty.length), iterations: 0, components: 0, done: false, box, log: [] };
 }
 
 /**
  * Hogbom's CLEAN: find the brightest pixel of the residual (in absolute value), put gain times
  * it into the model there, and subtract that much of the dirty beam centred there.  Repeat.
- * Stops after `steps` iterations or when the peak falls below `threshold`.  Returns the state.
+ * Stops after `steps` iterations or when the peak falls below `threshold`.  Each step is
+ * written to cs.log as two numbers, the pixel's index and the amount taken out.  Returns the
+ * state.
  */
 export function cleanSteps(cs, beam, n, { gain = 0.1, steps = 1, threshold = 0 } = {}) {
-  const R = cs.residual, M = cs.model, h = n / 2;
+  const R = cs.residual, M = cs.model, h = n / 2, [x0, y0, x1, y1] = cs.box || [0, 0, n, n];
+  if (!cs.log) cs.log = [];
   // The brightest pixel (kept from the last pass, which finds it while subtracting).
   let best = cs.peak ?? -1, bv = best >= 0 ? Math.abs(R[best]) : 0;
-  if (best < 0) for (let i = 0; i < R.length; i++) { const a = Math.abs(R[i]); if (a > bv) { bv = a; best = i; } }
+  if (best < 0) for (let j = y0; j < y1; j++) for (let i = x0; i < x1; i++) { const a = Math.abs(R[j * n + i]); if (a > bv) { bv = a; best = j * n + i; } }
   for (let s = 0; s < steps; s++) {
     if (bv <= threshold || bv === 0) { cs.done = true; break; }
     const g = gain * R[best], i0 = best % n, j0 = (best - i0) / n;
     if (M[best] === 0) cs.components++;
     M[best] += g;
-    // R(i, j) -= g B(i - i0 + n/2, j - j0 + n/2), indices mod n, finding the next peak too.
-    const off = (h - i0 + n) % n, cut = n - off;
+    cs.log.push(best, g);
+    // R(i, j) -= g B(i - i0 + n/2, j - j0 + n/2), indices mod n, finding the next peak too: the
+    // beam's column is i + off, less n from i = cut on.
+    const off = (h - i0 + n) % n, cut = n - off, a0 = Math.min(x1, Math.max(x0, cut));
     bv = 0;
-    for (let j = 0; j < n; j++) {
+    for (let j = y0; j < y1; j++) {
       const rrow = j * n, brow = (((j - j0 + h) % n + n) % n) * n;
-      for (let i = 0; i < cut; i++) {
+      for (let i = x0; i < a0; i++) {
         const v = (R[rrow + i] -= g * beam[brow + i + off]), a = v < 0 ? -v : v;
         if (a > bv) { bv = a; best = rrow + i; }
       }
-      for (let i = cut; i < n; i++) {
+      for (let i = a0; i < x1; i++) {
         const v = (R[rrow + i] -= g * beam[brow + i - cut]), a = v < 0 ? -v : v;
         if (a > bv) { bv = a; best = rrow + i; }
       }
