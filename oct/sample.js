@@ -159,6 +159,7 @@ export const GH = { t: GH_T, w: GH_W0.map((w) => w / GH_SUM) };
  *   beads: { dx, dz, z0, z1, a }: point scatterers of amplitude a on a grid (x and y every dx,
  *       z from z0 to z1 every dz).
  *   NA, focus: the beam's numerical aperture and focal depth this scene opens with.
+ *   samplesPerLc: depth samples per coherence length in its images (2.5 if not given).
  */
 export const SCENES = {
   retina: {
@@ -191,7 +192,7 @@ export const SCENES = {
   },
   beads: {
     label: 'Beads in gel', title: 'Tiny beads in clear gel on a grid 60 μm apart and 100 μm deep: each one shows how a single point is blurred, across and in depth',
-    n0: 1.33, nView: 1.33, halfWidth: 300, depth: 700, base: 30, curvature: 0, pit: 0, NA: 0.05, focus: 350,
+    n0: 1.33, nView: 1.33, halfWidth: 300, depth: 700, base: 30, curvature: 0, pit: 0, NA: 0.05, focus: 350, samplesPerLc: 8,
     bands: [{ name: 'gel', thick: 900, scatter: 0, r: 0.02, n: 1.33, pit: 0, colour: '#4a6a80' }],
     lesion: null,
     beads: { dx: 60, dz: 100, z0: 100, z1: 600, a: 0.05 },
@@ -357,9 +358,9 @@ export const CELL = 10;
 /**
  * The scatterers in the lateral cell (i, j) (x in [iC, (i+1)C), y likewise), down to the scene's
  * depth: Float64Array of [x, y, z, amplitude, ...], the amplitude including what the light loses
- * on its way there and back.  count: scatterers per cell per 100 μm of depth.  The amplitudes are Rayleigh-distributed about the local mean `scatter` (scale
- * s √(2/π), so their mean is s and their mean square (4/π) s²), with a random sign: a random phase
- * of 0 or π is enough to make speckle.
+ * on its way there and back.  count: scatterers per cell per 100 μm of depth.  The amplitudes are
+ * Rayleigh-distributed about the local mean `scatter` (scale s √(2/π), so their mean is s and
+ * their mean square (4/π) s²); their phases come from their depths (scan.js).
  */
 export function cellScatterers(scene, i, j, { count = 40 } = {}) {
   const rng = mulberry32(hashCell(i, j, 0, scene.opts.seed));
@@ -372,7 +373,8 @@ export function cellScatterers(scene, i, j, { count = 40 } = {}) {
     const u = rng(), v = rng();
     const s = scene.scatterAt(x, y, z, prof);
     if (s === 0) continue;
-    out[m++] = x; out[m++] = y; out[m++] = z; out[m++] = s * scene.through(prof, z) * 0.7978845608 * Math.sqrt(-2 * Math.log(1 - u)) * (v < 0.5 ? -1 : 1);
+    out[m++] = x; out[m++] = y; out[m++] = z; out[m++] = s * scene.through(prof, z) * 0.7978845608 * Math.sqrt(-2 * Math.log(1 - u));
+    void v;   // (drawn to keep the sequence of random numbers)
   }
   return out.subarray(0, m);
 }

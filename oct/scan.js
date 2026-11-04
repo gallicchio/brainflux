@@ -9,8 +9,9 @@
 //
 // The focused beam gives a point ρ off its axis the amplitude e^{−2ρ²/w(z)²} (the light goes out
 // through the beam's profile and comes back into the same fibre).
-//   - The scatterers within the beam add coherently, each with its own random phase: speckle,
-//     grains about a beam's width across and a coherence length deep.  With speckle off, they add
+//   - The scatterers within the beam add coherently, each with the phase e^{−2ik₀d} of its own
+//     optical depth d (random, from one to the next): speckle, grains about a beam's width
+//     across and a coherence length deep.  With speckle off, they add
 //     their mean power instead: per unit depth, density × (4/π) s² × ∫∫ e^{−4ρ²/w²} = density
 //     (4/π) s² πw²/4, what averaging many independent speckle patterns would give.
 //   - The diffuse interfaces (rough on the scale of the wavelength) add their power, sampled
@@ -64,16 +65,19 @@ export function column(scene, src, x, y, hd, nz, out, opts = {}) {
     const m0 = Math.max(0, Math.ceil((dc - reachD) / hd)), m1 = Math.min(nz - 1, Math.floor((dc + reachD) / hd));
     for (let m = m0; m <= m1; m++) { const u = m * hd - dc; P[m] += p * Math.exp(-s2 * u * u); }
   };
-  // A burst of real amplitude a at optical depth dc: the Gaussian e^{−s(u + mh)²} advanced by two
-  // multiplications per sample (its ratio between successive samples is itself geometric).
-  const cc = Math.exp(-2 * s1 * hd * hd);
+  // A burst of amplitude a from optical depth dc.  Its demodulated field is a γ(Δ − 2dc) without
+  // the common carrier e^{ik₀Δ}: a envelope times the phase e^{−2ik₀dc}, which differs from one
+  // scatterer to the next by many turns (they are wavelengths apart): that is what makes speckle.
+  // The Gaussian e^{−s(u + mh)²} is advanced by two multiplications per sample (its ratio between
+  // successive samples is itself geometric).
+  const cc = Math.exp(-2 * s1 * hd * hd), k2 = 2 * src.k0;
   const addField = (dc, a) => {
     dc += shift;
     const m0 = Math.max(0, Math.ceil((dc - reachD) / hd)), m1 = Math.min(nz - 1, Math.floor((dc + reachD) / hd));
     if (m1 < m0) return;
-    const u0 = m0 * hd - dc;
-    let g = a * Math.exp(-s1 * u0 * u0), f = Math.exp(-s1 * (2 * u0 * hd + hd * hd));
-    for (let m = m0; m <= m1; m++) { re[m] += g; g *= f; f *= cc; }
+    const u0 = m0 * hd - dc, ph = k2 * dc, cr = a * Math.cos(ph), ci = -a * Math.sin(ph);
+    let g = Math.exp(-s1 * u0 * u0), f = Math.exp(-s1 * (2 * u0 * hd + hd * hd));
+    for (let m = m0; m <= m1; m++) { re[m] += g * cr; im[m] += g * ci; g *= f; f *= cc; }
   };
   const prof = scene.profile(x, y);
   // The interfaces, each sampled across the beam at the beam's width at its depth.
@@ -142,9 +146,10 @@ export function column(scene, src, x, y, hd, nz, out, opts = {}) {
   return out;
 }
 
-/** How many depth samples an image of the scene needs: about 2.5 per coherence length. */
-export function depthSamples(scene, src, lo = 256, hi = 1024) {
-  return Math.max(lo, Math.min(hi, 32 * Math.ceil((scene.nView * scene.depth) / (src.lc / 2.5) / 32)));
+/** How many depth samples an image of the scene needs: about 2.5 per coherence length (more for
+ *  a scene that asks for them, as the beads do, to measure the width of a point's image). */
+export function depthSamples(scene, src, lo = 256, hi = 1536) {
+  return Math.max(lo, Math.min(hi, 32 * Math.ceil((scene.nView * scene.depth) / (src.lc / (scene.samplesPerLc || 2.5)) / 32)));
 }
 
 /**

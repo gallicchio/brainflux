@@ -148,9 +148,10 @@ export function peakWidth(A, j, h) {
   let lo = j, hi = j;
   while (lo > 0 && A[lo] > half) lo--;
   while (hi + 1 < A.length && A[hi] > half) hi++;
-  // Interpolate the crossings.
-  const fl = lo < j ? (A[lo + 1] - half) / (A[lo + 1] - A[lo]) : 0, fh = hi > j ? (A[hi - 1] - half) / (A[hi - 1] - A[hi]) : 0;
-  return (hi - fh - (lo + 1 - fl)) * h;
+  // Interpolate the crossings: between lo and lo + 1 on the left, hi − 1 and hi on the right.
+  const left = lo < j ? lo + 1 - (A[lo + 1] - half) / (A[lo + 1] - A[lo]) : j;
+  const right = hi > j ? hi - 1 + (A[hi - 1] - half) / (A[hi - 1] - A[hi]) : j;
+  return (right - left) * h;
 }
 
 /** 20 log₁₀ of an amplitude (10 log₁₀ of the power reflectivity R = r²), −∞ guarded. */
