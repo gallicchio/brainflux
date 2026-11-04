@@ -1,0 +1,17 @@
+{
+  "select": ["#pane-holo .sq", "#pane-spec .sq", "#pane-recon .sq"],
+  "wait": 0.8,
+  "js": "__app.redraw()",
+  "setups": {
+    "offaxis": {"select": ["#pane-spec .sq", "#pane-recon .sq"],
+      "js": "const box = [...document.querySelectorAll('#ref-options .slider')].find((s) => s.querySelector('label').textContent === 'angle (°)').querySelector('input[type=number]'); box.value = 2.2; box.dispatchEvent(new Event('change')); __app.redraw()"},
+    "depth": {"select": ["#recon-note", "#pane-recon .sq"],
+      "js": "__app.state.sweepFocus = false; __app.setFocus(80000); __app.redraw()"},
+    "parallax": {"js": "__app.advance(1.5); __app.state.sweepWindow = false; __app.redraw()"},
+    "cut": {"js": "__app.coverHalf(); __app.redraw()"},
+    "conjugate": {"select": ["#recon-note", "#pane-recon .sq"]},
+    "wavelength": {"select": ["#recon-note", "#pane-recon .sq"],
+      "js": "[...document.querySelectorAll('#jump-box button')].find((b) => b.textContent === 'Focus on the image').click(); __app.redraw()"},
+    "fourier": {"select": ["#pane-spec .sq", "#pane-recon .sq"]}
+  }
+}
