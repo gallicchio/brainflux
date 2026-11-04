@@ -131,7 +131,7 @@ figure.live .plot-wrap { aspect-ratio: 1 / 1; }
 .tile figcaption { font-size: 11.5px; line-height: 1.25; color: var(--ink-2); min-height: 2.5em; }
 .op { flex: 0 0 auto; min-width: 18px; text-align: center; font-size: 22px; font-weight: 600; color: var(--accent); align-self: center; margin-top: -2.5em; }
 .op.gap { min-width: 22px; border-left: 1px dashed var(--line); align-self: stretch; margin: 0 6px; }
-.comp-list { flex: 1 1 180px; min-width: 170px; align-self: flex-start; color: var(--ink-2); font-variant-numeric: tabular-nums; line-height: 1.45; }
+.comp-list { flex: 0 1 230px; min-width: 170px; align-self: flex-start; color: var(--ink-2); font-variant-numeric: tabular-nums; line-height: 1.45; }
 .comp-list b { color: var(--ink); font-weight: 600; }
 .comp-list ol { margin: 2px 0 0; padding-left: 0; list-style: none; }
 .comp-list[hidden] { display: none; }

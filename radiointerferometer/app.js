@@ -1077,11 +1077,16 @@ function drawSampled() {
  *  n x n picture of the uv plane out to ±uvMax, in the uv plane's colours. */
 function uvWindow(V, S, n) {
   const re = new Float64Array(n * n), im = new Float64Array(n * n), du = ensureGrid().du, h = N / 2, um = uvMax();
+  // The cells whose centres fall in each pixel (at least the nearest one), so that a pixel
+  // larger than a cell shows a sampled cell inside it rather than missing a row of them.
+  const span = (lo, hi) => { const a = Math.ceil(lo), b = Math.ceil(hi) - 1; return b >= a ? [a, b] : [Math.round((lo + hi) / 2), Math.round((lo + hi) / 2)]; };
   for (let y = 0; y < n; y++) {
-    const v = ((n / 2 - y - 0.5) / n) * 2 * um, q = Math.round(h - v / du);
+    const [q0, q1] = span(h - (((n / 2 - y) / n) * 2 * um) / du, h - (((n / 2 - y - 1) / n) * 2 * um) / du);
     for (let x = 0; x < n; x++) {
-      const u = ((x + 0.5 - n / 2) / n) * 2 * um, p = Math.round(h + u / du);
-      if (p >= 0 && p < N && q >= 0 && q < N && (!S || S[q * N + p])) { re[y * n + x] = V.re[q * N + p]; im[y * n + x] = V.im[q * N + p]; }
+      const [p0, p1] = span(h + (((x - n / 2) / n) * 2 * um) / du, h + (((x + 1 - n / 2) / n) * 2 * um) / du);
+      let o = -1;
+      for (let q = Math.max(0, q0); q <= Math.min(N - 1, q1) && o < 0; q++) for (let p = Math.max(0, p0); p <= Math.min(N - 1, p1); p++) if (!S || S[q * N + p]) { o = q * N + p; break; }
+      if (o >= 0) { re[y * n + x] = V.re[o]; im[y * n + x] = V.im[o]; }
     }
   }
   const out = new ImageData(n, n);
@@ -1172,8 +1177,12 @@ function tileField(id, data, top = fieldPeak(data), mark = -1) {
   }
   tileEdge(g);
 }
-/** The CLEAN components as dots, their area as their flux (white above zero, blue below). */
+/** The CLEAN components as dots, their area as their flux (white above zero, blue below); when
+ *  there are many, as the pixels they are, so that the cloud of them still reads as points. */
 function tileDots(id, model) {
+  let count = 0;
+  for (const o of BOX_IDX) if (model[o]) count++;
+  if (count > 40) { tileField(id, model); return; }
   const g = tileArea(id), ctx = g.ctx;
   ctx.fillStyle = '#000'; ctx.fillRect(g.x, g.y, g.s, g.s);
   const top = fieldPeak(model), r0 = Math.max(1.6, g.s / 45);
@@ -1776,6 +1785,7 @@ function syncPanels() {
     : 'The flow: the sky → one correlation for each pair → the sampled uv plane → its inverse Fourier transform → the image';
   $('#sketch-hbt-note').hidden = !s.hbt;
   $('#sampled-title').textContent = 'Sampled uv plane';
+  $('#sampled-note').textContent = s.view === 'uv' && s.hbt ? '|V|² where the pair has measured it' : 'V where a pair has measured it';
   $('#ground-title').textContent = s.view === 'array' ? 'The array on the ground' : 'The pair on the ground';
   $('#ground-note').textContent = s.view === 'array' ? 'drag a dish' : 'drag A or B';
   $('#sky-note').textContent = s.sky.kind === 'points' ? 'drag a source' : PICTURES[s.sky.picture]?.label?.toLowerCase() || '';
