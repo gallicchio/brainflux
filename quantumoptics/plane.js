@@ -176,7 +176,8 @@ export class Plane {
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax - 12 * ux + 6 * uy, ay + 12 * uy + 6 * ux); ctx.lineTo(ax - 12 * ux - 6 * uy, ay + 12 * uy - 6 * ux); ctx.closePath(); ctx.fill();
     if (label) {
       ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(label, f.X(Ra * ux) - 16 * uy, f.Y(Ra * uy) - 16 * ux);
+      const Rl = this.extent * 0.78;
+      ctx.fillText(label, f.X(Rl * ux) + 14 * uy, f.Y(Rl * uy) + 14 * ux);
     }
     if (hist && hist.counts.length) {
       // Bars perpendicular to the axis on its left side, height ∝ count.

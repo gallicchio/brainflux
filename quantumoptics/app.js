@@ -23,6 +23,7 @@ const TRACE_PERIODS = 4;          // periods of the field shown
 const SAMPLE_RATE = 2400;         // homodyne samples per second of the page's clock
 const STRIP_N = 500;              // samples on the strip chart
 const HIST_BINS = 60;             // value bins of the histogram over [−EXTENT, EXTENT]
+const SQ6 = Math.LN2;             // the presets' squeezing, r = ln 2: ΔX = 1/4 and 1 exactly, 6.02 dB
 const SOURCES = {
   bns: { label: 'Two neutron stars', m1: 1.4, m2: 1.4, fmin: 70, d: 40, fs: 8192, title: '1.4 + 1.4 solar masses, as GW170817; from 70 Hz, a few seconds to merger' },
   bbh: { label: 'Two black holes', m1: 10, m2: 10, fmin: 20, d: 500, fs: 4096, title: '10 + 10 solar masses, from 20 Hz: heavier, so louder, and merging at 220 Hz' },
@@ -312,8 +313,9 @@ function drawStrip() {
   ctx.stroke();
   ctx.restore();
   f.axes({ colors: c, xlabel: 'sample', ylabel: 'X_θ', xTicks: false });
-  ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-  fillSlots(ctx, ['theory: mean ', { v: m, dec: 3, w: 6 }, ', noise ΔX = ', { v: sd, dec: 3, w: 5 }], f.right - 4, f.top + 4);
+  ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  let x = f.left + 8; const y = f.bottom - 10;
+  ctx.fillStyle = c.band; ctx.fillRect(x, y - 5, 16, 10); x += 20; ctx.fillStyle = c.ink2; ctx.fillText('theory: ⟨X_θ⟩ ± ΔX_θ', x, y);
   ctx.restore();
 }
 
@@ -506,10 +508,11 @@ function drawSens() {
     ['standard quantum limit', c.ink, 1.2, [2, 3]], ['thermal', c.thermal, 1.2, []], ['seismic', c.seismic, 1.2, []],
     ...(sq.on ? [['without squeezing', c.ink, 2.2, [], 0.3]] : []), ['the chirp, 2|h̃|√f', c.chirp, 6, [], 0.3],
   ];
-  let x = f.left + 10, y = f.top + 12;
-  const colW = Math.max(120, Math.min(170, f.w / 4.2));
+  const rows = f.w < 560 ? 5 : 3, cols = Math.ceil(items.length / rows);
+  const colW = Math.max(...items.map((it) => ctx.measureText(it[0]).width)) + 34;
+  let x = f.right - cols * colW + 6, y = f.top + 12;
   items.forEach(([label, color, w, dash, alpha = 1], i) => {
-    if (i && i % 3 === 0) { x += colW; y = f.top + 12; }
+    if (i && i % rows === 0) { x += colW; y = f.top + 12; }
     ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash); ctx.globalAlpha = alpha;
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 18, y); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     ctx.fillStyle = c.ink2; ctx.fillText(label, x + 24, y);
@@ -566,7 +569,7 @@ function readout() {
     ['Noise', 'narrowest ΔX = ', bold(num(sp.min, 3, 5)), ' (along ', num(sp.angle / DEG, 0, 4), '°), widest ', bold(num(sp.max, 3, 5)), ', product ', num(sp.min * sp.max, 3, 5), ' (the limit is ¼)'],
   ];
   if (a > 1e-9) groups.push(['Phase noise', 'Δφ ≈ ΔX/|α| = ', bold(num(dphi, 3, 5)), ' rad = ', num(dphi / DEG, 1, 5), '°', state.r > 0 ? '' : ' (= 1/(2|α|), the standard quantum limit)']);
-  else groups.push(['Phase noise', 'no mean field: the phase is undefined']);
+  else groups.push(['Phase noise', 'no mean field, so no phase to be uncertain about']);
   if (state.view === 'squeeze' || state.r > 0) {
     groups.push(['Squeezing', 'r = ', bold(num(state.r, 2, 4)), ' = ', num(squeezeDb(state.r), 1, 4), ' dB; through loss η = ', num(state.eta, 2, 4), ' the squeezed quadrature reads ', bold(num(lossyVariance(state.r, state.eta), 3, 5)), ' of the vacuum\'s variance: ', num(-10 * Math.log10(lossyVariance(state.r, state.eta)), 1, 4), ' dB of squeezing']);
   }
@@ -599,22 +602,23 @@ function readoutHomodyne(box) {
 
 function readoutLigo(box) {
   const p = ligoParams(), sq = squeezeParams(), vac = { ...sq, on: false };
-  const b100 = noiseBudget(100, p, vac), s100 = noiseBudget(100, p, sq), v1k = noiseBudget(1000, p, vac), s1k = noiseBudget(1000, p, sq);
+  const b100 = noiseBudget(100, p, vac), s100 = noiseBudget(100, p, sq), v1k = noiseBudget(1000, p, vac), s1k = noiseBudget(1000, p, sq), v10 = noiseBudget(10, p, vac), s10 = noiseBudget(10, p, sq);
   const e24 = (x) => Math.sqrt(x) / 1e-24;
   const fs = sqlFrequency(p), r = snr(), ch = ensureChirp();
   const groups = [
     ['At 100 Hz', 'shot noise ', num(e24(b100.shot), 2, 5), ', radiation pressure ', num(e24(b100.rp), 2, 5), ', thermal ', num(e24(b100.thermal), 2, 5), ', total ', bold(num(e24(b100.total), 2, 5)), ' × 10⁻²⁴ /√Hz without squeezing; the SQL is touched at ', num(fs, 0, 4), ' Hz'],
   ];
-  if (sq.on) groups.push(['With squeezing', 'total ', bold(num(e24(s100.total), 2, 5)), ' × 10⁻²⁴ /√Hz at 100 Hz; shot noise at 1 kHz down by ', bold(num(-10 * Math.log10(s1k.shot / v1k.shot), 1, 5)), ' dB, radiation pressure at 10 Hz ', num(10 * Math.log10(s100.rp / b100.rp), 1, 5), ' dB']);
-  groups.push(['Signal-to-noise', 'ρ = ', bold(num(r.without, 1, 6)), ' without squeezing', ...(sq.on ? [', ', bold(num(r.with, 1, 6)), ' with: ', bold(num(r.ratio, 2, 5)), ' times as far, a volume ', bold(num(r.ratio ** 3, 2, 5)), ' times as big'] : [])]);
-  groups.push(['Reach', `${ch.src.label.toLowerCase()} seen at ρ = 8 out to `, bold(num(r.rangeWithout, 0, 5)), ' Mpc', ...(sq.on ? [' without squeezing, ', bold(num(r.rangeWith, 0, 5)), ' Mpc with'] : [])]);
+  if (sq.on) groups.push(['With squeezing', 'total ', bold(num(e24(s100.total), 2, 5)), ' × 10⁻²⁴ /√Hz at 100 Hz; shot noise at 1 kHz down by ', bold(num(-10 * Math.log10(s1k.shot / v1k.shot), 1, 5)), ' dB; radiation pressure at 10 Hz changed by ', num(10 * Math.log10(s10.rp / v10.rp), 1, 5, { plus: '+' }), ' dB']);
+  groups.push(['Signal-to-noise ratio', 'ρ = ', bold(num(r.without, 1, 6)), ' without squeezing', ...(sq.on ? [', ', bold(num(r.with, 1, 6)), ' with: ', bold(num(r.ratio, 2, 5)), ' times as far, a volume ', bold(num(r.ratio ** 3, 2, 5)), ' times as big; '] : ['; ']),
+    'reach (ρ = 8): ', bold(num(r.rangeWithout, 0, 5)), ' Mpc', ...(sq.on ? [' without, ', bold(num(r.rangeWith, 0, 5)), ' Mpc with'] : [])]);
   groups.push(['Scale', 'a strain of 10⁻²¹ changes the arms\' difference by ', num(1e-21 * p.L / 1e-18, 1, 4), ' × 10⁻¹⁸ m and the dark port\'s phase by ', num(darkPortPhase(1e-21, p) / 1e-11, 1, 4), ' × 10⁻¹¹ rad']);
   setGroupsKeyed(box, groups);
 }
 
 function updateLegend() {
   const lg = $('#legend');
-  if (state.view === 'ligo') { lg.replaceChildren(); return; }
+  lg.hidden = state.view === 'ligo';
+  if (lg.hidden) return;
   if (!lg._made) {
     lg._made = true;
     lg.replaceChildren(
@@ -688,7 +692,7 @@ function setView(v) {
   const wrap = $('#plane-wrap');
   if (v === 'homodyne') { if (wrap.parentNode !== $('#hom-pair')) $('#plane-slot').replaceWith(wrap); }
   else if (wrap.parentNode !== $('#top-pair')) { const slot = el('div', { id: 'plane-slot' }); wrap.replaceWith(slot); $('#top-pair').prepend(wrap); }
-  $('#plane-cap').innerHTML = v === 'homodyne' ? '<b>The quadrature plane</b> in the LO\'s frame, with the quadrature it reads' : '<b>The quadrature plane</b>, turning at ω (slowed)';
+  $('#plane-cap').innerHTML = v === 'homodyne' ? '<b>The quadrature plane</b> in the LO\'s frame' : '<b>The quadrature plane</b>, turning at ω (slowed)';
   $('#state-panel').hidden = v === 'ligo';
   $('#state-label').textContent = v === 'squeeze' ? 'What goes into the crystal' : v === 'homodyne' ? 'The signal' : 'The state of the mode';
   $('#squeeze-panel').hidden = v !== 'squeeze' && v !== 'homodyne';
@@ -722,7 +726,7 @@ const sqPresets = segmented([
   { value: 'off', label: 'None', title: 'No squeezing: the round cloud' },
 ], 'off', (v) => {
   if (v === 'off') state.r = 0;
-  else { if (state.r === 0) state.r = rFromDb(6); state.psi = ((state.kind === 'vacuum' ? 0 : state.phase) + (v === 'phase' ? 90 : 0) + 360) % 180; }
+  else { if (state.r === 0) state.r = SQ6; state.psi = ((state.kind === 'vacuum' ? 0 : state.phase) + (v === 'phase' ? 90 : 0) + 360) % 180; }
   rSlider.value = state.r; psiSlider.value = state.psi; changed();
 }, { label: 'Squeeze' });
 $('#sq-presets').append(sqPresets);
@@ -896,7 +900,6 @@ function finishSetup(view) {
   if (state.view === 'homodyne') takeSamples(0.5);   // something on the chart at once
 }
 
-const SQ6 = 0.69;       // 6.0 dB (and 1.15 is 10.0 dB)
 const setups = {
   // 1 · One mode
   vacuum: () => setup({ view: 'mode', kind: 'vacuum' }),
@@ -905,7 +908,7 @@ const setups = {
   // 2 · Squeezing
   squeezevac: () => setup({ view: 'squeeze', kind: 'vacuum', r: SQ6, psi: 0 }),
   phasesq: () => setup({ view: 'squeeze', kind: 'laser', alpha: 3, r: SQ6, psi: 90 }),
-  loss: () => setup({ view: 'squeeze', kind: 'vacuum', r: 1.15, psi: 0, eta: 0.5 }),
+  loss: () => setup({ view: 'squeeze', kind: 'vacuum', r: rFromDb(10), psi: 0, eta: 0.5 }),
   // 3 · Homodyne
   quadrature: () => setup({ view: 'homodyne', kind: 'laser', alpha: 2, theta: 0 }),
   scan: () => setup({ view: 'homodyne', kind: 'vacuum', r: SQ6, psi: 0, theta: 0, motor: 'scan', rate: 30 }),
@@ -933,6 +936,8 @@ window.addEventListener('hashchange', fromAddress);
 window.__app = {
   state, setups, anim, ready: true, setView, setRunning, setTheta, clearRecord,
   base: () => baseState(), signal: () => signalState(), turned: () => lastTurned,
+  /** The pixel (CSS, from the plane canvas's top left) of a point of the quadrature plane. */
+  pixelOf: (x1, x2) => [plane.X(x1), plane.Y(x2)],
   photons: () => { const p = photons(); return { P: Array.from(p.P.slice(0, 40)), mean: p.moments.mean, sd: p.moments.sd, nbar: p.nbar }; },
   trace: () => anim.trace.map((x) => [...x]),
   record: () => { const out = []; for (let k = 0; k < record.bins; k++) { const s = record.stats(k); if (s) out.push(s); } return out; },

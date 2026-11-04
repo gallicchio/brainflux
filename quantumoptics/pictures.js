@@ -105,7 +105,7 @@ export function drawSqueezer(ctx, w, h, p, c) {
  */
 export function drawHomodyne(ctx, w, h, p, c) {
   ctx.clearRect(0, 0, w, h);
-  const bx = w * 0.5, by = h * 0.52, s = Math.min(34, h * 0.12);
+  const top = 26, bx = w * 0.5, by = top + (h - top) * 0.5, s = Math.min(34, h * 0.12);
   // Beams: the signal from the left, the LO from below; outputs to the right and up.
   const lw = 2.5;
   ctx.save(); ctx.globalAlpha = 0.9;
@@ -114,8 +114,8 @@ export function drawHomodyne(ctx, w, h, p, c) {
   // After the beam splitter both outputs carry both beams: draw them two-coloured.
   arrow(ctx, bx + 14, by, w * 0.86, by, c.lo, 4, 9);
   arrow(ctx, bx + 14, by - 1.5, w * 0.86 - 4, by - 1.5, c.signal, 1.5, 0);
-  arrow(ctx, bx, by - 14, bx, h * 0.13, c.lo, 4, 9);
-  arrow(ctx, bx + 1.5, by - 14, bx + 1.5, h * 0.13 + 4, c.signal, 1.5, 0);
+  arrow(ctx, bx, by - 14, bx, top + 14, c.lo, 4, 9);
+  arrow(ctx, bx + 1.5, by - 14, bx + 1.5, top + 18, c.signal, 1.5, 0);
   ctx.restore();
   // The beam splitter: a square with its diagonal.
   ctx.save();
@@ -139,7 +139,7 @@ export function drawHomodyne(ctx, w, h, p, c) {
   ctx.save(); ctx.strokeStyle = c.lo; ctx.lineWidth = 2; const th = (p.theta * Math.PI) / 180;
   ctx.beginPath(); ctx.moveTo(bx, py); ctx.lineTo(bx + 7 * Math.cos(th), py - 7 * Math.sin(th)); ctx.stroke(); ctx.restore();
   // Photodiodes: half-disks facing the beams.
-  const d1 = [w * 0.88, by], d2 = [bx, h * 0.11];
+  const d1 = [w * 0.88, by], d2 = [bx, top + 11];
   for (const [x, yy, rot, name] of [[d1[0], d1[1], Math.PI / 2, 'D₁'], [d2[0], d2[1], Math.PI, 'D₂']]) {
     ctx.save(); ctx.translate(x, yy); ctx.rotate(rot);
     ctx.fillStyle = c.ink2; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI); ctx.closePath(); ctx.fill();
@@ -148,7 +148,7 @@ export function drawHomodyne(ctx, w, h, p, c) {
   text(ctx, 'D₁', d1[0] + 14, d1[1], c, { align: 'left', base: 'middle', font: F });
   text(ctx, 'D₂', d2[0] - 16, d2[1], c, { align: 'right', base: 'middle', font: F });
   // The subtraction: wires from both diodes to a circle.
-  const sx = w * 0.88, sy = h * 0.11;
+  const sx = w * 0.88, sy = top + 11;
   ctx.save(); ctx.strokeStyle = c.ink2; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(d1[0], d1[1] - 11); ctx.lineTo(d1[0], sy + 12); ctx.moveTo(d2[0] + 11, d2[1]); ctx.lineTo(sx - 12, sy); ctx.stroke();
   ctx.fillStyle = c.panel; ctx.beginPath(); ctx.arc(sx, sy, 11, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
@@ -163,8 +163,9 @@ export function drawHomodyne(ctx, w, h, p, c) {
  */
 export function drawLigo(ctx, w, h, p, c) {
   ctx.clearRect(0, 0, w, h);
-  const bx = w * 0.38, by = h * 0.47;
-  const xEnd = w * 0.95, yEnd = h * 0.08, yPd = h * 0.9;
+  const compact = w < 640;          // a phone: fewer words
+  const bx = w * (compact ? 0.42 : 0.38), by = h * 0.52;
+  const xEnd = w * 0.95, yEnd = 30, yPd = h * 0.92;
   // The beams.
   ctx.save(); ctx.strokeStyle = c.signal; ctx.lineWidth = 2; ctx.globalAlpha = 0.75;
   ctx.beginPath(); ctx.moveTo(w * 0.07, by); ctx.lineTo(bx, by); ctx.stroke();
@@ -176,10 +177,10 @@ export function drawLigo(ctx, w, h, p, c) {
   ctx.save(); ctx.strokeStyle = c.ink3; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
   ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, yPd - 12); ctx.stroke(); ctx.restore();
   // Laser, power-recycling mirror.
-  box(ctx, w * 0.02, by - 9, w * 0.05, 18, c, c.bsFill, c.ink2);
-  text(ctx, 'laser', w * 0.045, by + 12, c);
+  box(ctx, w * 0.02, by - 9, Math.max(22, w * 0.05), 18, c, c.bsFill, c.ink2);
+  text(ctx, 'laser', w * 0.02 + Math.max(11, w * 0.025), by + 12, c);
   ctx.save(); ctx.strokeStyle = c.ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(w * 0.2, by - 12); ctx.lineTo(w * 0.2, by + 12); ctx.stroke(); ctx.restore();
-  text(ctx, 'power recycling', w * 0.2, by + 15, c);
+  if (!compact) text(ctx, 'power recycling', w * 0.2, by - 15, c, { base: 'bottom' });
   // The beam splitter.
   ctx.save(); ctx.translate(bx, by); ctx.rotate(Math.PI / 4);
   ctx.fillStyle = c.bsFill; ctx.strokeStyle = c.ink2; ctx.lineWidth = 1.2;
@@ -191,23 +192,27 @@ export function drawLigo(ctx, w, h, p, c) {
     ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
   }
   ctx.restore();
-  text(ctx, `4 km arm cavity, ${(p.P / 1e3).toFixed(0)} kW`, (w * 0.47 + xEnd) / 2, by - 16, c, { base: 'bottom', color: c.ink });
-  text(ctx, '4 km', bx + 8, (yEnd + by) / 2, c, { align: 'left', base: 'middle', color: c.ink });
+  text(ctx, compact ? `4 km, ${(p.P / 1e3).toFixed(0)} kW` : `4 km arm cavity, ${(p.P / 1e3).toFixed(0)} kW`, (w * 0.47 + xEnd) / 2, by - 16, c, { base: 'bottom', color: c.ink });
+  // The second arm is as long; it is drawn foreshortened, with a break mark.
+  const ym = (yEnd + by - 24) / 2;
+  ctx.save(); ctx.strokeStyle = c.panel; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(bx - 8, ym + 4); ctx.lineTo(bx + 8, ym - 4); ctx.stroke();
+  ctx.strokeStyle = c.ink2; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(bx - 8, ym + 7); ctx.lineTo(bx + 8, ym - 1); ctx.moveTo(bx - 8, ym + 1); ctx.lineTo(bx + 8, ym - 7); ctx.stroke(); ctx.restore();
+  text(ctx, compact ? '4 km too' : '4 km too (foreshortened)', bx + 8, ym, c, { align: 'left', base: 'middle', color: c.ink });
   // Photodiode and the squeezer on the dark port.
   ctx.save(); ctx.translate(bx, yPd); ctx.rotate(Math.PI); ctx.fillStyle = c.ink2; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI); ctx.closePath(); ctx.fill(); ctx.restore();
   text(ctx, 'photodiode', bx + 16, yPd - 2, c, { align: 'left', base: 'middle' });
-  text(ctx, 'dark port: signal out', bx + 8, by + 22, c, { align: 'left', base: 'middle' });
+  if (!compact) text(ctx, 'dark port: signal out', bx + 8, by + 22, c, { align: 'left', base: 'middle' });
   const iy = h * 0.72;
   // The Faraday isolator: a circle on the dark-port path that lets the squeezed light in and the signal out.
   ctx.save(); ctx.fillStyle = c.panel; ctx.strokeStyle = c.ink2; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.arc(bx, iy, 10, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); ctx.restore();
-  text(ctx, 'isolator', bx + 14, iy, c, { align: 'left', base: 'middle' });
-  const s = Math.min(26, h * 0.12), ix = w * 0.19;
+  if (!compact) text(ctx, 'isolator', bx + 14, iy, c, { align: 'left', base: 'middle' });
+  const s = Math.min(26, h * 0.12), ix = compact ? w * 0.24 : w * 0.19;
   if (p.sq.on) {
     // OPO → (filter cavity) → isolator → up the dark port.
-    const ox = w * 0.07;
+    const ox = compact ? 24 : w * 0.07;
     box(ctx, ox - 18, iy - 10, 36, 20, c, c.crystal, c.ink2);
-    text(ctx, 'squeezer (OPO)', ox, iy + 13, c);
+    text(ctx, compact ? 'squeezer' : 'squeezer (OPO)', ox, iy + 13, c);
     arrow(ctx, ox + 18, iy, ix - s - 2, iy, c.sq, 2, 7);
     cloudIcon(ctx, ix, iy, s, p.inject, c, { fill: c.sqFill, label: `${p.sq.dB.toFixed(1)} dB squeezed` });
     if (p.sq.fd) {
@@ -215,15 +220,15 @@ export function drawLigo(ctx, w, h, p, c) {
       arrow(ctx, ix + s + 2, iy, fx - 22, iy, c.sq, 2, 7);
       box(ctx, fx - 22, iy - 7, 44, 14, c, c.bsFill, c.ink2);
       text(ctx, 'filter cavity', fx, iy - 10, c, { base: 'bottom' });
-      text(ctx, '300 m', fx, iy + 9, c);
+      if (!compact) text(ctx, '300 m', fx, iy + 9, c);
       arrow(ctx, fx + 22, iy, bx - 12, iy, c.sq, 2, 7);
     } else arrow(ctx, ix + s + 2, iy, bx - 12, iy, c.sq, 2, 7);
     arrow(ctx, bx, iy - 10, bx, by + 16, c.sq, 2, 7, [5, 3]);
-    text(ctx, 'squeezed vacuum in', bx - 14, (iy + by) / 2, c, { align: 'right', base: 'middle', color: c.sq });
+    if (!compact) text(ctx, 'squeezed vacuum in', bx - 14, (iy + by) / 2, c, { align: 'right', base: 'middle', color: c.sq });
   } else {
     cloudIcon(ctx, ix, iy, s, p.inject, c, { label: 'the vacuum' });
     arrow(ctx, ix + s + 2, iy, bx - 12, iy, c.ink3, 1.5, 7, [4, 3]);
     arrow(ctx, bx, iy - 10, bx, by + 16, c.ink3, 1.5, 7, [4, 3]);
-    text(ctx, 'the vacuum enters here', bx - 14, (iy + by) / 2, c, { align: 'right', base: 'middle', color: c.ink });
+    text(ctx, compact ? 'vacuum in' : 'the vacuum enters here', bx - 14, (iy + by) / 2, c, { align: 'right', base: 'middle', color: c.ink });
   }
 }

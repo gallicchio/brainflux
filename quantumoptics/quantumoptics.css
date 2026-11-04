@@ -48,9 +48,13 @@
 .qo[data-view="homodyne"] #hom-pair, .qo[data-view="homodyne"] #hom-pair2 { display: grid; }
 .qo[data-view="homodyne"] #apparatus-wrap, .qo[data-view="homodyne"] #plane-wrap { display: block; height: max(290px, calc(44vh - 40px)); }
 .qo[data-view="homodyne"] #strip-wrap, .qo[data-view="homodyne"] #variance-wrap { display: block; height: max(190px, calc(28vh - 20px)); }
-.qo[data-view="ligo"] #ligo-wrap { display: block; height: 230px; }
-.qo[data-view="ligo"] #sens-wrap { display: block; height: max(300px, calc(44vh - 40px)); }
-.qo[data-view="ligo"] #chirp-wrap { display: block; height: max(150px, calc(20vh - 20px)); }
+.qo[data-view="ligo"] #ligo-wrap { display: block; height: 210px; }
+.qo[data-view="ligo"] #sens-wrap { display: block; height: max(300px, calc(42vh - 40px)); }
+.qo[data-view="ligo"] #chirp-wrap { display: block; height: max(140px, calc(18vh - 20px)); }
+/* In the LIGO view the readout (the signal-to-noise ratio: the payoff) comes right after the hint. */
+.qo[data-view="ligo"] #readout { order: 1; }
+.qo[data-view="ligo"] #sens-wrap { order: 2; }
+.qo[data-view="ligo"] #chirp-wrap { order: 3; }
 /* The plane goes into the homodyne pair in that view (it is moved by the script). */
 
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; color: var(--ink-2); font-size: 12px; }

@@ -27,28 +27,28 @@
     <!-- 1 · One mode and 2 · Squeezing: the plane and the field -->
     <div class="pair" id="top-pair">
       <div class="plot-wrap" id="plane-wrap"><div class="cap" id="plane-cap"><b>The quadrature plane</b>, turning at ω (slowed)</div><canvas id="plane" tabindex="0" aria-label="The quadrature plane X1, X2 with the state's noise cloud (its Wigner function) turning at the light's frequency: drag the dot to set the mean field α"></canvas></div>
-      <div class="plot-wrap" id="trace-wrap"><div class="cap"><b>The field E(t)</b>: the cloud's shadow on the X₁ axis, one point of the cloud per period</div><canvas id="trace" aria-label="The field against time: the projection on X1 of a point drawn from the cloud as it turns, over the band of the cloud's noise"></canvas></div>
+      <div class="plot-wrap" id="trace-wrap"><div class="cap"><b>The field E(t)</b>: the cloud's shadow on the X₁ axis</div><canvas id="trace" aria-label="The field against time: the projection on X1 of a point drawn from the cloud as it turns, over the band of the cloud's noise"></canvas></div>
     </div>
     <div class="hint" id="hint-mode">Drag the dot in the plane to set the laser's field α: the wave on the right grows, its noise band does not</div>
     <div class="hint" id="hint-squeeze">Drag the <b>squeezing</b> slider and its <b>angle</b>: the cloud becomes an ellipse, and the wave's noise band breathes twice a period</div>
-    <div class="plot-wrap" id="photons-wrap"><div class="cap"><b>Photon numbers</b>: the chance P(n) of counting n photons in the mode</div><canvas id="photons" aria-label="The photon-number distribution of the state"></canvas></div>
+    <div class="plot-wrap" id="photons-wrap"><div class="cap"><b>Photon numbers</b>: the chance P(n) of counting n photons</div><canvas id="photons" aria-label="The photon-number distribution of the state"></canvas></div>
 
     <!-- 3 · Homodyne -->
     <div class="pair" id="hom-pair">
-      <div class="plot-wrap" id="apparatus-wrap"><div class="cap"><b>Homodyne detection</b>: the signal beats against a strong local oscillator</div><canvas id="apparatus" aria-label="The homodyne detector: the signal and the local oscillator meet on a 50:50 beam splitter, two photodiodes catch the outputs, and their photocurrents are subtracted"></canvas></div>
+      <div class="plot-wrap" id="apparatus-wrap"><div class="cap"><b>Homodyne detection</b>: the signal beats against a strong LO</div><canvas id="apparatus" aria-label="The homodyne detector: the signal and the local oscillator meet on a 50:50 beam splitter, two photodiodes catch the outputs, and their photocurrents are subtracted"></canvas></div>
       <div id="plane-slot"></div>
     </div>
     <div class="hint" id="hint-homodyne">Drag the yellow axis in the plane (or the <b>LO phase</b> slider) to choose the quadrature read; <b>Scan</b> turns it by motor</div>
     <div class="pair even" id="hom-pair2">
       <div class="plot-wrap" id="strip-wrap"><div class="cap"><b>The photocurrent</b> i₋ ∝ |α<sub>LO</sub>| X<sub>θ</sub>, sample by sample</div><canvas id="strip" aria-label="The difference photocurrent against time: samples of the quadrature X_theta with their mean and noise"></canvas></div>
-      <div class="plot-wrap" id="variance-wrap"><div class="cap"><b>Noise against the LO's phase</b>: measured (dots) and theory (line), 0 dB is the vacuum's</div><canvas id="variance" tabindex="0" aria-label="The variance of the photocurrent against the local oscillator's phase: the measured record and the theory curve; click to set the phase"></canvas></div>
+      <div class="plot-wrap" id="variance-wrap"><div class="cap"><b>Noise against the LO's phase</b>: measured (dots), theory (line)</div><canvas id="variance" tabindex="0" aria-label="The variance of the photocurrent against the local oscillator's phase: the measured record and the theory curve; click to set the phase"></canvas></div>
     </div>
 
     <!-- 4 · LIGO -->
-    <div class="plot-wrap" id="ligo-wrap"><div class="cap"><b>LIGO</b>: a Michelson with 4 km Fabry–Pérot arms; the dark port reads the arms' difference as a phase</div><canvas id="ligo" aria-label="The interferometer: laser, power-recycling mirror, beam splitter, two 4 km arm cavities, the dark port with its photodiode, and the squeezer that injects a squeezed vacuum into the dark port, through a filter cavity when the squeezing is frequency-dependent"></canvas></div>
-    <div class="hint" id="hint-ligo">Turn <b>Squeezed light</b> on and drag its <b>dB</b> slider: the quantum noise (blue) moves and the total (black) follows; the chirp's signal-to-noise ratio is the number at the bottom</div>
-    <div class="plot-wrap" id="sens-wrap"><div class="cap"><b>Strain sensitivity</b> √S<sub>h</sub>(f), the smallest strain seen in 1 Hz of bandwidth</div><canvas id="sens" aria-label="The strain noise amplitude spectral density against frequency: shot noise, radiation pressure, their sum, the standard quantum limit, the seismic wall, thermal noise and the total, with and without squeezing, and the chirp's spectrum"></canvas></div>
-    <div class="plot-wrap" id="chirp-wrap"><div class="cap"><b>The signal</b> h(t): a binary's chirp, face on and overhead</div><canvas id="chirp" aria-label="The gravitational-wave strain against time for the chosen binary: the Newtonian chirp up to the innermost stable orbit"></canvas></div>
+    <div class="plot-wrap" id="ligo-wrap"><div class="cap"><b>LIGO</b>: a Michelson with 4 km Fabry–Pérot arms</div><canvas id="ligo" aria-label="The interferometer: laser, power-recycling mirror, beam splitter, two 4 km arm cavities, the dark port with its photodiode, and the squeezer that injects a squeezed vacuum into the dark port, through a filter cavity when the squeezing is frequency-dependent"></canvas></div>
+    <div class="hint" id="hint-ligo">Turn <b>Squeezed light</b> on and drag its <b>dB</b> slider: the quantum noise moves, the total follows, and the chirp's signal-to-noise ratio ρ (below) grows</div>
+    <div class="plot-wrap" id="sens-wrap"><div class="cap"><b>Strain sensitivity</b> √S<sub>h</sub>(f): the least strain seen in 1 Hz</div><canvas id="sens" aria-label="The strain noise amplitude spectral density against frequency: shot noise, radiation pressure, their sum, the standard quantum limit, the seismic wall, thermal noise and the total, with and without squeezing, and the chirp's spectrum"></canvas></div>
+    <div class="plot-wrap" id="chirp-wrap"><div class="cap"><b>The signal</b> h(t): a binary's chirp</div><canvas id="chirp" aria-label="The gravitational-wave strain against time for the chosen binary: the Newtonian chirp up to the innermost stable orbit"></canvas></div>
 
     <div class="legend small" id="legend"></div>
     <div class="readout small" id="readout" aria-live="off"></div>
@@ -166,7 +166,7 @@
     of whatever comes in and de-amplifies the other, and here nothing comes in but the vacuum.
     Out comes the <em>squeezed vacuum</em>: the circle has become an ellipse,
     $\Delta X_1=e^{-r}/2=0.250$ along the squeezed direction and $\Delta X_2=e^{r}/2=1.000$
-    across it, with $r=0.693$, and the product still $\tfrac14$: squeezing moves the uncertainty,
+    across it, with $r=\ln2=0.693$, and the product still $\tfrac14$: squeezing moves the uncertainty,
     it does not remove it.  In decibels, $10\log_{10}e^{2r}=6.0$ dB: the squeezed quadrature's
     noise power is a quarter of the vacuum's.  The field on the right still has zero mean, but
     its noise band breathes twice per period, narrow when the thin side of the ellipse faces the
@@ -199,7 +199,7 @@
     $$V=\eta\,e^{-2r}+1-\eta=0.55,$$
     only 2.6 dB of squeezing left.  The rule: the squeezing you measure can never beat the loss,
     $-10\log_{10}(1-\eta)=3.0$ dB for $\eta=0.5$, however hard the crystal is pumped (drag $r$ to
-    1.5: still only 2.9 dB).  That is why squeezers, their photodiodes and LIGO's optics are built
+    1.5: still only 2.8 dB).  That is why squeezers, their photodiodes and LIGO's optics are built
     for every last per cent of efficiency.  Loss also breaks the pairs: odd photon numbers appear
     in the bar chart.</p>
   </article>
@@ -228,7 +228,7 @@
     which dips below the vacuum's 0 dB to $-6.0$ dB and rises to $+6.0$ dB.  This is the trace
     by which squeezed light was first recognised (Slusher et al. 1985; Wu, Kimble, Hall and Wu
     1986): noise below the shot-noise level, in one direction only.  Add loss ($\eta=0.5$ in the
-    signal panel): the dips fill in to $-2.6$ dB.</p>
+    signal panel): the dips fill in to $-2.0$ dB.</p>
   </article>
 
   <article class="exp" data-setup="phaseshift">
@@ -301,7 +301,7 @@
     different amounts.  With the angle following the readout's own combination at every
     frequency, the whole quantum-noise curve drops by the full factor: 10 dB everywhere,
     radiation pressure included.  LIGO and Virgo installed filter cavities for their fourth
-    observing run (2023).  Turn the loss up to a realistic 20%: the gain is 5.2 dB at high
+    observing run (2023).  Turn the loss up to a realistic 20%: the gain is 5.5 dB at high
     frequency, and still a gain at low.</p>
   </article>
 
@@ -313,10 +313,10 @@
     Its spectrum is the green band on the sensitivity plot, falling as $f^{-7/6}$; the
     signal-to-noise ratio a matched filter achieves is the area between it and the noise,
     $\rho^2=4\int|\tilde h(f)|^2/S_n(f)\,df$.  Without squeezing $\rho=72$; with 6 dB of
-    frequency-dependent squeezing through 20% loss, $\rho=89$: the same event 1.24 times as loud,
-    or heard 1.24 times as far, which is a volume of space 1.9 times as big, that many times
-    more events a year.  Drag the distance out until $\rho$ falls to 8, the usual threshold:
-    about 360 Mpc without squeezing, 440 Mpc with.  Try the two black holes: heavier, so
+    frequency-dependent squeezing through 20% loss, $\rho=104$: the same event 1.44 times as
+    loud, or heard 1.44 times as far, which is a volume of space 3.0 times as big, that many
+    times more events a year.  Drag the distance out until $\rho$ falls to 8, the usual
+    threshold: 360 Mpc without squeezing, 520 Mpc with.  Try the two black holes: heavier, so
     louder, and over in 6 s from 20 Hz.</p>
   </article>
 
