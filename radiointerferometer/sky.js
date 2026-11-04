@@ -34,10 +34,11 @@ export const ANGLE = { deg: [DEG, '°'], arcmin: [DEG / 60, '′'], arcsec: [DEG
  * except for the near field, where the sources sit at a finite height z.
  */
 export const UNITS = {
-  bench: { label: 'Lab bench', nu0: 915e6, len: 'm', lenScale: 1, angle: 'deg', fov: 1.0, uvMax: 12, pointScale: 0.3, nearField: false },
-  benchNear: { label: 'Lab bench, near field', nu0: 915e6, len: 'm', lenScale: 1, angle: 'deg', fov: 1.0, uvMax: 12, pointScale: 3, z: 5, nearField: true },
-  vla: { label: 'VLA', nu0: 5e9, len: 'km', lenScale: 1e3, angle: 'arcsec', fov: 20 * ANGLE.arcsec[0], uvMax: 36e3, pointScale: 5 * ANGLE.arcsec[0], nearField: false },
-  eht: { label: 'EHT', nu0: 230e9, len: 'km', lenScale: 1e3, angle: 'uas', fov: 256 * ANGLE.uas[0], uvMax: 13e6, pointScale: 50 * ANGLE.uas[0], nearField: false },
+  bench: { label: 'Lab bench', title: 'The lab: 915 MHz (λ = 32.8 cm), antennas a few metres apart, sources far away', nu0: 915e6, len: 'm', lenScale: 1, angle: 'deg', fov: 1.0, uvMax: 6, pointScale: 0.15, nearField: false },
+  benchNear: { label: 'Lab bench, near field', title: 'The lab notebook: the sources 5 m above the antennas and 3 m from the axis, with the exact distances', nu0: 915e6, len: 'm', lenScale: 1, angle: 'deg', fov: 1.25, uvMax: 4, pointScale: 3, z: 5, nearField: true },
+  vla: { label: 'VLA', title: 'The Very Large Array: 5 GHz (λ = 6 cm), baselines of kilometres, a sky of arcseconds', nu0: 5e9, len: 'km', lenScale: 1e3, angle: 'arcsec', fov: 20 * ANGLE.arcsec[0], uvMax: 36e3, pointScale: 5 * ANGLE.arcsec[0], nearField: false },
+  // (The ring picture is 0.216 of the field across: 42 µas, as M87*'s, in a field of 194 µas.)
+  eht: { label: 'EHT', title: 'The Event Horizon Telescope: 230 GHz (λ = 1.3 mm), baselines across the Earth, a sky of microarcseconds', nu0: 230e9, len: 'km', lenScale: 1e3, angle: 'uas', fov: 194 * ANGLE.uas[0], uvMax: 13e6, pointScale: 40 * ANGLE.uas[0], nearField: false },
 };
 export const wavelength = (nu0) => C / nu0;
 
@@ -59,7 +60,8 @@ export function angleFrom(units, a) {
  * notebook's pentagon turned by 10°, with a point at the top as there.
  */
 export const POINT_PRESETS = {
-  one: { label: 'One', title: 'A single point source: its correlation has one magnitude everywhere and a phase that winds with the baseline', points: [[0, 0, 1]] },
+  one: { label: 'One', title: 'A single point source straight up: the same correlation at every separation', points: [[0, 0, 1]] },
+  offset: { label: 'One, off-centre', title: 'A single point source off to one side: the size of its correlation is the same everywhere, and its phase winds with the separation', points: [[0.75, 0.4, 1]] },
   binary: { label: 'Binary', title: 'Two points of unequal brightness: the correlation beats as the baseline grows', points: [[-0.5, 0, 1], [0.5, 0, 0.6]] },
   line: { label: 'Line of 4', title: 'Four points in a line, as in the lab', points: [[-0.75, 0, 1], [-0.25, 0, 1], [0.25, 0, 1], [0.75, 0, 1]] },
   triangle: { label: 'Triangle', title: 'An equilateral triangle, point up', points: ring(3, 0) },
@@ -224,18 +226,32 @@ export function idealAt(model, pix, directions, u, v) {
 }
 
 /**
- * V of point sources at display resolution: w x h pixels covering u in [−umax, umax] and v
- * likewise (v up), into re, im (w*h).  For pictures the grid is sampled (nearest cell) instead.
+ * V at display resolution: w x h pixels covering u in [−umax, umax] and v likewise (v up), into
+ * re, im (w*h), exactly: the closed form for points; for a picture, its direct transform, done
+ * separably (each row of the picture against every u, then every v): NS²w + NS w h products.
  */
 export function idealWindow(model, pix, directions, grid, umax, w, h, re, im) {
   re.fill(0); im.fill(0);
   if (model.kind === 'picture') {
-    const du = grid.du, hN = N / 2;
+    const sky = model.sky, hS = NS / 2;
+    // Row transforms: R[j][x] = Σ_i I(i, j) e^{−2πi u_x l_i}.
+    const Rr = new Float64Array(NS * w), Ri = new Float64Array(NS * w), cs = new Float64Array(NS), sn = new Float64Array(NS);
+    for (let x = 0; x < w; x++) {
+      const u = ((x + 0.5 - w / 2) / w) * 2 * umax;
+      for (let i = 0; i < NS; i++) { const a = -TWO_PI * u * (i - hS) * pix; cs[i] = Math.cos(a); sn[i] = Math.sin(a); }
+      for (let j = 0; j < NS; j++) {
+        let sr = 0, si = 0;
+        const row = j * NS;
+        for (let i = 0; i < NS; i++) { const I = sky[row + i]; if (I) { sr += I * cs[i]; si += I * sn[i]; } }
+        Rr[j * w + x] = sr; Ri[j * w + x] = si;
+      }
+    }
+    // Then V(u_x, v_y) = Σ_j R[j][x] e^{−2πi v_y m_j}, m_j = (NS/2 − j) pix.
     for (let y = 0; y < h; y++) {
-      const v = ((h / 2 - y - 0.5) / h) * 2 * umax, q = Math.round(hN - v / du);
-      for (let x = 0; x < w; x++) {
-        const u = ((x + 0.5 - w / 2) / w) * 2 * umax, p = Math.round(hN + u / du);
-        if (p >= 0 && p < N && q >= 0 && q < N) { re[y * w + x] = grid.re[q * N + p]; im[y * w + x] = grid.im[q * N + p]; }
+      const v = ((h / 2 - y - 0.5) / h) * 2 * umax, row = y * w;
+      for (let j = 0; j < NS; j++) {
+        const a = -TWO_PI * v * (hS - j) * pix, c = Math.cos(a), s = Math.sin(a), o = j * w;
+        for (let x = 0; x < w; x++) { const pr = Rr[o + x], pi = Ri[o + x]; re[row + x] += pr * c - pi * s; im[row + x] += pr * s + pi * c; }
       }
     }
     return;

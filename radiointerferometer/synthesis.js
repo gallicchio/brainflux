@@ -319,11 +319,14 @@ export const EHT_SITES = [
 ];
 export const EHT_CENTRE = { lat: 10, lon: -70 };
 
+/** The slides' "few antennas, many baselines": eight dishes on a line with gaps 8 10 1 3 2 7 8,
+ *  whose 28 pairs measure every spacing from 1 to 24 units (and 31 and 39). */
+export const LINE_MARKS = [0, 8, 18, 19, 22, 24, 31, 39];
+
 /**
  * Preset layouts, as [east, north] metres (and names for the EHT).
- *   two    two dishes about 630 m apart
- *   line   eight dishes on an east-west line at the marks of a Golomb ruler (0 1 4 9 15 22 32
- *          34): every one of the 28 spacings is different
+ *   two    two dishes `arm` apart
+ *   line   eight dishes on an east-west line at LINE_MARKS, `unit` metres to a mark
  *   y      a Y like the Very Large Array: 9 dishes on each of three arms at azimuths 355, 115
  *          and 235 degrees, at distances growing as (k + 1/2)^1.716 out to `arm` metres (arm
  *          600 m is about the VLA's D configuration, 1950 m its C, 6400 m B, 21 km A)
@@ -333,7 +336,7 @@ export const EHT_CENTRE = { lat: 10, lon: -70 };
  */
 export function layout(kind, { arm = 1950, unit = 72, n = 8, seed = 1 } = {}) {
   if (kind === 'two') return { dishes: [[-arm / 2, 0], [arm / 2, 0]] };
-  if (kind === 'line') return { dishes: [0, 1, 4, 9, 15, 22, 32, 34].map((m) => [(m - 17) * unit, 0]) };
+  if (kind === 'line') return { dishes: LINE_MARKS.map((m) => [(m - 19.5) * unit, 0]) };
   if (kind === 'ring') return { dishes: Array.from({ length: n }, (_, k) => [arm * Math.sin((2 * Math.PI * k) / n), arm * Math.cos((2 * Math.PI * k) / n)]) };
   if (kind === 'random') {
     let s = seed * 7919 + 13;

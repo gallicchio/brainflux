@@ -1,39 +1,44 @@
-// The simulation underneath every view: sources of noise, two receivers, a correlator.
+// The correlator's simulation, underneath every view: sources of noise, two receivers, a
+// correlator.
 //
 // Every source k emits its own complex Gaussian noise s_k(t), independent of every other
 // source (incoherent), band-limited to a width Δν around the carrier ν₀.  We work at baseband,
-// with the complex envelope: the real voltage is x(t) = Re[s(t) e^{2πiν₀t}], and a delay τ of
-// the real signal is the envelope shifted by τ times the phase factor e^{−2πiν₀τ}.  Each
-// receiver j gets v_j(t) = Σ_k a_jk s_k(t − τ_jk) + n_j(t), with the geometric delay τ_jk from
-// the geometry and its own noise n_j.  The correlator forms, per chunk of M samples,
+// with the complex envelope: the real voltage is x(t) = √2 Re[s(t) e^{2πiν₀t}] (the √2 makes
+// ⟨x²⟩ = ⟨|s|²⟩, the source's brightness I, as the handout's I = V²/2 for a sine of amplitude V),
+// and a delay τ of the real signal is the envelope shifted by τ times the phase e^{−2πiν₀τ}.
+// Receiver j gets v_j(t) = Σ_k a_jk s_k(t − τ_jk) + n_j(t), with the geometric delay τ_jk and its
+// own noise n_j.  The correlator forms, per chunk of M samples,
 //
 //     c = ⟨v_A v_B*⟩     (receiver A times the conjugate of B, at zero lag)
 //
 // and with the baseline (u, v) = (r_B − r_A)/λ pointing from A to B this converges to
-// V(u, v) = Σ_k I_k e^{−2πi(u l_k + v m_k)}: the sky's Fourier transform with the textbook
-// sign.  (The lab notebook conjugates A instead and gets e^{+2πi...}; nothing physical changes.)
+// V(u, v) = Σ_k I_k e^{−2πi(u l_k + v m_k)}: the sky's Fourier transform with the textbook sign.
+// Its real part is ⟨x_A x_B⟩, the average of the product of the two real voltages (the
+// handout's correlation); its imaginary part is the same with B a quarter cycle later.  (The lab
+// notebook conjugates A instead and gets e^{+2πi...}; nothing physical changes.)
 //
 // Units inside: times in carrier cycles, positions in wavelengths (u = x/λ), directions as
 // direction cosines (l, m).  The envelope is sampled twice per cycle (dt = 1/2ν₀), so a chunk
-// of M = 1024 samples is 512 cycles and the baseband spans −ν₀..ν₀: "white" noise fills it,
-// and the real signal then has a flat spectrum from 0 to 2ν₀.  Bandwidths are fractions β = Δν/ν₀.
+// of M = 1024 samples is 512 cycles, and its frequency bins are 1/512 cycles⁻¹ apart across
+// −ν₀..ν₀: "white" fills them, and the real signal then has a flat spectrum from 0 to 2ν₀.
+// Bandwidths are fractions β = Δν/ν₀; the band is the 2h + 1 bins nearest the carrier, so
+// that it is symmetric and the autocorrelation is real.
 //
 // Everything is made in the frequency domain: a white Gaussian process has white Gaussian
 // Fourier coefficients, so each source is a vector of Gaussian bins inside its band, a delay is
 // a phase ramp e^{−2πi(ν₀ + f)τ} across the bins (an honest shift of the envelope, so that with
 // a wide band and a long baseline the envelopes stop overlapping and the correlation really
-// dies), and the receivers' spectra, the cross-spectrum and the correlations against lag come
-// out with a few FFTs per chunk.
+// dies), and the spectra, the cross-spectrum and the correlations against lag come out of the
+// same bins.  The time streams the page shows are made by display.js, slowed down.
 
 import { ifft } from '../lib/fft.js';
 
 export const M = 1024;           // samples per chunk
-export const UP = 4;             // upsampling of the displayed time streams (8 points per cycle)
-export const HISTORY = 100;      // chunk averages kept for the complex-plane scatter
-const CYCLES = M / 2;            // cycles per chunk
+export const CYCLES = M / 2;     // cycles per chunk
+export const HISTORY = 100;      // chunk correlations kept for the complex-plane scatter
 const TWO_PI = 2 * Math.PI;
 
-/** sin(πx)/(πx): the coherence envelope of a flat band (its autocorrelation). */
+/** sin(πx)/(πx): the coherence envelope of a flat band (its autocorrelation, for wide bands). */
 export function sinc(x) { return x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x); }
 
 /** Standard normal pairs by Box–Muller, with a replaceable uniform source (the tests seed it). */
@@ -62,14 +67,21 @@ class Gaussians {
   draw() { return this.table[(this.random() * TABLE) | 0]; }
 }
 
+/** The half-width h of a band of fractional width β on a grid of `cycles` cycles: the band is
+ *  the 2h + 1 bins |q| ≤ h, 1/cycles apart, so its width is (2h + 1)/cycles. */
+export function bandHalf(band, cycles) { return Math.max(1, Math.min(cycles - 1, Math.round((band * cycles - 1) / 2))); }
+
+/** Bins of a chunk as baseband frequencies (ν − ν₀)/ν₀, from FFT index b. */
+export function binFrequency(b) { return (b < M / 2 ? b : b - M) / CYCLES; }
+
 export class Simulation {
   constructor() {
     this.random = Math.random;
-    this.band = 0.1;            // Δν/ν₀
+    this.band = 0.1;            // Δν/ν₀ asked for (the band made is bandwidth(), the nearest odd number of bins)
     this.noise = 0.5;           // each receiver's own noise power (a source of brightness 1 has power 1)
     this.alpha = 0.05;          // the running average: avg += α (chunk − avg)
     this.tracking = true;       // the electronic delay towards the phase centre (and fringe stopping)
-    this.coherent = false;      // every source fed the same noise, with a relative phase step
+    this.coherent = false;      // every source fed the same noise, with a phase step between them
     this.coherentPhase = 0;     // radians between successive sources
     this.hbt = false;           // correlate intensities instead of voltages
     this.nearField = false;     // exact distances (sources at z) instead of plane waves
@@ -77,34 +89,30 @@ export class Simulation {
     this.pointing = { l: 0, m: 0 };      // the phase centre's direction cosines from the zenith
     this.sources = [{ l: 0, m: 0, I: 1 }];   // {l, m, I} far field; {x, y, z, I} (metres) near field
     this.receivers = [{ u: -2, v: 0 }, { u: 2, v: 0 }];   // positions in wavelengths
-    this.streams = 2;           // how many sources' own time streams to make for display
+    this.gains = null;          // optional [[A's gain for each source], [B's]]: amplitudes (1 if absent)
     this.chunks = 0;
     this.alloc();
     this.reset();
   }
 
   alloc() {
-    const n = M, nu = M * UP;
+    const n = M;
     this.VA = [new Float64Array(n), new Float64Array(n)];   // receivers' spectra (FFT order), this chunk
     this.VB = [new Float64Array(n), new Float64Array(n)];
+    this.tA = [new Float64Array(n), new Float64Array(n)];   // and time samples (for the intensities)
+    this.tB = [new Float64Array(n), new Float64Array(n)];
     this.partA = []; this.partB = [];                        // each source's own term at each receiver
     for (let k = 0; k < 8; k++) { this.partA.push([new Float64Array(n), new Float64Array(n)]); this.partB.push([new Float64Array(n), new Float64Array(n)]); }
     this.gRe = new Float64Array(n); this.gIm = new Float64Array(n); this.hRe = new Float64Array(n); this.hIm = new Float64Array(n);
-    this.srcSpec = [];                                      // the displayed sources' spectra
-    this.srcTime = [];                                      // and time streams (upsampled)
-    this.fineA = [new Float64Array(nu), new Float64Array(nu)];   // upsampled time streams for display
-    this.fineB = [new Float64Array(nu), new Float64Array(nu)];
     this.specAA = new Float64Array(n);                      // averaged auto-spectra (FFT order)
     this.specBB = new Float64Array(n);
-    this.specAB = [new Float64Array(n), new Float64Array(n)];   // averaged cross-spectrum
+    this.specAB = [new Float64Array(n), new Float64Array(n)];   // averaged cross-spectrum A·B*
     this.lagAA = null; this.lagBB = null; this.lagAB = null;  // correlations against lag, on the grid asked for
     this.history = [];                                      // the last HISTORY chunk correlations [re, im]
     this.bins = new Int32Array(n);
-    this.cos8 = Float64Array.from({ length: 2 * UP }, (_, i) => Math.cos((TWO_PI * i) / (2 * UP)));
-    this.sin8 = Float64Array.from({ length: 2 * UP }, (_, i) => Math.sin((TWO_PI * i) / (2 * UP)));
   }
 
-  /** Forget the averages (after the geometry or the band changes a lot). */
+  /** Forget the averages (after the band or the sources change). */
   reset() {
     this.avg = [0, 0];                 // the running average of the zero-lag correlation
     this.avgHbt = 0;                   // and of the intensity correlation
@@ -115,38 +123,57 @@ export class Simulation {
     this.specAA.fill(0); this.specBB.fill(0); this.specAB[0].fill(0); this.specAB[1].fill(0);
     this.history.length = 0;
     this.settled = 0;                  // chunks since the reset (the averages warm up over 1/α)
+    this.lagsStale = true;
   }
 
-  /** The chunk's frequency bins inside the band: FFT index b holds the baseband frequency
-   *  f/ν₀ = 2q/M with q = b < M/2 ? b : b − M.  Returns the count. */
+  /** The chunk's frequency bins inside the band, |q| ≤ h, into this.bins (FFT index order).
+   *  Returns the count, 2h + 1. */
   bandBins() {
-    const half = Math.max(1, Math.round((this.band * M) / 4));   // bins on each side of 0: β M/4
+    const h = bandHalf(this.band, CYCLES);
     let n = 0;
-    for (let q = -half; q < half; q++) this.bins[n++] = q < 0 ? q + M : q;
+    for (let q = -h; q <= h; q++) this.bins[n++] = q < 0 ? q + M : q;
     return n;
   }
 
-  /** The delay of source k's wavefront at receiver j, in carrier cycles (positive: later), and
-   *  the amplitude factor.  Far field: τ = −(u_j l_k + v_j m_k) (the receiver nearer the source
-   *  hears it first).  Near field: the exact distance, less the source's height. */
-  delay(j, k) {
-    const r = this.receivers[j], s = this.sources[k];
+  /** The band actually made, as a fraction of ν₀: (2h + 1)/512. */
+  bandwidth() { return (2 * bandHalf(this.band, CYCLES) + 1) / CYCLES; }
+
+  /** The coherence of the band at a delay of d cycles: ⟨s(t) s*(t + d)⟩/⟨|s|²⟩, the Dirichlet
+   *  kernel of the band's bins (≈ sinc(Δν d)).  Delays beyond half a chunk get fresh noise. */
+  coherence(d) {
+    if (Math.abs(d) > CYCLES / 2) return 0;
+    const nb = 2 * bandHalf(this.band, CYCLES) + 1, x = (Math.PI * d) / CYCLES;
+    const s = Math.sin(x);
+    return Math.abs(s) < 1e-12 ? 1 : Math.sin(nb * x) / (nb * s);
+  }
+
+  /** The delay of source k's wavefront at a receiver at r = {u, v} (wavelengths), in carrier
+   *  cycles (positive: later), and the amplitude factor.  Far field: τ = −(u l_k + v m_k) (the
+   *  receiver nearer the source hears it first).  Near field: the exact distance, less the
+   *  source's height, and the amplitude z/R, as in the lab notebook. */
+  delayAt(r, k) {
+    const s = this.sources[k];
     if (this.nearField && s.z !== undefined) {
       const L = this.lambda, x = r.u * L, y = r.v * L;
       const R = Math.hypot(x - s.x, y - s.y, s.z);
       return [(R - s.z) / L, s.z / R];
     }
-    return [-(r.u * s.l + r.v * s.m), 1];
+    const [l, m] = this.direction(k);
+    return [-(r.u * l + r.v * m), 1];
   }
+  delay(j, k) { return this.delayAt(this.receivers[j], k); }
 
-  /** The delay the correlator takes out of receiver j: towards the phase centre. */
-  trackDelay(j) {
+  /** The delay the correlator takes out of a receiver at r: towards the phase centre. */
+  trackAt(r) {
     if (!this.tracking) return 0;
-    const r = this.receivers[j], p = this.pointing;
+    const p = this.pointing;
     return -(r.u * p.l + r.v * p.m);
   }
+  trackDelay(j) { return this.trackAt(this.receivers[j]); }
 
-  /** Direction cosines of source k as the far-field picture shows it (from the ground's origin). */
+  gain(j, k) { return this.gains ? (this.gains[j][k] ?? 1) : 1; }
+
+  /** Direction cosines of source k (near-field sources from where they are). */
   direction(k) {
     const s = this.sources[k];
     if (s.z !== undefined && s.l === undefined) { const R = Math.hypot(s.x, s.y, s.z); return [s.x / R, s.y / R]; }
@@ -163,30 +190,38 @@ export class Simulation {
     return [re, im];
   }
 
-  /** What the correlator should converge to with this band, delay tracking, geometry and
-   *  coherence: Σ_k I_k a_Ak a_Bk γ(β Δτ_k) e^{−2πi(τ_Bk − τ_Ak)} (incoherent), where Δτ is the
-   *  residual delay after tracking and γ the band's coherence envelope; for coherent sources
-   *  the double sum over pairs, which depends on where the pair sits. */
-  expected() {
-    const K = this.sources.length, tA = this.trackDelay(0), tB = this.trackDelay(1);
+  /**
+   * What the correlator converges to for receivers at rA and rB (receiver indices jA, jB for the
+   * gains), with this band, delay tracking, geometry and coherence:
+   *     Σ_k I_k a_Ak a_Bk γ(Δτ_k) e^{−2πi(τ'_Ak − τ'_Bk)}        (incoherent sources)
+   * where τ' is the delay left after the electronic delay, Δτ = τ'_Ak − τ'_Bk and γ the band's
+   * coherence; for coherent sources the double sum over pairs of sources, which depends on where
+   * the pair sits and not only on its separation.  With rA = rB it is the power the receiver
+   * gets from the sources (add the receiver's noise for its total power).  only ≥ 0: that one
+   * source's share alone.
+   */
+  expectedAt(rA, rB, jA = 0, jB = 1, only = -1) {
+    const K = this.sources.length, tA = this.trackAt(rA), tB = this.trackAt(rB);
     const dA = [], dB = [];
-    for (let k = 0; k < K; k++) { dA.push(this.delay(0, k)); dB.push(this.delay(1, k)); }
+    for (let k = 0; k < K; k++) { dA.push(this.delayAt(rA, k)); dB.push(this.delayAt(rB, k)); }
     let re = 0, im = 0;
     const term = (k, kk) => {
-      // ⟨(a_Ak e^{−2πiτ_Ak} s_k) (a_Bkk e^{−2πiτ_Bkk} s_kk)*⟩ with the envelopes shifted.
-      const dt = (dB[kk][0] - tB) - (dA[k][0] - tA);     // B's envelope lags A's by this (cycles)
-      const g = sinc(this.band * dt);
-      const amp = Math.sqrt(this.sources[k].I * this.sources[kk].I) * dA[k][1] * dB[kk][1] * g;
-      let ph = -TWO_PI * ((dA[k][0] - tA) - (dB[kk][0] - tB));
+      const a = dA[k][0] - tA, b = dB[kk][0] - tB;
+      const amp = Math.sqrt(this.sources[k].I * this.sources[kk].I) * dA[k][1] * dB[kk][1] * this.gain(jA, k) * this.gain(jB, kk) * this.coherence(a - b);
+      let ph = -TWO_PI * (a - b);
       if (this.coherent) ph += this.coherentPhase * (k - kk);
       re += amp * Math.cos(ph); im += amp * Math.sin(ph);
     };
     for (let k = 0; k < K; k++) {
-      if (this.coherent) for (let kk = 0; kk < K; kk++) term(k, kk);
+      if (only >= 0 && k !== only) continue;
+      if (this.coherent && only < 0) for (let kk = 0; kk < K; kk++) term(k, kk);
       else term(k, k);
     }
     return [re, im];
   }
+  expected() { return this.expectedAt(this.receivers[0], this.receivers[1]); }
+  /** The power a receiver at r (index j) gets: the sources' share and its own noise. */
+  powerAt(r, j = 0) { return this.expectedAt(r, r, j, j)[0] + this.noise; }
 
   /** The baseline (u, v) = (r_B − r_A)/λ. */
   baseline() { return [this.receivers[1].u - this.receivers[0].u, this.receivers[1].v - this.receivers[0].v]; }
@@ -196,11 +231,9 @@ export class Simulation {
     const K = this.sources.length, n = M, nb = this.bandBins(), bins = this.bins;
     const VA = this.VA, VB = this.VB;
     VA[0].fill(0); VA[1].fill(0); VB[0].fill(0); VB[1].fill(0);
-    const tA = this.trackDelay(0), tB = this.trackDelay(1);
-    // Per-source terms at each receiver, for the self/cross decomposition (small K only).
+    const rA = this.receivers[0], rB = this.receivers[1], tA = this.trackAt(rA), tB = this.trackAt(rB);
+    // Each source's own terms at each receiver, for the self/cross decomposition (few sources only).
     const decompose = K <= 8 && !this.coherent;
-    const streams = Math.min(this.streams, K);
-    while (this.srcSpec.length < streams) { this.srcSpec.push([new Float64Array(n), new Float64Array(n)]); this.srcTime.push([new Float64Array(n * UP), new Float64Array(n * UP)]); }
     if (!this.gauss || this.gauss.random !== this.random) this.gauss = new Gaussians(this.random);
     const G = this.gauss;
     G.refresh();
@@ -217,10 +250,10 @@ export class Simulation {
       } else {
         for (let i = 0; i < nb; i++) { gRe[i] = a * G.draw(); gIm[i] = a * G.draw(); }
       }
-      if (k < streams) { const S = this.srcSpec[k]; S[0].fill(0); S[1].fill(0); for (let i = 0; i < nb; i++) { S[0][bins[i]] = gRe[i]; S[1][bins[i]] = gIm[i]; } }
       // Receiver A: the carrier phase of its delay; B: the carrier phase and the envelope shifted
       // by the delay relative to A (only differences matter), less what the correlator tracks out.
-      const [dA, aA] = this.delay(0, k), [dB, aB] = this.delay(1, k);
+      const [dA, aA0] = this.delayAt(rA, k), [dB, aB0] = this.delayAt(rB, k);
+      const aA = aA0 * this.gain(0, k), aB = aB0 * this.gain(1, k);
       const rel = (dB - tB) - (dA - tA);
       let src = [gRe, gIm];
       if (Math.abs(rel) > CYCLES / 2) {
@@ -231,8 +264,8 @@ export class Simulation {
       }
       const phA = -TWO_PI * (dA - tA), cA = aA * Math.cos(phA), sA = aA * Math.sin(phA);
       const phB = -TWO_PI * (dB - tB), cB = aB * Math.cos(phB), sB = aB * Math.sin(phB);
-      // The envelope shift: e^{−2πi (2q/M) rel} across the bins, by a running twiddle.
-      const dth = -TWO_PI * 2 * rel / n, wc = Math.cos(dth), ws = Math.sin(dth);
+      // The envelope shift: e^{−2πi f rel} across the bins (f = q/512 cycles⁻¹), by a running twiddle.
+      const dth = (-TWO_PI * rel) / CYCLES, wc = Math.cos(dth), ws = Math.sin(dth);
       const q0 = bins[0] >= n / 2 ? bins[0] - n : bins[0];
       let tr = Math.cos(dth * q0), ti = Math.sin(dth * q0);
       const pa = decompose ? this.partA[k] : null, pb = decompose ? this.partB[k] : null;
@@ -256,7 +289,7 @@ export class Simulation {
       VA[0][b] += sn * G.draw(); VA[1][b] += sn * G.draw();
       VB[0][b] += sn * G.draw(); VB[1][b] += sn * G.draw();
     }
-    // The correlator, in the frequency domain: ⟨v_A v_B*⟩ = (1/M²) Σ V_A V_B*.
+    // The correlator, in the frequency domain: ⟨v_A v_B*⟩ = (1/M²) Σ V_A V_B* (Parseval).
     let cr = 0, ci = 0, pA = 0, pB = 0;
     for (let i = 0; i < nb; i++) {
       const b = bins[i], ar = VA[0][b], ai = VA[1][b], br = VB[0][b], bi = VB[1][b];
@@ -276,20 +309,19 @@ export class Simulation {
         if (k === kk) { selfR += xr * inv; selfI += xi * inv; this.chunkSelfK[2 * k] = xr * inv; this.chunkSelfK[2 * k + 1] = xi * inv; } else { crossR += xr * inv; crossI += xi * inv; }
       }
     }
-    // The time streams (upsampled for display; every UP-th point is one of the chunk's own
-    // samples), and from them the intensities' correlation, ⟨(|v_A|² − P_A)(|v_B|² − P_B)⟩.
-    this.upsample(VA, this.fineA); this.upsample(VB, this.fineB);
-    for (let k = 0; k < streams; k++) this.upsample(this.srcSpec[k], this.srcTime[k]);
+    // The intensities' correlation, ⟨(|v_A|² − P_A)(|v_B|² − P_B)⟩, from the chunk's time samples.
     let hbt = 0;
-    {
-      const a = this.fineA, b = this.fineB;
+    if (this.hbt) {
+      const a = this.tA, b = this.tB;
+      a[0].set(VA[0]); a[1].set(VA[1]); ifft(a[0], a[1]);
+      b[0].set(VB[0]); b[1].set(VB[1]); ifft(b[0], b[1]);
       let mA = 0, mB = 0;
-      for (let t = 0; t < n * UP; t += UP) { mA += a[0][t] * a[0][t] + a[1][t] * a[1][t]; mB += b[0][t] * b[0][t] + b[1][t] * b[1][t]; }
+      for (let t = 0; t < n; t++) { mA += a[0][t] * a[0][t] + a[1][t] * a[1][t]; mB += b[0][t] * b[0][t] + b[1][t] * b[1][t]; }
       mA /= n; mB /= n;
-      for (let t = 0; t < n * UP; t += UP) hbt += (a[0][t] * a[0][t] + a[1][t] * a[1][t] - mA) * (b[0][t] * b[0][t] + b[1][t] * b[1][t] - mB);
+      for (let t = 0; t < n; t++) hbt += (a[0][t] * a[0][t] + a[1][t] * a[1][t] - mA) * (b[0][t] * b[0][t] + b[1][t] * b[1][t] - mB);
       hbt /= n;
     }
-    // Running averages.
+    // Running averages: a true mean over the first 1/α chunks, then the single-pole filter.
     const al = this.settled < 1 / this.alpha ? Math.max(this.alpha, 1 / (this.settled + 1)) : this.alpha;
     this.settled++;
     this.chunks++;
@@ -315,24 +347,12 @@ export class Simulation {
     return this.chunk;
   }
 
-  /** Zero-pad a chunk's spectrum (FFT order) UP times and transform back: the time stream at
-   *  2·UP points per cycle, exactly interpolated (the chunk is periodic and band-limited). */
-  upsample(S, out) {
-    const n = M, nu = n * UP, re = out[0], im = out[1];
-    re.fill(0); im.fill(0);
-    const h = n / 2;
-    for (let b = 0; b < h; b++) { re[b] = S[0][b]; im[b] = S[1][b]; }
-    for (let b = h; b < n; b++) { re[b + nu - n] = S[0][b]; im[b + nu - n] = S[1][b]; }
-    ifft(re, im);
-    for (let i = 0; i < nu; i++) { re[i] *= UP; im[i] *= UP; }
-  }
-
   /**
    * The averaged correlations against lag on a grid of `points` lags from −tauMax to tauMax
-   * (cycles): R_AA, R_BB (real) and R_AB = ⟨v_A(t) v_B*(t + τ)⟩ (complex; it peaks at the lag by
-   * which B's copy of a source arrives after A's).  Summed directly over the band's bins, the
-   * band-limited interpolation of the chunk's periodic correlation; the work is the same at
-   * every band when tauMax ~ 1/β.  Kept until the next chunk.
+   * (cycles), all as R_XY(τ) = ⟨v_X(t) v_Y*(t + τ)⟩ = Σ_b S_XY(b) e^{−2πi f_b τ}: R_AA and R_BB,
+   * and R_AB, which peaks at the lag by which B's copy of a source arrives after A's.  The real
+   * voltages' correlation is Re[R(τ) e^{−2πiν₀τ}].  Summed directly over the band's bins (the
+   * band-limited interpolation of the chunk's periodic correlation).  Kept until the next chunk.
    */
   lags(tauMax, points) {
     if (!this.lagsStale && this.lagAA && this.lagAA.tauMax === tauMax && this.lagAA[0].length === points) return;
@@ -341,37 +361,27 @@ export class Simulation {
     const mk = (old) => (old && old[0].length === points ? old : [new Float64Array(points), new Float64Array(points)]);
     const AA = this.lagAA = mk(this.lagAA), BB = this.lagBB = mk(this.lagBB), AB = this.lagAB = mk(this.lagAB);
     AA.tauMax = BB.tauMax = AB.tauMax = tauMax;
-    AA[0].fill(0); BB[0].fill(0); AB[0].fill(0); AB[1].fill(0);
+    for (const X of [AA, BB, AB]) { X[0].fill(0); X[1].fill(0); }
     const sAA = this.specAA, sBB = this.specBB, sAB = this.specAB;
     for (let i = 0; i < nb; i++) {
-      const b = bins[i], q = b < n / 2 ? b : b - n, f = (2 * q) / n;    // cycles⁻¹
+      const b = bins[i], f = (b < n / 2 ? b : b - n) / CYCLES;    // cycles⁻¹
       const a = sAA[b], bb = sBB[b], cr = sAB[0][b], ci = sAB[1][b];
-      // R(τ) = Σ_b spec[b] e^{+2πi f_b τ} for the autos; R_AB(τ) = ⟨v_A(t) v_B*(t + τ)⟩ = Σ_b spec_AB[b] e^{−2πi f_b τ}.
-      const dth = (2 * Math.PI * f * 2 * tauMax) / (points - 1), wc = Math.cos(dth), ws = Math.sin(dth);
-      let tr = Math.cos(-2 * Math.PI * f * tauMax), ti = Math.sin(-2 * Math.PI * f * tauMax);
+      // e^{−2πi f τ} at τ = −tauMax + p·step, by a running twiddle.
+      const dth = (-TWO_PI * f * 2 * tauMax) / (points - 1), wc = Math.cos(dth), ws = Math.sin(dth);
+      let tr = Math.cos(TWO_PI * f * tauMax), ti = Math.sin(TWO_PI * f * tauMax);
       for (let p = 0; p < points; p++) {
-        AA[0][p] += a * tr; BB[0][p] += bb * tr;
-        AB[0][p] += cr * tr + ci * ti; AB[1][p] += ci * tr - cr * ti;
+        AA[0][p] += a * tr; AA[1][p] += a * ti;
+        BB[0][p] += bb * tr; BB[1][p] += bb * ti;
+        AB[0][p] += cr * tr - ci * ti; AB[1][p] += cr * ti + ci * tr;
         const nr = tr * wc - ti * ws; ti = tr * ws + ti * wc; tr = nr;
       }
     }
   }
 
-  /** The real voltage x(t) = Re[s e^{2πiν₀t}] of an upsampled stream over the first `cycles`
-   *  cycles, into out (2·UP points per cycle). */
-  realSignal(fine, cycles, out) {
-    const pts = Math.min(out.length, cycles * 2 * UP), c = this.cos8, s = this.sin8;
-    for (let i = 0; i < pts; i++) { const p = i % (2 * UP); out[i] = fine[0][i] * c[p] - fine[1][i] * s[p]; }
-    return pts;
-  }
-
-  /** The radiometer scatter of one chunk's correlation: with N = β M/2 independent samples per
-   *  chunk, each of Re and Im of the chunk average has σ² = P_A P_B / 2N. */
+  /** The radiometer scatter of one chunk's correlation: with N = Δν T = (2h + 1) independent
+   *  samples per chunk, each of Re and Im of the chunk's average has σ² = P_A P_B / 2N. */
   chunkScatter() {
-    const N = Math.max(1, (this.band * M) / 2);
+    const N = 2 * bandHalf(this.band, CYCLES) + 1;
     return Math.sqrt((this.powerA * this.powerB) / (2 * N));
   }
 }
-
-/** Bins of the band as baseband frequencies f/ν₀ in FFT index order, for the spectrum plots. */
-export function binFrequency(b) { return (2 * (b < M / 2 ? b : b - M)) / M; }
