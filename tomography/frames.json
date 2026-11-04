@@ -1,0 +1,19 @@
+{
+  "select": ["#cell-scan .cell-head", "#cell-fbp .sq"],
+  "wait": 0.5,
+  "js": "(async () => { document.querySelector('#help header button.icon').click(); __app.finishScan(); for (let i = 0; i < 12000 && !__app.idle; i++) await new Promise((r) => setTimeout(r, 5)); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); __app.draw(); })()",
+  "setups": {
+    "sinusoid": {"select": ["#cell-scan .cell-head", "#cell-sino .sq"]},
+    "smear": {"select": ["#cell-bp"],
+      "js": "(async () => { document.querySelector('#help header button.icon').click(); for (let i = 0; i < 12000 && !__app.idle; i++) await new Promise((r) => setTimeout(r, 5)); for (let i = 0; i < 12; i++) __app.stepScan(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); __app.draw(); })()"},
+    "blur": {"select": ["#cell-bp", "#cell-extra"]},
+    "ramp": {"select": ["#cell-bp", "#cell-extra"]},
+    "slice": {"select": ["#cell-k"]},
+    "density": {"select": ["#cell-k", "#cell-extra"]},
+    "streaks": {"select": ["#cell-sino", "#cell-fbp"]},
+    "wedge": {"select": ["#cell-k", "#cell-bp"]},
+    "noise": {"select": ["#cell-fbp"]},
+    "metal": {"select": ["#cell-fbp"]},
+    "faint": {"select": ["#cell-fbp"]}
+  }
+}

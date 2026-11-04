@@ -1,0 +1,27 @@
+{
+  "select": [".bench-wrap"],
+  "wait": 0.6,
+  "js": "const p = [...document.querySelectorAll('#view-buttons button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.bench.draw();",
+  "setups": {
+    "gouy": {"select": [".bench-wrap", ".gouy-wrap"]},
+    "telescope": {"select": [".bench-wrap", ".gouy-wrap"]},
+    "imaging": {"select": ["#el-info", "details.lens-law"]},
+    "waveguide": {"select": [".bench-wrap", ".gouy-wrap"]},
+    "matching": {"select": [".bench-wrap"],
+      "js": "const set = (label, v) => { const n = [...document.querySelectorAll('#el-editor .slider')].find((s) => s.querySelector('label').textContent.trim() === label).querySelector('input[type=number]'); n.value = v; n.dispatchEvent(new Event('change')); }; set('at z (mm)', 324); set('f (mm)', 254); __app.bench.draw();"},
+    "stability": {"select": [".cav-wrap", "#stability"],
+      "js": "const p = [...document.querySelectorAll('#ray-box button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.cavity.launch(); for (let k = 0; k < 60; k++) __app.cavity.step(); __app.cavity.draw();"},
+    "comb": {"select": [".spec-wrap"],
+      "js": "const p = [...document.querySelectorAll('#ray-box button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.cavity.launch(); for (let k = 0; k < 60; k++) __app.cavity.step(); __app.cavity.draw();"},
+    "rays": {"select": ["#rayphase"],
+      "js": "const p = [...document.querySelectorAll('#ray-box button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.cavity.launch(); for (let k = 0; k < 60; k++) __app.cavity.step(); __app.cavity.draw();"},
+    "confocal": {"select": [".spec-wrap", "#rayphase"],
+      "js": "const p = [...document.querySelectorAll('#ray-box button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.cavity.launch(); for (let k = 0; k < 60; k++) __app.cavity.step(); __app.cavity.draw();"},
+    "hermite": {"select": [".mode-grid"],
+      "js": "const p = [...document.querySelectorAll('#zeta-buttons button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.modes.draw();"},
+    "donut": {"select": [".mode-grid"],
+      "js": "const p = [...document.querySelectorAll('#zeta-buttons button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.modes.draw();"},
+    "fft": {"select": [".mode-grid"],
+      "js": "const p = [...document.querySelectorAll('#zeta-buttons button')].find((x) => x.textContent === 'Pause'); if (p) p.click(); __app.modes.draw();"}
+  }
+}

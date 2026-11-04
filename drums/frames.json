@@ -1,0 +1,88 @@
+{
+  "select": [
+    ".analysis > .panel:nth-child(1)"
+  ],
+  "wait": 1.2,
+  "width": 520,
+  "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes); __app.state.fast = true; await W(() => MS() > 300); pause(); })()",
+  "setups": {
+    "drum": {
+      "select": [
+        ".analysis > .panel:nth-child(1)",
+        ".analysis > .panel:nth-child(2)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes && MS() > 40); __app.state.fast = true; const s = __app.computeSpectrum(), big = Math.max(...s.peaks.map((q) => q.amp)); const p = s.peaks.filter((q) => q.amp > 0.1 * big).sort((u, v) => u.lambda - v.lambda)[0]; __app.selectPeak(p.lambda); await W(() => __app.filter && __app.filter.T > 15); pause(); })()"
+    },
+    "square": {
+      "select": [
+        ".analysis > .panel:nth-child(2)",
+        ".analysis > .panel:nth-child(3)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes && __app.selected); pause(); })()"
+    },
+    "circle": {
+      "select": [
+        ".analysis > .panel:nth-child(2)",
+        ".analysis > .panel:nth-child(3)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes && __app.selected); pause(); })()"
+    },
+    "chladni": {
+      "select": [
+        ".analysis > .panel:nth-child(2)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes && __app.selected); pause(); })()"
+    },
+    "spectroscopy": {
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes && __app.signal && __app.signal.T > 4); pause(); })()"
+    },
+    "filter": {
+      "select": [
+        ".analysis > .panel:nth-child(1)",
+        ".analysis > .panel:nth-child(2)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.filter && __app.filter.T > 1.6); pause(); })()"
+    },
+    "weyl": {
+      "select": [
+        ".analysis > .panel:nth-child(3)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.counted); pause(); [...document.querySelectorAll('.analysis button')].find((b) => b.textContent === 'Take away the area term').click(); })()"
+    },
+    "gww": {
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.pinned && __app.modes && __app.state.shape === 'gww2'); __app.state.fast = true; await W(() => MS() > 150); pause(); })()"
+    },
+    "poisson": {
+      "select": [
+        ".analysis > .panel:nth-child(3)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.counted); pause(); })()"
+    },
+    "wigner": {
+      "select": [
+        ".analysis > .panel:nth-child(3)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.counted); pause(); })()"
+    },
+    "revival": {
+      "select": [
+        ".stage-wrap",
+        "#readouts"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.sim && __app.state.shape === 'square'); __app.state.fast = true; await W(() => __app.sim.t > 1.2); __app.state.fast = false; await W(() => __app.sim.t >= 1.28); pause(); })()"
+    },
+    "scars": {
+      "select": [
+        ".analysis > .panel:nth-child(1)",
+        ".analysis > .panel:nth-child(2)"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes && __app.state.shape === 'stadium' && __app.signal && __app.signal.T > 0.6); pause(); const a = __app, M = a.modes, h = a.grid.h, [r0, i0] = a.psi0; let best = -1, kb = 0; for (let k = 0; k < M.nvec; k++) { let x = 0, y = 0; for (let q = 0; q < M.N; q++) { const v = M.vectors[k * M.N + q], g = M.pts[q]; x += v * r0[g]; y += v * i0[g]; } if (x * x + y * y > best) { best = x * x + y * y; kb = k; } } a.selectExact(kb); })()"
+    },
+    "draw": {
+      "select": [
+        ".stage-wrap"
+      ],
+      "js": "(async () => { const W = async (c) => { for (let i = 0; i < 15000 && !c(); i++) await new Promise((r) => setTimeout(r, 20)); return c(); }; const MS = () => (__app.signal ? __app.signal.T * 0.3 / __app.state.c * 1000 : 0); const pause = () => { if (__app.state.running) document.getElementById('play').click(); }; await W(() => __app.modes); document.getElementById('clear').click(); const st = document.getElementById('stage'), R = st.getBoundingClientRect(); const ev = (type, fx, fy) => st.dispatchEvent(new PointerEvent(type, { clientX: R.left + fx * R.width, clientY: R.top + fy * R.height, pointerId: 1, isPrimary: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true })); const room = (cx) => { for (let a = 0; a <= 64; a++) ev('pointermove', cx + 0.09 * Math.cos(a * Math.PI / 16), 0.5 + 0.09 * Math.sin(a * Math.PI / 16)); ev('pointermove', cx, 0.5); }; __app.state.brush = 12; ev('pointerdown', 0.25, 0.5); room(0.25); __app.state.brush = 3; for (let a = 0; a <= 20; a++) ev('pointermove', 0.25 + 0.5 * a / 20, 0.5); __app.state.brush = 12; room(0.75); ev('pointerup', 0.75, 0.5); ev('pointerleave', 0.75, 0.5); __app.state.brush = 3; await W(() => __app.state.shape === 'drawn' && __app.modes && __app.sim); await W(() => MS() > 10); pause(); })()"
+    }
+  }
+}
