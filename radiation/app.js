@@ -831,7 +831,7 @@ function go(id, { params = {}, c = 8, lines = 'total', count = 24, map = 'off', 
 }
 
 const setups = {
-  kink: () => go('shuttle'),                                   // the opening set-up
+  kink: () => go('shuttle', { map: 'field' }),                 // the opening set-up, with its colours
   stop: () => go('stop', { params: { beta: 0.6, tau: 0.15 } }),   // one stop at a time (what "kink" was)
   coulomb: () => go('rest'),
   inside: () => go('stop', { params: { beta: 0.8, tau: 0.1 }, probe: [-3, 7] }),
