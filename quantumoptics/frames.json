@@ -1,0 +1,107 @@
+{
+  "size": [
+    1100,
+    900
+  ],
+  "select": [
+    "#top-pair"
+  ],
+  "wait": 0.8,
+  "setups": {
+    "vacuum": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.vacuum(); __app.step(1/30, 15);"
+    },
+    "coherent": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.coherent(); __app.step(1/30, 15);"
+    },
+    "phase": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.phase(); __app.step(1/30, 15);",
+      "select": [
+        "#plane-wrap"
+      ]
+    },
+    "squeezevac": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.squeezevac(); __app.step(1/30, 15); document.querySelector('#hint-squeeze').style.display = 'none'; document.querySelector('#readout').style.display = 'none';",
+      "select": [
+        "#top-pair",
+        "#photons-wrap"
+      ]
+    },
+    "phasesq": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.phasesq(); __app.step(1/30, 15);"
+    },
+    "loss": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.loss(); __app.step(1/30, 15);",
+      "select": [
+        "#squeezer-wrap",
+        "#top-pair"
+      ]
+    },
+    "quadrature": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.quadrature(); __app.step(1/30, 60);",
+      "select": [
+        "#hom-pair"
+      ]
+    },
+    "scan": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.scan(); __app.step(1/30, 366);",
+      "select": [
+        "#hom-pair2"
+      ]
+    },
+    "phaseshift": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.phaseshift(); __app.step(1/30, 60);",
+      "select": [
+        "#plane-wrap"
+      ]
+    },
+    "darkport": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.darkport(); __app.step(1/30, 15); document.querySelector('#hint-ligo').style.display = 'none'; document.querySelector('#readout').style.display = 'none';",
+      "select": [
+        "#ligo-wrap",
+        "#sens-wrap"
+      ]
+    },
+    "inject": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.inject(); __app.step(1/30, 15); document.querySelector('#hint-ligo').style.display = 'none'; document.querySelector('#readout').style.display = 'none';",
+      "select": [
+        "#ligo-wrap",
+        "#sens-wrap"
+      ]
+    },
+    "radiation": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.radiation(); __app.step(1/30, 15);",
+      "select": [
+        "#sens-wrap"
+      ]
+    },
+    "fdsqz": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.fdsqz(); __app.step(1/30, 15);",
+      "select": [
+        "#sens-wrap"
+      ]
+    },
+    "chirp": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.chirp(); __app.step(1/30, 15); [...document.querySelectorAll('#readout > div')].forEach((d) => { if (!d.textContent.startsWith('Signal')) d.style.display = 'none'; });",
+      "select": [
+        "#readout",
+        "#sens-wrap",
+        "#chirp-wrap"
+      ]
+    },
+    "buried": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.buried(); __app.step(1/30, 15); document.querySelector('#hint-detector').style.display = 'none';",
+      "select": [
+        "#detector-wrap",
+        "#det-readout"
+      ]
+    },
+    "reach": {
+      "js": "document.querySelectorAll('.plot-wrap').forEach((e) => { e.style.height = e.getBoundingClientRect().height + 'px'; }); __app.hold(true); __app.reseed(2026); __app.setups.reach(); __app.step(1/30, 15); document.querySelector('#hint-detector').style.display = 'none';",
+      "select": [
+        "#detector-wrap",
+        "#det-readout"
+      ]
+    }
+  }
+}

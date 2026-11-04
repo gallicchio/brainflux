@@ -1190,6 +1190,8 @@ window.__app = {
   },
   slide: () => startSlide(),
   hold(on = true) { testHold = on; lastT = 0; kick(); },
+  /** Restart the samples' random generator (views 1–3), so a still picture is the same each time it is made. */
+  reseed(seed = 12345) { rng.s = seed >>> 0; rng.spare = null; },
   /** Move the clocks on by dt seconds, n times, drawing the last frame. */
   step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) advance(dt); needDraw = false; drawNow(); return { t: anim.t, theta: state.theta, samples: record.count }; },
   draw: () => drawNow(),
