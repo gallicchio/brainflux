@@ -18,8 +18,10 @@ import { fft } from '../lib/fft.js';
 
 /**
  * Samples of the magnetization in the rotating frame, (t, M_x′, M_y′, M_z), each with its own
- * unit of thermal noise on the two transverse parts (nx, ny: the mean of `averages` standard
- * normal numbers, so that averaging is done for real and the noise shown falls as 1/√N).
+ * thermal noise on the two transverse parts (nx, ny): what is left of unit noise after averaging
+ * `averages` repeats.  The repeats' signals are the same, so their average is the signal plus the
+ * mean of N standard normal numbers, which is a normal number of r.m.s. 1/√N: one is drawn,
+ * divided by √N (meanGauss draws the N, for the tests).
  */
 export class Record {
   constructor() { this.clear(); }
@@ -30,13 +32,15 @@ export class Record {
 
   push(t, x, y, z, rng = null, averages = 1) {
     this.t.push(t); this.x.push(x); this.y.push(y); this.z.push(z);
-    this.nx.push(rng ? meanGauss(rng, averages) : 0);
-    this.ny.push(rng ? meanGauss(rng, averages) : 0);
+    const k = 1 / Math.sqrt(Math.max(1, averages));
+    this.nx.push(rng ? rng.gauss() * k : 0);
+    this.ny.push(rng ? rng.gauss() * k : 0);
   }
 
   /** Draw the noise afresh for every sample, as the mean of `averages` repeats. */
   renoise(rng, averages = 1) {
-    for (let i = 0; i < this.t.length; i++) { this.nx[i] = meanGauss(rng, averages); this.ny[i] = meanGauss(rng, averages); }
+    const k = 1 / Math.sqrt(Math.max(1, averages));
+    for (let i = 0; i < this.t.length; i++) { this.nx[i] = rng.gauss() * k; this.ny[i] = rng.gauss() * k; }
   }
 
   /** Drop the samples before tMin (keeping one, for interpolation). */

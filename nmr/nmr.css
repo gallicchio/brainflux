@@ -1,0 +1,131 @@
+/* Bloch sphere and NMR: the sphere and the spin-½ box on top, the signal under them, the
+   controls on the right.  Which plots and panels show depends on the view (data-view on main). */
+
+:root {
+  --mx: #2f62d8;          /* the mixer's x′ output, Mx′ */
+  --my: #c8501a;          /* the mixer's y′ output, My′ */
+  --mxy: #1d1d1f;         /* the envelope |Mxy|, the detector's output */
+  --mz: #1f8a4a;          /* Mz, along B0 */
+  --m: #d1243f;           /* the magnetization arrow */
+  --trail: #e0607a;
+  --b0: #7b3fb5;          /* the static field */
+  --b1: #b0307a;          /* the RF field and the pulses */
+  --beff: #8a5a00;        /* the effective field in the rotating frame */
+  --raw: #3b4a6b;         /* the coil's EMF */
+  --spec: #0f7a8a;        /* the spectrum */
+  --fit: #b8860b;         /* fitted curves */
+  --points: #1d1d1f;
+  --cone: #d1243f;
+  --sphere-hi: #ffffff;
+  --sphere-lo: #e9ecf3;
+  --coil: #b87333;        /* copper */
+  --slow: #5b3fc0;        /* spins below the mean frequency … */
+  --fast: #d07a00;        /* … and above it */
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mx: #7aa2ff;
+    --my: #ff9a5c;
+    --mxy: #ececef;
+    --mz: #6fd08f;
+    --m: #ff5c74;
+    --trail: #ff8fa0;
+    --b0: #c79bff;
+    --b1: #ff7ac0;
+    --beff: #e8b84a;
+    --raw: #a9b8d8;
+    --spec: #4fd6d0;
+    --fit: #f0c050;
+    --points: #ececef;
+    --cone: #ff5c74;
+    --sphere-hi: #2a2c34;
+    --sphere-lo: #16171c;
+    --coil: #e0a060;
+    --slow: #a08cff;
+    --fast: #ffb347;
+  }
+}
+
+.nmr {
+  display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 12px;
+  padding: 10px 12px; max-width: 1560px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.top-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; }
+.top-row .label { margin-right: 4px; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.plot-wrap canvas { width: 100%; height: 100%; }
+
+/* The sphere with the spin-½ box (or the board's sketch) beside it. */
+.sphere-area { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 8px; }
+.sphere-wrap { height: max(330px, calc(43vh - 10px)); }
+#sphere { cursor: grab; }
+#sphere.on-tip { cursor: pointer; }
+#sphere.dragging { cursor: grabbing; }
+.sphere-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sphere-note {
+  position: absolute; left: 8px; bottom: 5px; right: 8px; pointer-events: none;
+  font-size: 12px; color: var(--ink-2); line-height: 1.35;
+}
+.sphere-note b { color: var(--ink); }
+.side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.side .panel { padding: 8px 10px; }
+
+/* The spin-½ state. */
+.spin-half { font-size: 13px; }
+.spin-half .state { margin: 4px 0 6px; font-size: 14px; }
+.spin-half .state math { font-size: 1.05em; }
+.spin-half .amps { font-variant-numeric: tabular-nums; margin: 2px 0 4px; line-height: 1.5; }
+.bars { display: grid; grid-template-columns: auto 1fr auto; gap: 3px 6px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.pbar { height: 9px; border-radius: 3px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.pbar > i { display: block; height: 100%; background: var(--m); }
+.pbar.down > i { background: var(--b0); }
+.spin-half .why { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+
+.readout { color: var(--ink-2); font-variant-numeric: tabular-nums; line-height: 1.5; min-height: 4.5em; }
+.readout b, .readout .fixnum.b { color: var(--ink); font-weight: 600; }
+.readout .warn { color: var(--warn); }
+
+.signal-wrap { height: max(150px, calc(21vh - 10px)); }
+.plots2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.raw-wrap, .spec-wrap, .curve-wrap, .zoom-wrap { height: max(130px, calc(16vh - 10px)); }
+.timeline-wrap { height: 104px; }
+#timeline { cursor: pointer; }
+
+/* Which pictures each view has. */
+.nmr .plot-wrap.v-seq, .nmr .plot-wrap.v-earth, .nmr .spec-wrap, .nmr .curve-wrap, .nmr .zoom-wrap { display: none; }
+.nmr[data-view="many"] .spec-wrap { display: block; }
+.nmr[data-view="seq"] .v-seq, .nmr[data-view="seq"] .curve-wrap { display: block; }
+.nmr[data-view="earth"] .v-earth, .nmr[data-view="earth"] .spec-wrap, .nmr[data-view="earth"] .zoom-wrap, .nmr[data-view="earth"] .curve-wrap { display: block; }
+.nmr[data-view="one"] .plots2 { grid-template-columns: minmax(0, 1fr); }
+.nmr[data-view="earth"] .raw-wrap { display: none; }
+.nmr .hint.v-seq, .nmr .hint.v-earth { display: none; }
+.nmr[data-view="seq"] .hint.v-seq, .nmr[data-view="earth"] .hint.v-earth { display: block; }
+
+/* Controls; panels belong to views (data-views lists them). */
+.controls { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.controls .gloss { font-size: 12px; color: var(--ink-3); margin-top: -2px; }
+.controls .note { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.pulse-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.pulse-buttons button { font-weight: 600; }
+.check { display: flex; gap: 6px; align-items: center; cursor: pointer; color: var(--ink-2); }
+.check input { margin: 0; accent-color: var(--accent); }
+.slider.off input[type="range"] { opacity: 0.35; }
+.slider.off input[type="number"] { color: var(--ink-3); }
+.toggled-slider { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; align-items: center; }
+details summary { cursor: pointer; color: var(--ink-2); }
+details[open] summary { margin-bottom: 6px; }
+.button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+#play { min-width: 5.4em; }
+.seg button { font-size: 13px; }
+
+@media (max-width: 900px) {
+  .nmr { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  .sphere-area { grid-template-columns: minmax(0, 1fr); }
+  .sphere-wrap { height: min(92vw, 380px); }
+  .plots2 { grid-template-columns: minmax(0, 1fr); }
+  .signal-wrap { height: 170px; }
+  .raw-wrap, .spec-wrap, .curve-wrap, .zoom-wrap { height: 140px; }
+}
