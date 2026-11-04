@@ -9,6 +9,7 @@ import {
   DEFAULTS, NO_SQUEEZE, quantumNoise, noiseBudget, sqlFrequency, darkPortPhase, shotNoisePhase, chirpMass, iscoFrequency,
   timeToMerger, chirpFrequency, chirpSignal, chirpSpectrum, matchedFilterSnr, spaSnr, MPC, C, HBAR, G, MSUN,
 } from '../quantumoptics/ligo.js';
+import { Detector, meanVariance } from '../quantumoptics/detector.js';
 import { gaussianWigner } from '../phasespace/states.js';
 import { fft } from '../lib/fft.js';
 
@@ -286,4 +287,86 @@ test('Chirp: GW150914-like numbers, h ~ 1e−21 at 100 Hz from 410 Mpc', () => {
   const amp = Math.sqrt(2 * a.h.slice(-50).reduce((s, v) => s + v * v, 0) / 50);
   assert(amp > 3e-22 && amp < 3e-21, `amplitude near the end ${amp.toExponential(2)}`);
   return `Mc = ${mc.toFixed(1)}, ${a.tc.toFixed(2)} s, h ≈ ${amp.toExponential(1)} at the ISCO (${iscoFrequency(36, 29).toFixed(0)} Hz)`;
+});
+
+// ------------------------------------------------------------------ the detector's output
+
+/** The detector strip of the page: two neutron stars from 70 Hz, 8 s at 4096 Hz, merging at 7 s. */
+function bnsDetector() {
+  const mc = chirpMass(1.4, 1.4), fisco = iscoFrequency(1.4, 1.4);
+  const det = new Detector({ fs: 4096, T: 8 });
+  det.setSignal(chirpSignal(mc, MPC, 70, fisco, 4096).h, 7, [70, fisco]);
+  return { det, mc, fisco };
+}
+const SQ_FD = { on: true, dB: 6, angle: 90, eta: 0.8, fd: true };
+const SnOf = (sq) => (f) => noiseBudget(f, DEFAULTS, sq).total;
+
+test('Detector: the noise drawn from S_n has that spectrum; whitened it is white with unit variance, the same realisation whatever the spectrum', () => {
+  const { det } = bnsDetector();
+  det.setSeed(113);
+  det.setSpectrum(SnOf(NO_SQUEEZE), 'vac');
+  const w = meanVariance(det.whiteNoise);
+  close(w.variance, 1, 0.05, 'whitened noise: σ² = 1');
+  close(w.mean, 0, 0.02, 'whitened noise: mean 0');
+  // The raw noise's periodogram against S_n(f)/(2Δf), in bands: E|ñ_k|² = S_n/(2Δf).
+  const N = det.N, re = Float64Array.from(det.rawNoise), im = new Float64Array(N);
+  fft(re, im);
+  const band = (f0, f1) => { let s = 0, n = 0; for (let k = Math.ceil(f0 / det.df); k <= f1 / det.df; k++) { s += (re[k] ** 2 + im[k] ** 2) * det.dt ** 2 / (det.S[k] / (2 * det.df)); n++; } return s / n; };
+  const bands = [[12, 40], [100, 300], [1000, 1500]].map(([a, b]) => band(a, b));
+  for (const v of bands) close(v, 1, 0.08, 'periodogram / S_n');
+  const raw0 = Float64Array.from(det.rawNoise), white0 = Float64Array.from(det.whiteNoise);
+  // Squeezing: the same white spectrum, rescaled; the whitened noise unchanged.
+  det.setSpectrum(SnOf(SQ_FD), 'sq');
+  let dw = 0;
+  for (let j = 0; j < N; j++) dw = Math.max(dw, Math.abs(det.whiteNoise[j] - white0[j]));
+  assert(dw < 1e-9, `the whitened noise changed by ${dw}`);
+  const re2 = Float64Array.from(det.rawNoise), im2 = new Float64Array(N);
+  fft(re2, im2);
+  const k = Math.round(1000 / det.df), ratio = (re2[k] ** 2 + im2[k] ** 2) / (re[k] ** 2 + im[k] ** 2);
+  close(ratio, noiseBudget(1000, DEFAULTS, SQ_FD).total / noiseBudget(1000).total, 1e-6, 'the raw noise at 1 kHz rescaled by S_sq/S_vac');
+  let dr = 0;
+  for (let j = 0; j < N; j++) dr = Math.max(dr, Math.abs(det.rawNoise[j] - raw0[j]));
+  assert(dr > 1e-23, 'the raw noise changed');
+  det.setSeed(114); det.setSpectrum(SnOf(SQ_FD), 'sq');
+  assert(Math.abs(det.whiteNoise[100] - white0[100]) > 1e-6, 'a new seed, a new realisation');
+  return `σ² = ${w.variance.toFixed(3)} whitened; periodogram/S_n ${bands.map((v) => v.toFixed(3)).join(', ')} at 12–40, 100–300, 1000–1500 Hz; squeezing keeps the whitened noise to ${dw.toExponential(0)}`;
+});
+
+test('Matched filter: its noise has unit variance and it peaks at ρ where the template lines up, ρ as the read-out\'s and the stationary phase\'s', () => {
+  const { det, mc, fisco } = bnsDetector();
+  const out = [];
+  for (const [sq, key] of [[NO_SQUEEZE, 'vac'], [SQ_FD, 'sq']]) {
+    det.setSeed(113); det.setSpectrum(SnOf(sq), key);
+    // The chirp's part: the largest at the merger, and equal to σ there (σ/d = ρ at distance d).
+    let jmax = 0;
+    for (let j = 0; j < det.N; j++) if (det.mfSignal1[j] > det.mfSignal1[jmax]) jmax = j;
+    assert(jmax === det.mergeIndex, `the peak at sample ${jmax}, the merger at ${det.mergeIndex}`);
+    close(det.mfSignal1[jmax] / det.sigma1, 1, 1e-9, 'the peak is σ');
+    // ρ at 40 Mpc against the read-out's way (the FFT of the chirp at 8192 Hz) and the stationary phase.
+    const d = 40, rho = det.findings(d).rho, s8 = chirpSignal(mc, d * MPC, 70, fisco, 8192);
+    const page = matchedFilterSnr(s8.h, s8.dt, SnOf(sq), fft, { fmin: 70, fmax: fisco }).snr, spa = spaSnr(mc, d * MPC, SnOf(sq), 70, fisco);
+    close(rho / page, 1, 0.003, `ρ ${rho.toFixed(2)} against ${page.toFixed(2)}`);
+    close(rho / spa, 1, 0.01, `ρ ${rho.toFixed(2)} against the stationary phase's ${spa.toFixed(2)}`);
+    out.push(rho);
+  }
+  close(out[1] / out[0], 1.44, 0.01, 'squeezing: 1.44 times the SNR');
+  // Over many realisations: the noise of the output has mean 0 and variance 1, and its value at
+  // the merger (where the peak's height is ρ + that noise) likewise.
+  const M = 24;
+  let mean = 0, varSum = 0, inOne = 0, atM = 0, atM2 = 0;
+  det.setSignal(chirpSignal(mc, MPC, 70, fisco, 4096).h, 7, [70, fisco]);
+  for (let seed = 1; seed <= M; seed++) {
+    det.setSeed(seed); det.setSpectrum(SnOf(NO_SQUEEZE), 'vac');
+    const mv = meanVariance(det.mfNoise);
+    mean += mv.mean / M; varSum += mv.variance / M;
+    for (let j = 0; j < det.N; j++) if (Math.abs(det.mfNoise[j]) < 1) inOne++;
+    const z = det.findings(361).atMerger - det.findings(361).rho;
+    atM += z / M; atM2 += (z * z) / M;
+  }
+  close(varSum, 1, 0.03, 'the filter noise\'s variance');
+  close(mean, 0, 0.03, 'its mean');
+  close(inOne / (M * det.N), 0.6827, 0.01, 'within ±1: 68%, a Gaussian');
+  close(atM, 0, 3 / Math.sqrt(M), 'the peak at the merger: ρ on average');
+  close(atM2 - atM * atM, 1, 0.5, 'and its spread 1');
+  return `ρ(40 Mpc) = ${out[0].toFixed(2)}, ${out[1].toFixed(2)} squeezed; over ${M} realisations: variance ${varSum.toFixed(3)}, mean ${mean.toFixed(3)}, ${(100 * inOne / (M * det.N)).toFixed(1)}% within ±1, peak − ρ = ${atM.toFixed(2)} ± ${Math.sqrt(atM2 - atM * atM).toFixed(2)}`;
 });
