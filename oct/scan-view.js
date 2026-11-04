@@ -134,8 +134,11 @@ function resetVolume() { vol.reset(); vnext = 0; vprogress = 0; epoch++; }
 
 // --------------------------------------------------------------------- the scene and the scans
 
+let sceneKey = '';
 function makeAll() {
-  scene = makeScene(state.scene, { tilt: state.tilt, rough: state.rough, lesion: state.lesion, seed: state.seed });
+  // A new scene only when the scene changes (not the light): its scatterers are kept with it.
+  const key = JSON.stringify([state.scene, state.tilt, state.rough, state.lesion, state.seed]);
+  if (key !== sceneKey || !scene) { scene = makeScene(state.scene, { tilt: state.tilt, rough: state.rough, lesion: state.lesion, seed: state.seed }); sceneKey = key; }
   beam = sceneBeam(scene, S.src, state.NA, state.focus);
   bs = new BScan(scene, S.src);
   bs.setAverage(state.avg, state.how, state.step);

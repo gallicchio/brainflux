@@ -46,15 +46,18 @@ function buffers(nz) {
 // The scatterers of each lateral cell, made once and kept while the scene stays the same (the
 // scans visit neighbouring columns in turn, so a cell is wanted many times over).  real: which
 // realisation of them (0 to 63).
-const cellCache = { scene: null, count: 0, map: new Map() };
+// One cache for each scene (two views may scan two scenes in turn; a single shared cache would
+// throw each one's away whenever the other ran).
+const cellCaches = new WeakMap();
 function cell(scene, i, j, count, real = 0) {
-  if (cellCache.scene !== scene || cellCache.count !== count) { cellCache.scene = scene; cellCache.count = count; cellCache.map.clear(); }
+  let cache = cellCaches.get(scene);
+  if (!cache || cache.count !== count) { cache = { count, map: new Map() }; cellCaches.set(scene, cache); }
   const key = ((i + 32768) * 65536 + (j + 32768)) * 64 + real;
-  let sc = cellCache.map.get(key);
+  let sc = cache.map.get(key);
   if (!sc) {
-    if (cellCache.map.size > 12000) cellCache.map.clear();
+    if (cache.map.size > 12000) cache.map.clear();
     sc = Float32Array.from(cellScatterers(scene, i, j, { count, real }));
-    cellCache.map.set(key, sc);
+    cache.map.set(key, sc);
   }
   return sc;
 }

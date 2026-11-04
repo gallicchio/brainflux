@@ -80,24 +80,70 @@ function evalV(t) {
   return sharp ? prepareSharpPotential(out, sim.dx, { kc: state.pot.kc || 16 }) : out;
 }
 
-function applyPotential({ keepState }) {
+function applyPotential({ keepState, quick = false }) {
   if (!sim || !Vexpr) return;
   Vdynamic = Vexpr.uses('t');
   subX = null;
   const V = evalV(keepState ? sim.t : 0);
   sim.setPotential(V);
-  computeLevels(V);
+  computeLevels(V, { quick });
 }
 
-function computeLevels(V) {
+// The stationary states cost far more than anything else a change does (bisection on two grids
+// for up to 60 of them), and the time steps don't use them: they are the levels drawn, the
+// stationary starting states and the bars of the state's weights.  So they are found again only
+// when the potential they belong to has changed (a packet's x0, sigma or k0 leaves them alone),
+// and while a slider is moving only those below the top of the plot are found, the rest once it
+// has been still for a moment (settleSoon).
+let levelsKey = '', levelsFull = false, levelsCount = 0;
+function levelKey(V) {
+  // (FNV-1a over the potential's bits, with what else the levels depend on.)
+  const u = new Uint32Array(V.buffer, V.byteOffset, V.length * 2);
+  let h = 2166136261;
+  for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 16777619); }
+  return [h >>> 0, V.length, sim.dx, state.mass, state.boundary, state.pot.id, state.pot.noLevels, String(state.pot.erange)].join(' ');
+}
+function computeLevels(V, { quick = false } = {}) {
+  const key = levelKey(V);
+  if (key === levelsKey && (levelsFull || quick)) return;
   const n = sim.n, walls = state.boundary === 'walls';
   const [lo, hi] = state.pot.erange || potentialRange();
+  const init = state.init || {};
+  const need = init.kind === 'eigen' ? init.n + 1 : init.kind === 'two' ? Math.max(init.n, init.m) + 1 : 0;
   levels = eigenstates(V, sim.dx, state.mass, 60, {
     first: walls ? 1 : 0, last: n - 1, maxE: hi + 2 * (hi - lo),
+    softMaxE: quick ? energyRange()[1] : Infinity, atLeast: need,     // (quick: the plot's top, and the state's own)
   });
   // Between walls every state counts; otherwise only the bound ones (below both ends of V).
   const edge = Math.min(V[0], V[n - 1]);
   shownLevels = state.pot.noLevels ? [] : walls ? levels : levels.filter((s) => s.E < edge - 1e-9);
+  levelsKey = key; levelsFull = !quick;
+  if (!quick) levelsCount = shownLevels.length;
+  if (quick) settleSoon();
+}
+
+// What a moving slider leaves for later: the rest of the levels, and the time step's trial run.
+let settleTimer = 0, calibratePending = false;
+function settleSoon() { clearTimeout(settleTimer); settleTimer = setTimeout(settle, 200); }
+function settle() {
+  clearTimeout(settleTimer); settleTimer = 0;
+  if (!sim) return;
+  const wasFull = levelsFull;
+  if (!levelsFull) computeLevels(sim.V);
+  if (calibratePending && !Vdynamic) {
+    calibratePending = false;
+    dtCal = sim.calibrateStep(sim.suggestedStep(lastE));
+    dtMax = Math.min(dtCal, sim.suggestedStep(lastE));
+  }
+  if (!wasFull) {
+    // The stationary rows and the n, m sliders' ranges, now that all the levels are known.
+    if (state.init?.kind === 'eigen' || state.init?.kind === 'two') {
+      const off = nOffset(), count = Math.max(1, shownLevels.length);
+      nSlider.setRange(off, off + count - 1); mSlider.setRange(off, off + count - 1);
+    }
+    showChoice();
+  }
+  kick();
 }
 
 // A typed potential's energy range: from its minimum to a few times the spread of its middle.
@@ -154,10 +200,10 @@ function initialPsi() {
   return { re, im };
 }
 
-function restart() {
+function restart({ quick = false } = {}) {
   if (!sim) return;
   errorText = '';
-  if (Vdynamic || started) applyPotential({ keepState: false });
+  if (Vdynamic || started) applyPotential({ keepState: false, quick });
   try {
     const { re, im } = initialPsi();
     sim.setPsi(re, im);
@@ -175,7 +221,10 @@ function restart() {
   sim.h = 0;
   classical = { x: o.x, p: o.p, alive: true };
   lastE = o.E;
-  dtCal = Vdynamic ? 0.02 : sim.calibrateStep(sim.suggestedStep(lastE));
+  // (While a slider moves, the trial run waits until it stops: suggestedStep's cap meanwhile.)
+  if (Vdynamic) dtCal = 0.02;
+  else if (quick) { dtCal = sim.suggestedStep(lastE); calibratePending = true; settleSoon(); }
+  else { dtCal = sim.calibrateStep(sim.suggestedStep(lastE)); calibratePending = false; }
   dtMax = Math.min(dtCal, sim.suggestedStep(lastE));
   // Scales for the plots, fixed until the next restart (so spreading shows as falling).
   let dmax = 0;
@@ -196,15 +245,20 @@ function restart() {
   updateHash();
 }
 
-/** How long a step takes, to cap the steps per frame at about 12 ms of work. */
+/** How long a step takes, to cap the steps per frame at about 12 ms of work: timed once for
+ *  each grid and boundary (a step's cost doesn't depend on the state or the potential). */
+const stepCost = new Map();
 function measureSpeed() {
   if (!(dtMax > 0)) dtMax = 0.01;
+  const key = `${sim.n} ${sim.boundary} ${Vdynamic}`;
+  if (stepCost.has(key)) { maxSteps = stepCost.get(key); return; }
   const keep = { re: sim.re.slice(), im: sim.im.slice(), t: sim.t, a: sim.absorbed, al: sim.absorbedLeft };
   const t0 = performance.now();
   sim.step(dtMax * 1e-3, 20);
   const per = (performance.now() - t0) / 20 + (Vdynamic ? sim.n * 2e-5 : 0);
   sim.re.set(keep.re); sim.im.set(keep.im); sim.t = keep.t; sim.absorbed = keep.a; sim.absorbedLeft = keep.al;
   maxSteps = Math.max(10, Math.min(2000, Math.floor(12 / Math.max(per, 1e-3))));
+  stepCost.set(key, maxSteps);
 }
 
 // ------------------------------------------------------------------------ the sim
@@ -685,9 +739,9 @@ const vField = exprField({
     Vexpr = expr; Vparams = params;
     if (!sim) return;
     const t0 = !started;
-    applyPotential({ keepState: !t0 });
-    if (!t0 && !Vdynamic) dtCal = sim.calibrateStep(sim.suggestedStep(lastE));
-    if (t0) restart();
+    applyPotential({ keepState: !t0, quick: true });
+    if (!t0 && !Vdynamic) { calibratePending = true; settleSoon(); }
+    if (t0) restart({ quick: true });
     else if (!quenchNoted) { quenchNoted = true; toast('The potential changed while the clock ran: the wave function felt it suddenly. Restart to begin again.', 4000); }
     measureSpeed();
     kick();
@@ -776,8 +830,8 @@ function setKind(kind, init) {
 }
 
 function restartIfIdle() {
-  // Changing the initial state always starts again from it.
-  restart();
+  // Changing the initial state always starts again from it (a slider moving: see settleSoon).
+  restart({ quick: true });
   kick();
 }
 
@@ -826,8 +880,10 @@ function showChoice() {
   for (const { button } of startButtons) button.setAttribute('aria-pressed', String(button === lit));
   for (const b of Object.values(kindButtons)) b.setAttribute('aria-pressed', String(b === lit));
   // Stationary states only where there are some (and the kind loaded, whatever it is).
-  kindRows.eigen.hidden = !shownLevels.length && init.kind !== 'eigen';
-  kindRows.two.hidden = shownLevels.length < 2 && init.kind !== 'two';
+  // (While a slider moves only the levels in view are known: the rows go by the last full count.)
+  const count = levelsFull ? shownLevels.length : Math.max(levelsCount, shownLevels.length);
+  kindRows.eigen.hidden = !count && init.kind !== 'eigen';
+  kindRows.two.hidden = count < 2 && init.kind !== 'two';
 }
 
 /** A named state, at its own speed (or the potential's). */
@@ -892,6 +948,7 @@ $('#measure-x').addEventListener('click', () => {
   kick();
 });
 $('#measure-e').addEventListener('click', () => {
+  if (!levelsFull || calibratePending) settle();
   if (!shownLevels.length) { toast('This potential has no stationary states to collapse onto.'); return; }
   const cn = coefficients(), total = cn.reduce((a, b) => a + b, 0);
   if (total < 0.98) { toast(`Only ${(100 * total).toFixed(0)}% of this state is in the levels found; an energy measurement could give a value in the continuum.`, 4000); if (total < 0.5) return; }
@@ -940,7 +997,7 @@ const bcSeg = segmented([
   { value: 'periodic', label: 'Ring', title: 'The ends are joined: a particle on a ring' },
   { value: 'absorbing', label: 'Absorbing', title: 'Whatever reaches the ends is absorbed, as if the domain went on forever' },
 ], state.boundary, (v) => { state.boundary = v; rebuildKeepingInit(); }, { label: 'Boundaries' });
-const massSlider = slider({ label: 'mass m', min: 0.1, max: 10, log: true, value: 1, onInput: (v) => { state.mass = v; rebuildKeepingInit(); } });
+const massSlider = slider({ label: 'mass m', min: 0.1, max: 10, log: true, value: 1, onInput: (v) => { state.mass = v; rebuildKeepingInit({ quick: true }); } });
 numBox.append(
   el('div', { class: 'row' }, 'x from', xminBox, 'to', xmaxBox),
   el('div', { class: 'row' }, nSelect),
@@ -957,13 +1014,13 @@ function syncNumerics() {
   xminBox.value = state.domain[0]; xmaxBox.value = state.domain[1];
   nSelect.value = state.n; bcSeg.value = state.boundary; massSlider.value = state.mass;
 }
-function rebuildKeepingInit() {
+function rebuildKeepingInit({ quick = false } = {}) {
   const init = state.init;
   const [xmin, xmax] = state.domain;
   sim = new Sim1D({ n: state.n, xmin, xmax, mass: state.mass, boundary: state.boundary });
-  applyPotential({ keepState: false });
+  applyPotential({ keepState: false, quick });
   state.init = init;
-  restart();
+  restart({ quick });
   kick();
 }
 
@@ -1092,4 +1149,4 @@ if (setups[hash.setup]) setups[hash.setup]();
 else if (!fromHash(hash)) choosePotential(POTENTIALS[2], { keepRunning: false });
 setRunning(true);
 
-window.__app = { state, get sim() { return sim; }, get slow() { const r = [slowFrames, frames]; slowFrames = frames = 0; return r; }, setups, choosePotential, restart, advance, get levels() { return shownLevels; }, get marks() { return marks; }, get classical() { return classical; }, viewRange, potentials: POTENTIALS, byId, ready: true };
+window.__app = { state, get sim() { return sim; }, get slow() { const r = [slowFrames, frames]; slowFrames = frames = 0; return r; }, setups, choosePotential, restart, advance, get levels() { if (!levelsFull) settle(); return shownLevels; }, settle, get marks() { return marks; }, get classical() { return classical; }, viewRange, potentials: POTENTIALS, byId, ready: true };

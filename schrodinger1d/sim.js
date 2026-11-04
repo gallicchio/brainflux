@@ -511,10 +511,11 @@ function tridiagSolve(d, e, E, b) {
 /**
  * The lowest `count` eigenstates of the finite-difference Hamiltonian for potential V on a grid
  * of spacing dx, with psi = 0 beyond the ends.  first/last: the index range of the grid to use
- * (for walls, the interior points 1..n-1).  Returns [{E, psi: Float64Array(n)}] normalised so
+ * (for walls, the interior points 1..n-1).  It stops at the first above maxE, or above softMaxE
+ * once it has atLeast of them.  Returns [{E, psi: Float64Array(n)}] normalised so
  * that sum psi^2 dx = 1, real, with a positive slope at the left.
  */
-export function eigenstates(V, dx, mass, count, { first = 0, last = V.length - 1, maxE = Infinity } = {}) {
+export function eigenstates(V, dx, mass, count, { first = 0, last = V.length - 1, maxE = Infinity, softMaxE = Infinity, atLeast = 0 } = {}) {
   const m = last - first + 1;
   const d = new Float64Array(m);
   const t = 1 / (2 * mass * dx * dx);
@@ -534,7 +535,7 @@ export function eigenstates(V, dx, mass, count, { first = 0, last = V.length - 1
   const total = Math.min(count, m, mc);
   for (let k = 0; k < total; k++) {
     const Efine = bisect(d, e2, k, lo - 1, hi + 1);
-    if (Efine > maxE) break;
+    if (Efine > maxE || (Efine > softMaxE && k >= atLeast)) break;
     const Ecoarse = bisect(dc, tc * tc, k, lo - 1, hi + 1);
     const E = (4 * Efine - Ecoarse) / 3;
     // Inverse iteration from a generic start; shifting slightly off E keeps it well posed.

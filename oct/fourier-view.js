@@ -232,7 +232,10 @@ function ensureBscan() {
   const key = `${state.scene}|${S.src.lamNm}|${S.src.fwhmNm}`;
   if (bscanKey === key) return;
   bscanKey = key;
-  const sc = makeScene(state.scene, {});
+  // The same scene object while the scene is the same: its scatterers are kept with it (scan.js's
+  // cell cache), so a new bandwidth sums them again instead of making them again.
+  if (!ensureBscan.scene || ensureBscan.scene.name !== state.scene) ensureBscan.scene = makeScene(state.scene, {});
+  const sc = ensureBscan.scene;
   const beam = sceneBeam(sc, S.src, sc.NA, sc.focus);
   bscan = new BScan(sc, S.src, { nx: 256 });
   bscan.measureAll({ beam, speckle: true, noise: 0 });
@@ -251,13 +254,16 @@ function fdImage() {
   if (key === fdKey) return { nz, h };
   fdKey = key;
   const nx = bscan.nx, P = new Float32Array(nx * nz);
+  // The fall-off and the fold depend on the depth alone: worked out once for all the columns.
+  const M = bscan.nz, wt = new Float32Array(M), at = new Int32Array(M);
+  for (let m = 0; m < M; m++) {
+    const d = m * bscan.hd + state.shift, r = spec.rolloff(2 * d);
+    wt[m] = r * r * (bscan.hd / h); at[m] = Math.min(nz - 1, Math.floor(fold(d, dm) / h));
+  }
   for (let ix = 0; ix < nx; ix++) {
-    const A = bscan.img.subarray(ix * bscan.nz, (ix + 1) * bscan.nz);
-    for (let m = 0; m < bscan.nz; m++) {
-      const d = m * bscan.hd + state.shift, r = spec.rolloff(2 * d), q = Math.min(nz - 1, Math.floor(fold(d, dm) / h));
-      P[ix * nz + q] += A[m] * A[m] * r * r * (bscan.hd / h);
-    }
-    if (!state.subtract) { P[ix * nz] += 1; P[ix * nz + 1] += 0.3; }
+    const A = bscan.img.subarray(ix * M, (ix + 1) * M), o = ix * nz;
+    for (let m = 0; m < M; m++) P[o + at[m]] += A[m] * A[m] * wt[m];
+    if (!state.subtract) { P[o] += 1; P[o + 1] += 0.3; }
   }
   const lo = bscan.level - 40, hi = bscan.level;
   paintImage(fdImg, nx, nz, (i, j) => Math.sqrt(P[i * nz + j]), lo, hi);

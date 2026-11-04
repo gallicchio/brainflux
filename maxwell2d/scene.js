@@ -24,6 +24,8 @@ export const MATERIALS = {
 };
 
 const keyOf = (m) => (m.bg ? 'bg' : m.pec ? 'pec' : m.absorb ? 'abs' : `n${m.n}`);
+/** The shapes' outlines alone, without their indices: what decides which fine cells they cover. */
+const shapeOutlines = (ops) => JSON.stringify(ops, (k, v) => (k === 'mat' ? { pec: !!v.pec, absorb: !!v.absorb, bg: !!v.bg } : v));
 
 // --------------------------------------------------------------------------- shapes
 
@@ -266,16 +268,47 @@ export class Scene {
     for (let q = hiY + 1; q < fy; q++) fine.copyWithin(q * fx, hiY * fx, hiY * fx + fx);
   }
 
-  /** Rebuild everything from the shape and paint operations. */
+  /** Rebuild everything from the shape and paint operations.  When only the shapes' refractive
+   *  indices have changed (the index slider), their outlines on the fine grid are the same: only
+   *  their materials' values change, and the cells' properties are worked out again from them. */
   rebuild() {
+    const geom = shapeOutlines(this.shapeOps), paints = this.paintOps.length;
+    if (geom === this._geom && this.paintOps === this._paintRef && paints === this._paints && this._retune()) {
+      this._properties(0, this.nx, 0, this.ny);
+      this.version++;
+      return [0, this.nx, 0, this.ny];
+    }
     this.fine.fill(0);
     this.palette.length = 1;
     for (const op of this.shapeOps) this._raster(op);
     for (const op of this.paintOps) this._raster(op);
     this._extend();
     this._properties(0, this.nx, 0, this.ny);
+    this._geom = geom; this._paintRef = this.paintOps; this._paints = paints;
+    this._shapeIds = this.shapeOps.map((op) => this.materialId(op.mat));
+    this._paintIds = new Set(this.paintOps.map((op) => this.materialId(op.mat)));
     this.version++;
     return [0, this.nx, 0, this.ny];
+  }
+
+  /** Give the shapes' palette entries their new indices, if that alone is the change and it can be
+   *  done (each entry still one material, none shared with paint); false: rebuild instead. */
+  _retune() {
+    if (!this._shapeIds || this._shapeIds.length !== this.shapeOps.length) return false;
+    const next = new Map();
+    for (let i = 0; i < this.shapeOps.length; i++) {
+      const id = this._shapeIds[i], mat = this.shapeOps[i].mat, key = keyOf(mat);
+      if (next.has(id) ? next.get(id).key !== key : false) return false;
+      const was = this.palette[id];
+      if (!was || was.pec !== (mat.pec ? 1 : 0) || was.bg !== (mat.bg ? 1 : 0) || (was.sig !== 0) !== !!mat.absorb) return false;
+      if (was.key !== key && this._paintIds.has(id)) return false;
+      next.set(id, { key, mat });
+    }
+    // No two entries may end up the same material (materialId would have merged them).
+    const keys = new Set();
+    for (const [id, { key }] of next) { if (keys.has(key) || this.palette.some((p, j) => j !== id && !next.has(j) && p.key === key)) return false; keys.add(key); }
+    for (const [id, { key, mat }] of next) Object.assign(this.palette[id], { key, eps: mat.n ? mat.n * mat.n : 1, n: mat.n });
+    return true;
   }
 
   setShapes(ops) { this.shapeOps = ops; return this.rebuild(); }
@@ -289,6 +322,7 @@ export class Scene {
   /** Draw an operation on top without keeping it (a piece of a stroke that is kept whole
    *  elsewhere); returns the cells whose properties changed. */
   stroke(op) {
+    this._geom = null;          // (the fine grid now holds more than the last rebuild drew)
     const r = this._raster(op);
     if (!r) return null;
     let [i0, i1, j0, j1] = r;
