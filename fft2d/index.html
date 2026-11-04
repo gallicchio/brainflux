@@ -123,7 +123,7 @@
   $\tfrac{2}{\pi}\arctan(|F|/R)$, with $R$ the magnitude drawn in full colour; the slider's
   number moves $R$ by powers of ten, so +1 draws everything ten times brighter.</figcaption></figure>
 
-  <article class="exp" data-setup="jacket">
+  <article class="exp" data-setup="jacket" data-frame="720x357">
     <h3>1. Take the stripes off Fourier's jacket</h3>
     <p>The engraver shaded the jacket with parallel lines.  To a Fourier transform, a family of
     lines with one spacing and one direction is a pair of bright spots at $\pm\vec k$, away from
@@ -132,7 +132,7 @@
     stripes fade from the image while the rest stays sharp.  This is a <em>notch filter</em>.</p>
   </article>
 
-  <article class="exp" data-setup="lowpass">
+  <article class="exp" data-setup="lowpass" data-frame="720x357">
     <h3>2. Low-pass filter: blur</h3>
     <p>With the mask tool, press on the centre of the transform and drag outwards: everything
     farther from the centre than the pointer is set to zero, as you drag.  Only the long
@@ -141,14 +141,14 @@
     <em>ringing</em>, the price of cutting the spectrum off abruptly.</p>
   </article>
 
-  <article class="exp" data-setup="highpass">
+  <article class="exp" data-setup="highpass" data-frame="720x357">
     <h3>3. High-pass filter: edges</h3>
     <p>Now the mask zeroes the inside instead.  Without the low frequencies, smooth areas lose
     their brightness and only edges, curls of hair and hatching remain.  Smaller masks remove
     less.</p>
   </article>
 
-  <article class="exp" data-setup="gaussian">
+  <article class="exp" data-setup="gaussian" data-frame="720x357">
     <h3>4. A Gaussian transforms into a Gaussian</h3>
     <p>Move the <em>Size</em> slider.  A Gaussian of width $\sigma$ (its standard deviation, in
     pixels) transforms into a Gaussian of width $N/(2\pi\sigma)$ pixels: the narrower one is, the
@@ -158,7 +158,7 @@
     the shape that makes the product smallest.  Paint a single pixel: its transform is flat.</p>
   </article>
 
-  <article class="exp" data-setup="shift">
+  <article class="exp" data-setup="shift" data-frame="720x357">
     <h3>5. Shifting multiplies by a phase</h3>
     <p>Drag the image with the hand tool.  The magnitude of the transform does not change at all
     (it is being drawn as magnitude only); only its phase does, by $e^{-2\pi i\,\vec k\cdot\vec a/N}$
@@ -167,7 +167,7 @@
     drag.  Drag the transform instead, and the image gets the phase ramp.</p>
   </article>
 
-  <article class="exp" data-setup="box">
+  <article class="exp" data-setup="box" data-frame="720x357">
     <h3>6. A square becomes a sinc</h3>
     <p>The transform of a square of side $w$ is $\mathrm{sinc}(k_x)\,\mathrm{sinc}(k_y)$: a
     bright centre with lobes along the axes falling off as $1/k$, and zeros every $N/w$ (here
@@ -178,7 +178,7 @@
     transform is a Bessel function.</p>
   </article>
 
-  <article class="exp" data-setup="slits">
+  <article class="exp" data-setup="slits" data-frame="720x357">
     <h3>7. Slits, gratings and diffraction</h3>
     <p>Far from an aperture, the light it lets through makes the pattern $|F|^2$: the Fourier
     transform <em>is</em> Fraunhofer diffraction.  The transform is drawn as intensity $|F|^2$.  A
@@ -187,7 +187,7 @@
     every 12.2); seven slits sharpen the fringes into the orders of a grating.</p>
   </article>
 
-  <article class="exp" data-setup="lattice">
+  <article class="exp" data-setup="lattice" data-frame="720x357">
     <h3>8. Crystals and the reciprocal lattice</h3>
     <p>A lattice of atoms with spacing $a$ transforms into a lattice of spots with spacing
     $N/a$: the reciprocal lattice of X-ray and electron diffraction.  Make the lattice finer
@@ -202,7 +202,7 @@
     the brick faces spreads a faint haze over all of $k$, as disorder does in a real crystal.</p>
   </article>
 
-  <article class="exp" data-setup="hermitian">
+  <article class="exp" data-setup="hermitian" data-frame="720x357">
     <h3>9. Real images have symmetric transforms</h3>
     <p>A real image has $F(-\vec k)=F(\vec k)^*$: points opposite each other through the centre
     have the same brightness and opposite phases.  Red faces red and cyan faces cyan (a real
@@ -217,7 +217,7 @@
     conjugate value: the image stays real.</p>
   </article>
 
-  <article class="exp" data-setup="phase">
+  <article class="exp" data-setup="phase" data-frame="720x357">
     <h3>10. Phase or magnitude: which one carries the picture?</h3>
     <p>The transform's phase has been thrown away (<em>Keep only the magnitude</em>): the image is
     unrecognisable.  Undo, and choose <em>Keep only the phase</em> from the transform's menu
@@ -226,7 +226,7 @@
     hard part of solving a crystal structure.</p>
   </article>
 
-  <article class="exp" data-setup="swap">
+  <article class="exp" data-setup="swap" data-frame="720x357">
     <h3>11. Swap the phases of two pictures</h3>
     <p>The transform of the author's photograph has been given the phases of Fourier's
     transform, keeping its own magnitudes.  The result looks like Fourier, not like the author.
@@ -234,7 +234,7 @@
     <em>Use remembered phase</em>.  Try it the other way round.)</p>
   </article>
 
-  <article class="exp" data-setup="wave">
+  <article class="exp" data-setup="wave" data-frame="720x357">
     <h3>12. Every point of k-space is a plane wave</h3>
     <p>One bright pixel in the transform is one plane wave $e^{2\pi i\,\vec k\cdot\vec r/N}$ in the
     image: stripes of rotating colour, perpendicular to $\vec k$, with $|\vec k|$ of them across
@@ -246,7 +246,7 @@
     two interfere.</p>
   </article>
 
-  <article class="exp" data-setup="comb">
+  <article class="exp" data-setup="comb" data-frame="720x357">
     <h3>13. Sampling: painting on a lattice</h3>
     <p>With <em>Repeat 4×4</em>, every brush mark is copied onto a 4×4 lattice: the image is
     the mark convolved with a comb.  Its transform is the mark's transform multiplied by a comb:
