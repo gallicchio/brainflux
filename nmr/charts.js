@@ -1,9 +1,82 @@
 // The plots of the NMR page: the detected signal against time (the mixer's two outputs and the
 // detector's envelope), the coil's EMF as a scope shows it, the spectrum, and a curve of
-// amplitudes with its fit.  Each takes a canvas context, its size, and plain data.
+// amplitudes with its fit.  Each takes a canvas context, its size, and plain data.  The traces of
+// sampled signals (the record, the EMF, OUT) are drawn as a digital phosphor scope draws them
+// (lib/scope.js): a slow line as a line, a band of many cycles to a pixel graded, brightest where
+// the trace lingers; ?scope=fast in the address brings back the old per-column drawing.
 
 import { Frame, fillSlots, niceTicks } from '../lib/plot.js';
-import { rawColumns } from './signal.js';
+import { scopeTrace, scopeMode } from '../lib/scope.js';
+import { rawPlan, rawFill } from './signal.js';
+
+/**
+ * A key for a trace's kept picture (lib/scope.js), but only while what it shows stands still:
+ * the same `still` (the record's id and version, say) at this place (`at`) as the last time it
+ * was drawn.  A trace that changes every frame (a record growing as the clock runs) is drawn
+ * afresh with no key, as making and throwing away a kept picture each frame would cost more.
+ */
+const lastSeen = new Map();
+function keyIfStill(at, still, key) {
+  const same = lastSeen.get(at) === still;
+  lastSeen.set(at, still);
+  return same ? `${at} ${still} ${key}` : undefined;
+}
+
+/**
+ * Draw a trace that grows at its right end (a record filling as the clock runs) in two parts: the
+ * columns already final, kept in a picture of their own and drawn into it only as they become
+ * final, CHUNK device columns at a time; and the rest, drawn afresh every frame.  So a frame costs
+ * the newest columns and one copy, not the whole trace.  `sig` names everything the trace depends
+ * on but its growth (the record's id and epoch, the scales, the colours, the mode): when it or the
+ * plot's place on the canvas changes, the picture starts again.  finalX: the drawing x up to which
+ * the trace will not change; endX: where it ends (nothing is drawn past it).  draw(c, region, xa, xb) draws the trace from drawing x xa to xb (it
+ * may draw a little more) onto the context c inside the region (a Frame-like box; lib/scope.js
+ * clips to it), c being a scratch picture's context whose transform makes the drawing coordinates
+ * the same as on the canvas.  Each part is a whole number of device columns, drawn two columns
+ * wider on each side than it is copied out (a column's shade depends on its neighbours'), its
+ * samples running MARGIN columns further, so the seams between parts don't show.
+ */
+const growing = new Map(), CHUNK = 32, MARGIN = 3, WIDEN = 2;
+let partCanvas = null;
+function growingTrace(ctx, f, at, sig, finalX, endX, draw) {
+  const M = ctx.getTransform(), sx = M.a, sy = M.d;
+  // (?scope=fast draws each column's extremes, which costs less than keeping a picture would.)
+  if (scopeMode() === 'fast') { draw(ctx, f, f.left - MARGIN / sx, endX + MARGIN / sx); return; }
+  const L = Math.floor(M.e + sx * f.left), T = Math.floor(M.f + sy * f.top);
+  const W = Math.max(1, Math.ceil(M.e + sx * (f.left + f.w)) - L), H = Math.max(1, Math.ceil(M.f + sy * (f.top + f.h)) - T);
+  const full = `${sig}|${L} ${T} ${W} ${H} ${sx} ${sy} ${M.e} ${M.f}`;
+  let g = growing.get(at);
+  if (!g) { g = { canvas: document.createElement('canvas'), full: '', done: 0 }; growing.set(at, g); }
+  if (g.full !== full) {
+    g.full = full; g.done = 0;
+    if (g.canvas.width !== W || g.canvas.height !== H) { g.canvas.width = W; g.canvas.height = H; } else g.canvas.getContext('2d').clearRect(0, 0, W, H);
+  }
+  // Device columns [c0, c1) of the plot as a region in drawing coordinates (nudged inward, so that
+  // it rounds to exactly those columns), and the drawing x of column c's left edge.
+  const region = (c0, c1) => ({ left: (L + c0 + 1e-4 - M.e) / sx, top: f.top, w: (c1 - c0 - 2e-4) / sx, h: f.h });
+  const xOf = (c) => (L + c - M.e) / sx;
+  // Columns [c0, c1) of the trace, drawn into the scratch picture over [c0 - WIDEN, c1 + WIDEN).
+  const part = (c0, c1) => {
+    if (!partCanvas) partCanvas = document.createElement('canvas');
+    if (partCanvas.width < W || partCanvas.height < H) { partCanvas.width = Math.max(W, partCanvas.width); partCanvas.height = Math.max(H, partCanvas.height); }
+    const pc = partCanvas.getContext('2d'), e0 = Math.max(0, c0 - WIDEN), e1 = Math.min(W, c1 + WIDEN);
+    pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(e0, 0, e1 - e0, H);
+    pc.setTransform(sx, 0, 0, sy, M.e - L, M.f - T);
+    draw(pc, region(e0, e1), xOf(e0 - MARGIN), xOf(e1 + MARGIN));
+    return partCanvas;
+  };
+  const fin = Math.min(W, Math.floor(M.e + sx * finalX) - L - MARGIN), end = Math.max(0, Math.min(W, Math.ceil(M.e + sx * endX) - L + MARGIN));
+  if (fin - g.done >= CHUNK || (fin === W && g.done < W)) {
+    const kc = g.canvas.getContext('2d');
+    kc.setTransform(1, 0, 0, 1, 0, 0);
+    kc.drawImage(part(g.done, fin), g.done, 0, fin - g.done, H, g.done, 0, fin - g.done, H);
+    g.done = fin;
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (g.done > 0) ctx.drawImage(g.canvas, 0, 0, g.done, H, L, T, g.done, H);
+  if (g.done < end) ctx.drawImage(part(g.done, end), g.done, 0, end - g.done, H, L + g.done, T, end - g.done, H);
+  ctx.restore();
+}
 
 /** A time unit for a span of seconds: {s: scale, u: name}. */
 export function timeUnit(span) {
@@ -49,53 +122,6 @@ export function pulseName(angle, phase) {
 }
 
 /**
- * Per pixel column, the lowest and highest of get(i) over the record's samples in it, or the
- * record interpolated at the column's middle where a column holds fewer than two samples.
- * Returns {lo, hi, has} (has: the column holds a sample or lies between two).
- */
-function columnsOf(record, get, t0, t1, cols, interp) {
-  const lo = new Float32Array(cols), hi = new Float32Array(cols), has = new Uint8Array(cols);
-  const T = record.t, n = T.length;
-  if (!n) return { lo, hi, has };
-  const w = (t1 - t0) / cols;
-  for (let c = 0; c < cols; c++) {
-    const ta = t0 + c * w, tb = ta + w;
-    if (tb < T[0] || ta > T[n - 1]) continue;
-    let i = Math.max(0, record.index(ta)), a = Infinity, b = -Infinity, k = 0;
-    if (T[i] < ta) i++;
-    for (; i < n && T[i] <= tb; i++) { const v = get(i); if (v < a) a = v; if (v > b) b = v; k++; }
-    if (k < 2) { const v = interp(Math.min(T[n - 1], Math.max(T[0], (ta + tb) / 2))); if (k === 0) a = b = v; else { a = Math.min(a, v); b = Math.max(b, v); } }
-    lo[c] = a; hi[c] = b; has[c] = 1;
-  }
-  return { lo, hi, has };
-}
-
-/** Draw a trace given per-column ranges: a line through the middles, filled where it spreads. */
-function drawColumns(ctx, f, cols, colsData, Y, color, width, fill = true) {
-  const { lo, hi, has } = colsData;
-  ctx.save();
-  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width;
-  ctx.beginPath();
-  let on = false;
-  for (let c = 0; c < cols; c++) {
-    if (!has[c]) { on = false; continue; }
-    const x = f.left + ((c + 0.5) * f.w) / cols, y = Y((lo[c] + hi[c]) / 2);
-    if (on) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-    on = true;
-  }
-  ctx.stroke();
-  if (fill) {
-    ctx.globalAlpha = 0.55;
-    for (let c = 0; c < cols; c++) {
-      if (!has[c]) continue;
-      const y0 = Y(hi[c]), y1 = Y(lo[c]);
-      if (y1 - y0 > width) ctx.fillRect(f.left + (c * f.w) / cols, y0, Math.max(1, f.w / cols), y1 - y0);
-    }
-  }
-  ctx.restore();
-}
-
-/**
  * The detected signal against time: the mixer's outputs M_x′ and M_y′, the envelope |M_xy|, and
  * (faint) M_z, which the coil does not see.  opts: {record, t0, t1, ymax, sigma, scale (units per
  * M0), unit, colors, sent, show: {mx, my, mxy, mz}, now, title, echoes: [t...], fit: {t0, A, tau}}.
@@ -108,15 +134,44 @@ export function drawSignal(ctx, width, height, o) {
   ctx.save(); f.clip();
   ctx.strokeStyle = c.line; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(0)); ctx.lineTo(f.right, f.Y(0)); ctx.stroke();
-  const cols = Math.max(20, Math.round(f.w));
-  const tmp = [0, 0, 0];
-  const at = (t) => R.at(t, sg, tmp);
   const sh = o.show || { mx: true, my: true, mxy: true, mz: true };
-  if (sh.mz) drawColumns(ctx, f, cols, columnsOf(R, (i) => k * R.z[i], o.t0, o.t1, cols, (t) => k * at(t)[2]), (v) => f.Y(v), c.mz, 1.2, false);
-  // The envelope first and thick, so that a mixer's output lying on it shows on top of it.
-  if (sh.mxy) drawColumns(ctx, f, cols, columnsOf(R, (i) => k * Math.hypot(R.x[i] + sg * R.nx[i], R.y[i] + sg * R.ny[i]), o.t0, o.t1, cols, (t) => { const m = at(t); return k * Math.hypot(m[0], m[1]); }), (v) => f.Y(v), c.mxy, 3.2);
-  if (sh.mx) drawColumns(ctx, f, cols, columnsOf(R, (i) => k * (R.x[i] + sg * R.nx[i]), o.t0, o.t1, cols, (t) => k * at(t)[0]), (v) => f.Y(v), c.mx, 1.5);
-  if (sh.my) drawColumns(ctx, f, cols, columnsOf(R, (i) => k * (R.y[i] + sg * R.ny[i]), o.t0, o.t1, cols, (t) => k * at(t)[1]), (v) => f.Y(v), c.my, 1.5);
+  // The record's samples in the window, and the one either side of it (so the trace reaches the
+  // edges; nothing is drawn beyond the record's ends).  Without noise the record is a smooth
+  // line, a sample or two a pixel, and is drawn as one (anti-aliased by the canvas).  With noise,
+  // which is new at every sample, two or more samples a device pixel (a narrow plot) make a band,
+  // drawn through scopeTrace as a scope shows noise (?scope=fast: the old per-column drawing) and
+  // kept as it grows; fewer are a line too.  (Decided for the whole trace, so that the parts kept
+  // as it grows don't each decide for themselves.)
+  const N = R.length, traces = [
+    sh.mz && [(i) => R.z[i], c.mz, 1.2],
+    // The envelope first and thick, so that a mixer's output lying on it shows on top of it.
+    sh.mxy && [(i) => Math.hypot(R.x[i] + sg * R.nx[i], R.y[i] + sg * R.ny[i]), c.mxy, 3.2],
+    sh.mx && [(i) => R.x[i] + sg * R.nx[i], c.mx, 1.5],
+    sh.my && [(i) => R.y[i] + sg * R.ny[i], c.my, 1.5],
+  ].filter(Boolean);
+  const span = (ta, tb) => [Math.max(0, R.index(ta)), Math.min(N - 1, R.index(tb) + 1)];
+  // (With noise, one sample a noise index: a sample off the grid, at the end of a pulse or of a
+  // frame's step of the clock, shares the noise of its grid sample, and would draw it as a flat
+  // step, where a scope's trace lingers and shows a bright dash.)
+  const pick = (i0, i1) => { const out = []; for (let i = i0; i <= i1; i++) if (!out.length || R.k[i] !== R.k[out[out.length - 1]]) out.push(i); return out; };
+  const [v0, v1] = span(o.t0, o.t1), all = sg > 0 && v1 > v0 ? pick(v0, v1) : null;
+  const dense = all && all.length - 1 >= 2 * (f.X(R.t[v1]) - f.X(R.t[v0])) * ctx.getTransform().a;
+  if (N >= 2 && dense) {
+    const draw = (cx, region, xa, xb) => {
+      const [i0, i1] = span(Math.max(o.t0, f.invX(xa)), Math.min(o.t1, f.invX(xb))), I = pick(i0, i1);
+      if (I.length < 2) return;
+      for (const [value, color, width] of traces) scopeTrace(cx, region, { n: I.length, x: (j) => f.X(R.t[I[j]]), y: (j) => f.Y(k * value(I[j])), color, width });
+    };
+    growingTrace(ctx, f, `${ctx.canvas.id} signal`, `${R.id} ${R.epoch} ${sg} ${k} ${o.t0} ${o.t1} ${o.ymax} ${traces.map((q) => q[1]).join(' ')} ${scopeMode()}`, f.X(R.t[N - 1]), f.X(R.t[N - 1]), draw);
+  } else if (N >= 2) {
+    const I = all || Array.from({ length: Math.max(0, v1 - v0 + 1) }, (_, j) => v0 + j);
+    for (const [value, color, width] of traces) {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      I.forEach((i, j) => { const x = f.X(R.t[i]), y = f.Y(k * value(i)); if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.stroke();
+    }
+  }
   if (o.fit && o.fit.A) {
     ctx.strokeStyle = c.fit; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
     ctx.beginPath();
@@ -148,9 +203,10 @@ export function drawSignal(ctx, width, height, o) {
   return f;
 }
 
-/** The coil's EMF as a scope on it shows it: the oscillation at the Larmor frequency (or its
- *  envelope where the plot holds too many periods to draw).  opts: {record, omegaRef, t0, t1,
- *  ymax, sigma, scale, unit, colors, sent, title, zoomNote}. */
+/** The coil's EMF as a scope on it shows it: the oscillation at the Larmor frequency, or, where
+ *  a pixel holds many periods, the band they make, graded by the time the trace spends across it
+ *  (signal.js rawPlan and rawFill sample it; lib/scope.js draws it).  opts: {record, omegaRef,
+ *  t0, t1, ymax, sigma, scale, unit, colors, sent, title, zoomNote}. */
 export function drawRaw(ctx, width, height, o) {
   const c = o.colors, f = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
   const tu = timeUnit(o.t1 - o.t0), k = o.scale || 1;
@@ -164,26 +220,18 @@ export function drawRaw(ctx, width, height, o) {
   if (R.length) {
     const ta = Math.max(o.t0, R.t[0]), tb = Math.min(o.t1, R.t[R.length - 1]);
     if (tb > ta) {
-      const cols = Math.max(10, Math.round((f.w * (tb - ta)) / (o.t1 - o.t0)));
-      const r = rawColumns(R, o.omegaRef, ta, tb, cols, o.sigma || 0, 6);
-      envelope = r.envelope;
-      const x0 = f.X(ta), w = f.X(tb) - x0;
-      ctx.strokeStyle = c.raw; ctx.fillStyle = c.raw; ctx.lineWidth = 1.3;
-      if (r.envelope) {
-        ctx.globalAlpha = 0.75;
-        for (let i = 0; i < cols; i++) { const y0 = f.Y(k * r.hi[i]), y1 = f.Y(k * r.lo[i]); ctx.fillRect(x0 + (i * w) / cols, y0, Math.max(1, w / cols + 0.5), Math.max(1, y1 - y0)); }
-        ctx.globalAlpha = 1;
-      } else {
-        ctx.beginPath();
-        for (let i = 0; i < cols; i++) {
-          const x = x0 + ((i + 0.5) * w) / cols;
-          // Within a column the trace runs from one end of its range to the other.
-          const a = f.Y(k * r.lo[i]), b = f.Y(k * r.hi[i]);
-          if (i === 0) ctx.moveTo(x, (a + b) / 2);
-          if (Math.abs(a - b) > 1.5) { ctx.lineTo(x, a); ctx.lineTo(x, b); } else ctx.lineTo(x, (a + b) / 2);
-        }
-        ctx.stroke();
-      }
+      // The samples are laid out over the whole window, so that they stay where they are as the
+      // record grows (and the trace's picture can be kept as it grows); those in the record are drawn.
+      const fast = scopeMode() === 'fast', sg = o.sigma || 0;
+      const plan = rawPlan(o.omegaRef, o.t0, o.t1, f.w * ctx.getTransform().a, { fast }), dt = (o.t1 - o.t0) / (plan.n - 1);
+      envelope = plan.band;
+      const draw = (cx, region, xa, xb) => {
+        const j0 = Math.max(0, Math.ceil((Math.max(ta, f.invX(xa)) - o.t0) / dt - 1e-9)), j1 = Math.min(plan.n - 1, Math.floor((Math.min(tb, f.invX(xb)) - o.t0) / dt + 1e-9));
+        if (j1 <= j0) return;
+        const v = rawFill(R, o.omegaRef, o.t0, o.t1, plan, sg, rawBuffer(j1 - j0 + 1), j0, j1);
+        scopeTrace(cx, region, { n: j1 - j0 + 1, y: (j) => f.Y(k * v[j]), x0: f.X(o.t0 + j0 * dt), x1: f.X(o.t0 + j1 * dt), color: c.raw, width: 1.3, alpha: fast && plan.band ? 0.75 : 1 });
+      };
+      growingTrace(ctx, f, `${ctx.canvas.id} raw`, `${R.id} ${R.epoch} ${o.omegaRef} ${o.t0} ${o.t1} ${ta} ${sg} ${k} ${o.ymax} ${c.raw} ${plan.n} ${scopeMode()}`, f.X(tb), f.X(tb), draw);
     }
   }
   ctx.restore();
@@ -196,9 +244,15 @@ export function drawRaw(ctx, width, height, o) {
   return { frame: f, envelope };
 }
 
-/** A trace given as evenly spaced samples (OUT at an audio rate), as a scope draws it: per pixel
- *  column the samples' range.  opts: {t0, t1, y (Float32Array over [t0, t1]), ymax, colors,
- *  title, note}. */
+let rawBuf = new Float32Array(0);
+/** A buffer of at least n floats for the raw trace's samples, reused from frame to frame. */
+function rawBuffer(n) { if (rawBuf.length < n) rawBuf = new Float32Array(Math.ceil(n * 1.25)); return rawBuf; }
+
+/** A trace given as evenly spaced samples (OUT at an audio rate), as a scope draws it: through
+ *  lib/scope.js, interpolated as the band-limited signal it is (OUT is filtered far below half its
+ *  sampling rate) where its samples are sparse, so a crest between samples comes out and the
+ *  receiver's noise is a band.  opts: {t0, t1, y (Float32Array over [t0, t1]), ymax, colors,
+ *  title, note, key (names everything y depends on, when it is kept)}. */
 export function drawTrace(ctx, width, height, o) {
   const c = o.colors, f = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
   const tu = timeUnit(o.t1 - o.t0), y = o.y, n = y.length;
@@ -206,20 +260,7 @@ export function drawTrace(ctx, width, height, o) {
   ctx.save(); f.clip();
   ctx.strokeStyle = c.line;
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(0)); ctx.lineTo(f.right, f.Y(0)); ctx.stroke();
-  if (n > 1) {
-    const cols = Math.max(10, Math.round(f.w));
-    ctx.strokeStyle = c.raw; ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    for (let i = 0; i < cols; i++) {
-      const a0 = Math.floor((i * (n - 1)) / cols), a1 = Math.max(a0, Math.floor(((i + 1) * (n - 1)) / cols));
-      let lo = Infinity, hi = -Infinity;
-      for (let j = a0; j <= a1; j++) { if (y[j] < lo) lo = y[j]; if (y[j] > hi) hi = y[j]; }
-      const x = f.left + ((i + 0.5) * f.w) / cols, ya = f.Y(lo), yb = f.Y(hi);
-      if (i === 0) ctx.moveTo(x, (ya + yb) / 2);
-      if (Math.abs(ya - yb) > 1.5) { ctx.lineTo(x, ya); ctx.lineTo(x, yb); } else ctx.lineTo(x, (ya + yb) / 2);
-    }
-    ctx.stroke();
-  }
+  if (n > 1) scopeTrace(ctx, f, { n, y: (i) => f.Y(y[i]), x0: f.X(o.t0), x1: f.X(o.t1), color: c.raw, width: 1.3, bandlimited: true, key: o.key ? keyIfStill(`nmr trace ${o.title}`, o.key, o.ymax) : undefined });
   ctx.restore();
   ctx.save();
   const g = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });

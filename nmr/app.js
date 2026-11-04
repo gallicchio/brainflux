@@ -1247,6 +1247,7 @@ function niceUp(x) {
   return e * [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((m) => m * e >= x * (1 - 1e-9));
 }
 
+let zoomKept = { key: null, y: null };
 function drawBoardPlots() {
   drawBoardStrip();
   drawTankPlot();
@@ -1262,8 +1263,13 @@ function drawBoardPlots() {
     ctx.clearRect(0, 0, width, height);
     // A scope's sweep of 10 ms: the newest 10 ms while the FID comes in, its first 10 ms after.
     const open = tOpenAbs(), live = run && !eng.done && eng.t > open + 0.01;
-    const z1 = live ? eng.t : open + 0.01, z0 = z1 - 0.01, y = outSamples(eng.record, eng.omegaRef, z0, 480);
-    drawTrace(ctx, width, height, { t0: z0, t1: z1, y, ymax: 1.1 * Vo, colors: C,
+    const z1 = live ? eng.t : open + 0.01, z0 = z1 - 0.01;
+    // (Once the sweep stands still, OUT's samples and their picture are kept until anything they
+    // depend on changes: the record, the switches, the noise, the coil's EMF, the receiver's opening.)
+    const zkey = live ? null : `nmr out ${eng.record.id} ${eng.record.version} ${eng.omegaRef} ${z0} ${board.code} ${state.noiseOn} ${state.averages} ${eng.noiseSeed} ${Vfull()} ${open}`;
+    if (!zkey || zoomKept.key !== zkey) zoomKept = { key: zkey, y: outSamples(eng.record, eng.omegaRef, z0, 480) };
+    const y = zoomKept.y;
+    drawTrace(ctx, width, height, { t0: z0, t1: z1, y, ymax: 1.1 * Vo, colors: C, key: zkey,
       title: eng.t < open ? '10 ms of OUT: the receiver opens 19 ms after the switch-off' : live ? 'The last 10 ms at OUT (V): the oscillation itself' : 'Its first 10 ms at OUT (V)' });
   }
   {
