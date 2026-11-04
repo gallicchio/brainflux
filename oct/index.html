@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optical Coherence Tomography · BrainFlux</title>
+<meta name="description" content="From white-light fringes to a 3D image: a Michelson with a broadband source finds the depth of every reflecting layer in a sample, an A-scan at a time, then a cross-section and a volume, and the Fourier-domain way that does it all at once.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="oct.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Optical coherence tomography</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="oct" id="main" data-view="fringes">
+  <section class="stage">
+    <div class="row view-row" id="view-row"></div>
+
+    <!-- 1 · Fringes from a layer -->
+    <div class="view" id="v-fringes">
+      <div class="cell schem-cell">
+        <div class="head"><h2>A Michelson with a sample in one arm</h2><span class="note">seen from above</span></div>
+        <div class="box dark-box schem-box"><canvas id="f-schem" tabindex="0" aria-label="The interferometer from above: drag the reference mirror along its rail; the sample is below the beam splitter"></canvas></div>
+        <div class="hint" id="f-hint">Drag the reference mirror (or click on the trace below): fringes appear only while its distance matches the surface's depth.</div>
+      </div>
+      <div class="cell side-cell">
+        <div class="head"><h2>The light</h2><span class="note">its spectrum: drag a ◇ to change its width</span></div>
+        <div class="box spec-box"><canvas id="f-spec" aria-label="The source's spectrum against wavelength: drag a diamond to change the bandwidth"></canvas></div>
+        <div class="head"><h2>The fringes, magnified</h2><span class="note">the signal within 8 μm of the mirror</span></div>
+        <div class="box zoom-box"><canvas id="f-zoom" aria-label="The detector's signal within 8 micrometres of the mirror's position, fringe by fringe"></canvas></div>
+      </div>
+      <div class="cell trace-cell">
+        <div class="head"><h2>The detector's signal against the mirror's position</h2><span class="note">what it has recorded so far</span></div>
+        <div class="box trace-box"><canvas id="f-trace" aria-label="The detector's signal against the mirror's position d: click or drag to move the mirror there"></canvas></div>
+        <div class="readout" id="f-readout"><div id="f-readout-1"></div><div id="f-readout-2"></div><div id="f-readout-3"></div></div>
+      </div>
+    </div>
+
+    <!-- 2 · The A-scan -->
+    <div class="view" id="v-ascan">
+      <div class="cell">
+        <div class="head"><h2>The sample in the sample arm</h2><span class="note">drawn in optical depth; yellow: the depth the reference mirror matches now</span></div>
+        <div class="box strip-box"><canvas id="a-strip" aria-label="The sample's layers at their optical depths, and the depth the reference mirror matches: click to put the mirror there"></canvas></div>
+        <div class="gloss" id="a-describe"></div>
+        <div class="hint" id="a-hint">The motor scans the reference mirror through the whole sample, as in view 1: every layer makes its own burst.  Click on any plot to put the mirror there.</div>
+      </div>
+      <div class="cell">
+        <div class="head"><h2>The detector's signal</h2><span class="note">the fringes, far too fine to see one by one at this scale, and the detector's noise</span></div>
+        <div class="box a-trace-box"><canvas id="a-trace" aria-label="The detector's signal against the mirror's position, recorded as the mirror moves"></canvas></div>
+      </div>
+      <div class="cell">
+        <div class="head"><h2>The A-scan: the envelope of the fringes</h2><span class="note">the sample's reflectivity against depth</span><span class="spacer"></span><span id="a-scale-box"></span></div>
+        <div class="box a-scan-box"><canvas id="a-scan" aria-label="The A-scan: the envelope of the fringes, demodulated from the detector's signal, against depth"></canvas></div>
+        <div class="box grey-box"><canvas id="a-grey" aria-label="The same A-scan as a strip of grey levels"></canvas></div>
+        <div class="gloss">The same A-scan in grey, brighter where the sample reflects more: one column of the cross-sections in view 3.</div>
+        <div class="readout" id="a-readout"><div id="a-readout-1"></div><div id="a-readout-2"></div></div>
+      </div>
+    </div>
+
+    <!-- 3 · B-scan and the volume -->
+    <div class="view" id="v-scan" data-mode="bscan">
+      <div class="row s-mode-row"><span id="s-mode-box"></span></div>
+      <div class="s-bgrid">
+        <div class="cell s-scene-cell">
+          <div class="head"><h2>The sample from the side</h2><span class="note">the beam drawn to scale, stepped across by the galvo mirror</span></div>
+          <div class="box dark-box s-scene-box"><canvas id="s-scene" aria-label="The sample from the side, with the galvo mirror, the scan lens and the beam at the column being measured: point to name what is there, click to move the beam"></canvas></div>
+        </div>
+        <div class="cell s-legend-cell">
+          <div class="head"><h2>Its layers</h2></div>
+          <div id="s-legend" class="legend"></div>
+        </div>
+        <div class="cell s-bscan-cell">
+          <div class="head"><h2>The B-scan: what OCT sees</h2><span class="note">each column one A-scan, in grey (decibels)</span></div>
+          <div class="box dark-box s-bscan-box"><canvas id="s-bscan" aria-label="The B-scan: the A-scans side by side, brighter where the sample reflects more: point to name what is there, click to see that column"></canvas></div>
+          <div class="hint" id="s-hint">Press <b>Step</b> to move the beam one column, <b>Go on</b> to sweep it across; click either picture to see that column's A-scan on the right.</div>
+        </div>
+        <div class="cell s-ascan-cell">
+          <div class="head"><h2>That column</h2></div>
+          <div class="box s-ascan-box"><canvas id="s-ascan" aria-label="The A-scan of the column the beam is at, in decibels, depth down"></canvas></div>
+        </div>
+      </div>
+      <div class="s-vgrid">
+        <div class="cell">
+          <div class="head"><h2>The volume</h2><span class="note">three slices through it, in a cube</span></div>
+          <div class="box dark-box s-cube-box"><canvas id="s-cube" aria-label="The volume as a cube with the three slices in it"></canvas></div>
+          <div class="hint" id="s-vhint">Click or drag on any slice to move the other two through that point (or use the sliders under The slices).</div>
+        </div>
+        <div class="cell">
+          <div class="head"><h2><span class="sw xy"></span>En face</h2><span class="note">the plane at one depth, seen from above</span></div>
+          <div class="box dark-box s-xy-box"><canvas id="s-xy" aria-label="The en-face slice: the volume at one depth, seen from above"></canvas></div>
+        </div>
+        <div class="cell">
+          <div class="head"><h2><span class="sw xz"></span>A B-scan, at one y</h2></div>
+          <div class="box dark-box s-sl-box"><canvas id="s-xz" aria-label="The B-scan at the chosen y"></canvas></div>
+        </div>
+        <div class="cell">
+          <div class="head"><h2><span class="sw yz"></span>A cross-section across y, at one x</h2></div>
+          <div class="box dark-box s-sl-box"><canvas id="s-yz" aria-label="The cross-section across y at the chosen x"></canvas></div>
+        </div>
+      </div>
+      <div class="readout" id="s-readout"><div id="s-readout-1"></div><div id="s-readout-2"></div><div id="s-readout-3"></div></div>
+    </div>
+
+    <!-- 4 · Fourier-domain OCT -->
+    <div class="view" id="v-fourier">
+      <div class="row"><span id="q-mode-box"></span></div>
+      <div class="q-a">
+        <div class="cell q-schem-cell">
+          <div class="head"><h2>The reference mirror stays still</h2><span class="note">a spectrometer instead of a detector</span></div>
+          <div class="box dark-box schem-box"><canvas id="q-schem" aria-label="The interferometer with its reference mirror fixed at zero path, and a grating spreading the light over a line camera"></canvas></div>
+        </div>
+        <div class="cell q-spec-cell">
+          <div class="head"><h2>What the line camera records</h2><span class="note">the interference spectrum: a fringe for every layer, the finer the deeper</span></div>
+          <div class="box q-spec-box"><canvas id="q-spec" aria-label="The interference spectrum on the camera's pixels against wavenumber"></canvas></div>
+        </div>
+        <div class="cell q-scan-cell">
+          <div class="head"><h2>Its Fourier transform: the whole A-scan at once</h2><span class="note">one peak per fringe frequency</span><span class="spacer"></span><span id="q-scale-box"></span></div>
+          <div class="q-legend" id="q-legend"></div>
+          <div class="box q-scan-box"><canvas id="q-scan" aria-label="The A-scan from the Fourier transform of the spectrum, against optical depth: click a layer's marker to see its own fringe in the spectrum"></canvas></div>
+          <div class="hint" id="q-hint">The stage motor moves the sample slowly in depth: watch its fringes get finer as it goes deeper.  Click a ▼ to see that layer's own fringe in the spectrum.</div>
+        </div>
+      </div>
+      <div class="q-b">
+        <div class="cell">
+          <div class="head"><h2>A B-scan, one camera frame per column</h2><span class="note">the whole depth of every column at once; the sample moves, the picture follows at video rate</span></div>
+          <div class="box dark-box q-bscan-box"><canvas id="q-bscan" aria-label="A B-scan made the Fourier-domain way, its depth from zero path to the end of the range"></canvas></div>
+          <div class="hint" id="q-bhint">Drag "sample at" (or let the stage motor move it): bring the sample up through zero path and see its mirror image fold in; push it past the end of the range and see it fold back.</div>
+        </div>
+      </div>
+      <div class="readout" id="q-readout"><div id="q-readout-1"></div><div id="q-readout-2"></div><div id="q-readout-3"></div></div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel" id="light-panel">
+      <div class="label">The light</div>
+      <div class="row" id="lam-box"></div>
+      <div id="bw-box"></div>
+      <div class="gloss">Δλ, the bandwidth: the width of the spectrum at half its height.  The broader the light, the shorter the coherence length.</div>
+      <div class="readout-line" id="light-readout"></div>
+    </div>
+
+    <div class="panel for-fringes">
+      <div class="label">The sample</div>
+      <div id="f-sample-box" class="stack"></div>
+      <div id="f-plate-box" class="stack"></div>
+      <details id="f-more">
+        <summary>More: glass in one arm only (dispersion)</summary>
+        <div id="f-glass-box" class="stack"></div>
+        <div class="gloss">A block of BK7 glass in the sample arm with no twin in the reference arm.  Glass delays each colour differently (dispersion), so the colours' fringes no longer line up: the burst spreads and its fringes are chirped.  (The mirror is put back by the glass's group delay, so the burst stays where it was.)</div>
+      </details>
+    </div>
+    <div class="panel for-fringes">
+      <div class="label">The reference mirror</div>
+      <div id="f-mirror-box" class="stack"></div>
+      <div class="row motor-row"><span class="small muted">Motor</span><span id="f-motor-box"></span></div>
+      <div id="f-speed-box" class="stack"></div>
+      <div class="row"><button type="button" class="small-btn" id="f-fit" title="Fit the trace's window to the surfaces">Fit to the sample</button><button type="button" class="small-btn" id="f-clear" title="Forget what the detector has recorded">Clear the trace</button></div>
+    </div>
+
+    <div class="panel for-ascan">
+      <div class="label">The sample</div>
+      <div id="a-sample-box"></div>
+      <div id="a-gap-box" class="stack" hidden></div>
+    </div>
+    <div class="panel for-ascan">
+      <div class="label">The scan</div>
+      <div class="row motor-row"><span class="small muted">Motor</span><span id="a-motor-box"></span><button type="button" class="small-btn" id="a-whole" title="Record the whole range at once">Whole scan</button></div>
+      <div id="a-speed-box"></div>
+      <div id="a-noise-box"></div>
+      <div class="gloss">The noise floor: the reflection that is as strong as the detector's noise.  A real detector's noise is mostly shot noise, the graininess of light itself: with 1 mW on the sample at 840 nm and 400 A-scans a second, its floor is about −100 dB, one part in 10¹⁰ of the light.  Here it is raised so that you can see it.</div>
+    </div>
+
+    <div class="panel for-scan">
+      <div class="label">The scan</div>
+      <div class="row"><button type="button" id="s-play" class="primary" title="Pause, or go on scanning">Pause</button><button type="button" id="s-step" title="One more column (one more B-scan for the volume), then stop">Step</button><button type="button" id="s-finish" title="Measure everything that is left, at once">Finish</button></div>
+      <div id="s-image-box" class="stack"></div>
+    </div>
+    <div class="panel for-scan s-vol-only">
+      <div class="label">The slices</div>
+      <div id="s-slice-box" class="stack"></div>
+    </div>
+    <div class="panel for-scan">
+      <div class="label">The sample</div>
+      <div id="s-scene-box"></div>
+      <div class="row" id="s-toggles"><button type="button" class="small-btn" id="s-reseed" title="The same sample with its scatterers in new places: a new speckle pattern">New speckle</button></div>
+      <details id="s-more">
+        <summary>More: tilt and roughness</summary>
+        <div id="s-shape-box" class="stack"></div>
+      </details>
+    </div>
+    <div class="panel for-scan">
+      <div class="label">The beam</div>
+      <div id="s-beam-box" class="stack"></div>
+      <div class="gloss">NA, the numerical aperture: the sine of the half-angle of the cone of light the lens focuses into the sample.  A wide cone makes a small spot, but only near the focus.</div>
+    </div>
+
+    <div class="panel for-fourier">
+      <div class="label">The spectrometer</div>
+      <div class="row"><span class="small muted">Pixels</span><span id="q-n-box"></span></div>
+      <div class="gloss">The camera spans three bandwidths of the light.  More pixels across it: finer steps δk in wavenumber, finer fringes followed, a deeper range.</div>
+      <div id="q-show-box" class="stack"></div>
+      <div id="q-show-a" class="stack q-a-only"></div>
+      <div id="q-noise-box"></div>
+      <div class="gloss">Why every OCT built since about 2006 works this way: a time-domain system measures one depth at a time, a spectrometer all N at once, each pixel collecting light for the whole A-scan.  For the same light and the same time its noise floor is about N/2 lower (for 1024 pixels, 27 dB), or for the same floor it is that much faster: from 400 A-scans a second to 70,000 and more.</div>
+    </div>
+    <div class="panel for-fourier q-a-only">
+      <div class="label">The sample</div>
+      <div id="q-sample-box"></div>
+      <div id="q-pos-box" class="stack"></div>
+    </div>
+    <div class="panel for-fourier q-b-only">
+      <div class="label">The sample</div>
+      <div id="q-scene-box"></div>
+      <div id="q-shift-box" class="stack"></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <section class="start"><h3>Start here</h3>
+  <p>In the <a href="../interferometer/#setup=white">interferometer demo</a>, white light made fringes only within a few micrometres of equal
+  paths.  That is the whole idea of optical coherence tomography: put a sample where the second
+  mirror was, and every layer in it that reflects a little light makes its own burst of fringes
+  when the reference mirror is at the same distance.</p>
+  <p>The page opens with one reflecting surface.  <b>Drag the reference mirror</b> on the drawing
+  (or let the motor sweep it, or click on the trace) and watch the burst appear only where the two
+  distances match.  <b>Drag a ◇ on the spectrum</b> to change how broad the light is, and see the
+  burst narrow as the light broadens.</p>
+  <p>The four views at the top go one step each: <b>1</b> one surface; <b>2</b> the mirror scanned
+  through a layered sample, which reads out how much it reflects at every depth (an A-scan);
+  <b>3</b> the beam stepped sideways, A-scan after A-scan, into a cross-section of an eye's retina,
+  and then into a 3D volume; <b>4</b> the way it is done today, with the mirror still and a
+  spectrometer that measures every depth at once.</p>
+  </section>
+
+  <h3>1 · Fringes from a layer</h3>
+
+  <article class="exp" data-setup="start">
+    <h3>1. One surface: fringes only where the paths match</h3>
+    <p>What the page opens with: a broadband infrared source (a superluminescent diode at
+    $\lambda_0=840$ nm, $\Delta\lambda=50$ nm wide), a beam splitter, the reference mirror on its
+    rail, and in the other arm one surface of glass that reflects $r=0.2$ of the light's
+    amplitude, 50 μm beyond the place where the two arms are equal.  The motor sweeps the mirror
+    back and forth.  Far from 50 μm the detector sees a steady signal; within a few micrometres of
+    it, a burst of fringes, one fringe for every 420 nm ($\lambda_0/2$) of mirror travel, about 15
+    of them within the burst's half height.  The burst is 6.23 μm wide at half height, which is the
+    coherence length
+    $$\ell_c=\frac{2\ln 2}{\pi}\frac{\lambda_0^2}{\Delta\lambda}=0.44\,\frac{(0.84\ \text{μm})^2}{0.05\ \text{μm}}=6.23\ \text{μm}.$$
+    It is the same reason white light's fringes stopped a few micrometres from equal paths: every
+    wavelength in the light makes fringes of its own spacing, and they are in step only where the
+    paths match.  So the burst says where the surface is, to within a few micrometres, however
+    blurred the light is sideways.  Stop the motor (■) and drag the mirror through it slowly; the
+    magnified view shows each fringe.</p>
+  </article>
+
+  <article class="exp" data-setup="bandwidth">
+    <h3>2. Broader light, shorter bursts</h3>
+    <p>The same surface in light only 10 nm wide: the burst is 31.1 μm wide, five times longer.
+    Drag a ◇ on the spectrum (or the bandwidth slider) and watch the burst follow
+    $\ell_c\propto\lambda_0^2/\Delta\lambda$: 12.45 μm at 25 nm, 6.23 μm at 50, 3.11 μm at 100,
+    2.08 μm at 150 nm.  The burst's envelope is the Fourier transform of the light's spectrum,
+    which is why a broad spectrum gives a short burst.  Narrow the light to a laser's 0.05 nm and
+    the "burst" is 6.2 mm long: fringes everywhere, and no way to tell where the surface is.  At
+    1300 nm (the button under The light) the same 50 nm gives 14.9 μm, because $\ell_c$ grows as
+    $\lambda_0^2$: longer wavelengths need broader sources for the same depth resolution.</p>
+  </article>
+
+  <article class="exp" data-setup="two">
+    <h3>3. Two surfaces: the plate's optical thickness</h3>
+    <p>Now the surface is the front of a glass plate 100 μm thick, of index $n=1.5$, whose back face
+    reflects too.  The motor sweeps the mirror over both: two bursts, at 40 and 190 μm.  They are
+    not 100 μm apart but 150.00 μm: the light crosses the glass at $c/n$, so the mirror must move
+    $n t=1.5\times100$ μm, the plate's optical thickness, to match the back face.  Change $n$ and the
+    second burst moves; change $t$ and it moves $n$ times as far.  (For a burst it is the group
+    index that counts; this glass has no dispersion, so the two are the same.)  Look at the centre
+    of each burst in the magnified view: the front face's is a bright fringe (the signal goes up
+    to 1.48), the back face's a dark one (down to 0.69): light reflected from glass into air has
+    its amplitude turned over, $r=(1-n)/(1+n)<0$.</p>
+  </article>
+
+  <article class="exp" data-setup="dispersion">
+    <h3>4. Glass in one arm only: the burst spreads</h3>
+    <p>Light 150 nm wide ($\ell_c=2.08$ μm) and 2 mm of BK7 glass in the sample arm, with no twin
+    in the reference arm.  Glass delays each colour differently (its dispersion, in the
+    <a href="../dispersion/">dispersion demo</a>); the mirror can be set to make up the average delay, but not the
+    differences.  The colours' fringes no longer line up all at one place, and the burst spreads
+    to 10.06 μm, 4.84 times wider, its fringes closer together at one end than the other (see the
+    magnified view).  The spread is $\sqrt{1+4\beta^2\sigma_k^4}$, with $\beta=L\,d^2(nk)/dk^2$
+    the glass's group-velocity dispersion over its length and $\sigma_k$ the spectrum's width in
+    wavenumber: it grows as the square of the bandwidth.  At 50 nm the same glass spreads the burst
+    only from 6.23 to 7.04 μm, and at 1300 nm hardly at all (14.91 to 14.92 μm): BK7's
+    group-velocity dispersion is 41 fs²/mm at 840 nm but 2 fs²/mm at 1300 nm.  This is why an OCT
+    with a broad source puts the same glass in both arms, and why an eye's 24 mm of water must be
+    matched in the reference arm.</p>
+  </article>
+
+  <h3>2 · The A-scan</h3>
+
+  <article class="exp" data-setup="ascan">
+    <h3>5. Scan the mirror through a sample: its A-scan</h3>
+    <p>A microscope cover slip, 170 μm of glass ($n=1.52$), its front 20 μm beyond equal paths.
+    The motor scans the reference mirror through the whole sample, a new measurement each pass;
+    the detector's signal shows a burst for each face, and its envelope (taken out of the noisy
+    signal by a band-pass filter at the fringe frequency) is the A-scan: how strongly the sample
+    reflects at each depth.  The peaks are at 20.00 and 278.39 μm, where the faces are
+    ($20+1.52\times170=278.4$ μm), and as high as the faces reflect: 0.206 and 0.199 (the back
+    face's light has crossed the front face twice, losing $r^2$ each time).  The grey strip under
+    the A-scan is the same thing as brightness: one column of the pictures in view 3.  Try the
+    three-layer film: its two inner bonds reflect five times less than its faces.</p>
+  </article>
+
+  <article class="exp" data-setup="resolution">
+    <h3>6. How close can two layers be? Closer than ℓ_c, they merge, mostly</h3>
+    <p>Two surfaces in air, each reflecting 0.2, 8 μm apart; the dashed curves are what each would
+    give alone.  Two clear peaks.  Lower the gap (type it in steps of 0.05 μm): from about 5.5 μm
+    down ($0.88\,\ell_c$) the peaks merge into one, which is the depth resolution, about $\ell_c$.
+    But not everywhere: at some gaps a dip opens between them again, every 0.42 μm ($\lambda_0/2$)
+    of gap.  At 4.00 μm there are two peaks, at 19.11 and 24.94 μm (5.83 μm apart, not 4); at 4.2
+    and 5.0 μm there is one.  The A-scan is the envelope of the sum of the two surfaces' fields,
+    each burst with its fringes: where the two bursts' fringes are out of step, half a fringe
+    apart, they cancel between the surfaces and the sum dips (look at the trace above: the
+    fringes die away in the middle); where they are in step they add into one peak.  So two close
+    layers show as one or two, and in the wrong places, according to their spacing to a tenth of
+    a wavelength.  It is the same interference that makes speckle in tissue (experiment 9).</p>
+  </article>
+
+  <article class="exp" data-setup="retina">
+    <h3>7. Weak layers in decibels, and the noise floor</h3>
+    <p>A stack like the layers of the retina ($n=1.38$): nine interfaces that each reflect between
+    1.5% and 7% of the light's amplitude.  On a linear scale the weak ones hardly show; in
+    decibels ($20\log_{10}|r|$, from −23 to −36.5 dB here) all nine stand clear of the noise,
+    which is at −60 dB.  Raise the noise floor: at −45 dB only five of the nine peaks rise clear
+    of it (four times its typical height), at −40 dB two, at −35 dB one.  A real OCT's noise is
+    mostly shot noise, the graininess of light: with a milliwatt on the eye its floor is near
+    −100 dB, a part in $10^{10}$ of the light, so it sees layers far weaker than these.</p>
+  </article>
+
+  <h3>3 · B-scan and volume</h3>
+
+  <article class="exp" data-setup="bscan">
+    <h3>8. Step the beam across: a cross-section of the retina</h3>
+    <p>A galvo mirror (a mirror on a motor that turns it) steps the beam across the back of an eye,
+    and at each step the system measures an A-scan.  The A-scans side by side, in grey decibels,
+    are the B-scan: 512 columns 5.9 μm apart over 3 mm, building from left to right (Step: one
+    column; Go on; Finish).  Compare it with the drawing above it, on the same scale across: the
+    bright nerve fibre layer at the top, dipping into the foveal pit where the inner layers part,
+    the dark nuclear layers, the bright line of the pigment epithelium, the choroid below it,
+    dimmer with depth (the pigment absorbs), and the dark cyst of fluid beside the fovea.  Click
+    either picture for that column's A-scan.  The depth axis is the optical depth divided by
+    $n=1.38$, as the instrument shows it.  Each column is what view 2 measured; this one is the
+    whole point of OCT: a cross-section of living tissue, without cutting it.  Unlike the CT
+    scanner of the <a href="../tomography/">tomography demo</a>, which measures sums along lines
+    and must back-project them, OCT measures each line of the picture directly: there is nothing
+    to reconstruct.</p>
+  </article>
+
+  <article class="exp" data-setup="speckle">
+    <h3>9. Speckle: the grain in every OCT picture</h3>
+    <p>The tissue's grainy look is not its structure: it is speckle.  Each resolution cell holds
+    many scatterers, wavelengths apart in depth, and their light adds with random phases, so the
+    sum is bright in some places and dark in others: the interference of experiment 6, between
+    countless scatterers.  The grains are about the beam's width across (8.9 μm) and a coherence
+    length deep (4.5 μm in the tissue).  Press New speckle: the scatterers move, the grains move,
+    the layers stay.  Turn Speckle off: the scatterers add their power instead of their fields,
+    which is what averaging many independent pictures gives, and the layers are smooth.  Averaged
+    over the picture, the speckle's brightness is the smooth picture's; their ratio fluctuates
+    from grain to grain with a contrast (its standard deviation over its mean) of about 1.3 here,
+    near the 1 of fully developed speckle (each cell here holds only a few scatterers).
+    Real instruments average several B-scans at slightly different places to calm it.</p>
+  </article>
+
+  <article class="exp" data-setup="lateral">
+    <h3>10. Across and in depth: two resolutions that do not depend on each other</h3>
+    <p>Tiny beads in clear gel, 60 μm apart across and 100 μm in depth, and a tightly focused beam:
+    NA 0.1, focused at 300 μm.  Its waist is $w_0=\lambda_0/(\pi\,\mathrm{NA})=2.7$ μm, and it
+    stays in focus over only $2z_R=2\pi n w_0^2/\lambda_0=71$ μm.  At the focus a bead's image is
+    3.3 μm wide across ($1.18\,w_0=3.1$ μm); 100 μm above or below it, 9.5 μm; 300 μm below, 26.8 μm:
+    the beam's width $w(z)$.  In depth every bead is 4.7 μm thick, $\ell_c/n$, whatever the NA and
+    the depth.  Now set NA to 0.02: $w_0=13.4$ μm and a depth of focus of 1.78 mm, so every bead is
+    16 μm wide at every depth, and still 4.7 μm thick.  In a microscope a tight focus gives both
+    fine detail across and a thin slice in depth; in OCT the depth resolution comes from the
+    light's coherence instead, so a weak lens can be used and the whole depth kept in focus.  (In
+    decibels a spot looks wider than its half height: its faint skirts show.)</p>
+  </article>
+
+  <article class="exp" data-setup="tilt">
+    <h3>11. A tilted plate: OCT measures optical path</h3>
+    <p>A plate of glass 200 μm thick ($n=1.5$, its faces ground so they scatter light back) on a
+    painted backing, tilted 5°.  Its front face runs across the B-scan at 5.00° (fitted to the
+    brightest point of each column).  But the paint behind it appears 300 μm below the front face,
+    not 200 μm: the instrument measures optical path, $n t$, and shows it as depth assuming air.
+    Real instruments divide by the tissue's index, as view 3 does for the retina (1.38); where the
+    index changes, structures below appear displaced.  Change the tilt (under More) and the
+    roughness of the top surface.  (A polished face tilted by more than the beam's angle would
+    send its reflection past the lens and vanish from the picture: OCT sees only light that comes
+    back.)</p>
+  </article>
+
+  <article class="exp" data-setup="volume">
+    <h3>12. The second axis: a volume, and the retina in 3D</h3>
+    <p>Step the beam along y too, after every B-scan, and the B-scans stack into a volume: 64 of
+    them, each 64 A-scans of 256 depths, a million numbers (the red lines on the cube's top are the
+    B-scans measured so far).  It is shown as three slices you can move: a B-scan at one y
+    (magenta), a cross-section across y at one x (cyan), and the en-face plane at one depth seen
+    from above (yellow), drawn as planes in the cube.  The en-face plane at 212 μm cuts through the
+    fovea's pit (the dark disc in the middle, the fluid filling it) and through the cyst beside it,
+    which shows as a dark oval 0.4 mm across; the rings around them are the layers, which curve
+    with the eye and so cross the flat plane.  Click on any slice to move the other two there, and
+    find the cyst in all three.  This is the 3D image: clinics read retinal volumes like this
+    every day.  (The volume steps 47 μm between A-scans, coarser than the B-scan's 5.9 μm: a
+    finer volume would take 64 times longer.)</p>
+  </article>
+
+  <h3>4 · Fourier domain</h3>
+
+  <article class="exp" data-setup="fourier">
+    <h3>13. The mirror still: a fringe in the spectrum for every layer</h3>
+    <p>Fourier-domain OCT leaves the reference mirror at zero path and sends the light coming back
+    to a grating, which spreads it over a line camera: one pixel per wavelength.  One surface,
+    moved slowly in depth by a stage motor.  The camera sees the source's spectrum with fringes
+    across it: at a depth $d$ the paths differ by $\Delta=2d$, so the two beams are in step at
+    wavenumbers $k$ that differ by $2\pi/\Delta$.  At 25 μm there are 10.6 fringes across the
+    camera, at 50 μm 21.2, at 100 μm 42.5: the deeper the surface, the finer its fringes.  The
+    Fourier transform of the camera's spectrum turns each fringe frequency into a peak at its
+    depth: at 50 μm the peak is at 50.00 μm, 0.1995 high (the surface reflects 0.2), on top of
+    the grey time-domain A-scan of view 2.  It is the interferometer demo's Fourier-transform
+    spectrometer run backwards: there the mirror moved and the transform gave the spectrum; here
+    the spectrum is measured and the transform gives the depths.  Try the cover slip, and click a
+    ▼ to see one face's own fringe in the spectrum: the A-scan's small third peak, at 258.4 μm, is
+    the two faces' light interfering with each other, at their separation.</p>
+  </article>
+
+  <article class="exp" data-setup="conjugate">
+    <h3>14. The mirror image: zero path inside the sample</h3>
+    <p>The three-layer film with its front 60 μm nearer than the reference mirror, so zero path
+    falls inside it: its layers are at −60, −15, +75 and +142.5 μm.  The camera records a real
+    spectrum, and $\cos(k\Delta)=\cos(-k\Delta)$: a layer 60 μm before zero path makes exactly the
+    fringes of one 60 μm after it.  With both sides shown, the transform is symmetric; on the side
+    that is kept as the image, the layers appear at 15, 60, 75 and 142.5 μm, two of them mirrored
+    into places where nothing is.  So Fourier-domain systems keep the whole sample on one side of
+    zero path (and use only half of their depth range); measuring the complex spectrum, with two
+    phases of the reference, removes the ambiguity.  Drag "sample at" up through zero path and
+    watch the images cross.</p>
+  </article>
+
+  <article class="exp" data-setup="range">
+    <h3>15. The depth range: how many pixels, and the fall-off</h3>
+    <p>The cover slip again, now on a camera of only 256 pixels.  The camera's pixels are
+    $\delta k$ apart, and a fringe must have at least two pixels to itself: the deepest fringes it
+    can follow belong to $z_\text{max}=\pi/(2n\,\delta k)$, here 301 μm of optical path.  The back
+    face, at 318.4 μm, is past it: its fringes are sampled too coarsely and look like those of a
+    layer at $2z_\text{max}-318.4=283.7$ μm, where it appears, folded back.  And it is faint, −27
+    dB instead of −14: each pixel averages over its own width of spectrum, which washes out fine
+    fringes (the dashed fall-off curve).  Choose 512 pixels: the range doubles to 602 μm, the
+    face is back at 318.4 μm, at 69% of its height (−17 dB); 1024 pixels: 91%.  The range is
+    $N\lambda_0^2/(12\,\Delta\lambda)$ for $N$ pixels spanning three bandwidths: more pixels, or
+    narrower light, go deeper.</p>
+  </article>
+
+  <article class="exp" data-setup="fdbscan">
+    <h3>16. A whole B-scan, one camera frame per column</h3>
+    <p>The retina, measured the Fourier-domain way: 256 A-scans, each one camera frame.  At 70,000
+    frames a second (a typical clinical camera) that is 3.7 ms per B-scan, 270 B-scans a second:
+    video rate, and the picture follows the sample as the stage motor moves it.  A time-domain
+    system like view 3's measures 400 A-scans a second; a spectrometer collects every depth all
+    the time, which for the same light and time lowers its noise floor about $N/2$ times (27 dB
+    for 1024 pixels) or, for the same floor, makes it that much faster.  Move the sample: up
+    through zero path, the retina's mirror image folds in from the top; deeper than 1204 μm, its
+    bottom folds back from the end of the range; and everything dims with depth, the fall-off of
+    experiment 15.  Choose 512 pixels: the range halves and the choroid folds back over the
+    retina.</p>
+  </article>
+
+  <section id="how">
+  <h3>How it works</h3>
+  <p><em>Lengths and conventions.</em>  Lengths are in micrometres, wavenumbers $k=2\pi/\lambda$ in
+  rad/μm.  The reference mirror's position $d$ and a layer's depth are measured from where the
+  two arms are equal; the light goes there and back, so the paths differ by $\Delta=2d$, and a
+  layer at geometric depth $z$ in a medium of index $n$ matches the mirror at $d=nz$, its optical
+  depth.  Reflections are amplitudes $r$; in decibels, $20\log_{10}|r|$, which is
+  $10\log_{10}$ of the reflected power.</p>
+  <p><em>The interference integral.</em>  With the reference's amplitude 1 and the sample sending
+  back amplitudes $a_i$ from paths $\Delta_i$, light of spectrum $S(k)$ (of unit area) gives the
+  detector
+  $$I(\Delta)=\int S(k)\Big|1+\sum_i a_i e^{ik(\Delta_i-\Delta)}\Big|^2 dk
+  = I_\text{dc}+2\,\mathrm{Re}\sum_i a_i\,\gamma(\Delta-\Delta_i),\qquad \gamma(\Delta)=\int S(k)\,e^{ik\Delta}dk,$$
+  where $I_\text{dc}=1+\sum a_i^2+\dots$ does not depend on the mirror.  The coherence function
+  $\gamma$ is the Fourier transform of the spectrum, as in the interferometer demo.  For a
+  Gaussian spectrum of standard deviation $\sigma_k$ (full width $\Delta k=2.355\,\sigma_k$, so
+  $\Delta k=2\pi\Delta\lambda/\lambda_0^2$), $\gamma(\Delta)=e^{ik_0\Delta}e^{-\sigma_k^2\Delta^2/2}$:
+  fringes at the centre wavelength under a Gaussian envelope, which falls to half at
+  $\Delta=\pm2\ln2\,\lambda_0^2/(\pi\Delta\lambda)$, that is at $d=\pm\ell_c/2$.  The convention
+  here: $\ell_c=(2\ln2/\pi)\lambda_0^2/\Delta\lambda$ is the full width at half maximum of the
+  burst against the mirror's position, and the depth resolution in optical path.</p>
+  <p><em>The A-scan</em> is the envelope $\left|\sum_i a_i\gamma(\Delta-\Delta_i)\right|$: the
+  page band-passes the detector's signal about the fringe frequency (a window as wide as the
+  spectrum) and takes the magnitude of its analytic signal (by FFT).  It is the sum of fields,
+  not of powers, so layers closer than $\ell_c$ interfere (experiments 6 and 9).</p>
+  <p><em>Fourier domain.</em>  With the mirror still, the camera's pixel at $k$ sees
+  $$I(k)=S(k)\Big[1+\sum_i a_i^2+2\sum_i a_i\cos(k\Delta_i)+2\sum_{i<j}a_ia_j\cos k(\Delta_i-\Delta_j)\Big],$$
+  and its inverse Fourier transform has a peak $a_i\gamma$ at $\pm\Delta_i$, the autocorrelation
+  terms at the layers' separations, and a large term at zero (removed by subtracting the
+  spectrum measured with the sample arm blocked).  With $N$ pixels $\delta k$ apart the transform
+  repeats every $2\pi/\delta k$ in $\Delta$, so the range is
+  $\Delta_\text{max}=\pi/\delta k$, $z_\text{max}=\pi/(2n\,\delta k)$.  Each pixel averages over
+  $\delta k$, which multiplies a peak at $\Delta$ by $\mathrm{sinc}(\Delta\,\delta k/2)$, and the
+  spectrometer's own blur (taken here as one pixel) by $e^{-(\Delta\,\delta k)^2/16\ln 2}$: the
+  fall-off, 26% at the end of the range.</p>
+  <p><em>Across.</em>  The lens focuses the beam to a waist $w_0=\lambda_0/(\pi\,\mathrm{NA})$, the
+  <a href="../beams/">Gaussian-beam demo</a>'s $w_0=\lambda f/(\pi w)$, with Rayleigh range $z_R=\pi n w_0^2/\lambda_0$
+  and width $w(z)=w_0\sqrt{1+((z-z_f)/z_R)^2}$.  The fibre that sends the light also collects it,
+  so a point $\rho$ off the axis is seen with amplitude $e^{-2\rho^2/w^2}$, and a point's image is
+  $1.18\,w$ wide at half height.  Depth and lateral resolution are set by different things:
+  $\ell_c/n$ by the spectrum, $w_0$ by the lens.</p>
+  <p><em>Dispersion</em> (experiment 4): glass of length $L$ in one arm adds the phase
+  $2Lk\,n(k)$; its quadratic part $\beta(k-k_0)^2$, $\beta=L\,d^2(nk)/dk^2$ (N-BK7 from Schott's
+  Sellmeier formula), turns $\gamma$ into
+  $q^{-1/2}e^{-\sigma_k^2u^2/2q}e^{ik_0u}$ with $q=1-2i\beta\sigma_k^2$: wider by $|q|$, lower by
+  $|q|^{-1/2}$, chirped.</p>
+
+  <h3>What is approximate</h3>
+  <p class="small">The spectrum is Gaussian in wavenumber.  The glass of views 1 and 2 has no
+  dispersion, so its group and phase indices are equal (in BK7 at 840 nm they are 1.525 and
+  1.510).  The A-scans of views 3 and 4 are computed in the envelope domain: each column is the
+  field of its scatterers (each with the phase of its depth) and the power of its interfaces
+  (ground, diffuse surfaces, seen across the beam by Gauss–Hermite quadrature), with a noise of
+  the chosen floor correlated over a coherence length; demodulation is assumed perfect.  The
+  tissue is made up: bands of scatterers (about 40 in every 10 × 10 × 100 μm) with the retina's
+  thicknesses and its pit roughly right, a cyst of clear fluid, attenuation by $e^{-\int\mu\,dz}$
+  in amplitude, and one index per band.  The spectrometer's pixels are evenly spaced in $k$
+  (a real one is resampled to $k$ first) and span three bandwidths; its blur is one pixel.  The
+  Fourier-domain B-scan of experiment 16 folds the power of each column, not its field.  The
+  noise floors are raised far above real ones so that they can be seen.</p>
+  <p class="small muted">New in 2026 for BrainFlux.
+  Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+  </section>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
