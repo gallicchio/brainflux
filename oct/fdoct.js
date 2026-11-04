@@ -106,3 +106,15 @@ export function positiveHalf(scan) {
   const m0 = scan.L / 2;
   return { A: scan.A.subarray(m0), D0: 0, h: scan.h };
 }
+
+/**
+ * Where optical depth d lands in a Fourier-domain image of range dm (= Δ_max/2): the spectrum is
+ * real, so −d looks like d, and it is sampled every δk, so d and 2dm − d look alike.  fold(d)
+ * folds d into [0, dm].
+ */
+export function fold(d, dm) {
+  const p = 2 * dm;
+  let u = ((d % p) + p) % p;
+  if (u > dm) u = p - u;
+  return u;
+}

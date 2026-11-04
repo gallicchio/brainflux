@@ -9,7 +9,7 @@
 import { $, slider, segmented, toggle, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame } from '../lib/plot.js';
 import { STACKS, makeStack, bursts, mulberry32, SCENES, makeScene } from './sample.js';
-import { makeSpectrometer, cameraSpectrum, fdAScan } from './fdoct.js';
+import { makeSpectrometer, cameraSpectrum, fdAScan, fold } from './fdoct.js';
 import { peaks } from './tdoct.js';
 import { BScan, sceneBeam } from './scan.js';
 import { drawMichelson } from './pictures.js';
@@ -227,17 +227,6 @@ function ensureBscan() {
   const all = Array.from(bscan.img).sort((p, q) => p - q);
   bscan.level = 20 * Math.log10(all[Math.floor(0.995 * (all.length - 1))] || 1e-3) + 2;
   fdKey = '';
-}
-
-/**
- * Where optical depth d lands in a Fourier-domain image of range dm: the spectrum is real, so
- * −d looks like d, and sampled every δk, so d and 2dm − d look alike: fold d into [0, dm].
- */
-export function fold(d, dm) {
-  const p = 2 * dm;
-  let u = ((d % p) + p) % p;
-  if (u > dm) u = p - u;
-  return u;
 }
 
 /** The B-scan as the Fourier-domain system shows it: each column's power folded into [0, dm],
