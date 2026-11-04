@@ -131,6 +131,8 @@ function followWindow(oldD, newD) {
 
 function addRecord(a, b) {
   const lo = Math.min(a, b), hi = Math.max(a, b);
+  // Seen already (the motor sweeping to and fro over its record): nothing new to draw.
+  if (record.some((iv) => iv[0] <= lo && iv[1] >= hi)) return;
   const out = [];
   let nlo = lo, nhi = hi, placed = false;
   for (const iv of record) {
