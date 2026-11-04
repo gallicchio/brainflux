@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Drive the antenna-array and aperture-synthesis demo: every experiment, dragging, the address,
-CLEAN, the Earth turning; check the physics read-outs as it goes; screenshots in build/."""
-import json, math, os, re, sys, time
+"""Drive the antenna-array demo: every experiment, dragging, the address; check the physics
+read-outs as it goes; the pointers to the radio-interferometer demo, and the redirect of the old
+aperture-synthesis addresses to it; screenshots in build/."""
+import json, math, os, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
 
@@ -111,6 +112,7 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
           f'the drawer opens with "Start here" ({d["sentences"]} sentences, no equations), experiment 1 is the opening state, and "{d["howH3"]}" comes last')
     b.eval("document.querySelector('#help-button').click()"); b.sleep(0.4)
     contrast_check(b, '#help .start p', 'light', 'the Start-here block')
+    contrast_check(b, '#see-also', 'light', 'the See-also line')
     b.key('Escape'); b.sleep(0.3)
 
     # ---------------------------------------------------------------- the arrays experiments
@@ -228,132 +230,40 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     load(b, 'arrays/index.html#setup=start')
     check(b.eval('[__app.A.n, __app.A.d, __app.A.theta0, __app.A.layout]') == [8, 0.5, 20, 'line'], '#setup=start is the opening view: eight in a line, steered to 20 degrees')
 
-    # ---------------------------------------------------------------- synthesis
+    # ---------------------------------------------------------------- the radio-interferometer demo
+    # Aperture synthesis is a demo of its own now: no tab, stage or controls for it here, and the
+    # page is "Antenna arrays".
     load(b, 'arrays/index.html')
-    click(b, 'Aperture synthesis', '#mode-row'); b.sleep(2)
-    b.screenshot('build/arrays-synth-start.png')
-    check(b.eval('__app.state.mode') == 'synth' and b.eval('__app.S.dishes.length') == 27, 'the synthesis mode opens on a Y of 27 dishes')
-    # Its first screen: a hint under the top row of pictures, and each panel named in plain words.
-    hint_check(b, '#synth-hint', ['#map', '#uv', '#beam'], 'Drag a dish', 'synthesis')
-    notes = b.eval("['map-note', 'uv-note', 'beam-note', 'sky-note', 'dirty-note', 'clean-head-note', 'clean-note'].map((id) => document.querySelector('#' + id).textContent)")
-    titles = b.eval("[...document.querySelectorAll('#synth-stage h2')].map((h) => h.textContent)")
-    check('pairs (baselines)' in notes[0] and notes[1].startswith('uv plane') and notes[2].startswith('one point’s image') and 'Fourier’s portrait' in notes[3]
-          and 'blurred by the dirty beam' in notes[4] and 'point by point' in notes[5] and 'CLEAN takes the brightest point' in notes[6]
-          and titles == ['Dishes on the ground', 'What is measured', 'Dirty beam', 'The true sky', 'Dirty image', 'CLEAN image'],
-          f'the six panels say what they are in words: {titles}; "{notes[1]}", "{notes[2]}"')
+    v = b.eval("""(() => ({ modeRow: !!document.querySelector('#mode-row'), stage: !!document.querySelector('#synth-stage, #synth-controls, #map, #uv, #clean'),
+        tabs: [...document.querySelectorAll('button')].filter((x) => /synthesis/i.test(x.textContent)).length,
+        title: document.title, h1: document.querySelector('h1').textContent, desc: document.querySelector('meta[name=description]').content,
+        word: /synthesis/i.test(document.body.textContent) }))()""")
+    check(not v['modeRow'] and not v['stage'] and v['tabs'] == 0 and not v['word'] and v['h1'] == 'Antenna arrays' and v['title'] == 'Antenna Arrays · BrainFlux' and 'synthesis' not in v['desc'],
+          f'no synthesis tab, stage or controls, and the word is gone: the page is "{v["h1"]}" ({v["title"]})')
+    # The drawer ends its experiments with a short section on radio interferometers, before "How it
+    # works", linking to the new demo; and the pattern has a one-line See also.
+    r = b.eval("""(() => { const h = document.querySelector('#help'), s = h.querySelector('#radio'), kids = [...h.children], i = kids.indexOf(s);
+        const see = document.querySelector('#see-also');
+        return { h3: s && s.querySelector('h3').textContent, link: !!(s && s.querySelector('a[href="../radiointerferometer/"]')), paras: s ? s.querySelectorAll('p').length : 0,
+                 text: s ? s.textContent : '', afterLast: i > 0 && kids[i - 1].matches('.exp[data-setup="focus"]'), beforeHow: !!(kids[i + 1] && kids[i + 1].id === 'how'),
+                 see: !!(see && see.querySelector('a[href="../radiointerferometer/"]') && see.getClientRects().length), seeText: see ? see.textContent : '' }; })()""")
+    check(r['h3'] == 'Radio interferometers' and r['link'] and r['paras'] == 1 and 'run backwards' in r['text'] and 'Fourier transform of the sky' in r['text'] and r['afterLast'] and r['beforeHow'],
+          f'after the last experiment, "{r["h3"]}": one paragraph linking to ../radiointerferometer/, before "How it works"')
+    check(r['see'] and r['seeText'].startswith('See also'), f'under the pattern, a See-also link to the new demo: "{r["seeText"][:60]}"')
+    b.eval("document.querySelector('#help-button').click()"); b.sleep(0.4)
+    b.eval("document.querySelector('#radio').scrollIntoView()"); b.sleep(0.3)
+    b.screenshot('build/arrays-radio-section.png')
+    b.key('Escape'); b.sleep(0.3)
+    # A synthesis address typed into the address bar while the page is open goes to the new demo too.
+    b.eval("location.hash = 'setup=rotation'")
+    b.wait("location.pathname.endsWith('/radiointerferometer/')", timeout=20)
+    check(b.eval('location.hash') == '#setup=rotation', 'typing #setup=rotation into the address sends the page to ../radiointerferometer/#setup=rotation')
+    load(b, 'arrays/index.html#setup=start')
 
-    # Two dishes: the dirty image of a point at the centre is the dirty beam, a single cosine.
-    setup(b, 'fringe', 1.5)
-    d = b.eval("(() => { const D = __app.synth.dirty, B = __app.synth.beam; let w = 0, lo = 1; for (let i = 0; i < D.length; i++) { w = Math.max(w, Math.abs(D[i] - B[i])); lo = Math.min(lo, B[i]); } return [w, lo]; })()")
-    check(d[0] < 1e-12 and abs(d[1] + 1) < 0.02, f'two dishes: dirty image = dirty beam (to {d[0]:.1e}), a cosine from +1 to {d[1]:.3f}')
-    # Drag a dish: the baseline turns.
-    u1 = b.eval('[__app.synth.tracks.u[0], __app.synth.tracks.v[0]]')
-    b.drag('#map', (0.9, 0.35), (0.9, 0.1), steps=6); b.sleep(0.8)
-    u2 = b.eval('[__app.synth.tracks.u[0], __app.synth.tracks.v[0]]')
-    check(abs(u2[1] - u1[1]) > 50, f'dragging a dish north changes the baseline (v {u1[1]:.0f} -> {u2[1]:.0f} m)')
-    setup(b, 'six', 1.5)
-    check(b.eval('__app.synth.tracks.nb') == 15, 'six dishes: 15 baselines')
-
-    # East-west line: circles at the pole, ellipses of axis ratio sin(dec) elsewhere.
-    for name, dec in (('ellipses', 90), ('equator', 5)):
-        setup(b, name, 1.5)
-        r = b.eval("""(() => { const t = __app.synth.tracks; let worst = 0, sd = Math.sin(__app.S.dec * Math.PI / 180);
-            for (let p = 0; p < t.nb; p++) { let B = 0; for (let k = 0; k < t.nt; k++) B = Math.max(B, Math.abs(t.u[p * t.nt + k]));
-              for (let k = 0; k < t.nt; k++) { const u = t.u[p * t.nt + k], v = t.v[p * t.nt + k]; worst = Math.max(worst, Math.abs(Math.hypot(u, v / sd) - B) / B); } }
-            return worst; })()""")
-        # (Not exactly: on the curved Earth an east-west line of dishes isn't quite level, which
-        # shifts the ellipses by about E^2 / 2R; at low declination that is 1e-3 of the minor axis.)
-        check(r < 2e-3, f'east-west line at declination {dec}: every track is an ellipse of axis ratio sin(dec) (worst {r:.1e})')
-        b.screenshot(f'build/arrays-synth-{name}.png')
-    fit = b.eval('[__app.synth.fit.major, __app.synth.fit.minor]')
-    check(fit[0] > 5 * fit[1], f'near the equator the beam is a streak ({fit[0]:.1f} x {fit[1]:.1f} pixels)')
-
-    # Resolution: the double separates as the longest baseline grows.
-    setup(b, 'resolution', 1.5)
-    DIP = """(() => { const d = __app.synth.dirty, n = 256, sky = __app.synth.sky; const pts = []; for (let i = 0; i < sky.length; i++) if (sky[i] > 0) pts.push([i % n, Math.floor(i / n)]);
-        const [a, c] = pts; let lo = 1e9; for (let t = 0.2; t <= 0.8; t += 0.02) lo = Math.min(lo, d[Math.round(a[1] + t * (c[1] - a[1])) * n + Math.round(a[0] + t * (c[0] - a[0]))]);
-        return lo / Math.min(d[a[1] * n + a[0]], d[c[1] * n + c[0]]); })()"""
-    r1 = b.eval(DIP)
-    setslider(b, 'longest', 1.4); b.sleep(1)
-    r2 = b.eval(DIP)
-    check(r1 > 1 and r2 < 0.45, f'the double: one blob at 1.04 km (ratio {r1:.2f}), separated at 1.4 km (dip {r2:.2f} of the fainter peak)')
-    b.screenshot('build/arrays-synth-resolved.png')
-
-    # Short spacings: nothing measures u = v = 0, so the dirty image adds up to zero.
-    setup(b, 'shortspacing', 1.5)
-    s = b.eval('[__app.synth.dirty.reduce((a, v) => a + v, 0), Math.min(...__app.synth.dirty)]')
-    s = b.eval('[__app.synth.dirty.reduce((a, v) => a + v, 0), Math.min(...__app.synth.dirty) / Math.max(...__app.synth.dirty)]')
-    check(abs(s[0]) < 1e-9 and s[1] < -0.1, f'short spacings missing: the dirty image adds up to {s[0]:.1e}, and its negative bowl goes down to {s[1]:.2f} of its peak')
-
-    # The notes keep still as the declination, the hours and the longest baseline change, and while
-    # CLEAN runs.
-    NOTES = f"{LAYOUT}('#map-note, #uv-note, #beam-note, #sky-note, #obs-note div, #clean-note')"
-    setup(b, 'clean', 1.5)
-    base, moved = {}, []
-    for name, v in (('declination', -35.5), ('declination', 4), ('declination', 62.25), ('hours', 0.5), ('hours', 11.5), ('hours', 2), ('declination', 50)):
-        setslider(b, name, v); b.sleep(0.4)
-        moved += track(base, b.eval(NOTES))
-    check(not moved, 'the notes keep still as the declination and the hours change' + (f'; moved {moved[:3]}' if moved else ''))
-    base, moved, seen = {}, [], set()
-    for k in range(12):
-        click(b, 'Step', '#clean-box'); b.sleep(0.1)
-        seen.add(b.eval("document.querySelector('#clean-note').textContent"))
-        moved += track(base, b.eval(NOTES))
-    check(len(seen) >= 10 and not moved, f'the CLEAN note keeps still as it counts steps ({len(seen)} readings, e.g. {sorted(seen)[-1]!r})' + (f'; moved {moved[:3]}' if moved else ''))
-
-    # CLEAN finds the double's fluxes at the right pixels.
-    setup(b, 'clean', 1.5)
-    click(b, 'Step', '#clean-box'); click(b, 'Step', '#clean-box')
-    check(b.eval('__app.synth.cs.iterations') == 2, 'Step takes one CLEAN step')
-    click(b, 'Run', '#clean-box')
-    b.wait('!__app.S.running', timeout=120); b.sleep(0.5)
-    c = b.eval("""(() => { const cs = __app.synth.cs, sky = __app.synth.sky, out = []; for (let i = 0; i < sky.length; i++) if (sky[i] > 0) out.push([sky[i], cs.model[i]]);
-        return { pairs: out, total: cs.model.reduce((a, v) => a + v, 0), comps: cs.components, it: cs.iterations }; })()""")
-    check(c['comps'] == 2 and all(abs(m - t) < 0.01 for t, m in c['pairs']), f"CLEAN: {c['comps']} components in {c['it']} steps, fluxes {[(round(t, 3), round(m, 4)) for t, m in c['pairs']]} (true, found)")
-    for show in ('Residual', 'Components', 'Restored'):
-        click(b, show, '#clean-show')
-    b.screenshot('build/arrays-synth-clean.png')
-
-    # The Event Horizon Telescope: Earth-sized baselines.
-    setup(b, 'eht', 2)
-    lb = b.eval("document.querySelector('#obs-note').textContent").replace('\u00a0', ' ')
-    km, uas = re.search(r'Longest baseline ([\d.]+) km', lb), re.search(r'λ/B = ([\d.]+) µas', lb)
-    check(km and uas and abs(float(km[1]) - 12700) < 50 and abs(float(uas[1]) - 21.2) < 0.05, f'the EHT: longest baseline 12,700 km, lambda/B = 21 microarcseconds ({lb[:80]!r})')
-    broken = b.eval("(() => { const t = __app.synth.tracks; let n = 0; for (let i = 1; i < t.ok.length; i++) if (t.ok[i] !== t.ok[i - 1] && i % t.nt) n++; return n; })()")
-    check(broken > 10, f'its tracks break where the source sets for a station ({broken} breaks)')
-    b.screenshot('build/arrays-synth-eht.png')
-
-    # The Earth turns: the observation replays and finishes.
-    setup(b, 'rotation', 1.5)
-    snap = b.eval('__app.synth.tracks.nt')
-    click(b, 'Turn the Earth', '#earth-box'); b.sleep(4)
-    mid = b.eval('[__app.S.playing, __app.S.tNow]')
-    b.screenshot('build/arrays-synth-turning.png')
-    b.wait('!__app.S.playing', timeout=60); b.sleep(0.5)
-    check(snap == 1 and mid[0] and 0 < mid[1] < 1 and b.eval('__app.S.tNow') == 1 and b.eval('__app.S.hours') == 12,
-          f'Turn the Earth: from a snapshot to 12 hours (halfway at {mid[1]:.2f})')
-    b.screenshot('build/arrays-synth-rotation-12h.png')
-    h = b.eval('location.hash')
-    check('mode=synth' in h and 'hours=12' in h, f'the address keeps the observation ({h[:60]}...)')
-
-    # A typed sky: its parameters are sliders, and it is kept in the address.
-    click(b, 'Typed', '#skies'); b.sleep(1)
-    m1 = b.eval("(() => { const s = __app.synth.sky, n = 256; let m = 0; for (let i = 0; i < s.length; i++) m += s[i] * Math.abs((i % n) - n / 2); return m; })()")
-    setslider(b, 'a', 4); b.sleep(1)
-    m2 = b.eval("(() => { const s = __app.synth.sky, n = 256; let m = 0; for (let i = 0; i < s.length; i++) m += s[i] * Math.abs((i % n) - n / 2); return m; })()")
-    check(m2 > 1.5 * m1 and abs(b.eval('__app.synth.sky.reduce((a, v) => a + v, 0)') - 1) < 1e-9, f'typed sky: sliding a moves the lobes out (mean |x| {m1:.1f} -> {m2:.1f} pixels), total flux 1')
-    check('Ip=a%3A4' in b.eval('location.hash'), 'the typed sky and its parameters are in the address')
-    b.screenshot('build/arrays-synth-typed.png')
-
-    for name in ['fringe', 'six', 'rotation', 'ellipses', 'equator', 'resolution', 'shortspacing', 'eht', 'clean']:
-        setup(b, name, 1.5)
-        b.screenshot(f'build/arrays-exp-{name}.png')
     # Dark theme: the hints and the Start-here block read.
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
-    setup(b, 'rotation', 1.0)
-    contrast_check(b, '#synth-hint', 'dark', 'the synthesis hint')
-    b.screenshot('build/arrays-dark-synth.png')
     setup(b, 'start', 1.0)
+    contrast_check(b, '#see-also', 'dark', 'the See-also line')
     contrast_check(b, '#field-hint', 'dark', 'the arrays hint')
     b.eval("document.querySelector('#help-button').click()"); b.sleep(0.4)
     contrast_check(b, '#help .start p', 'dark', 'the Start-here block')
@@ -361,8 +271,8 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     e = errors(b)
     check(not e, 'no exceptions or console errors' + ('' if not e else ': ' + '; '.join(e[:3])))
 
-# Phone width: the controls go under the pictures, and each mode's hint sits right under its main
-# picture, inside the first screen.
+# Phone width: the controls go under the pictures, and the hint sits right under the main picture,
+# inside the first screen.
 with Browser('arrays/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1)
     b.screenshot('build/arrays-phone.png')
@@ -371,13 +281,33 @@ with Browser('arrays/index.html', size=(390, 844)) as b:
     top = b.eval("[document.querySelector('#arrays-controls').getBoundingClientRect().top, document.querySelector('#polar').getBoundingClientRect().bottom]")
     check(top[0] > top[1], 'the controls stack under the pictures')
     hint_check(b, '#field-hint', ['#field'], 'Drag an element', 'phone, arrays')
-    b.eval("__app.setups.eht()"); b.sleep(2)
-    b.screenshot('build/arrays-phone-synth.png')
-    w = b.eval('[document.documentElement.scrollWidth, innerWidth]')
-    check(w[0] <= w[1], f'synthesis: no sideways scrolling at phone width ({w[0]} <= {w[1]})')
-    hint_check(b, '#synth-hint', ['#map', '#uv'], 'Drag a dish', 'phone, synthesis')
     e = errors(b)
     check(not e, 'no errors at phone width' + ('' if not e else ': ' + '; '.join(e[:3])))
+
+# The old addresses of the aperture-synthesis view, opened cold: each leaves for the new demo
+# before the page starts, keeping its #setup= name (or the saved state, for that demo to honour or
+# ignore), and replaces itself in the history, so that Back still works.  (The new demo is a folder
+# of its own; whether it exists here does not matter, only where the address goes.)
+with Browser('about:blank', size=(1400, 900)) as b:
+    for h, want in (('#setup=eht', '#setup=eht'), ('#setup=rotation', '#setup=rotation'), ('#setup=resolution', '#setup=resolution'), ('#setup=clean', '#setup=clean'),
+                    ('#mode=synth&hours=12&dec=50&sky=double', '#hours=12&dec=50&sky=double'), ('#view=synthesis', '')):
+        b.call('Page.navigate', url='about:blank'); b.sleep(0.3)
+        n0 = b.eval('history.length')
+        b.goto('arrays/index.html' + h)
+        try:
+            b.wait("location.pathname.endsWith('/radiointerferometer/')", timeout=20); gone = True
+        except TimeoutError:
+            gone = False
+        loc, n1 = b.eval('location.pathname + location.hash'), b.eval('history.length')
+        check(gone and loc.endswith('/radiointerferometer/' + want) and n1 == n0 + 1,
+              f'arrays/index.html{h} goes to {loc} ({"replacing itself in the history" if n1 == n0 + 1 else f"history {n0} -> {n1}"})')
+    # And a phased-array address stays, with no detour.
+    b.call('Page.navigate', url='about:blank'); b.sleep(0.3)
+    b.goto('arrays/index.html#setup=steer'); b.wait('window.__app && __app.ready'); b.sleep(0.5)
+    loc = b.eval('location.pathname + location.hash')
+    check('/arrays/index.html#' in loc and 'th=30' in loc and b.eval('__app.A.n') == 16, f'arrays/index.html#setup=steer stays here, as its state ({loc})')
+    e = errors(b)
+    check(not e, 'no errors on the way' + ('' if not e else ': ' + '; '.join(e[:3])))
 
 print(f"SUMMARY: {'all passed' if not failures else str(len(failures)) + ' failed'}")
 sys.exit(1 if failures else 0)
