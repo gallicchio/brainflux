@@ -175,8 +175,9 @@ export class Engine {
     for (let guard = 0; guard < 1e7; guard++) {
       // First what is due now: the end of a pulse, the next pulse, a new part of the board's
       // cycle, a sample.
-      if (this.pulse && this.t >= this.pulse.t1) this.pulse = null;
-      while (!this.pulse && this.queue.length && this.queue[0].t <= this.t) this._start(this.queue.shift());
+      // (A sample at each end of a pulse, off the grid, so the record is exact where M turned.)
+      if (this.pulse && this.t >= this.pulse.t1) { this.pulse = null; this.sample(); }
+      while (!this.pulse && this.queue.length && this.queue[0].t <= this.t) { this.sample(); this._start(this.queue.shift()); }
       if (this.earth) {
         const [ph] = this._earthPhase();
         if (ph !== this.earth.phase) {

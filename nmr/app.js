@@ -74,7 +74,11 @@ const state = {
 const eng = new Engine({});
 eng.rng.s = 20261104;
 /** A scripted run: pulses (centres at t), the clock from t0 to span, and again if loop. */
-let run = null, pauseLeft = 0, freeStart = 0;
+let run = null, pauseLeft = 0, freeStart = 0, runId = 0;
+// The noise is drawn afresh for every run, from a seed that a set-up resets: so each set-up's
+// first run (the one its help quotes) is the same every time, and its repeats differ.
+let seedCount = 0;
+function reseed() { eng.rng.s = (20261104 + 7919 * seedCount++) >>> 0; eng.rng.spare = null; }
 const view = new SphereView();
 let trail = [];
 
@@ -105,10 +109,11 @@ function resample() {
 
 /** Start a scripted run: every spin along z, the pulses at their times (centres). */
 function startRun(r) {
-  run = { loop: true, ...r };
+  run = { loop: true, ...r }; runId++;
   const starts = run.pulses.map((q) => q.t - pulseDuration(q.angle * DEG, state.B1) / 2);
   run.t0 = Math.min(0, ...starts);
   eng.setSampling((run.span - run.t0) / SAMPLES_PER_WINDOW);
+  reseed();
   eng.reset([0, 0, 1], run.t0);
   eng.tEnd = run.span;
   run.pulses.forEach((q, i) => eng.schedule(starts[i], q.angle, q.phase, state.B1));
@@ -127,7 +132,7 @@ function goFree() {
 
 /** Start afresh with no script: the spins along v, the clock at 0. */
 function startFree(v = [0, 0, 1]) {
-  run = null; freeStart = 0;
+  run = null; freeStart = 0; runId++;
   eng.reset(v, 0);
   resample();
   trail = [];
@@ -326,7 +331,7 @@ function pushTrail() {}
 
 // ---------------------------------------------------------------------------- the plots
 
-let specCache = { key: '', spec: null, frame: 0 };
+let specCache = { key: '', spec: null, frame: 0 }, lastSpec = null;
 
 function drawPlots() {
   if (state.view === 'earth') { drawBoardPlots(); return; }
@@ -371,10 +376,13 @@ function drawSpec(t0, t1, acq = null) {
   const span = Math.max(state.inst === 'earth' ? 2 : 200, 3 * (Number.isFinite(line) && line > 0 ? line : 0) + 1.2 * Math.abs(state.offsetHz));
   let spec = null;
   if (b - a > (t1 - t0) * 0.02) {
-    const key = `${a}|${eng.record.length}|${sigma()}|${span}`;
-    if (specCache.key !== key && (specCache.frame++ % 4 === 0 || !specCache.spec)) specCache = { key, spec: specOf(a, b, span), frame: 1 };
+    // (Recomputed every few frames while the record grows, at once when anything else changed.)
+    const key = `${a}|${eng.record.length}|${sigma()}|${span}`, same = specCache.run === `${runId}|${a}|${sigma()}|${span}`;
+    const grown = eng.record.length > 1.05 * (specCache.n || 0) + 8;
+    if (specCache.key !== key && (!same || grown || specCache.frame++ % 4 === 0)) specCache = { key, run: `${runId}|${a}|${sigma()}|${span}`, spec: specOf(a, b, span), frame: 1, n: eng.record.length };
     spec = specCache.spec;
   }
+  lastSpec = spec;
   const fu = span > 3000 ? { s: 1e-3, u: 'kHz', dec: 2 } : { s: 1, u: 'Hz', dec: state.inst === 'earth' ? 2 : 0 };
   drawSpectrum(ctx, width, height, {
     spec, fmin: -span, fmax: span, unit: fu, colors: C, mark: true,
@@ -887,7 +895,7 @@ function fidFit() {
   // zero (the envelope of noise alone is σ√(π/2) on average, which would lengthen the fit).
   const m0 = eng.record.at(a, 0), ph = Math.atan2(m0[1], m0[0]), ux = Math.cos(ph), uy = Math.sin(ph);
   const t = [], y = [], tmp = [0, 0, 0], sg = sigma();
-  for (let k = 0; k < 40; k++) { const tk = a + ((b - a) * k) / 39, m = eng.record.at(tk, sg, tmp); t.push(tk - a); y.push(m[0] * ux + m[1] * uy); }
+  for (let k = 0; k < 200; k++) { const tk = a + ((b - a) * k) / 199, m = eng.record.at(tk, sg, tmp); t.push(tk - a); y.push(m[0] * ux + m[1] * uy); }
   const f = fitShape(t, y, 'decay');
   return { t0: a, A: f.A, tau: f.tau, t, y };
 }
@@ -973,8 +981,9 @@ function startBoard() {
   state.B0 = board.BE; state.offsetHz = 0;
   applyEngine();
   eng.setSampling(board.tl / SAMPLES_PER_WINDOW);
+  reseed();
   eng.startEarth({ Bp: Bp(), BE: board.BE, tp: board.tp, ramp: board.ramp, tl: board.tl, tOpen: BOARD.tOpen });
-  run = { earth: true, t0: 0, span: eng.tEnd, loop: board.loop, pulses: [] };
+  run = { earth: true, t0: 0, span: eng.tEnd, loop: board.loop, pulses: [] }; runId++;
   board.listen = 0; board.afterRamp = null; pauseLeft = 0;
   trail = [];
   dirty();
@@ -1109,8 +1118,9 @@ function drawBoardPlots() {
     const line = 1 / (Math.PI * T2star(T2eff(), state.ensemble ? state.spreadHz : 0)), span = Math.max(2, 4 * (Number.isFinite(line) ? line : 0));
     let spec = null;
     if (t1 - t0 > 0.1) {
-      const key = `b|${t0}|${eng.record.length}|${sg}|${span}`;
-      if (specCache.key !== key && (specCache.frame++ % 6 === 0 || !specCache.spec)) specCache = { key, spec: specOf(t0, t1, span), frame: 1 };
+      const key = `b|${t0}|${eng.record.length}|${sg}|${span}`, same = specCache.run === `b${runId}|${sg}|${span}`;
+      const grown = eng.record.length > 1.05 * (specCache.n || 0) + 8;
+      if (specCache.key !== key && (!same || grown || specCache.frame++ % 6 === 0)) specCache = { key, run: `b${runId}|${sg}|${span}`, spec: specOf(t0, t1, span), frame: 1, n: eng.record.length };
       spec = specCache.spec;
     }
     board.spec = spec;
@@ -1270,6 +1280,7 @@ function loadHash(h) {
 
 /** A set-up: the view, the instrument and every setting it names; the rest at their defaults. */
 function setup(o) {
+  seedCount = 0;
   if (!o.keepInstrument || o.inst) loadInstrument(o.inst || 'teachspin');
   state.frame = o.frame || 'lab';
   state.ensemble = !!o.ensemble; state.arrows = o.arrows ?? 32;
@@ -1313,6 +1324,7 @@ const setups = {
 };
 /** A set-up of the board: tap water, the board's numbers, and those named. */
 function boardSetup(o) {
+  seedCount = 0;
   loadInstrument('earth');
   Object.assign(board, { tp: 3, ramp: 0.4e-3, tl: 2, I: 1.5, BE: BOARD.claremont, gradNT: 5, speedMode: 'auto', loop: true, points: [], scan: null, fit: null }, o);
   delete board.scan; board.scan = null;
@@ -1359,5 +1371,7 @@ window.__app = {
   /** Finish the τ scan now. */
   finishScan() { while (seq.scan && seq.scan.x.length < seq.scan.taus.length) scanStep(); draw(); return seq.scan; },
   sum: (frame = 'rot') => eng.sum(frame),
+  /** The spectrum last drawn (view 2 or 3): {peak, fwhm, df}. */
+  get spec() { return lastSpec && { peak: lastSpec.peak, fwhm: lastSpec.fwhm, df: lastSpec.df }; },
   tip: () => tipScreen(),
 };

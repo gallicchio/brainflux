@@ -215,7 +215,7 @@ test('the switch-off: sudden when A = γBE²τ/Bp ≪ 1 (M left across the Earth
   const A = adiabaticity(Bp, BE, 0.4e-3);
   close(A, 0.0289, 5e-4, 'the board\'s 0.4 ms');
   // The spins follow the field while it turns slower than they precess about it, until the
-  // ramp is nearly over: they are left about A^{1/3} behind.  At the board's 0.4 ms: 98.8%.
+  // ramp is nearly over, and are left tilted a little towards BE: 8.7° at the board's 0.4 ms (98.9%).
   const sudden = leftAcross(Bp, BE, 0.4e-3);
   assert(sudden.across > 0.985 && sudden.along > 0.1 && sudden.along < 0.2, `0.4 ms: across ${sudden.across}, along ${sudden.along}`);
   const fine = switchOff([1, 0, 0], Bp, BE, 0.4e-3, { perPeriod: 96 });
@@ -276,7 +276,12 @@ test('the noise is Gaussian with the r.m.s. asked for, and averaging N repeats d
   R.renoise(rng, 25);
   const avg = noiseRms(R, 0, 1, 0.2);
   close(one, 0.2, 0.01, 'σ = 0.2 with no averaging'); close(one / avg, 5, 0.3, '25 averages: 5 times smaller');
-  return `unit noise: r.m.s. ${rms(a).toFixed(4)}, ${(100 * within / n).toFixed(1)}% within 1σ; 16 averages: ${rms(b).toFixed(4)}; a record at σ = 0.2: ${one.toFixed(4)}, after 25 averages ${avg.toFixed(4)}`;
+  // And by averaging for real: 25 noisy repeats of the same signal, added up and divided.
+  const sig = (i) => Math.sin(i / 30), reps = 25, n2 = 4000, sum = new Float64Array(n2);
+  for (let r = 0; r < reps; r++) for (let i = 0; i < n2; i++) sum[i] += sig(i) + 0.2 * rng.gauss();
+  const resid = Array.from(sum, (v, i) => v / reps - sig(i));
+  close(rms(resid), avg, 0.004, 'the record\'s averaged noise is what averaging 25 repeats leaves');
+  return `unit noise: r.m.s. ${rms(a).toFixed(4)}, ${(100 * within / n).toFixed(1)}% within 1σ; 16 averages: ${rms(b).toFixed(4)}; a record at σ = 0.2: ${one.toFixed(4)}, after 25 averages ${avg.toFixed(4)} (25 repeats averaged by hand: ${rms(resid).toFixed(4)})`;
 });
 
 // ------------------------------------------------------------------------------ spin ½
