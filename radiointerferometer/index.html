@@ -99,7 +99,7 @@
           <div class="foot" id="plane3-foot"></div>
         </figure>
         <figure class="cell" id="recon-cell">
-          <div class="cell-head"><h2 id="recon-title">Image from the samples</h2></div>
+          <div class="cell-head"><h2 id="recon-title">Image from the samples</h2><span class="note" id="recon-note">grey above zero, blue below</span></div>
           <div class="canvas-wrap"><canvas id="recon" aria-label="The image made from the sampled uv plane"></canvas></div>
           <div class="foot" id="recon-foot"></div>
         </figure>
@@ -229,7 +229,10 @@
     product $x(t)\,x(t+\tau)$, blue above zero and red below, and its average is
     $R(\tau)$, the <em>autocorrelation</em>, the dot on the autocorrelation plot.  At $\tau=0$ the
     product is $x^2$, never negative, and its average is the power.  Here $\tau$ is half a
-    cycle: the copy is upside down, the product is mostly negative, and $R=-0.99$.  Drag
+    cycle: the copy is upside down, the product is mostly negative, and $R=-0.99$ (the
+    running average wanders a few hundredths either side of it: it is an average of noise,
+    and its scatter is the radiometer's, about $1/\sqrt{N}$ for $N$ independent stretches
+    of $1/\Delta\nu$; raise the averaging to steady it).  Drag
     $\tau$ along: $R$ oscillates at $\nu_0$, a cycle per cycle of lag, under an envelope that
     first reaches zero at $\tau=1/\Delta\nu$, 20 cycles, where the lumps no longer line up.
     That envelope is the Fourier transform of the band (the Wiener–Khinchin theorem): a flat
@@ -436,6 +439,13 @@
     of the uv plane at once, a six-pointed star of them.  The dirty beam has six spokes, and
     the dirty image is the sky blurred by it.  Drag a dish on the ground: its 26 baselines move
     together.</p>
+    <p>Why the image goes blue (negative) in places: no pair measures $u=v=0$, the total flux of
+    the sky (that would need two dishes in the same place); in a real array the spacings shorter
+    than a dish is wide are missing too.  So the dirty image has no average: it is the sky with its broadest,
+    smoothest part taken away, and wherever the sky is fainter than its surroundings the image
+    dips below zero.  A bright point on a dark sky barely shows this; a picture with a bright
+    background, like Fourier's portrait, shows it everywhere.  Real arrays add a single dish's
+    own map to fill the hole in the middle.</p>
   </article>
 
   <article class="exp" data-setup="rotation">

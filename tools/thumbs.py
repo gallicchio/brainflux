@@ -25,6 +25,7 @@ DEMOS = {
     'holography': ('#setup=tilt', 3),
     'tomography': ('#obj=phantom&panels=all', 1, '__app.state.playing = false; while (__app.sc.count < 120) __app.stepScan()'),
     'arrays': ('#setup=steer', 3),
+    'radiointerferometer': ('#setup=uv', 4),
     'beams': ('#setup=start', 3),
     'drums': ('#setup=filter', 10),
     'phasespace': ('#setup=anharmonic&t=8', 3),

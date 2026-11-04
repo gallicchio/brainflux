@@ -107,7 +107,9 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     setup(b, 'lag', 400)
     r = b.eval('__app.view1()')
     ok, miss = says(b, 'lag', 'half a cycle', 'R=-0.99', '20 cycles')
-    check(ok and abs(r['longRun'] + 0.99) < 0.03, f"lag: at τ = ½ cycle the correlator's average is R = {r['longRun']:.3f} (help: −0.99); this stretch's own average {r['mean']:.2f}" + (f' missing {miss}' if miss else ''))
+    # A running average of noise: it scatters about the true -0.99 by ~1/sqrt(N), N ~ 25
+    # independent stretches per chunk x ~60 chunks in the IIR: 0.026.  Allow 4 sigma.
+    check(ok and abs(r['longRun'] + 0.99) < 0.1, f"lag: at τ = ½ cycle the correlator's average is R = {r['longRun']:.3f} (help: −0.99, within its scatter of ~0.03); this stretch's own average {r['mean']:.2f}" + (f' missing {miss}' if miss else ''))
     z = b.eval('(() => { const B = __app.bandwidth(); return [__app.sim.coherence(1 / B), __app.sim.coherence(0.9 / B)]; })()')
     check(abs(z[0]) < 1e-9 and z[1] > 0.05, f'lag: the envelope first reaches zero at exactly τ = 1/Δν (coherence {z[0]:.1e} there, {z[1]:.2f} at 0.9/Δν)')
     # Dragging the lag along the autocorrelation; the dot follows the curve.
