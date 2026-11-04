@@ -46,6 +46,7 @@
 .cell > .hint { margin: 0 2px; }
 .readout { color: var(--ink-2); font-size: 13px; line-height: 1.55; min-height: 3em; }
 .readout > div { min-height: 1.55em; }
+.readout > div.warn-line { color: var(--warn); }
 
 /* View 1: the interferometer and the light side by side, the trace under them. */
 #v-fringes { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); grid-template-areas: "schem side" "trace trace"; }
@@ -93,8 +94,11 @@ h2 .sw { display: inline-block; width: 14px; height: 5px; border-radius: 2px; ma
 .q-a { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); grid-template-areas: "schem spec" "scan scan"; gap: 8px 10px; }
 .q-schem-cell { grid-area: schem; } .q-spec-cell { grid-area: spec; } .q-scan-cell { grid-area: scan; }
 .q-spec-cell .q-spec-box { flex: 1; min-height: 200px; }
-.q-scan-box { height: max(220px, calc(100vh - 640px)); }
+.q-scan-box { height: max(210px, calc(100vh - 660px)); }
 #q-scan { cursor: pointer; }
+.q-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; color: var(--ink-2); }
+.q-legend .lg-env { color: var(--env); } .q-legend .lg-td { color: var(--ink-3); } .q-legend .lg-fall { color: var(--noisec); }
+.q-legend .lg-lay { color: var(--layer); } .q-legend .lg-ac { color: var(--ink-3); }
 .q-bscan-box { height: max(320px, calc(100vh - 330px)); }
 .oct[data-qmode="bscan"] .q-a, .oct:not([data-qmode="bscan"]) .q-b { display: none; }
 .oct[data-qmode="bscan"] .q-a-only, .oct:not([data-qmode="bscan"]) .q-b-only { display: none; }

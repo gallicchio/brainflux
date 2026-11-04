@@ -191,6 +191,18 @@ function drawScan(c) {
     if (state.both && b.D !== 0) { ctx.globalAlpha = 0.3; const xm = f.X(-b.D / 2); ctx.beginPath(); ctx.moveTo(xm, y - 1); ctx.lineTo(xm - 5, y - 10); ctx.lineTo(xm + 5, y - 10); ctx.closePath(); ctx.fill(); }
     ctx.globalAlpha = 1;
   });
+  // Layers the image shows somewhere else: folded back from past the range, or mirrored from
+  // the other side of zero path.  A hollow marker where they land, saying where they are.
+  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  B.forEach((b) => {
+    const d = b.D / 2, shown = state.both ? (Math.abs(d) <= DM ? null : Math.sign(d) * fold(d, DM)) : (d >= 0 && d <= DM ? null : fold(d, DM));
+    if (shown === null) return;
+    const x = f.X(shown), y = Y(Math.abs(b.a) * spec.rolloff(Math.abs(b.D)));
+    ctx.strokeStyle = c.layer; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, y - 1); ctx.lineTo(x - 5, y - 10); ctx.lineTo(x + 5, y - 10); ctx.closePath(); ctx.stroke();
+    const text = d < 0 ? `mirrored from ${d.toFixed(0)} μm` : `folded back from ${d.toFixed(0)} μm`, half = ctx.measureText(text).width / 2 + 2;
+    ctx.fillStyle = c.layer; ctx.fillText(text, Math.max(f.left + half, Math.min(f.right - half, x)), Math.max(f.top + 14, y - 12));
+  });
   // Where the layers' light interferes among itself (the autocorrelation terms): at their separations.
   ctx.strokeStyle = c.ink3; ctx.lineWidth = 1.2;
   if (B.length <= 4) for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
@@ -201,16 +213,20 @@ function drawScan(c) {
   const x0 = f.X(0);
   ctx.strokeStyle = c.mirror; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x0, f.top); ctx.lineTo(x0, f.bottom); ctx.stroke();
   ctx.restore();
-  ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'top'; ctx.textAlign = 'right';
-  let ly = f.top + 3;
-  const legend = (text, col) => { ctx.fillStyle = col; ctx.fillText(text, f.right - 6, ly); ly += 14; };
-  legend('— from the spectrum, by one Fourier transform', c.env);
-  if (state.td) legend('— the time-domain A-scan of view 2, for comparison', c.ink3);
-  legend('···· the fall-off with depth', c.noise);
-  legend('▼ the layers (click one to see its fringe)', c.layer);
-  if (B.length > 1 && B.length <= 4) legend('▽ two layers\' light interfering with each other', c.ink3);
+  ctx.font = '11px system-ui, sans-serif';
+  legendLine();
   ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = c.mirror; ctx.fillText('zero path', x0 + 4, f.bottom - 3);
   scanFrame = f;
+}
+
+/** The A-scan's legend, as a line of text over the plot (rebuilt only when it changes). */
+function legendLine() {
+  const parts = [['env', '— from the spectrum, by one Fourier transform'], ...(state.td ? [['td', '— the time-domain A-scan of view 2']] : []), ['fall', '··· the fall-off with depth'],
+    ['lay', '▼ the layers (click one to see its fringe)'], ...(B.length > 1 && B.length <= 4 ? [['ac', '▽ two layers\' light interfering']] : [])];
+  const box = $('#q-legend'), key = parts.map((p) => p[0]).join();
+  if (box._key === key) return;
+  box._key = key;
+  box.replaceChildren(...parts.map(([k, t]) => { const e = document.createElement('span'); e.className = `lg-${k}`; e.textContent = t; return e; }));
 }
 
 // --------------------------------------------------------------------- drawing: a B-scan
@@ -281,8 +297,11 @@ function readout() {
   const src = S.src;
   if (state.mode === 'ascan') {
     const pk = B[state.pick] || B[0], fr = ((spec.kHi - spec.kLo) * pk.D) / (2 * Math.PI);
+    const ppf = spec.N / Math.abs(fr);
     setGroups($('#q-readout-1'), [[`The ${pk.name} is `, { v: pk.D / 2, dec: 1, w: 6 }, ' μm beyond zero path:'],
-      ['its fringe has a period 2π/Δ = ', { v: (2 * Math.PI) / Math.abs(pk.D), dec: 4, w: 6 }, ' rad/μm,'], ['', { v: Math.abs(fr), dec: 1, w: 5 }, ' fringes across the camera']]);
+      ['its fringe has a period 2π/Δ = ', { v: (2 * Math.PI) / Math.abs(pk.D), dec: 4, w: 6 }, ' rad/μm,'], ['', { v: Math.abs(fr), dec: 1, w: 5 }, ' across the camera,'],
+      ['', { v: Math.min(ppf, 99999), dec: 1, w: 6 }, ppf < 2 ? ' pixels each: too few (2 needed)' : ' pixels each']]);
+    $('#q-readout-1').classList.toggle('warn-line', ppf < 2);
     const found = foundPeaks();
     setGroups($('#q-readout-2'), [['Peaks from the transform: ', { v: found.length, dec: 0, w: 2 }, ';'],
       ...(found.length === 1 ? [['at ', { v: found[0].d, dec: 2, w: 7 }, ' μm']] : found.length > 1 ? [['the first at ', { v: found[0].d, dec: 2, w: 7 }, ' μm,'], ['the last at ', { v: found[found.length - 1].d, dec: 2, w: 7 }, ' μm']] : [])]);
