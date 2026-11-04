@@ -106,7 +106,7 @@
     from here, in the experiments below.</p>
   </section>
 
-  <article class="exp" data-setup="one">
+  <article class="exp" data-setup="one" data-frame="720x366">
     <h3>1. A charge on a spring: why $n$ rises, then falls through a line</h3>
     <p>One line at $\omega_0=2$, $\gamma=0.2$.  The light's frequency sweeps slowly across it
     (drag the square handle to take over).  Watch the charge and the two curves beside it, $E(t)$
@@ -123,7 +123,7 @@
     towards 1.</p>
   </article>
 
-  <article class="exp" data-setup="wave">
+  <article class="exp" data-setup="wave" data-frame="518x196">
     <h3>2. What $n$ and $\kappa$ do to the wave</h3>
     <p>The light at $\omega=1.6$, below the line: $n=1.290$ and $\kappa=0.057$.  In the
     picture on the right the wave comes in from vacuum.  Inside, its crests are $\lambda_0/n=
@@ -138,7 +138,7 @@
     signal (experiments 14 and 15).</p>
   </article>
 
-  <article class="exp" data-setup="metal">
+  <article class="exp" data-setup="metal" data-frame="720x239">
     <h3>3. A metal is a mirror below $\omega_p$</h3>
     <p>Free electrons, $\varepsilon=1-\omega_p^2/(\omega^2+i\gamma\omega)$, with sodium's
     $\hbar\omega_p=5.9$ eV.  With no spring, nothing pulls an electron back, and at every
@@ -153,7 +153,7 @@
     electron density, $\omega_p^2=Ne^2/\varepsilon_0m$.</p>
   </article>
 
-  <article class="exp" data-setup="ionosphere">
+  <article class="exp" data-setup="ionosphere" data-frame="720x239">
     <h3>4. The ionosphere reflects AM radio</h3>
     <p>The same physics with $10^{12}$ electrons per cubic metre: $f_p=\omega_p/2\pi\approx9$
     MHz (frequencies here are $f$ in MHz).  AM broadcasts (0.53 to 1.7 MHz) are far below $f_p$
@@ -167,7 +167,7 @@
     sunspot cycle.</p>
   </article>
 
-  <article class="exp" data-setup="glass">
+  <article class="exp" data-setup="glass" data-frame="720x366">
     <h3>5. Glass: why a prism spreads the colours</h3>
     <p>Fused silica, as three oscillators (Malitson's fit): two resonances in the ultraviolet
     (10.7 and 18 eV) and one in the infrared (0.13 eV, at the left edge).  The visible band
@@ -179,7 +179,7 @@
     spectrum more than the red.</p>
   </article>
 
-  <article class="exp" data-setup="reststrahlen">
+  <article class="exp" data-setup="reststrahlen" data-frame="720x470">
     <h3>6. Reststrahlen: a crystal that mirrors one band of the infrared</h3>
     <p>Rock salt in the infrared (frequencies $\nu$ in THz).  The Na⁺ and Cl⁻ ions vibrate against
     each other at the transverse optical frequency, $\nu_\mathrm{TO}=4.9$ THz; the electrons,
@@ -193,7 +193,7 @@
     $\gamma$ to 0.5 THz: damping rounds the plateau, and $R$ at 6.2 THz falls to 75%.</p>
   </article>
 
-  <article class="exp" data-setup="sumrule">
+  <article class="exp" data-setup="sumrule" data-frame="720x209">
     <h3>7. The f-sum rule: one area that no reshaping can change</h3>
     <p>However a line is shaped, one weighted area is fixed by the number of charges alone:
     $$\int_0^\infty\omega\,\varepsilon''(\omega)\,d\omega=\frac{\pi}{2}\,\omega_p^2,\qquad\omega_p^2=\frac{Nq^2}{\varepsilon_0m}.$$
@@ -204,7 +204,7 @@
     frequency: there every charge responds as if it were free, $\chi\to-\omega_p^2/\omega^2$.</p>
   </article>
 
-  <article class="exp" data-setup="sliver">
+  <article class="exp" data-setup="sliver" data-frame="720x497">
     <h3>8. Kramers–Kronig, one sliver at a time</h3>
     <p>Causality: the charges cannot respond before they are pushed.  The bottom plot is
     $\chi(t)$, the polarisation after a short kick of $E$ at $t=0$, and it is zero before
@@ -221,7 +221,7 @@
     large, but there the shares of its neighbours on either side cancel it.</p>
   </article>
 
-  <article class="exp" data-setup="draw">
+  <article class="exp" data-setup="draw" data-frame="720x497">
     <h3>9. Draw the absorption, get the index</h3>
     <p>$\mathrm{Im}\,\chi$ is a flat band of absorption, drawn by hand, and $\mathrm{Re}\,\chi$ is
     what causality makes of it: $(h/\pi)\ln|(b^2-\omega^2)/(a^2-\omega^2)|$ for a band of height
@@ -234,7 +234,7 @@
     edges.</p>
   </article>
 
-  <article class="exp" data-setup="acausal">
+  <article class="exp" data-setup="acausal" data-frame="720x497">
     <h3>10. Break causality: a medium that responds before it is kicked</h3>
     <p>A medium that absorbs exactly as the single line does, but with
     $\mathrm{Re}\,\chi=0$: no dispersion at all.  Its $\chi(t)$ is odd in time: it responds before
@@ -245,7 +245,7 @@
     is recomputed, and the past goes quiet.</p>
   </article>
 
-  <article class="exp" data-setup="typed">
+  <article class="exp" data-setup="typed" data-frame="720x497">
     <h3>11. Type χ(ω): the sign of i</h3>
     <p>$\chi(\omega)=\omega_p^2/(\omega_0^2-\omega^2-i\gamma\omega)$ typed in (as
     <code>wp^2/(w0^2 - w^2 - i g w)</code>): causal (before the kick, $1.5\times10^{-4}$ of its size
@@ -263,7 +263,7 @@
     $\chi(t)=\sigma$ for $t>0$ and 0 before.</p>
   </article>
 
-  <article class="exp" data-setup="delay">
+  <article class="exp" data-setup="delay" data-frame="720x501">
     <h3>12. A pulse is late: phase and group velocity</h3>
     <p>A pulse below the line ($\omega_c=1$; its spectrum is the grey hump).  The middle plot is
     the pulse inside the medium at one moment, against the same pulse in vacuum (dashed).  The
@@ -279,7 +279,7 @@
     turns red, since here lower frequencies go faster (the colour is the local frequency).</p>
   </article>
 
-  <article class="exp" data-setup="spread">
+  <article class="exp" data-setup="spread" data-frame="720x501">
     <h3>13. A short pulse spreads, red first</h3>
     <p>A 10 fs pulse at 800 nm through 5 mm of fused silica, watched moving with the pulse.  In
     the visible and near infrared glass has normal dispersion, so red light (lower $\omega$,
@@ -292,7 +292,7 @@
     long: $L$ grows as $T^2$, and after 5 mm it is only 1.60 times longer.</p>
   </article>
 
-  <article class="exp" data-setup="superluminal">
+  <article class="exp" data-setup="superluminal" data-frame="720x501">
     <h3>14. Faster than light? The peak exits early</h3>
     <p>A long pulse tuned to the middle of a weak absorption line, where $n$ falls so steeply
     with $\omega$ that $n_g=-0.975$: negative.  At the detector, the peak of what comes out
@@ -306,7 +306,7 @@
     distorted, and its peak is only 1.6 early at $z=5$.</p>
   </article>
 
-  <article class="exp" data-setup="front">
+  <article class="exp" data-setup="front" data-frame="720x501">
     <h3>15. ...and a front never arrives early</h3>
     <p>The same pulse with a sharp front: before $t_f=-24$ (24 before its peak) there is no field
     at all.  What comes out now piles up just behind the front (its peak is at $-22.9$), and
@@ -318,7 +318,7 @@
     period.)</p>
   </article>
 
-  <article class="exp" data-setup="precursors">
+  <article class="exp" data-setup="precursors" data-frame="720x501">
     <h3>16. Precursors: what arrives first when a wave is switched on</h3>
     <p>A carrier switched on suddenly at $t=0$ into a dense medium (Brillouin's own numbers,
     1914).  The first thing to arrive, exactly at $t=z/c$, is the Sommerfeld precursor (a
