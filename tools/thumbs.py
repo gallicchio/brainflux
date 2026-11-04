@@ -28,6 +28,7 @@ DEMOS = {
     'radiointerferometer': ('#setup=uv', 4),
     'oct': ('#setup=volume', 1, '__app.hold(true); __app.B.finishNow(); __app.step(0, 1)'),
     'nmr': ('#setup=echo', 1, '__app.hold(true); __app.runTo(2.55e-3)'),
+    'mri': ('#setup=fill', 1, "__app.hold(true); (() => { const v = __app.views.kspace; for (const q of [32, 31, 33, 30, 34, 29, 35, 28, 36, 27, 37, 26, 38, 25, 39]) v.acq.measure(q); v.scan.n = 15; v.cue(43, v.seq.tEcho + 0.5); __app.draw(); })()"),
     'beams': ('#setup=start', 3),
     'drums': ('#setup=filter', 10),
     'phasespace': ('#setup=anharmonic&t=8', 3),

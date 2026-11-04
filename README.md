@@ -30,6 +30,7 @@ beta are new and still being checked.
 - [Drums and billiards](https://gallicchio.github.io/brainflux/drums/) (beta)
 - [Quantum phase space](https://gallicchio.github.io/brainflux/phasespace/) (beta)
 - [Bloch sphere and NMR](https://gallicchio.github.io/brainflux/nmr/) (beta)
+- [MRI: from spins to an image](https://gallicchio.github.io/brainflux/mri/) (beta)
 - [The principle of least action](https://gallicchio.github.io/brainflux/action/) (beta)
 
 They are static pages with no frameworks, no build step and no server code: serve this folder
