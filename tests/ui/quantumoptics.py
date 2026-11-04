@@ -300,7 +300,8 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
     b.eval('location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
     s = b.eval('__app.state')
     check(s['view'] == 'squeeze' and s['psi'] == 37 and abs(s['r'] - math.log(2)) < 1e-4 and s['alpha'] == 3, f'reloading the address brings back the view, α and the squeezing ({b.eval("location.hash")[:60]})')
-    b.eval("location.hash = '#setup=fdsqz'"); b.wait("__app.state.view === 'ligo' && __app.state.sq.fd", timeout=20)
+    # (window.__app may be undefined for a moment if the page is still loading: guard it, else eval throws)
+    b.eval("location.hash = '#setup=fdsqz'"); b.wait("window.__app && __app.state.view === 'ligo' && __app.state.sq.fd", timeout=20)
     check(b.eval('__app.state.sq.dB') == 10, 'typing #setup=fdsqz into the address opens that experiment')
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))

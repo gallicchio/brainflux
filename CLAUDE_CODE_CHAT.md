@@ -1407,3 +1407,59 @@ interferometer demo leaves off.
 before: 18 radio, 18 NMR, 23 MRI, 13 OCT, with the arrays' 7 synthesis tests gone) and the
 scripted run of all 23 demos, the four new ones making 110, 57, 74 and 66 checks.  Firefox
 isn't installed here.
+
+## Prompt 21
+
+> Start the quantum optics squeezed light and LIGO demo.
+
+### Response 21 (2026-11-04)
+
+Built by one agent from a brief that tells the story in the order a student can follow it
+(the container restarted once and killed the first attempt before it had committed anything;
+the second was told to commit each view as it worked).  `quantumoptics/`, four views and 14
+experiments, the placeholder card replaced:
+
+- *1 · One mode*: the quadrature plane (X₁, X₂) with the state's Wigner function drawn in
+  closed form in the phase-space demo's red and blue, turning at ω slowed; the mean field α
+  on a stick you drag; one point of the cloud drawn each period and its shadow on X₁ traced
+  beside it as E(t) over the mean ± ΔX band; the photon-number distribution.  The vacuum's
+  noise is real; a laser's coherent state is the classical field plus that noise; more
+  photons give the same absolute noise and a sharper phase, Δφ = 1/(2|α|).
+- *2 · Squeezing*: the vacuum or a laser's field through a χ⁽²⁾ crystal pumped at 2ω, r
+  and its dB, the angle, a loss beam splitter with "vacuum in" rounding the ellipse out
+  (V = η e^{−2r} + 1 − η: 10 dB through 50% loss is 2.6 dB); the squeezed vacuum's even photon
+  numbers with ⟨n⟩ = sinh²r; amplitude- against phase-squeezed, sub- against
+  super-Poissonian Δn.
+- *3 · Homodyne*: the apparatus (signal, a strong local oscillator with a phase shifter, the
+  50:50 beam splitter, two photodiodes, the subtractor); the plane in the LO's frame with
+  the yellow X_θ axis you drag and the samples' histogram projected on it; the photocurrent
+  sample by sample; the noise against θ in dB re ¼ with the measured record over theory and a
+  motor that scans θ, so the student finds the ±6 dB of a squeezed state; a small phase shift
+  on a coherent state read at the standard quantum limit (SNR 0.60, Δφ_min = 0.167 rad at
+  |α| = 3) and below it with 6 dB of phase squeezing (SNR 1.12, 0.083 rad).
+- *4 · LIGO*: the interferometer sketch (laser, power recycling, the 4 km arm cavities at
+  400 kW, the dark port, the isolator, the photodiode; "the vacuum enters here" when
+  squeezing is off, the OPO and the filter cavity when on); the strain sensitivity on log
+  axes (shot noise, radiation pressure, the standard quantum limit touched at 48 Hz, the
+  seismic wall, thermal noise, the total, with the unsqueezed total ghosted behind) from
+  Kimble et al. 2001, injected squeezing of any angle and loss, and frequency-dependent
+  squeezing turning the angle with frequency; a binary's Newtonian chirp (two neutron stars
+  at 40 Mpc, two black holes at 500 Mpc) drawn as a band over the curve and as h(t), with
+  "Hear it"; its matched-filter signal-to-noise ratio.  The payoff as a number: 6 dB of
+  frequency-dependent squeezing through 20% loss takes ρ from 72.3 to 104.2, 1.44 times as
+  far, 3.0 times the volume, the reach at ρ = 8 from 361 to 521 Mpc.
+
+Physics in DOM-free modules checked against closed forms: the Wigner function against the
+phase-space demo's to 3e-17, the photon statistics (Poisson; even-only for the squeezed
+vacuum; ⟨n⟩ and Δn² of a displaced squeezed state) to 1e-5, the homodyne variance against
+θ, the loss formula, the SQL envelope over all powers to 1e-5, frequency-dependent squeezing
+giving e^{−2r} at every frequency, the matched-filter SNR by FFT against the stationary-phase
+quadrature within 4%.  Departures from the brief, said in the help: the shot noise is flat
+below the arm bandwidth and rises ∝ f above it (the Fabry–Pérot result), not ∝ √f; 6 dB
+rather than 10 in the phase-shift experiment, because at 10 dB the turned ellipse's wide
+side leaks into the reading.  Left: a whitened detector trace with the chirp buried in
+simulated noise, the visual twin of the SNR number.
+
+**Tests.**  15 unit tests and an 86-check UI test (desktop, dark, phone), both passing on the
+merged `main` with the whole unit-test page at 410 passed; one wait in the UI test could throw
+if it ran while the page was still loading, and is guarded now.

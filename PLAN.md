@@ -144,7 +144,7 @@ Then superposition (standing waves, fringes) and a 1D packet with a chosen dispe
 - Fourier series with sound (the old SoundFourier/InstrumentFourier applets): harmonics on
   sliders, heard through Web Audio.
 
-### TODO: `quantumoptics/`, squeezed light and LIGO (not started)
+### `quantumoptics/`: squeezed light and LIGO (built 2026-11-04; the plan as written)
 
 Continuous-variable quantum optics, worked up to LIGO's use of squeezed states.  The story:
 one mode of the field has two quadratures, X and P, with ΔX ΔP ≥ ½; a coherent state is the
@@ -342,7 +342,6 @@ alone and forwards its old synthesis links.  The `wip/` branches are superseded 
 
 Left for later, besides the lists above:
 
-- The quantum-optics demo (the TODO under "The demos"), not started.
 - From the new demos' reports: the board's tank tuning and the coil's angle to the Earth's
   field (NMR); the Earth's-field and 5 MHz presets, T₂ during the readout, partial volume
   and a shaped field map (MRI); averaging B-scans against speckle, a flattened en-face slab,
