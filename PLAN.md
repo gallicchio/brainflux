@@ -327,3 +327,25 @@ resume each: continue the branch (the page, the UI test, the thumbnail), registe
 file in `tests/index.html`'s list, add the card to the landing page and the line to
 `README.md` and `tools/thumbs.py`, run `tools/test_all.sh`, merge.  Then the quantum-optics
 demo (the TODO above).
+
+## Status, 2026-11-04
+
+The four paused demos are finished and merged, marked beta on the landing page:
+`radiointerferometer/` (one source's noise and its autocorrelation; two antennas and two
+sources with live streams, the fringe and the cross terms dying; the uv plane with the
+correlator's dot settling on the colour under the pair, the Etch-a-Sketch and HBT; a whole
+array and Earth rotation with the dirty image, the dirty beam and CLEAN), `nmr/` (one spin,
+many spins, pulse sequences, the Earth's-field board), `mri/` (one axis, a slice, the second
+axis filling k-space, contrast and artefacts, Lauterbur) and `oct/` (fringes from a layer,
+the A-scan, the B-scan and a 3D volume, Fourier-domain OCT).  `arrays/` is the phased array
+alone and forwards its old synthesis links.  The `wip/` branches are superseded by `main`.
+
+Left for later, besides the lists above:
+
+- The quantum-optics demo (the TODO under "The demos"), not started.
+- From the new demos' reports: the board's tank tuning and the coil's angle to the Earth's
+  field (NMR); the Earth's-field and 5 MHz presets, T₂ during the readout, partial volume
+  and a shaped field map (MRI); averaging B-scans against speckle, a flattened en-face slab,
+  a Web Worker for the volume scan on slow machines (OCT); more imaging algorithms than
+  Högbom's CLEAN, and the help for the Etch-a-Sketch with HBT on (radio).
+- 2D scattering: Born's |V~(k − k0)|² on the momentum circle and the classical dσ/dθ.
