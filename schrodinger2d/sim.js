@@ -487,6 +487,32 @@ export function fraunhofer(k, ys, Are, Aim, dy, thetas) {
   });
 }
 
+/**
+ * Classical particles off a hard disk of radius r, in two dimensions.  One with impact parameter
+ * b, |b| < r, meets the wall at the angle alpha to its normal with sin(alpha) = |b|/r, and is
+ * reflected through theta = pi - 2 alpha, to the side it came in on: |b| = r cos(theta/2), one b
+ * for each theta in (-pi, pi), so
+ *     dsigma/dtheta = |db/dtheta| = (r/2) |sin(theta/2)|,
+ * nothing straight forward and most straight back, and in all sigma = 2r, the width the disk
+ * blocks (twice the integral of (r/2) sin(theta/2) from 0 to pi).  (A wave's total is twice
+ * this as kr -> infinity: the same 2r reflected, and as much again diffracted into the narrow
+ * forward peak that makes the shadow; see the tests.)
+ */
+export function classicalHardDisk(r, thetas) {
+  return thetas.map((t) => 0.5 * r * Math.abs(Math.sin(t / 2)));
+}
+
+/**
+ * Where a particle of energy E coming head on is turned back by the soft wall
+ * V0 / (1 + e^{(r - a)/w}) (the demo's disk): V = E at r = a + w ln(V0/E - 1).  As w -> 0 the
+ * wall is a hard disk of that radius (classical rays through it, see the tests).  NaN if
+ * V0 <= E: then a particle rolls over the top.
+ */
+export function wallRadius(V0, a, w, E) {
+  if (!(V0 > E) || !(E > 0)) return NaN;
+  return a + Math.max(0, w) * Math.log(V0 / E - 1);
+}
+
 /** Exact partial waves for a hard disk of radius a (psi = 0 on it): tan delta_m = J_m(ka)/Y_m(ka). */
 export function hardDiskWaves(k, a, mmax = 30) {
   const J = besselJ(mmax, k * a), Y = besselY(mmax, k * a), out = [];

@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves, radialWaves, fraunhofer, preparePotential2D } from '../schrodinger2d/sim.js';
+import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, hardDiskWaves, radialWaves, fraunhofer, preparePotential2D, classicalHardDisk, wallRadius } from '../schrodinger2d/sim.js';
 import { besselJ } from '../lib/bessel.js';
 
 function setup({ n = 128, L = 64, absorb = true, V, packet }) {
@@ -242,4 +242,111 @@ test('the optical theorem in 2D: its phase factor, for unitary and for absorbing
     const f0 = pw.f[0], imForm = Math.sqrt((8 * Math.PI) / k) * (f0[1] * Math.cos(Math.PI / 4) - f0[0] * Math.sin(Math.PI / 4));
     close(imForm, pw.optical, 1e-9, 'sqrt(8 pi/k) Im[e^{-i pi/4} f(0)]');
   }
+});
+
+// Classical scattering off a hard disk in 2D: |b| = r cos(theta/2), so dsigma/dtheta =
+// (r/2)|sin(theta/2)| and sigma = 2r.  Counted here with evenly spaced rays, each reflected
+// off the circle by geometry alone (the hit point, the normal there, d' = d - 2(d.n)n), not by
+// the formula.
+test('classical hard disk: (r/2)|sin(theta/2)| and sigma = 2r, against rays reflected off the circle', () => {
+  const r = 1.7, B = 1.25 * r, N = 200000, nb = 72, dth = (2 * Math.PI) / nb, hist = new Float64Array(nb);
+  let hit = 0;
+  for (let i = 0; i < N; i++) {
+    const b = -B + ((i + 0.5) * 2 * B) / N;
+    if (Math.abs(b) >= r) continue;            // misses: not scattered
+    hit += (2 * B) / N;
+    const nx = -Math.sqrt(r * r - b * b) / r, ny = b / r, dn = nx;   // the ray (1, 0) meets the circle at r (nx, ny)
+    const t = Math.atan2(-2 * dn * ny, 1 - 2 * dn * nx);
+    hist[Math.min(nb - 1, Math.floor(((t + Math.PI) / (2 * Math.PI)) * nb))] += (2 * B) / N;
+  }
+  close(hit, 2 * r, 1e-4, 'sigma = 2r');
+  // Each bin against the formula's own average over it: (r/2)|sin(t/2)| integrates to r(1 - cos(t/2)) from 0.
+  const F = (t) => Math.sign(t) * r * (1 - Math.cos(t / 2)), th = Array.from({ length: nb }, (_, j) => -Math.PI + (j + 0.5) * dth);
+  const formula = classicalHardDisk(r, th);
+  let worst = 0;
+  for (let j = 0; j < nb; j++) {
+    const lo = -Math.PI + j * dth, want = (F(lo + dth) - F(lo)) / dth;
+    worst = Math.max(worst, Math.abs(hist[j] / dth - want) / (r / 2));
+    assert(Math.abs(formula[j] - want) < 0.002 * r, `the formula at ${(th[j] * 180 / Math.PI).toFixed(1)} degrees`);
+  }
+  assert(worst < 1e-3, `ray count off the formula by ${worst} of r/2`);
+  return `sigma ${hit.toFixed(5)} = 2r; bins within ${worst.toExponential(1)} of r/2`;
+});
+
+// The demo's disk is a soft wall, V0/(1 + e^{(r-a)/w}).  Classical rays through it, integrated
+// with Runge-Kutta: the head-on one turns back at wallRadius (V = E), and as the wall sharpens
+// the rays' dsigma/dtheta becomes the hard disk's of that radius.  (At the demo's w = 0.25 they
+// are bent from further out when they graze it, and the curve is flatter.)
+function wallRays(V0, a, w, E, N, nb, bmax = a + 25 * w) {
+  const shell = a + 25 * w, v = Math.sqrt(2 * E), h = Math.min(0.01, w / v / 20);
+  const dV = (r) => { const e = Math.exp(Math.min(700, (r - a) / w)); return (-V0 * e) / (w * (1 + e) ** 2); };
+  const acc = (x, y) => { const r = Math.hypot(x, y), g = -dV(r) / r; return [g * x, g * y]; };
+  const hist = new Float64Array(nb);
+  let turn = Infinity;
+  for (let i = 0; i < N; i++) {
+    const b = i === 0 ? 0 : ((i - 0.5) * bmax) / (N - 1);    // b >= 0 (the rest by symmetry); the first head on
+    let x = -Math.sqrt(shell * shell - b * b), y = b, vx = v, vy = 0;
+    for (let s = 0; s < 1e6; s++) {
+      const [ax1, ay1] = acc(x, y), [ax2, ay2] = acc(x + (h / 2) * vx, y + (h / 2) * vy);
+      const [ax3, ay3] = acc(x + (h / 2) * (vx + (h / 2) * ax1), y + (h / 2) * (vy + (h / 2) * ay1));
+      const [ax4, ay4] = acc(x + h * (vx + (h / 2) * ax2), y + h * (vy + (h / 2) * ay2));
+      x += h * (vx + (h / 6) * (ax1 + ax2 + ax3)); y += h * (vy + (h / 6) * (ay1 + ay2 + ay3));
+      vx += (h / 6) * (ax1 + 2 * ax2 + 2 * ax3 + ax4); vy += (h / 6) * (ay1 + 2 * ay2 + 2 * ay3 + ay4);
+      if (i === 0) turn = Math.min(turn, Math.hypot(x, y));
+      if (s > 2 && x * x + y * y > shell * shell && x * vx + y * vy > 0) break;
+    }
+    if (i > 0) hist[Math.min(nb - 1, Math.floor((Math.abs(Math.atan2(vy, vx)) / Math.PI) * nb))] += bmax / (N - 1);
+  }
+  return { hist, turn };   // hist: dsigma per bin of |theta| on one side
+}
+
+test('a soft wall turns a head-on particle back at wallRadius, and sharpened it scatters like that hard disk', () => {
+  const V0 = 8, a = 1.5, E = 2, nb = 18, dth = Math.PI / nb, notes = [];
+  let last = Infinity;
+  for (const w of [0.25, 0.05, 0.02]) {
+    const rE = wallRadius(V0, a, w, E), { hist, turn } = wallRays(V0, a, w, E, 3000, nb);
+    close(turn, rE, 2e-3, `the head-on ray turns at V = E, w = ${w}:`);
+    // Beyond 60 degrees, against (rE/2) sin(theta/2) averaged over each bin (one side: rE (1 - cos(t/2))).
+    // (Rays that graze a soft wall are turned from further out, where V = E cos^2(alpha): the
+    // small angles come right last, as w ln(1/cos^2(alpha)) -> 0.)
+    let dev = 0, n = 0, back = 0, want = 0;
+    for (let j = 6; j < nb; j++) {
+      const lo = j * dth, f = (rE * (Math.cos(lo / 2) - Math.cos((lo + dth) / 2))) / dth;
+      dev += Math.abs(hist[j] / dth - f) / f; n++;
+      if (lo >= (150 * Math.PI) / 180) { back += hist[j]; want += f * dth; }
+    }
+    dev /= n;
+    notes.push(`w ${w}: turns at ${turn.toFixed(4)} (rE ${rE.toFixed(4)}), off the hard disk by ${(100 * dev).toFixed(1)}% beyond 60 deg, ${(100 * (back / want - 1)).toFixed(1)}% beyond 150`);
+    assert(dev < last, 'closer to the hard disk as the wall sharpens: ' + notes.join('; '));
+    last = dev;
+    if (w === 0.02) assert(dev < 0.04 && Math.abs(back / want - 1) < 0.04, 'the sharp wall is a hard disk: ' + notes.join('; '));
+    // The help: rays through the demo's own wall send 0.73 straight back (170 to 180 degrees),
+    // against the hard disk's 0.89.
+    if (w === 0.25) {
+      const last10 = wallRays(V0, a, w, E, 401, nb, 0.2).hist[nb - 1] / dth, hard = (rE * Math.cos(Math.PI / 2 - dth / 2)) / dth;   // rays 0.0005 apart there
+      notes.push(`w 0.25 from 170 to 180 deg: ${last10.toFixed(3)} against the hard disk's ${hard.toFixed(3)}`);
+      assert(Math.abs(last10 - 0.73) < 0.01 && Math.abs(hard - 0.887) < 0.002, 'help, straight back: ' + notes.join('; '));
+    }
+  }
+  assert(Number.isNaN(wallRadius(1, a, 0.25, E)), 'no wall when V0 < E');
+  return notes.join('; ');
+});
+
+// A wave off a hard disk (the exact partial waves, tan delta_m = J_m(kr)/Y_m(kr)): its total
+// cross section tends to 4r, twice the classical 2r (the extinction paradox: the shadow takes
+// as much as the disk reflects), and away from forward its |f|^2 tends to the classical curve.
+test('a wave off a hard disk: sigma -> 4r, twice the classical, and its large angles become classical', () => {
+  const k = 2, th = Array.from({ length: 721 }, (_, i) => (i * Math.PI) / 720), notes = [];
+  let lastS = Infinity, lastB = Infinity;
+  for (const kr of [5, 10, 20, 40]) {
+    const r = kr / k, pw = fromPartialWaves(hardDiskWaves(k, r, kr + 30), k, th), cl = classicalHardDisk(r, th);
+    let wave = 0, cls = 0;
+    for (let i = 0; i < th.length; i++) if (th[i] >= Math.PI / 2) { wave += pw.f[i][0] ** 2 + pw.f[i][1] ** 2; cls += cl[i]; }
+    const s = pw.sigma / (4 * r), bk = Math.abs(wave / cls - 1);
+    notes.push(`kr ${kr}: sigma/4r ${s.toFixed(4)}, large angles ${(wave / cls).toFixed(4)} of classical`);
+    assert(s > 1 && s < lastS && bk < lastB, 'towards 4r and the classical curve: ' + notes.join('; '));
+    lastS = s; lastB = bk;
+  }
+  assert(lastS < 1.05 && lastB < 0.002, notes.join('; '));
+  return notes.join('; ');
 });
