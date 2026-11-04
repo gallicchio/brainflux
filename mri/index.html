@@ -169,7 +169,7 @@
   <article class="exp" data-setup="axis">
     <h3>1. A field that rises along x turns position into frequency</h3>
     <p>Two tubes of water, 12 mm and 6 mm wide, in a field that rises by $G=2$ mT/m along $x$.
-    A π/2 pulse tips every spin into the plane (the <a href="../nmr/">NMR demo</a> shows how), and
+    A π/2 pulse tips every spin into the plane (the <a href="../nmr/#setup=pulse90">NMR demo</a> shows how), and
     then each turns at its own Larmor frequency,
     $$f(x)=\bar\gamma\,(B_0+Gx),\qquad \bar\gamma=\frac{\gamma}{2\pi}=42.58\ \mathrm{MHz/T}.$$
     The page watches from a frame that turns at $f_0=\bar\gamma B_0$ (63.87 MHz at 1.5 T), as the
@@ -329,7 +329,7 @@
     <p>A poor magnet: every spin is a little off its frequency (a spread of width
     $1/\pi T_2'$ with $T_2'=8$ ms), so after the π/2 pulse the spins drift out of step, speckling
     the phase picture with random colours, and the signal would fade as $e^{-t/T_2'}$.  At TE/2
-    comes the π pulse.  It turns every spin's phase around, $\varphi\to-\varphi$, so a spin that
+    comes the π pulse (one spin's view of it in the <a href="../nmr/#setup=echo">NMR demo</a>).  It turns every spin's phase around, $\varphi\to-\varphi$, so a spin that
     had run ahead is now as far behind, and it goes on running ahead at the same rate: at TE they
     are all back in step, whatever their offsets.  The same π pulse turns the gradients' phase
     around too, $\vec k\to-\vec k$ (the dot jumps through the centre of k-space), so the readout
@@ -438,7 +438,7 @@
   <h3>How it works</h3>
   <p><b>The signal.</b>  Protons in a field $B$ precess at the Larmor frequency
   $f=\bar\gamma B$, with $\bar\gamma=\gamma/2\pi=42.58$ MHz/T.  A π/2 pulse tips them into
-  the transverse plane (the <a href="../nmr/">NMR demo</a>); in a frame turning at
+  the transverse plane (the <a href="../nmr/#setup=pulse90">NMR demo</a>); in a frame turning at
   $f_0=\bar\gamma B_0$, as the receiver demodulates, a spin at $\vec r$ in a gradient $\vec G$
   turns at $\bar\gamma\,\vec G\cdot\vec r$, clockwise for positive offsets (protons have
   $\gamma>0$).  Its transverse magnetization $M_x+iM_y$ goes as $e^{-2\pi i\bar\gamma\int\vec G\cdot\vec r\,dt}$,
