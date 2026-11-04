@@ -456,6 +456,10 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     reload(b)
     s = b.eval('__app.views.axis.s')
     check(b.eval('__app.view') == 'axis' and s['G'] == 3.25 and len(s['pieces']) == 2 and s['pieces'][0]['rho'] == 0.6, f'view 1 comes back from its address (G = {s["G"]}, {len(s["pieces"])} tubes)')
+    b.eval("__app.views.axis.setMagnet('earth')"); b.wait("location.hash.includes('B0=0.00004603')", timeout=10)
+    reload(b)
+    m = b.eval("[__app.views.axis.mag.id, document.querySelector('#v1-gradient-box label').textContent, +document.querySelector('#v1-gradient-box input[type=number]').value]")
+    check(m == ['earth', 'gradient G (µT/m)', 162.5], f'and in the Earth\'s field, its gradient in µT/m ({m})')
     for name, view, key in (('rephase', 'slice', 'rp=0'), ('spinecho', 'kspace', 't2p=8'), ('fat', 'contrast', 'fat=1'), ('earth', 'contrast', 'B0=0.00004603'), ('blur', 'contrast', 'dc=1')):
         setup(b, name)
         b.wait(f"location.hash.includes('v={view}') && location.hash.includes({json.dumps(key)})", timeout=10)
@@ -485,7 +489,7 @@ with Browser('mri/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready', timeout=90); b.eval('__app.hold(true)')
     b.screenshot('build/mri-phone-start.png')
     wide, firsts = [], []
-    for name, view in (('axis', 'axis'), ('slice', 'slice'), ('fill', 'kspace'), ('contrast', 'contrast'), ('lauterbur', 'contrast')):
+    for name, view in (('axis', 'axis'), ('slice', 'slice'), ('fill', 'kspace'), ('contrast', 'contrast'), ('earth', 'contrast'), ('lauterbur', 'contrast')):
         setup(b, name); b.eval('__app.step(0.3, 3)'); b.eval('window.scrollTo(0, 0)')
         hint = b.eval("(() => { const h = [...document.querySelectorAll('.hint')].find((e) => e.getClientRects().length); const r = h.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.bottom)]; })()")
         cv = b.box(VIEWS[view])
