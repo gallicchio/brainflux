@@ -122,6 +122,27 @@ figure.live .plot-wrap { aspect-ratio: 1 / 1; }
 .rif[data-view="array"] #sampled-cell { grid-column: 5 / 9; grid-row: 3; }
 .rif[data-view="array"] #beam-cell { grid-column: 9 / 13; grid-row: 3; }
 
+/* How the image is made: a strip of small pictures as equations, under the second row. */
+.rif[data-view="array"] #method-cell { display: flex; grid-column: 1 / -1; grid-row: 5; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.eq { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; }
+.eq[hidden] { display: none; }
+.tile { margin: 0; display: flex; flex-direction: column; gap: 2px; flex: 0 1 165px; min-width: 84px; }
+.tile canvas { display: block; width: 100%; aspect-ratio: 1 / 1; background: #000; border-radius: 4px; }
+.tile figcaption { font-size: 11.5px; line-height: 1.25; color: var(--ink-2); min-height: 2.5em; }
+.op { flex: 0 0 auto; min-width: 18px; text-align: center; font-size: 22px; font-weight: 600; color: var(--accent); align-self: center; margin-top: -2.5em; }
+.op.gap { min-width: 22px; border-left: 1px dashed var(--line); align-self: stretch; margin: 0 6px; }
+.comp-list { flex: 1 1 180px; min-width: 170px; align-self: flex-start; color: var(--ink-2); font-variant-numeric: tabular-nums; line-height: 1.45; }
+.comp-list b { color: var(--ink); font-weight: 600; }
+.comp-list ol { margin: 2px 0 0; padding-left: 0; list-style: none; }
+.comp-list[hidden] { display: none; }
+
+/* Making the image: a menu of methods, each with its gloss. */
+.imager-menu { display: flex; flex-direction: column; gap: 4px; }
+.imager-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; padding: 5px 8px; line-height: 1.3; }
+.imager-menu button b { font-size: 13px; font-weight: 600; }
+.imager-menu button span { font-size: 12px; color: var(--ink-2); }
+.imager-menu button[aria-checked="true"] { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+
 /* The arrow from the sampled plane to the image: across the gap between them, pointing left, in
    the sampled plane's left margin (which has no ticks: the plane above has them). */
 .rif[data-view="array"] #flow-arrow, .rif[data-view="uv"].sketching #flow-arrow { display: flex; }
@@ -139,6 +160,13 @@ figure.live .plot-wrap { aspect-ratio: 1 / 1; }
 .controls details summary { cursor: pointer; color: var(--ink-2); }
 .controls details[open] summary { margin-bottom: 6px; }
 .gloss { line-height: 1.4; }
+/* The help's picture of autocorrelations: points on black, as the page draws a sky. */
+.autocorr { margin: 4px 0 8px; }
+.autocorr svg { display: block; width: 100%; max-width: 440px; height: auto; }
+.autocorr .sky rect { fill: #000; }
+.autocorr .sky circle { fill: #fff; }
+.autocorr text { fill: var(--ink-2); font-size: 11px; text-anchor: middle; font-family: var(--font); }
+.autocorr .arrow { fill: none; stroke: var(--accent); stroke-width: 2; }
 .part { margin-top: 26px !important; color: var(--accent); font-size: 14px !important; text-transform: uppercase; letter-spacing: 0.04em; }
 /* Which panels each view shows. */
 #scene-panel, #pair-panel, #sources-panel, #sketch-panel, #array-panel, #clean-panel, #units-panel, #more-panel { display: none; }
@@ -165,7 +193,10 @@ figure.live .plot-wrap { aspect-ratio: 1 / 1; }
   .uvgrid { grid-template-columns: minmax(0, 1fr); }
   .rif .uvgrid > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
   #uv-cell { order: 1; } #hint-uv { order: 2; } #plane-cell { order: 3; } #sky-cell { order: 4; }
-  #recon-cell { order: 5; } #flow-arrow { order: 6; } #sampled-cell { order: 7; } #flow-caption { order: 8; } #beam-cell { order: 9; } #ground-cell { order: 10; }
+  #recon-cell { order: 5; } #flow-arrow { order: 6; } #sampled-cell { order: 7; } #flow-caption { order: 8; } #beam-cell { order: 9; } #method-cell { order: 9; } #ground-cell { order: 10; }
+  .tile { flex-basis: 96px; }
+  .op { font-size: 18px; min-width: 12px; }
+  .op.gap { flex-basis: 100%; height: 0; border: 0; margin: 0; }
   #fig-streams3 { order: 11; } #fig-spec3 { order: 12; } #fig-slide3 { order: 13; }
   .rif[data-view="array"] #uv-cell { order: 1; } .rif[data-view="array"] #sky-cell { order: 3; } .rif[data-view="array"] #recon-cell { order: 4; } .rif[data-view="array"] #flow-arrow { order: 5; } .rif[data-view="array"] #sampled-cell { order: 6; }
   figure.live .plot-wrap, .rif[data-view="uv"].sketching figure.live .plot-wrap { aspect-ratio: auto; height: 190px; }

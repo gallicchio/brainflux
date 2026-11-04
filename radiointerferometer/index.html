@@ -102,6 +102,7 @@
           <div class="cell-head"><h2 id="recon-title">Image from the samples</h2><span class="note" id="recon-note">grey above zero, blue below</span></div>
           <div class="canvas-wrap"><canvas id="recon" aria-label="The image made from the sampled uv plane"></canvas></div>
           <div class="foot" id="recon-foot"></div>
+          <div class="foot" id="recon-err"></div>
         </figure>
         <figure class="cell" id="sampled-cell">
           <div class="cell-head"><h2 id="sampled-title">Sampled uv plane</h2><span class="note" id="sampled-note">V where a pair has measured it</span></div>
@@ -121,6 +122,23 @@
         </figure>
         <div class="hint" id="hint-uv">Drag the ● on the uv plane: the pair’s separation (its mirror ○ follows).  The live dot in “What the pair measures” settles on the colour under the ●</div>
         <div class="flow-caption small" id="flow-caption">The flow: the sky → one correlation for each pair → the sampled uv plane → its inverse Fourier transform → the image</div>
+        <figure class="cell" id="method-cell">
+          <div class="cell-head"><h2 id="method-title">How the image is made</h2><span class="note" id="method-note"></span></div>
+          <div class="eq" id="eq-a">
+            <figure class="tile" id="t-a1"><canvas></canvas><figcaption></figcaption></figure><span class="op" id="op-a1"></span>
+            <figure class="tile" id="t-a2"><canvas></canvas><figcaption></figcaption></figure><span class="op" id="op-a2"></span>
+            <figure class="tile" id="t-a3"><canvas></canvas><figcaption></figcaption></figure><span class="op gap" id="op-a3"></span>
+            <figure class="tile uvtile" id="t-a4"><canvas></canvas><figcaption></figcaption></figure>
+          </div>
+          <div class="eq" id="eq-b">
+            <figure class="tile" id="t-b1"><canvas></canvas><figcaption></figcaption></figure><span class="op" id="op-b1"></span>
+            <figure class="tile" id="t-b2"><canvas></canvas><figcaption></figcaption></figure><span class="op" id="op-b2"></span>
+            <figure class="tile" id="t-b3"><canvas></canvas><figcaption></figcaption></figure><span class="op" id="op-b3"></span>
+            <figure class="tile" id="t-b4"><canvas></canvas><figcaption></figcaption></figure>
+            <div class="comp-list small" id="comp-list"></div>
+          </div>
+          <div class="foot" id="method-foot"></div>
+        </figure>
         <figure class="plot live" id="fig-streams3"><figcaption><span class="sw a"></span>A and <span class="sw b"></span>B hear</figcaption><div class="plot-wrap"><canvas id="streams3" aria-label="What antennas A and B hear, against time"></canvas></div></figure>
         <figure class="plot live" id="fig-spec3"><figcaption>Spectra, and A·B* coloured by phase</figcaption><div class="plot-wrap"><canvas id="spec3" aria-label="The spectra of A and B, and their cross-spectrum coloured by its phase"></canvas></div></figure>
         <figure class="plot live" id="fig-slide3"><figcaption>Slide the pair, same separation</figcaption><div class="plot-wrap"><canvas id="slide3" aria-label="The correlation as the pair slides sideways, keeping its separation; drag to slide it"></canvas></div><div class="foot" id="slide3-foot"></div></figure>
@@ -161,6 +179,7 @@
       <div class="label">Fourier Etch-a-Sketch</div>
       <div class="row" id="sketch-row"></div>
       <div class="small muted gloss">Keep each measurement where the pair was, and at its mirror point: the image under the sky is the inverse transform of everything kept so far.  Hold Shift to move without painting.</div>
+      <div class="small muted gloss" id="sketch-hbt-note" hidden>With HBT on, what is kept is |V|², without its phase, and the inverse transform of |V|² is not the sky but its <em>autocorrelation</em>: the sky slid over itself, a point at the separation of every pair of sources.  A binary gives three points in a line, a triangle a hexagon round a bright centre (experiment 17).</div>
     </div>
     <div class="panel" id="array-panel">
       <div class="label">A whole array</div>
@@ -171,9 +190,13 @@
     </div>
     <div class="panel" id="clean-panel">
       <div class="label">Making the image</div>
+      <div class="small muted gloss">Every way of making the image has to guess the spacings no pair measured.  Choose one: the strip under the pictures shows how it works.</div>
+      <div class="imager-menu" id="imager-menu" role="radiogroup" aria-label="How to make the image"></div>
       <div class="row" id="clean-row"></div>
       <div id="clean-box" class="stack"></div>
-      <div class="small muted gloss" id="clean-note">CLEAN supposes the sky is made of points: it finds the brightest pixel, takes a little of the dirty beam out there, and repeats.</div>
+      <div class="small muted gloss" id="clean-note"></div>
+      <div class="row" id="weight-row"></div>
+      <div class="small muted gloss" id="weight-note">Natural weighting counts every sample, so the many short baselines dominate: a broad beam.  Uniform counts every measured cell of the uv plane once: a sharper beam, with more sidelobes.</div>
     </div>
     <div class="panel" id="units-panel">
       <div class="label">Units</div>
@@ -204,7 +227,8 @@
     antennas</b>: drag antenna B along the ground and watch the dot in the complex plane wind
     round.  <b>3 · The uv plane</b>: the correlation a pair would measure at every separation, in
     colour; drag the ● and the live dot settles on the colour under it.  <b>4 ·
-    Many baselines</b>: a whole array, the turning Earth, and the image that comes out.</p>
+    Many baselines</b>: a whole array, the turning Earth, the image that comes out, and three ways of
+    making it.</p>
     <p>Look for this: one antenna alone sees no pattern at all, but the average of the product
     of two antennas makes fringes as their separation grows; the fringes of different sources
     add; and the map of every separation is the Fourier transform of the sky.</p>
@@ -377,7 +401,7 @@
     in a disk: the three sources come apart.  Press <em>Autopilot</em> to let a spiral fill the
     plane.  This is the optics lab's Fourier Etch-a-Sketch, done with the phases kept: there,
     two collectors in pseudo-thermal light correlate intensities and only $|V|^2$ comes out
-    (experiment 16).</p>
+    (experiments 16 and 17).</p>
   </article>
 
   <article class="exp" data-setup="nearfield">
@@ -417,13 +441,52 @@
     shows $|V|^2$ in grey, and the phase is gone.  A triangle and the same triangle turned by
     180° give the same map (press <em>Triangle, turned</em>): $|V|^2$ cannot tell a sky from its
     mirror image through the centre.  That is the phase problem of intensity interferometry and
-    of crystallography; radio arrays avoid it by correlating voltages.</p>
+    of crystallography; radio arrays avoid it by correlating voltages.  The optics lab meets it
+    in <a href="https://github.com/gallicchio/fourier-etch-a-sketch/blob/main/docs/lab-handout.md#part-5-the-phase-problem-session-4">Part 5
+    of the Fourier Etch-a-Sketch</a>, with this triangle and a letter F; experiment 17 paints the
+    map and looks at the image it makes.</p>
+  </article>
+
+  <article class="exp" data-setup="hbtsketch">
+    <h3>17. The Etch-a-Sketch with intensities: the sky’s autocorrelation</h3>
+    <p>HBT and <em>Keep what you measure</em> are both on, and the autopilot is painting a
+    spiral, as the optics lab's <a href="https://github.com/gallicchio/fourier-etch-a-sketch">Fourier
+    Etch-a-Sketch</a> does.  What gets painted is $|V|^2$, without its phase, and its inverse
+    transform is not the sky: it is the sky's <em>autocorrelation</em>, the sky slid over itself
+    and multiplied, $A(\vec r)=\sum_{j,k}I_jI_k\,\delta(\vec r-(\vec r_j-\vec r_k))$.  Every pair
+    of sources makes a point at their separation, and another at minus it; every source adds to
+    a point at the centre.</p>
+    <figure class="autocorr" aria-label="Two sources make three points; three sources make six points round a centre">
+      <svg viewBox="0 0 440 120" role="img">
+        <g class="sky"><rect x="4" y="8" width="96" height="96" rx="6"/><circle cx="34" cy="56" r="8"/><circle cx="70" cy="56" r="6"/></g>
+        <text x="52" y="118">a binary</text>
+        <path class="arrow" d="M106 56h18m-6-5 6 5-6 5"/>
+        <g class="sky"><rect x="130" y="8" width="96" height="96" rx="6"/><circle cx="142" cy="56" r="5"/><circle cx="178" cy="56" r="10"/><circle cx="214" cy="56" r="5"/></g>
+        <text x="178" y="118">its autocorrelation</text>
+        <g class="sky"><rect x="246" y="8" width="72" height="96" rx="6"/><circle cx="282" cy="36" r="6"/><circle cx="267" cy="62" r="6"/><circle cx="297" cy="62" r="6"/></g>
+        <text x="282" y="118">a triangle</text>
+        <path class="arrow" d="M322 56h14m-6-5 6 5-6 5"/>
+        <g class="sky"><rect x="340" y="8" width="96" height="96" rx="6"/><circle cx="388" cy="56" r="10"/>
+          <circle cx="403" cy="30" r="5"/><circle cx="373" cy="30" r="5"/><circle cx="418" cy="56" r="5"/><circle cx="358" cy="56" r="5"/><circle cx="403" cy="82" r="5"/><circle cx="373" cy="82" r="5"/></g>
+        <text x="388" y="118">its autocorrelation</text>
+      </svg>
+    </figure>
+    <p>The binary's two sources (1 and 0.6, 8.6° apart) give three points in a line: the centre,
+    $1^2+0.6^2=1.36$, and a point 8.6° to either side, $1\times0.6=0.6$, so 0.44 of the centre's
+    height (0.41 in the picture: the brush that paints the uv plane is a few cells wide, and that
+    dims the image away from its middle).  Press <em>Triangle</em>, <em>Clear</em> and
+    <em>Autopilot</em>: three sources make six points on a hexagon, one for each ordered pair,
+    round a centre three times as bright.  Then <em>Triangle, turned</em>: the same hexagon.  A
+    sky and the same sky turned by 180° have the same autocorrelation, which is experiment 16's
+    phase problem, seen in the image.  The autocorrelation still tells sizes and separations,
+    and from it a clever guess can sometimes find the sky (phase retrieval, the lab's last
+    question).</p>
   </article>
 
   <h3 class="part">4 · Many baselines</h3>
 
   <article class="exp" data-setup="line">
-    <h3>17. Few antennas, many baselines</h3>
+    <h3>18. Few antennas, many baselines</h3>
     <p>The slides' eight antennas on a line, with gaps of 8, 10, 1, 3, 2, 7 and 8 units: their
     28 pairs measure every spacing from 1 to 24 units.  The second row appears: under the ideal
     uv plane, the <em>sampled</em> uv plane ($V$ where a pair measures it, black elsewhere);
@@ -434,7 +497,7 @@
   </article>
 
   <article class="exp" data-setup="array">
-    <h3>18. A Y of 27 dishes: 351 pairs at once</h3>
+    <h3>19. A Y of 27 dishes: 351 pairs at once</h3>
     <p>A Y like the Very Large Array: 27 dishes make $27\cdot26/2$ = 351 pairs, and so 702 points
     of the uv plane at once, a six-pointed star of them.  The dirty beam has six spokes, and
     the dirty image is the sky blurred by it.  Drag a dish on the ground: its 26 baselines move
@@ -449,7 +512,7 @@
   </article>
 
   <article class="exp" data-setup="rotation">
-    <h3>19. The Earth turns, and the tracks fill the plane</h3>
+    <h3>20. The Earth turns, and the tracks fill the plane</h3>
     <p>The same Y, 8 hours of a source at declination 40°.  As the Earth turns, each pair's point
     in the uv plane sweeps an ellipse of axis ratio $\sin\delta$ (the white tracks); the sampled
     plane fills in, the beam's spokes fade and the image sharpens.  Press <em>Turn the
@@ -459,7 +522,7 @@
   </article>
 
   <article class="exp" data-setup="resolution">
-    <h3>20. Long baselines see fine detail, short ones the broad shapes</h3>
+    <h3>21. Long baselines see fine detail, short ones the broad shapes</h3>
     <p>Two point sources 5″ apart at 5 GHz ($\lambda$ = 6 cm), and a small Y whose longest
     baseline is 1.8 km: the finest fringe, $\lambda/B$ = 6.8″, is coarser than their
     separation, and the image shows one blob with a shoulder.  Spread the array out: at a
@@ -471,7 +534,7 @@
   </article>
 
   <article class="exp" data-setup="eht">
-    <h3>21. An Earth-sized telescope sees a black hole's ring</h3>
+    <h3>22. An Earth-sized telescope sees a black hole's ring</h3>
     <p>The nine sites of the Event Horizon Telescope (2018), at 1.3 mm, looking at a ring 42 µas
     across like the one around the black hole in M87, for 12 hours.  Baselines nearly as long
     as the Earth is wide (12,700 km) give $\lambda/B$ = 21 µas, enough to see the ring; the
@@ -480,15 +543,69 @@
     track stops where the source sets for one of its stations.</p>
   </article>
 
+  <h3 class="part">4 · Many baselines: making the image</h3>
+
+  <article class="exp" data-setup="dirty">
+    <h3>23. The dirty image: every spacing no pair measured counts as zero</h3>
+    <p>The galaxy, watched by the Y for 8 hours.  Under <em>Making the image</em>,
+    <em>Dirty image</em> is chosen: the inverse transform of the sampled uv plane, with a zero
+    wherever no pair measured.  The strip at the bottom shows the same thing the other way
+    round: the sky convolved with the dirty beam (⊛), each point of the sky replaced by a copy
+    of the beam, sidelobes and all.  Look for what is missing: the galaxy's faint outer disk,
+    and round it a blue bowl.  The broadest, smoothest parts of a sky live at the shortest
+    spacings, and the shortest of all, the zero spacing (the total flux), no pair measures (the
+    black middle of the strip's uv plane): add up the dirty image and you get 0.000.  The
+    number under the image is how far it is from the true sky seen through the clean beam
+    (root-mean-square, as a fraction of its peak): 4.4%, the number to beat.</p>
+  </article>
+
   <article class="exp" data-setup="clean">
-    <h3>22. CLEAN takes the dirty beam out, point by point</h3>
-    <p>Högbom's CLEAN (1974) supposes the sky is a few points.  It finds the brightest pixel of
-    the residual (at first the dirty image), adds a tenth of it to a model there (the loop
-    gain), subtracts a tenth of the dirty beam centred there, and repeats.  Two sources, two
-    hours of a Y: press <em>Step</em> a few times and watch, then <em>Run</em>.  The CLEAN image
-    is the model smoothed by a Gaussian fitted to the beam's main lobe, plus what is left.
-    Smooth emission (the galaxy) takes thousands of points, and what no pair measured stays
-    missing.</p>
+    <h3>24. CLEAN takes the dirty beam out, point by point</h3>
+    <p>Högbom's CLEAN (1974) supposes the sky is a few points.  The strip's first row is one
+    step: it finds the brightest pixel of the residual (at first the dirty image), the ✚, takes
+    a tenth of it (the loop gain) out of the residual as a copy of the dirty beam centred there,
+    and puts a point of that much into its list: 0.0997 at the first step, a tenth of a source
+    of brightness 1.  Two sources, two hours of a small Y: press <em>Step</em> a few times and
+    watch the ✚ hop between the sources and the list grow, then <em>Watch</em>.  After 84 steps
+    the residual's peak is below 1% of the dirty image's and CLEAN stops, with 2 points.  The
+    second row restores the image: the points smoothed by the <em>clean beam</em>, a Gaussian
+    fitted to the dirty beam's main lobe, plus what is left; it is 0.03% off the true sky,
+    against 2.5% for the dirty image.  The points' uv plane (top right) is CLEAN's guess at every
+    spacing, measured or not: what two points would give.  Raise the loop gain to 1 and press
+    <em>Watch</em>: 2 steps, a whole source each.  That works for points standing alone; on
+    anything else a gain of a tenth or so is the custom, so that a step taken in the wrong place
+    costs little.</p>
+  </article>
+
+  <article class="exp" data-setup="mem">
+    <h3>25. Maximum entropy: the smoothest sky that fits</h3>
+    <p>The galaxy and the Y again, with <em>Maximum entropy</em> (Gull and Daniell, 1978).  It
+    looks for the positive sky that agrees with the measurements and is otherwise as smooth and
+    flat as it can be: it starts from a flat guess $M$ holding the total flux (which one dish
+    alone can measure) and minimises the misfit to the data less $\alpha$ times the entropy.
+    The answer obeys one rule at every pixel, $I=M\,e^{R/\alpha}$, $R$ the residual there: a
+    pixel rises above the flat guess only where the measurements still want more, and it can
+    never go negative.  Watch the strip's first row: the image starts flat, the residual is the
+    dirty image, and each iteration moves every pixel towards $M\,e^{R/\alpha}$; in 40
+    iterations the two agree, and the residual has faded.  The outer disk the dirty image lost
+    is back, and the image is 0.61% off the true sky.  Its uv plane shows how: in the gaps, and
+    in the hole in the middle, it has made smooth guesses.  Raise $\alpha$ (the entropy's
+    weight) to 0.1: done in 10 iterations, but smoother and 2.1% off; lower it to 0.003: 77
+    iterations, 0.57% off, closer to the data.</p>
+  </article>
+
+  <article class="exp" data-setup="compare">
+    <h3>26. Points or a smooth sky: CLEAN against maximum entropy</h3>
+    <p>The binary and the Y for 8 hours, with CLEAN allowed 1000 steps.  It finds the two points
+    in 83 steps and its image is 0.01% off the true sky: points are what it looks for.  Choose
+    <em>Maximum entropy</em>: 32 iterations, 0.11% off, the two points sitting in faint rings of
+    the dirty beam, what the entropy held back.  Now press <em>Galaxy</em>: maximum entropy takes
+    40 iterations and is 0.61% off.  Choose <em>CLEAN</em>: its 1000 steps have put down 402
+    points, a speckle along the arms (the strip's second row), and its image is 2.9% off, the
+    outer disk still missing.  CLEAN builds a smooth sky out of thousands of points, slowly;
+    maximum entropy builds points out of a smooth sky, a little softened.  Real arrays use both,
+    and newer guesses too (multiscale CLEAN, compressed sensing): each is a different guess at
+    what no pair measured.</p>
   </article>
 
   <section class="theory">
@@ -541,9 +658,38 @@
   axis ratio $\sin\delta$ (Thompson, Moran and Swenson).  The samples go onto the grid of the
   picture's transform (natural weighting counts each sample, uniform each cell once); the
   dirty beam is the transform of the sampling alone, the dirty image the transform of the
-  sampled $V$, and the dirty image is the sky convolved with the beam.  CLEAN (Högbom, 1974)
-  subtracts the beam point by point and restores with a Gaussian fitted to the beam's main
-  lobe.</p>
+  sampled $V$, and the dirty image is the sky convolved with the beam.</p>
+  <p><b>Making the image.</b>  With weights $S$ on the sampled cells (zero elsewhere), the dirty
+  image is $I_D=\mathcal F^{-1}[S\,V]$ and the dirty beam $B=\mathcal F^{-1}[S]$, so
+  $I_D=B*I$: every method has to guess $V$ where $S=0$.  CLEAN (Högbom, 1974) guesses points:
+  it finds the residual's peak $R_p$ (inside the field), adds $gR_p$ to its model there,
+  subtracts $gR_p$ times the beam centred there, and repeats until the peak is under 1% of the
+  dirty image's; the image is then the model convolved with the clean beam (a Gaussian fitted
+  to the beam's main lobe above 0.35) plus the residual.  Maximum entropy (Gull and Daniell
+  1978, Cornwell and Evans 1985) minimises
+  $$J(I)=\tfrac12\langle I,B*I\rangle-\langle I,I_D\rangle+\alpha\sum_i\Big[I_i\ln\frac{I_i}{M_i}-I_i+M_i\Big]$$
+  over positive images in the field: the first two terms are, but for a constant,
+  $\tfrac12\sum_kS_k|\tilde I_k-V_k|^2$, the misfit to the measured visibilities, and the last
+  is minus the entropy relative to the flat default $M$ holding the total flux.  The gradient
+  is $\alpha\ln(I/M)-R$ with $R=I_D-B*I$ the residual, so the answer is
+  $I=M\,e^{R/\alpha}$ at every pixel, and it is unique, since $B*$ is positive semi-definite
+  (its eigenvalues are the weights $S\ge0$) and the entropy strictly convex.  The page finds
+  it by conjugate gradients, preconditioned by the Hessian's diagonal $1+\alpha/I$, with an
+  exact line search (along $I+t\,d$, $J$ needs one convolution, $B*d$).  With every spacing
+  measured ($B=\delta$) each pixel solves $\alpha\ln(I/M)=I_D-I$ alone: $I=\alpha\,
+  W\!\big(\tfrac M\alpha e^{I_D/\alpha}\big)$, with Lambert's $W$, which the unit tests check.
+  The error under the image is the root-mean-square difference, over the field, from the true
+  sky convolved with the clean beam, as a fraction of that image's peak; CLEAN's and maximum
+  entropy's images are restored the same way, their model through the clean beam plus the
+  residual.</p>
+  <p><b>Intensities and the autocorrelation.</b>  $|V|^2=VV^*$ is the transform of the sky
+  correlated with itself (the convolution theorem):
+  $\mathcal F^{-1}[|V|^2](\vec r)=\int I(\vec r\,')\,I(\vec r\,'+\vec r)\,d^2r'$, for points
+  $\sum_{j,k}I_jI_k\,\delta(\vec r-(\vec r_j-\vec r_k))$.  It is symmetric through the centre
+  whatever the sky, which is why the sky and the sky turned by 180° cannot be told apart.  The
+  Etch-a-Sketch paints each chunk's value into a 3 × 3 brush of uv cells; the blur this makes
+  in the uv plane multiplies the image by the brush's transform, which falls a little away from
+  the middle.</p>
   <p>Conventions: $l$ east (to the right), $m$ north (up), and $u$, $v$ the same way; on the lab
   bench sky angles are $\sin\theta$, in degrees, elsewhere small angles.  The units presets
   change the labels (and, for the near field, the geometry).  Astronomers usually draw east on

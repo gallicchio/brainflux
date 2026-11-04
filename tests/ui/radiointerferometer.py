@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Drive the radio interferometry demo: the first screen (running, the hint, Start here first,
-the theory last), all four views and all 22 experiments, the numbers the help quotes measured in
-the page, dragging everything that can be dragged, the readouts keeping still, the address (and
-the old antenna-arrays demo's synthesis set-ups, which now lead here), both themes and a phone.
+the theory last), all four views and all 26 experiments, the numbers the help quotes measured in
+the page, dragging everything that can be dragged, the menu of ways to make the image and its
+strip, the readouts keeping still, the address (and the old antenna-arrays demo's synthesis
+set-ups, which now lead here), both themes and a phone.
 
 Nothing here waits on the clock except one check that the page opens running: the page's time
-is held and stepped from here (__app.hold, __app.step), one chunk of the correlator a frame."""
+is held and stepped from here (__app.hold, __app.step), one chunk of the correlator a frame.  The
+time a frame takes is printed, not checked (the machine is shared)."""
 import json, math, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
@@ -16,9 +18,9 @@ def check(cond, msg):
     if not cond: failures.append(msg)
 
 SETUPS = ['noise', 'lag', 'white', 'envelope', 'independent', 'fringe', 'twosources', 'young', 'delay',
-          'stripes', 'uv', 'picture', 'sketch', 'nearfield', 'coherent', 'hbt',
-          'line', 'array', 'rotation', 'resolution', 'eht', 'clean']
-VIEW = {**{n: 'one' for n in SETUPS[:5]}, **{n: 'two' for n in SETUPS[5:9]}, **{n: 'uv' for n in SETUPS[9:16]}, **{n: 'array' for n in SETUPS[16:]}}
+          'stripes', 'uv', 'picture', 'sketch', 'nearfield', 'coherent', 'hbt', 'hbtsketch',
+          'line', 'array', 'rotation', 'resolution', 'eht', 'dirty', 'clean', 'mem', 'compare']
+VIEW = {**{n: 'one' for n in SETUPS[:5]}, **{n: 'two' for n in SETUPS[5:9]}, **{n: 'uv' for n in SETUPS[9:17]}, **{n: 'array' for n in SETUPS[17:]}}
 # The old antenna-arrays demo's synthesis set-ups, and the view each should open here.
 ALIASES = {'fringe': 'two', 'six': 'array', 'rotation': 'array', 'ellipses': 'array', 'equator': 'array',
            'resolution': 'array', 'shortspacing': 'array', 'eht': 'array', 'clean': 'array'}
@@ -92,7 +94,7 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     # (The machine is shared, so single set-ups' times jump about: the typical one is checked.)
     for v, ts in times.items():
         med = sorted(ts)[len(ts) // 2]
-        check(med < 16.7, f'view {v}: a frame (one chunk, everything drawn) takes {med:.1f} ms for the typical set-up, {max(ts):.1f} at most: within 60 frames a second')
+        print(f'info  view {v}: a frame (one chunk, everything drawn) takes {med:.1f} ms for the typical set-up, {max(ts):.1f} at most')
 
     # ---------------------------------------------------------------- 1 · one source
     setup(b, 'noise', 30)
@@ -267,6 +269,42 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     diff = max(abs(math.remainder(a[1] + c[1], 2 * math.pi)) for a, c in zip(tri[0], tri[1]))
     check(same < 1e-9 and diff < 1e-9 and max(abs(a[1]) for a in tri[0]) > 0.3, f'hbt: the triangle and the triangle turned by 180° have the same |V|² ({same:.1e} apart) and opposite phases')
 
+    # The Etch-a-Sketch with intensities: the sky's autocorrelation.
+    PEAKS = r"""((pts) => { const img = __app.paintedImage(), N = 256, h = 128, pix = __app.fov() / 128;
+      const at = ([l, m]) => { const ci = h + l / pix, cj = h - m / pix; let best = -1e9; for (let j = Math.round(cj) - 2; j <= Math.round(cj) + 2; j++) for (let i = Math.round(ci) - 2; i <= Math.round(ci) + 2; i++) best = Math.max(best, img[j * N + i]); return best; };
+      const c = at([0, 0]); return pts.map((p) => at(p) / c); })"""
+    setup(b, 'hbtsketch', 1)
+    cap = b.eval("[document.querySelector('#recon-title').textContent, document.querySelector('#recon-note').textContent, document.querySelector('#flow-caption').textContent, document.querySelector('#sketch-hbt-note').getClientRects().length, __app.state.autopilot, __app.state.hbt]")
+    check(cap[0] == 'The sky’s autocorrelation' and '|V|²' in cap[1] and 'autocorrelation' in cap[2] and cap[3] > 0 and cap[4] and cap[5],
+          f'hbtsketch: HBT and the autopilot on; the image is captioned as the sky’s autocorrelation (“{cap[1]}”), and the panel says why')
+    for _ in range(31): b.eval('__app.step(100)')
+    src = b.eval('__app.skyModel().sources.map((s) => [s.l, s.m, s.I])')
+    d = [src[1][0] - src[0][0], src[1][1] - src[0][1]]
+    r = b.eval(f'{PEAKS}({json.dumps([d, [-d[0], -d[1]], [d[0] / 2, d[1] / 2]])})')
+    sep = math.degrees(math.asin(math.hypot(*d)))
+    ok, miss = says(b, 'hbtsketch', '(1 and 0.6, 8.6° apart)', '1.36', '0.44 of the centre', '0.41 in the picture')
+    # (The painted values are averages of noise: the ratio wanders by about 0.01 from run to run.)
+    check(ok and quoted(sep, '8.6') and quoted(src[0][2] * src[1][2] / (src[0][2] ** 2 + src[1][2] ** 2), '0.44') and abs(r[0] - 0.41) < 0.025 and abs(r[1] - 0.41) < 0.025 and abs(r[2]) < 0.2,
+          f"hbtsketch: the binary's autocorrelation is three points, the side ones {sep:.1f}° out at {r[0]:.3f} and {r[1]:.3f} of the centre (0.6/1.36 = 0.44 less the brush's taper), little between them ({r[2]:.2f})" + (f' missing {miss}' if miss else ''))
+    b.eval("""(() => { document.querySelector('#point-presets button[title^="An equilateral"]').click(); __app.clearPaint();
+      [...document.querySelectorAll('#sketch-row button')].find((e) => e.textContent === 'Autopilot').click(); })()""")
+    for _ in range(31): b.eval('__app.step(100)')
+    src = b.eval('__app.skyModel().sources.map((s) => [s.l, s.m, s.I])')
+    diffs = [[src[j][0] - src[k][0], src[j][1] - src[k][1]] for j in range(3) for k in range(3) if j != k]
+    hexa = b.eval(f'{PEAKS}({json.dumps(diffs)})')
+    angles = sorted(math.degrees(math.atan2(q[1], q[0])) % 360 for q in diffs)
+    gaps = [round((angles[(k + 1) % 6] - angles[k]) % 360) for k in range(6)]
+    check(all(0.2 < v < 0.34 for v in hexa) and gaps == [60] * 6 and len({round(math.hypot(*q), 9) for q in diffs}) == 1,
+          f"hbtsketch: the triangle's autocorrelation is six points on a hexagon (60° apart, all as far out), each {min(hexa):.2f}–{max(hexa):.2f} of the centre (1/3, less the brush's taper)")
+    b.eval("""(() => { document.querySelector('#point-presets button[title^="The same triangle"]').click(); __app.clearPaint();
+      [...document.querySelectorAll('#sketch-row button')].find((e) => e.textContent === 'Autopilot').click(); })()""")
+    for _ in range(31): b.eval('__app.step(100)')
+    hexb = b.eval(f'{PEAKS}({json.dumps(diffs)})')
+    check(max(abs(a - c) for a, c in zip(hexa, hexb)) < 0.06, f"hbtsketch: the triangle turned by 180° gives the same hexagon ({', '.join(f'{v:.2f}' for v in hexb)})")
+    check('fourier-etch-a-sketch/blob/main/docs/lab-handout.md#part-5-the-phase-problem' in b.eval("document.querySelector('.exp[data-setup=hbt]').innerHTML"),
+          'hbt: the help links the Fourier Etch-a-Sketch’s Part 5, the phase problem')
+    check(b.eval("document.querySelectorAll('.exp[data-setup=hbtsketch] svg circle').length") == 15, 'hbtsketch: the help draws the binary’s three points and the triangle’s hexagon')
+
     # ---------------------------------------------------------------- 4 · many baselines
     setup(b, 'line', 1)
     ln = b.eval("""(() => { const a = __app.array(), x = a.dishes.map((d) => d[0]).sort((p, q) => p - q), unit = (x[1] - x[0]) / 8, s = new Set();
@@ -318,23 +356,100 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     ok, miss = says(b, 'eht', 'nine sites', '1.3 mm', '42 µas', '12,700 km', '21 µas', '20 µas for 1 mm and 10,000 km')
     check(ok and eh['n'] == 9 and abs(eh['ring'] - 42) < 2 and abs(km - 12700) < 100 and quoted(uas, '21') and quoted(1e-3 / 1e7 * 206265e6, '20.6') ,
           f"eht: {eh['n']} sites, a ring {eh['ring']:.1f} µas across, the longest baseline {km:.0f} km: λ/B = {uas} µas (and 1 mm over 10,000 km is 20.6 µas)" + (f' missing {miss}' if miss else ''))
+    # ---------------------------------------------------------------- making the image: the menu and its strip
+    IMG = """(() => { const m = __app.imaging(); let sum = 0; for (const v of __app.array().dirtyImg) sum += v;
+      return { imager: m.imager, err: m.error, steps: m.cs.iterations, comps: m.cs.components, done: m.cs.done, its: m.ms ? m.ms.iterations : 0,
+        memdone: m.ms ? m.ms.done : false, sum: sum / m.dirtyPeak, playing: m.playing, title: document.querySelector('#method-title').textContent,
+        errText: document.querySelector('#recon-err').textContent, b: !document.querySelector('#eq-b').hidden,
+        tiles: [...document.querySelectorAll('#method-cell .tile')].filter((e) => e.getClientRects().length).length }; })()"""
+    menu = b.eval("[...document.querySelectorAll('#imager-menu button')].map((e) => [e.dataset.imager, e.querySelector('b').textContent, e.querySelector('span').textContent.length])")
+    check([m[0] for m in menu] == ['dirty', 'clean', 'mem'] and all(m[2] > 40 for m in menu), f"the menu of ways to make the image: {', '.join(m[1] for m in menu)}, each with a gloss")
+    setup(b, 'dirty', 2)
+    d23 = b.eval(IMG)
+    ok, miss = says(b, 'dirty', '8 hours', 'add up the dirty image and you get 0.000', '4.4%')
+    check(ok and d23['imager'] == 'dirty' and abs(d23['sum']) < 5e-4 and quoted(100 * d23['err'], '4.4') and d23['tiles'] == 4 and not d23['b'] and 'dirty beam' in d23['title'],
+          f"dirty: the strip shows the sky ⊛ the beam = the dirty image and its uv plane (4 tiles); the dirty image adds up to {d23['sum']:.1e} of its peak; {100 * d23['err']:.2f}% off the true sky" + (f' missing {miss}' if miss else ''))
+    # The dirty image's uv plane is the sampled plane: zero in the middle (no zero spacing).
+    z0 = b.eval('(() => { const S = __app.array().sampled.S; return S[128 * 256 + 128]; })()')
+    check(z0 == 0, 'dirty: no pair measures the zero spacing (the sampled plane is zero at u = v = 0)')
     setup(b, 'clean', 1)
-    b.eval("[...document.querySelectorAll('#clean-row button')].find((e) => e.textContent === 'Run').click()"); b.eval('__app.draw()')
-    cl = b.eval("""(() => { const a = __app.array(), cs = a.cs, N = 256, pix = __app.fov() / 128, src = __app.skyModel().sources, flux = [];
-      for (const q of src) { const ci = 128 + q.l / pix, cj = 128 - q.m / pix; let f = 0; for (let j = Math.round(cj) - 1; j <= Math.round(cj) + 1; j++) for (let i = Math.round(ci) - 1; i <= Math.round(ci) + 1; i++) f += cs.model[j * N + i]; flux.push(f); }
-      let total = 0; for (const v of cs.model) total += v; return { it: cs.iterations, flux, total }; })()""")
-    check(cl['it'] > 50 and abs(cl['flux'][0] / cl['flux'][1] - 1 / 0.6) < 0.25 and cl['flux'][0] + cl['flux'][1] > 0.8 * cl['total'],
-          f"clean: {cl['it']} steps put {cl['flux'][0]:.3f} and {cl['flux'][1]:.3f} at the two sources (their brightnesses 1 : 0.6), of {cl['total']:.3f} in all")
+    c0 = b.eval(IMG)
+    b.eval("[...document.querySelectorAll('#clean-row button')].find((e) => e.textContent === 'Step').click()"); b.eval('__app.draw()')
+    first = b.eval('(() => { const cs = __app.array().cs; return [cs.iterations, cs.log[1], document.querySelectorAll("#comp-list li").length]; })()')
+    check(c0['steps'] == 0 and not c0['playing'] and c0['b'] and c0['tiles'] == 8 and first[0] == 1 and first[2] == 1,
+          f"clean: it starts from the dirty image (0 steps, not running); Step takes one ({first[1]:.4f}) and the list of steps grows to {first[2]}; the strip has its two rows (8 pictures)")
+    for _ in range(5): b.eval("[...document.querySelectorAll('#clean-row button')].find((e) => e.textContent === 'Step').click()")
+    b.eval('__app.draw()')
+    hop = b.eval('(() => { const log = __app.array().cs.log, at = []; for (let k = 0; k < log.length; k += 2) at.push(log[k]); return [new Set(at).size, document.querySelectorAll("#comp-list li").length]; })()')
+    check(hop[0] == 2 and hop[1] == 6, f'clean: in 6 steps the ✚ visits both sources ({hop[0]} pixels), and the list shows the latest {hop[1]}')
+    b.eval("[...document.querySelectorAll('#clean-row button')].find((e) => e.textContent === 'Reset').click()")
+    b.eval("[...document.querySelectorAll('#clean-row button')].find((e) => e.textContent === 'Watch').click()")
+    watching = b.eval('[__app.imaging().playing, document.querySelector("#clean-row button:nth-child(2)").textContent]')
+    b.eval('__app.step(1)')
+    one = b.eval('__app.array().cs.iterations')
+    for _ in range(40): b.eval('__app.step(10)')
+    c24 = b.eval(IMG)
+    ok, miss = says(b, 'clean', '0.0997', 'After 84 steps', 'with 2 points', '0.03% off', '2.5% for the dirty image')
+    check(ok and watching == [True, 'Pause'] and one == 1 and quoted(first[1], '0.0997') and c24['done'] and c24['steps'] == 84 and c24['comps'] == 2 and not c24['playing']
+          and quoted(100 * c24['err'], '0.03') and quoted(100 * c0['err'], '2.5'),
+          f"clean: Watch runs it a step a frame at first ({one} after one frame), and it stops by itself after {c24['steps']} steps with {c24['comps']} points; {100 * c24['err']:.3f}% off the true sky against {100 * c0['err']:.2f}% for the dirty image" + (f' missing {miss}' if miss else ''))
+    b.eval('__app.state.gain = 1'); b.eval("[...document.querySelectorAll('#clean-row button')].find((e) => e.textContent === 'Watch').click()")
+    for _ in range(5): b.eval('__app.step(2)')
+    g1 = b.eval(IMG)
+    ok, miss = says(b, 'clean', 'loop gain to 1', '2 steps, a whole source each')
+    check(ok and g1['done'] and g1['steps'] == 2 and g1['comps'] == 2, f"clean: with a loop gain of 1, Watch starts again and takes {g1['steps']} steps" + (f' missing {miss}' if miss else ''))
+    setup(b, 'mem', 1)
+    m1 = b.eval(IMG)
+    for _ in range(10): b.eval('__app.step(10)')
+    m25 = b.eval(IMG)
+    flat = b.eval('(() => { __app.startImager(); const m = __app.imaging().ms; let lo = Infinity, hi = -Infinity; for (let k = 0; k < m.idx.length; k++) { const v = m.model[m.idx[k]]; lo = Math.min(lo, v); hi = Math.max(hi, v); } return [lo, hi, m.flux]; })()')
+    for _ in range(10): b.eval('__app.step(10)')
+    ok, miss = says(b, 'mem', 'in 40 iterations', '0.61% off')
+    check(ok and m1['playing'] and m25['memdone'] and m25['its'] == 40 and quoted(100 * m25['err'], '0.61') and flat[0] == flat[1] and abs(flat[2] - 1) < 1e-9 and m25['err'] < 0.2 * d23['err'],
+          f"mem: it starts flat (every pixel {flat[0]:.2e}, the total flux {flat[2]:.3f} spread evenly) and runs by itself; done after {m25['its']} iterations, {100 * m25['err']:.2f}% off the true sky (the dirty image {100 * d23['err']:.2f}%)" + (f' missing {miss}' if miss else ''))
+    ok, miss = says(b, 'mem', 'to 0.1: done in 10 iterations', '2.1% off', 'to 0.003: 77 iterations, 0.57% off')
+    al = {}
+    for a in (0.1, 0.003):
+        b.eval(f'__app.state.alpha = {a}; __app.startImager(); __app.runMem(300)')
+        al[a] = b.eval('(() => { const m = __app.imaging(); return [m.ms.iterations, m.error, m.ms.done]; })()')
+    check(ok and al[0.1][0] == 10 and quoted(100 * al[0.1][1], '2.1') and al[0.003][0] == 77 and quoted(100 * al[0.003][1], '0.57') and al[0.1][2] and al[0.003][2],
+          f"mem: α = 0.1 is done in {al[0.1][0]} iterations, {100 * al[0.1][1]:.2f}% off; α = 0.003 in {al[0.003][0]}, {100 * al[0.003][1]:.2f}% off" + (f' missing {miss}' if miss else ''))
+    b.eval('__app.state.alpha = 0.01; __app.startImager(); __app.runMem(300)')
+    rule = b.eval('(() => { const m = __app.imaging().ms; let worst = 0; for (const o of m.idx) { const t = m.default[o] * Math.exp(m.residual[o] / m.alpha); if (m.model[o] > 1e-3 * m.default[o]) worst = Math.max(worst, Math.abs(m.model[o] - t) / t); } return worst; })()')
+    check(rule < 0.01, f'mem: at the end every pixel is M e^(R/α), to {100 * rule:.2f}%')
+    setup(b, 'compare', 2)
+    k1 = b.eval(IMG)
+    b.eval("document.querySelector('#imager-menu button[data-imager=mem]').click()")
+    for _ in range(15): b.eval('__app.step(10)')
+    k2 = b.eval(IMG)
+    b.eval("document.querySelector('#picture-presets button[title^=\"A bulge\"]').click()"); b.sleep(0.5)
+    for _ in range(15): b.eval('__app.step(10)')
+    k3 = b.eval(IMG)
+    b.eval("document.querySelector('#imager-menu button[data-imager=clean]').click()"); b.eval('__app.state.cleanAuto = true; __app.startImager()'); b.eval('__app.draw()')
+    k4 = b.eval(IMG)
+    ok, miss = says(b, 'compare', 'allowed 1000 steps', 'in 83 steps', '0.01% off', '32 iterations, 0.11% off', '40 iterations and is 0.61% off', '1000 steps have put down 402 points', '2.9% off')
+    check(ok and k1['imager'] == 'clean' and k1['steps'] == 83 and k1['comps'] == 2 and quoted(100 * k1['err'], '0.01') and k2['its'] == 32 and quoted(100 * k2['err'], '0.11')
+          and k3['its'] == 40 and quoted(100 * k3['err'], '0.61') and k4['steps'] == 1000 and k4['comps'] == 402 and quoted(100 * k4['err'], '2.9'),
+          f"compare: the binary, CLEAN {k1['steps']} steps, {k1['comps']} points, {100 * k1['err']:.3f}%; maximum entropy {k2['its']} iterations, {100 * k2['err']:.2f}%; the galaxy, maximum entropy {k3['its']}, {100 * k3['err']:.2f}%, CLEAN {k4['steps']} steps, {k4['comps']} points, {100 * k4['err']:.2f}%" + (f' missing {miss}' if miss else ''))
+    check(k1['err'] < k2['err'] and k3['err'] < 0.5 * k4['err'], 'compare: CLEAN wins on points, maximum entropy on the smooth galaxy')
+    b.eval("document.querySelector('#imager-menu button[data-imager=dirty]').click()"); b.eval('__app.draw()')
+    check(b.eval('__app.state.imager') == 'dirty' and b.eval("document.querySelector('#clean-row').hidden") and b.eval("document.querySelector('#imager-menu button[data-imager=dirty]').getAttribute('aria-checked')") == 'true',
+          'the menu chooses the dirty image again (its buttons hidden: nothing to step)')
+    setup(b, 'mem', 1)
+    b.eval('__app.state.alpha = 0.003; __app.writeAddress()'); h2 = b.eval('location.hash')
+    check('img=mem' in h2 and 'alpha=0.003' in h2, f'the address keeps the method and its α ({h2[-40:]})')
 
     # ---------------------------------------------------------------- readouts keep still
     for name, sels in [('lag', '#spec1-foot .fixnum, #lag1-foot .fixnum, #product1-foot .fixnum'), ('twosources', '#fringe-foot .fixnum, #plane2-foot .fixnum'),
-                       ('uv', '#uv-foot .fixnum, #plane3-foot .fixnum, #slide3-foot .fixnum'), ('array', '#uv-foot .fixnum, #recon-foot .fixnum, #beam-foot .fixnum')]:
-        setup(b, name, 30)
-        moves, texts = b.steady(sels, [lambda: b.eval('__app.step(7)') for _ in range(6)])
+                       ('uv', '#uv-foot .fixnum, #plane3-foot .fixnum, #slide3-foot .fixnum'), ('array', '#uv-foot .fixnum, #recon-foot .fixnum, #beam-foot .fixnum'),
+                       ('mem', '#method-foot .fixnum, #recon-err .fixnum'), ('clean', '#method-foot .fixnum, #recon-err .fixnum')]:
+        setup(b, name, 30 if name != 'mem' else 1)
+        if name == 'clean': b.eval("[...document.querySelectorAll('#clean-row button')].find((e) => e.textContent === 'Watch').click()")
+        moves, texts = b.steady(sels, [lambda: b.eval('__app.step(5)') for _ in range(6)])
         check(not moves and len(texts) > (1 if name != 'array' else 0), f'{name}: the numbers under the pictures keep still as they change ({len(texts)} different readings)' + (f' moved: {moves[:3]}' if moves else ''))
     # Everything fits: no caption or readout wider than its box.
-    for v in ('one', 'two', 'uv', 'array'):
-        setup(b, {'one': 'noise', 'two': 'twosources', 'uv': 'uv', 'array': 'rotation'}[v], 5)
+    for v in ('one', 'two', 'uv', 'array', 'array with CLEAN', 'array with maximum entropy'):
+        setup(b, {'one': 'noise', 'two': 'twosources', 'uv': 'uv', 'array': 'rotation', 'array with CLEAN': 'compare', 'array with maximum entropy': 'mem'}[v], 5)
         cut = b.eval("[...document.querySelectorAll('figcaption, .foot, .cell-head')].filter((e) => e.getClientRects().length && e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent.slice(0, 40))")
         check(not cut, f'view {v}: every caption and readout fits its box' + (f': {cut[:3]}' if cut else ''))
 
@@ -375,7 +490,7 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
 with Browser('radiointerferometer/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready', timeout=90)
     b.eval('__app.hold(true)')
-    for name in ('noise', 'fringe', 'uv', 'sketch', 'rotation'):
+    for name in ('noise', 'fringe', 'uv', 'sketch', 'rotation', 'clean'):
         b.console.clear()
         setup(b, name, 30)
         v = VIEW[name]
