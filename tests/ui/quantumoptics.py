@@ -64,8 +64,9 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
     for v in ('squeeze', 'homodyne', 'ligo'):
         b.eval(f"__app.setView('{v}')"); hints[v] = visible_hints(b)
     b.eval("__app.setView('mode')")
-    check(all(len(h) == 1 for h in hints.values()) and 'squeezing' in hints['squeeze'][0] and 'yellow axis' in hints['homodyne'][0] and 'Squeezed light' in hints['ligo'][0],
-          'the squeezing, homodyne and LIGO views each have one hint saying what to drag')
+    check(len(hints['squeeze']) == len(hints['homodyne']) == 1 and 'squeezing' in hints['squeeze'][0] and 'yellow axis' in hints['homodyne'][0] and 'Squeezed light' in hints['ligo'][0],
+          'the squeezing and homodyne views each have one hint saying what to drag, and the LIGO view one on its noise curve')
+    check(len(hints['ligo']) == 2 and 'distance' in hints['ligo'][1] and 'Slide the template' in hints['ligo'][1], f"and one under the detector's output ({hints['ligo'][1:]})")
     # Plain words: the view tabs, the state buttons, the presets have tooltips; the sliders have words.
     titles = b.eval("[...document.querySelectorAll('#view-row button, #kind-row button, #sq-presets button, #source-row button')].map((e) => e.title)")
     check(all(len(t) > 20 for t in titles), f'every view tab, state button, squeezing preset and source has a tooltip ({len(titles)})')
@@ -77,9 +78,9 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
     start = b.eval("document.querySelector('#help .start').innerText")
     check(order[0] == 'start' and order[-1] == 'theory' and 'math' not in b.eval("document.querySelector('#help .start').innerHTML") and 'Drag' in start and 'LIGO' in start and len(start) < 1800,
           f'the drawer opens with Start here and ends with How it works ({len(order)} parts, {order.count("exp")} experiments)')
-    check(order.count('exp') == 14, '14 experiments')
+    check(order.count('exp') == 16, '16 experiments')
     names = b.eval('Object.keys(__app.setups)')
-    check(names == ['vacuum', 'coherent', 'phase', 'squeezevac', 'phasesq', 'loss', 'quadrature', 'scan', 'phaseshift', 'darkport', 'inject', 'radiation', 'fdsqz', 'chirp'], f'the set-ups are in the drawer\'s order ({names})')
+    check(names == ['vacuum', 'coherent', 'phase', 'squeezevac', 'phasesq', 'loss', 'quadrature', 'scan', 'phaseshift', 'darkport', 'inject', 'radiation', 'fdsqz', 'chirp', 'buried', 'reach'], f'the set-ups are in the drawer\'s order ({names})')
 
     # ---- 1 · One mode: the vacuum's noise, the coherent state, the phase
     run(b, 'vacuum', 2)
@@ -263,6 +264,71 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
     check(abs(ch['tc'] - 6) < 0.3 and abs(ch['fisco'] - 220) < 2 and b.eval('__app.state.distance') == 500 and r3['without'] > 20, f"two black holes at 500 Mpc: {ch['tc']:.1f} s from 20 Hz to {ch['fisco']:.0f} Hz, ρ = {r3['without']:.0f}")
     b.screenshot('build/qo-chirp.png')
 
+    # ---- 4 · LIGO: the chirp buried in the noise, and the matched filter that finds it
+    run(b, 'buried')
+    r = b.box('#det-readout'); dw = b.box('#detector-wrap')
+    check(b.eval('scrollY') > 100 and dw[1] >= 0 and r[1] + r[3] <= 900, f"setting it up scrolls the detector's strip and its numbers into view (scrolled {b.eval('scrollY'):.0f} px)")
+    d = b.eval('__app.detector()'); sn = b.eval('__app.snr()')
+    check(abs(d['rho'] - sn['with']) < 0.05 and abs(d['without']['rho'] - sn['without']) < 0.05,
+          f"the strip's expected peak σ/d is the read-out's ρ: {d['rho']:.2f} against {sn['with']:.2f} squeezed, {d['without']['rho']:.2f} against {sn['without']:.2f} without")
+    check(d['tPeak'] == 7 and abs(d['peak'] - d['atMerger']) < 1e-9 and abs(d['atMerger'] - d['rho']) < 4,
+          f"the filter's output peaks where the template lines up (7 s), at z = {d['atMerger']:.2f} for ρ = {d['rho']:.2f}")
+    check(abs(d['mfVar'] - 1) < 0.06 and d['noisePeak'] < 5.5, f"its noise has variance {d['mfVar']:.3f} and reaches {d['noisePeak']:.2f} elsewhere")
+    ro = b.eval("document.querySelector('#det-readout').innerText")
+    check('104.3' in ro and '104.2' in ro and '72.3' in ro and '2.48' in ro and 'σ' in ro, f"the strip's read-out quotes z = 104.3 against ρ = 104.2, 72.3 without, the chirp 2.48 σ ({ro[:80]}...)")
+    check(abs(d['atMerger'] - 104.3) < 0.05 and abs(d['without']['atMerger'] - 72.3) < 0.05 and abs(d['whitePeak'] - 2.48) < 0.005 and abs(d['noisePeak'] - 4.2) < 0.05, "the help's 104.3, 72.3, 2.48 σ and 4.2")
+    white_on = d['white']
+    b.eval("document.querySelector('#sq-row button').click(); __app.step(0, 1)")
+    d2 = b.eval('__app.detector()')
+    same = max(abs(x - y) for x, y in zip(white_on, d2['white']))
+    check(not b.eval('__app.state.sq.on') and same < 1e-9 and abs(d2['atMerger'] - 72.3) < 0.05 and abs(d2['rho'] - 72.3) < 0.05 and abs(d2['whitePeak'] - 1.59) < 0.005,
+          f"squeezing off: the same whitened noise (to {same:.0e}), the chirp in it {d2['whitePeak']:.2f} σ, the peak {d2['atMerger']:.1f}")
+    b.eval("[...document.querySelectorAll('#data-row button')].find((x) => x.textContent === 'Raw').click(); __app.step(0, 1)")
+    d3 = b.eval('__app.detector()')
+    b.eval("document.querySelector('#sq-row button').click(); __app.step(0, 1)")
+    d4 = b.eval('__app.detector()'); ro = b.eval("document.querySelector('#det-readout').innerText")
+    check(b.eval('__app.state.data') == 'raw' and abs(d4['rawRms'] - 2.83e-22) < 0.01e-22 and d3['rawRms'] > d4['rawRms'] and abs(d4['rawPeak'] - 5.05e-22) < 0.005e-22 and 'raw strain' in ro and '2.83' in ro and '5.05' in ro,
+          f"raw: the noise's spread {d4['rawRms']:.3e} squeezed ({d3['rawRms']:.3e} without), the chirp at most {d4['rawPeak']:.4e}")
+    b.screenshot('build/qo-buried-raw.png')
+    b.eval("[...document.querySelectorAll('#data-row button')].find((x) => x.textContent === 'Whitened').click(); __app.step(0, 1)")
+    # Slide the template along: the output drawn as it goes, back to lined up at the end.
+    b.eval("[...document.querySelectorAll('#slide-row button')].find((x) => x.textContent.startsWith('Slide')).click()")
+    s0 = b.eval('__app.detector()')
+    b.eval('__app.step(1/30, 90)'); s1 = b.eval('__app.detector()')
+    b.screenshot('build/qo-slide.png')
+    check(s0['sliding'] and s0['lag'] == 0 and s1['sliding'] and abs(s1['lag'] - 4) < 0.01 and abs(s1['zAtLag']) < 5, f"the template slides: at {s1['lag']:.2f} s the output is noise (z = {s1['zAtLag']:.2f})")
+    b.eval('__app.step(1/30, 140)'); s2 = b.eval('__app.detector()')
+    check(not s2['sliding'] and s2['lag'] == 7 and abs(s2['zAtLag'] - s2['atMerger']) < 1e-9, 'after the slide it is lined up again')
+    box = b.box('#detector')
+    b.click('#detector', ((50 + 3.5 / 8 * (box[2] - 64)) / box[2], 0.85)); b.eval('__app.step(0, 1)')
+    check(abs(b.eval('__app.state.lag') - 3.5) < 0.02, f"a click on the strip puts the template there ({b.eval('__app.state.lag'):.3f} s)")
+    b.eval("[...document.querySelectorAll('#slide-row button')].find((x) => x.textContent === 'New noise').click(); __app.step(0, 1)")
+    d5 = b.eval('__app.detector()')
+    check(d5['seed'] == 114 and abs(d5['white'][0] - white_on[0]) > 1e-6 and abs(d5['rho'] - d['rho']) < 1e-9 and abs(d5['atMerger'] - d5['rho']) < 4, f"New noise: another realisation (seed {d5['seed']}), the same ρ, the peak {d5['atMerger']:.1f}")
+    # At the reach.
+    run(b, 'reach')
+    d = b.eval('__app.detector()'); sn = b.eval('__app.snr()')
+    check(abs(sn['rangeWithout'] - 361) < 0.5 and abs(d['rho'] - 8.0) < 0.02 and abs(d['atMerger'] - 8.1) < 0.05 and abs(d['noisePeak'] - 4.0) < 0.05 and abs(d['whitePeak'] - 0.18) < 0.005 and abs(d['tPeak'] - 7) < 0.005,
+          f"at the reach (361 Mpc) ρ = {d['rho']:.2f}: the chirp {d['whitePeak']:.3f} σ high, the peak {d['atMerger']:.2f} against the noise's {d['noisePeak']:.2f}")
+    b.screenshot('build/qo-reach.png')
+    set_slider(b, '#chirp-box', 'distance', 600); d = b.eval('__app.detector()')
+    check(abs(d['rho'] - 4.8) < 0.05 and abs(d['atMerger'] - 4.9) < 0.05, f"at 600 Mpc: ρ = {d['rho']:.2f}, the peak {d['atMerger']:.2f}, the noise {d['noisePeak']:.2f}")
+    set_slider(b, '#chirp-box', 'distance', 1000); d = b.eval('__app.detector()')
+    check(abs(d['rho'] - 2.9) < 0.05 and d['peak'] > d['atMerger'] and abs(d['tPeak'] - 3.8) < 0.05, f"at 1000 Mpc (ρ = {d['rho']:.2f}) the tallest peak is the noise's, at {d['tPeak']:.2f} s")
+    set_slider(b, '#chirp-box', 'distance', 361)
+    b.eval("document.querySelector('#sq-row button').click(); __app.step(0, 1)")
+    d = b.eval('__app.detector()'); sn = b.eval('__app.snr()')
+    check(abs(d['rho'] - 11.5) < 0.05 and abs(sn['rangeWith'] - 521) < 0.5, f"squeezing on at 361 Mpc: ρ = {d['rho']:.2f}; the reach {sn['rangeWith']:.0f} Mpc")
+    b.eval("document.querySelector('#sq-row button').click(); __app.step(0, 1)")
+    peaks, noise = [], []
+    for i in range(6):
+        b.eval("[...document.querySelectorAll('#slide-row button')].find((x) => x.textContent === 'New noise').click(); __app.step(0, 1)")
+        d = b.eval('__app.detector()'); peaks.append(d['atMerger']); noise.append(d['noisePeak'])
+    check(abs(min(peaks) - 7.7) < 0.05 and abs(max(peaks) - 8.9) < 0.05 and abs(min(noise) - 3.9) < 0.05 and abs(max(noise) - 4.8) < 0.05,
+          f"six more realisations at the reach: the peak {min(peaks):.2f} to {max(peaks):.2f}, the noise's largest {min(noise):.2f} to {max(noise):.2f}")
+    t = b.eval("(() => { __app.state.sq.on = true; const t0 = performance.now(); for (let i = 0; i < 3; i++) { __app.state.sq.dB = 3 + i; __app.draw(); } return (performance.now() - t0) / 3; })()")
+    check(t < 200, f'a new spectrum (a squeezing slider\'s step) makes the noise and draws in {t:.0f} ms')
+
     # ---- every experiment's read-out is made of numbers
     bad = []
     for name in names:
@@ -286,10 +352,17 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
         worst, compared, seen = keeps_still(b, RO, steps)
         check(worst <= 0.5 and compared >= len(steps) - 3 and len(seen) >= len(steps) // 2,
               f'{name}: the read-out keeps still while its numbers change (largest shift {worst:.1f} px over {compared} of {len(steps)} changes, {len(seen)} readings)')
+    dist = lambda v: (lambda: set_slider(b, '#chirp-box', 'distance', v))
+    for name, steps in (('buried', [dist(v) for v in (60, 100, 200, 361, 500, 800)] + [db(v) for v in (2, 9, 12)]),):
+        run(b, name, 0.3)
+        worst, compared, seen = keeps_still(b, '#det-readout > div, #det-readout .fixnum', steps)
+        check(worst <= 0.5 and compared >= len(steps) - 3 and len(seen) >= len(steps) // 2,
+              f'{name}: the read-out keeps still while its numbers change (largest shift {worst:.1f} px over {compared} of {len(steps)} changes, {len(seen)} readings)')
 
     # ---- speed: a frame of each animated view
-    for name in ('coherent', 'phasesq', 'scan'):
+    for name in ('coherent', 'phasesq', 'scan', 'buried'):
         run(b, name, 0.2)
+        if name == 'buried': b.eval('__app.slide()')      # the template sliding along the data
         ms = b.eval('__app.bench()')
         check(ms < 33, f'{name}: {ms:.1f} ms an animation frame (needs < 33)')
 
@@ -300,6 +373,12 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
     b.eval('location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
     s = b.eval('__app.state')
     check(s['view'] == 'squeeze' and s['psi'] == 37 and abs(s['r'] - math.log(2)) < 1e-4 and s['alpha'] == 3, f'reloading the address brings back the view, α and the squeezing ({b.eval("location.hash")[:60]})')
+    b.eval('__app.hold(true)'); run(b, 'buried', 0.1)
+    b.eval("[...document.querySelectorAll('#data-row button')].find((x) => x.textContent === 'Raw').click(); [...document.querySelectorAll('#slide-row button')].find((x) => x.textContent === 'New noise').click()")
+    b.wait("location.hash.includes('dv=raw') && location.hash.includes('ns=114')", timeout=20)
+    b.eval('location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
+    s = b.eval('__app.state')
+    check(s['view'] == 'ligo' and s['data'] == 'raw' and s['seed'] == 114 and s['sq']['on'], "the address keeps the detector's realisation and raw or whitened")
     # (window.__app may be undefined for a moment if the page is still loading: guard it, else eval throws)
     b.eval("location.hash = '#setup=fdsqz'"); b.wait("window.__app && __app.state.view === 'ligo' && __app.state.sq.fd", timeout=20)
     check(b.eval('__app.state.sq.dB') == 10, 'typing #setup=fdsqz into the address opens that experiment')
@@ -310,7 +389,7 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
 with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
     b.wait('window.__app && __app.ready', timeout=90); b.eval('__app.hold(true)')
-    for name in ('coherent', 'squeezevac', 'scan', 'inject'):
+    for name in ('coherent', 'squeezevac', 'scan', 'inject', 'buried'):
         run(b, name, 1); b.screenshot(f'build/qo-dark-{name}.png')
     check(b.eval("getComputedStyle(document.body).backgroundColor") != 'rgb(244, 243, 239)', 'dark: the page follows the dark colour scheme')
     run(b, 'vacuum', 0.5); first_screen(b, 'dark')
@@ -326,10 +405,12 @@ with Browser('quantumoptics/index.html', size=(390, 844)) as b:
     plane = b.box('#plane-wrap')
     check(plane[1] + plane[3] <= 844 and plane[2] >= 300, f'on a phone the plane is in view without scrolling (bottom at {plane[1] + plane[3]:.0f} px, {plane[2]:.0f} px wide)')
     wide = []
-    for name in ('vacuum', 'phasesq', 'scan', 'chirp'):
+    for name in ('vacuum', 'phasesq', 'scan', 'chirp', 'buried'):
         run(b, name, 0.5)
         b.screenshot(f'build/qo-phone-{name}.png')
         wide.append(b.eval('document.documentElement.scrollWidth'))
+    det = b.box('#detector-wrap')
+    check(det[2] <= 390 and det[1] >= 0 and det[1] < 844, f"phone: the buried chirp's set-up brings the detector's strip into view ({det[2]:.0f} px wide at {det[1]:.0f} px)")
     check(max(wide) <= 390, f'no sideways scrolling on a phone (pages {max(wide)} px wide at most)')
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'phone: no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))

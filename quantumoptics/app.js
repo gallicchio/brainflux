@@ -1,7 +1,7 @@
 // Quantum optics: squeezed light and LIGO.  Four views, each a step: one mode of the field as
 // a cloud in the quadrature plane; squeezing it; homodyne detection; LIGO.  The physics is in
-// states.js, homodyne.js and ligo.js; the quadrature plane is drawn by plane.js and the
-// sketches by pictures.js; this file is the page.
+// states.js, homodyne.js, ligo.js and detector.js (LIGO's output: noise, chirp, matched filter);
+// the quadrature plane is drawn by plane.js and the sketches by pictures.js; this file is the page.
 
 import {
   gaussianState, rotated, quadratureMean, quadratureVariance, principalSpreads, samplePoint, meanPhotons,
@@ -11,10 +11,11 @@ import { Rng, sample, VarianceRecord, noiseDb, phaseMeasurement } from './homody
 import {
   DEFAULTS, noiseBudget, quantumNoise, sqlFrequency, darkPortPhase, chirpMass, iscoFrequency, chirpSignal, amplitudeSpectrum, MPC,
 } from './ligo.js';
+import { Detector } from './detector.js';
 import { Plane, drawColorbar } from './plane.js';
 import { drawSqueezer, drawHomodyne, drawLigo } from './pictures.js';
 import { el, $, slider, segmented, toggle, drawer, readHash, writeHash, setSlots, setGroups } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors, fillSlots, niceTicks, tickLabel } from '../lib/plot.js';
+import { fitCanvas, Frame, themeColors, fillSlots, slotsWidth, niceTicks, tickLabel } from '../lib/plot.js';
 import { fft } from '../lib/fft.js';
 
 const DEG = Math.PI / 180;
@@ -28,6 +29,10 @@ const SOURCES = {
   bns: { label: 'Two neutron stars', m1: 1.4, m2: 1.4, fmin: 70, d: 40, fs: 8192, title: '1.4 + 1.4 solar masses, as GW170817; from 70 Hz, a few seconds to merger' },
   bbh: { label: 'Two black holes', m1: 10, m2: 10, fmin: 20, d: 500, fs: 4096, title: '10 + 10 solar masses, from 20 Hz: heavier, so louder, and merging at 220 Hz' },
 };
+// The detector's output: 8 s at 4096 samples a second, the chirp merging at 7 s; the noise's
+// seed (113: a typical realisation, its filter output near 0 at the merger); the template slides
+// along the data in 6 s.
+const DET_FS = 4096, DET_T = 8, DET_MERGE = 7, DET_SEED = 113, SLIDE_RATE = DET_T / 6;
 
 // ------------------------------------------------------------------------- state
 
@@ -43,10 +48,12 @@ const state = {
   ligo: { P: DEFAULTS.P, fc: DEFAULTS.fc, M: DEFAULTS.M },
   sq: { on: false, dB: 6, angle: 90, eta: 0.8, fd: false },
   source: 'bns', distance: 40,
+  seed: DET_SEED, data: 'white', template: true,   // the noise's seed, whitened or raw data, the template drawn
+  lag: DET_MERGE,                 // where the template's merger is put (s): lined up with the chirp's
 };
 // The clocks.  t: the time in periods of the light (views 1 and 2); the point drawn from the
 // cloud for the current period; the field's record.  Homodyne: the samples.
-const anim = { t: 0, sample: null, samplePeriod: -1, trace: [], sweepDir: 1 };
+const anim = { t: 0, sample: null, samplePeriod: -1, trace: [], sweepDir: 1, sliding: false };
 const rng = new Rng(12345);
 const record = new VarianceRecord(180);
 let hist2d = new Uint32Array(record.bins * HIST_BINS);
@@ -554,6 +561,166 @@ function drawChirp() {
   ctx.restore();
 }
 
+// The detector's output: 8 s of noise drawn from the total noise curve with the chirp in it,
+// whitened or raw, and the matched filter's output.  The noise is made once per seed and
+// spectrum (a squeezing slider's change, not a frame); the distance only rescales the chirp.
+const detector = new Detector({ fs: DET_FS, T: DET_T });
+const detectorVac = new Detector({ fs: DET_FS, T: DET_T });     // the same noise without squeezing, for the ghost
+let detectorSource = null;
+
+function ensureDetector() {
+  if (detectorSource !== state.source) {
+    const src = SOURCES[state.source], mc = chirpMass(src.m1, src.m2), fisco = iscoFrequency(src.m1, src.m2);
+    const h1 = chirpSignal(mc, MPC, src.fmin, fisco, DET_FS).h;   // at 1 Mpc
+    for (const det of [detector, detectorVac]) det.setSignal(h1, DET_MERGE, [src.fmin, fisco]);
+    detectorSource = state.source;
+  }
+  const p = ligoParams(), sq = squeezeParams(), vac = { ...sq, on: false };
+  const spectrum = (det, s) => { det.setSeed(state.seed); det.setSpectrum((f) => noiseBudget(f, p, s).total, JSON.stringify([p, s.on ? s : 0])); };
+  spectrum(detector, sq);
+  if (sq.on) spectrum(detectorVac, vac);
+  return detector;
+}
+
+/** The numbers the detector strip shows, at the chosen distance (also for the tests). */
+function detectorFindings() {
+  const det = ensureDetector(), g = 1 / state.distance, F = det.findings(state.distance);
+  const lagIndex = clamp(Math.round(state.lag * DET_FS), 0, det.N - 1);
+  let whitePeak = 0, rawPeak = 0, rawVar = 0;
+  for (let j = 0; j < det.N; j++) { whitePeak = Math.max(whitePeak, Math.abs(g * det.whiteSignal1[j])); rawPeak = Math.max(rawPeak, Math.abs(g * det.signal1[j])); rawVar += det.rawNoise[j] ** 2; }
+  const out = { ...F, zAtLag: det.mfNoise[lagIndex] + g * det.mfSignal1[lagIndex], lag: state.lag, whitePeak, rawPeak, rawRms: Math.sqrt(rawVar / det.N), sigma1: det.sigma1 };
+  if (state.sq.on) { const v = detectorVac.findings(state.distance); out.without = { rho: v.rho, atMerger: v.atMerger, noisePeak: v.noisePeak }; }
+  else out.without = null;
+  return out;
+}
+
+/** Min to max of value(j) for the samples under each pixel column of f, for j < jEnd: a dense trace. */
+function columnTrace(ctx, f, N, value, jEnd = N) {
+  const cols = Math.max(1, Math.floor(f.w));
+  ctx.beginPath();
+  for (let px = 0; px < cols; px++) {
+    const i0 = Math.floor((px / cols) * N), i1 = Math.min(jEnd, Math.max(i0 + 1, Math.floor(((px + 1) / cols) * N)));
+    if (i0 >= jEnd) break;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = i0; i < i1; i++) { const v = value(i); if (v < lo) lo = v; if (v > hi) hi = v; }
+    const x = f.left + px + 0.5;
+    ctx.moveTo(x, f.Y(lo) + 0.5); ctx.lineTo(x, f.Y(hi) - 0.5);
+  }
+  ctx.stroke();
+}
+
+let detectorFrame = null;
+function drawDetector() {
+  const det = ensureDetector(), d = state.distance, g = 1 / d, c = colors, N = det.N, F = detectorFindings();
+  const { ctx, width, height } = fitCanvas($('#detector'));
+  ctx.clearRect(0, 0, width, height);
+  const narrow = width < 600, top = narrow ? 44 : 28, bottom = 32, gap = 10, h1 = Math.max(40, 0.45 * (height - top - bottom - gap));
+  const f1 = new Frame(ctx, width, height, { left: 50, right: 14, top, bottom: height - top - h1 });
+  const f2 = new Frame(ctx, width, height, { left: 50, right: 14, top: top + h1 + gap, bottom });
+  detectorFrame = f2;
+  f1.x0 = f2.x0 = 0; f1.x1 = f2.x1 = DET_T;
+  const raw = state.data === 'raw', noise = raw ? det.rawNoise : det.whiteNoise, sig = raw ? det.signal1 : det.whiteSignal1;
+  const lagShift = Math.round((state.lag - DET_MERGE) * DET_FS), lagIndex = clamp(Math.round(state.lag * DET_FS), 0, N - 1);
+  const seconds = (f) => { ctx.strokeStyle = c.line; ctx.lineWidth = 1; ctx.setLineDash([2, 4]); ctx.beginPath(); for (let t = 1; t < DET_T; t++) { const x = Math.round(f.X(t)) + 0.5; ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); } ctx.stroke(); ctx.setLineDash([]); };
+
+  // The data: noise + chirp, and the template at its lag over it.
+  let ymax = 0;
+  for (let j = 0; j < N; j++) ymax = Math.max(ymax, Math.abs(noise[j] + g * sig[j]));
+  ymax = raw ? 1.08 * ymax : Math.max(5, 1.08 * ymax);      // whitened: σ = 1
+  f1.y0 = -ymax; f1.y1 = ymax;
+  ctx.fillStyle = c.panel; ctx.fillRect(f1.left, f1.top, f1.w, f1.h);
+  f1.clip();
+  seconds(f1);
+  ctx.strokeStyle = c.seismic; ctx.lineWidth = 1;
+  columnTrace(ctx, f1, N, (j) => noise[j] + g * sig[j]);
+  if (state.template) {
+    ctx.strokeStyle = c.chirp; ctx.lineWidth = 1; ctx.globalAlpha = 0.9;
+    columnTrace(ctx, f1, N, (j) => { const i = j - lagShift; return i >= 0 && i < N ? g * sig[i] : 0; });
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+  let scale = 1;
+  if (raw) { scale = 10 ** Math.floor(Math.log10(F.rawRms)); f1.y0 /= scale; f1.y1 /= scale; }
+  f1.axes({ colors: c, xTicks: false, ylabel: raw ? `h, ×10${sup(Math.round(Math.log10(scale)))}` : 'whitened (σ)' });
+  // A legend.
+  ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  const lined = Math.abs(state.lag - DET_MERGE) < 1e-6;
+  const lg = [[narrow ? 'data' : 'data: noise + chirp', c.seismic], ...(state.template ? [[narrow ? (lined ? 'the template, lined up' : 'the template') : lined ? 'the template, lined up with the chirp' : 'the template, slid along', c.chirp]] : [])];
+  let lx = f1.left + 6; const ly = f1.bottom - 10;
+  for (const [label, color] of lg) {
+    const w = ctx.measureText(label).width + 30;
+    ctx.globalAlpha = 0.85; ctx.fillStyle = c.panel; ctx.fillRect(lx - 3, ly - 8, w, 16); ctx.globalAlpha = 1;
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 16, ly); ctx.stroke();
+    ctx.fillStyle = c.ink2; ctx.fillText(label, lx + 22, ly); lx += w + 6;
+  }
+  ctx.restore();
+
+  // The matched filter's output, z(t): the template's merger put at t.
+  const zEnd = anim.sliding ? lagIndex + 1 : N;
+  let zmax = Math.max(10, F.rho + 4);
+  for (let j = 0; j < N; j++) zmax = Math.max(zmax, Math.abs(det.mfNoise[j] + g * det.mfSignal1[j]));
+  zmax *= 1.25;
+  f2.y0 = -zmax; f2.y1 = zmax;
+  ctx.fillStyle = c.panel; ctx.fillRect(f2.left, f2.top, f2.w, f2.h);
+  f2.clip();
+  seconds(f2);
+  // The unit noise, ρ expected and the threshold 8.
+  ctx.fillStyle = c.band; ctx.fillRect(f2.left, f2.Y(1), f2.w, f2.Y(-1) - f2.Y(1));
+  const hline = (y, dash, color, w = 1) => { ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash); ctx.beginPath(); ctx.moveTo(f2.left, Math.round(f2.Y(y)) + 0.5); ctx.lineTo(f2.right, Math.round(f2.Y(y)) + 0.5); ctx.stroke(); ctx.setLineDash([]); };
+  hline(8, [2, 3], c.warn);
+  hline(F.rho, [6, 4], c.ink3);
+  if (F.without) hline(F.without.rho, [6, 4], c.ink3);
+  // The template's place, under the output.
+  const lx2 = Math.round(f2.X(state.lag)) + 0.5;
+  ctx.strokeStyle = c.chirp; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(lx2, f2.top); ctx.lineTo(lx2, f2.bottom); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  ctx.strokeStyle = state.sq.on ? c.sq : c.ink; ctx.lineWidth = 1.5;
+  columnTrace(ctx, f2, N, (j) => det.mfNoise[j] + g * det.mfSignal1[j], zEnd);
+  // Without squeezing (the same noise): where the peak would be.
+  if (F.without && !anim.sliding) { ctx.fillStyle = c.ink3; ctx.beginPath(); ctx.arc(f2.X(F.tMerge), f2.Y(F.without.atMerger), 3.5, 0, 2 * Math.PI); ctx.fill(); }
+  ctx.fillStyle = c.chirp; ctx.beginPath(); ctx.arc(lx2, f2.Y(F.zAtLag), 3.5, 0, 2 * Math.PI); ctx.fill();
+  ctx.restore();
+  // The cursor through the data too.
+  ctx.save(); ctx.beginPath(); ctx.rect(f1.left, f1.top, f1.w, f1.h); ctx.clip();
+  ctx.strokeStyle = c.chirp; ctx.globalAlpha = 0.6; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(lx2, f1.top); ctx.lineTo(lx2, f1.bottom); ctx.stroke();
+  ctx.restore();
+  f2.axes({ colors: c, xlabel: 'time (s): where the template\'s merger is put', ylabel: 'filter output z' });
+  // Labels on the lines.
+  ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
+  const tag = (y, text, color) => { const py = f2.Y(y) - 2; if (py < f2.top + 12 || py > f2.bottom - 2) return; const w = ctx.measureText(text).width; ctx.globalAlpha = 0.85; ctx.fillStyle = c.panel; ctx.fillRect(f2.left + 4, py - 12, w + 6, 13); ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.fillText(text, f2.left + 7, py); };
+  tag(8, '8: the threshold', c.warn);
+  if (F.rho > 11) tag(F.rho, state.sq.on ? 'ρ with squeezing: the expected peak' : 'ρ: the expected peak', c.ink2);
+  if (F.without && F.without.rho > 11 && f2.Y(F.without.rho) - f2.Y(F.rho) > 15) tag(F.without.rho, 'ρ without squeezing (the grey dot)', c.ink2);
+  ctx.restore();
+  detectorReadout(F, raw, scale);
+}
+
+/** The detector strip's numbers, under it: words and numbers in fixed slots. */
+function detectorReadout(F, raw, scale) {
+  const e = Math.round(Math.log10(scale));
+  const groups = [
+    ['The data', ...(raw
+      ? ['raw strain above 10 Hz: the noise\'s spread ', bold(num(F.rawRms / scale, 2, 4)), `, the chirp at most `, bold(num(F.rawPeak / scale, 2, 4)), ` × 10${sup(e)}`]
+      : ['whitened, so the noise\'s spread is σ = 1; the chirp in it is at most ', bold(num(F.whitePeak, 2, 5)), ' σ high'])],
+    ['The filter', 'with the template\'s merger at ', num(state.lag, 2, 4), ' s, z = ', bold(num(F.zAtLag, 1, 6)), '; lined up (', num(F.tMerge, 2, 4), ' s), z = ', bold(num(F.atMerger, 1, 6)), ' against the expected ρ = ', bold(num(F.rho, 1, 6)), ' ± 1; elsewhere the noise reaches ', bold(num(F.noisePeak, 1, 4))],
+  ];
+  if (F.without) groups.push(['Without squeezing', 'the same noise: lined up, z = ', num(F.without.atMerger, 1, 6), ' against ρ = ', num(F.without.rho, 1, 6), '; elsewhere the noise reaches ', num(F.without.noisePeak, 1, 4)]);
+  setGroupsKeyed($('#det-readout'), groups);
+}
+
+function detectorPointer(e) {
+  if (!detectorFrame) return;
+  const r = $('#detector').getBoundingClientRect();
+  anim.sliding = false;
+  state.lag = clamp(detectorFrame.invX(e.clientX - r.left), 0, DET_T);
+  dirty();
+}
+
+function startSlide() {
+  if (state.view !== 'ligo') return;
+  state.lag = 0; anim.sliding = true; lastT = 0;
+  dirty();
+}
+
 // ---------------------------------------------------------------------- readouts
 
 const num = (v, dec, w, extra = {}) => ({ v, dec, w, ...extra });
@@ -641,6 +808,14 @@ function kick() { if (!raf) raf = requestAnimationFrame(loop); }
 
 /** Move the clocks on by dt seconds of the page's time. */
 function advance(dt) {
+  if (state.view === 'ligo') {
+    // The template slides along the data (its own clock: the Animation panel is not in this view).
+    if (anim.sliding) {
+      state.lag += dt * SLIDE_RATE;
+      if (state.lag >= DET_T) { state.lag = DET_MERGE; anim.sliding = false; slideButton.textContent = 'Slide the template'; }
+    }
+    return;
+  }
   if (!state.running) return;
   if (state.view === 'mode' || state.view === 'squeeze') {
     anim.t += dt / state.period;
@@ -655,7 +830,7 @@ function loop(now) {
   raf = 0;
   const dtReal = lastT ? Math.min(0.1, (now - lastT) / 1000) : 0;
   lastT = now;
-  const animating = !document.hidden && state.running && state.view !== 'ligo';
+  const animating = !document.hidden && (state.view === 'ligo' ? anim.sliding : state.running);
   if (animating && !testHold) advance(dtReal);
   if (needDraw || animating) { needDraw = false; drawNow(); }
   if (animating) raf = requestAnimationFrame(loop); else lastT = 0;
@@ -669,7 +844,7 @@ function drawNow() {
   } else if (state.view === 'homodyne') {
     drawApparatus(); drawHomodynePlane(); drawStrip(); drawVariance();
   } else {
-    drawLigoSketch(); drawSens(); drawChirp();
+    drawLigoSketch(); drawSens(); drawChirp(); drawDetector();
   }
   updateLegend();
   readout();
@@ -700,6 +875,7 @@ function setView(v) {
   $('#ligo-panel').hidden = v !== 'ligo';
   $('#chirp-panel').hidden = v !== 'ligo';
   $('#anim-panel').hidden = v === 'ligo';
+  if (v !== 'ligo' && anim.sliding) { anim.sliding = false; state.lag = DET_MERGE; slideButton.textContent = 'Slide the template'; }
   periodSlider.hidden = v === 'homodyne';
   wedgeToggle.hidden = v === 'homodyne';
   $('#run').textContent = state.running ? 'Pause' : 'Run';
@@ -775,6 +951,33 @@ const distSlider = slider({ label: 'distance (Mpc)', min: 10, max: 2000, log: tr
 const hearButton = el('button', { type: 'button', title: 'Play the chirp as sound: its frequencies are in the audible range', onclick: () => hearChirp() }, 'Hear it');
 $('#chirp-box').append(distSlider, el('div', { class: 'row' }, hearButton));
 $('#chirp-note').textContent = 'The Newtonian chirp of the two masses, face on and overhead, from its starting frequency to the innermost stable orbit, where the inspiral ends.  ρ, in the read-out, is the signal-to-noise ratio of a matched filter; 8 is the usual threshold for a detection.';
+// The detector's output.
+const dataSeg = segmented([
+  { value: 'white', label: 'Whitened', title: 'Each frequency divided by the noise there: the noise comes out flat, in units of its spread σ, and the chirp is weighted as the matched filter weighs it' },
+  { value: 'raw', label: 'Raw', title: 'The strain the detector records (above 10 Hz): the noise of every frequency at once, the chirp lost in it' },
+], state.data, (v) => { state.data = v; dirty(); scheduleHash(); }, { label: 'The data' });
+const templateToggle = toggle('Template', state.template, (on) => { state.template = on; dirty(); scheduleHash(); }, 'Draw the template, a copy of the chirp, over the data where its merger is put: lined up with the chirp unless you slide it or click elsewhere');
+$('#data-row').append(dataSeg, templateToggle);
+const slideButton = el('button', { type: 'button', title: 'Slide the template along the data from the start: the filter\'s output is drawn as it goes, and leaps up when the template lines up with the chirp', onclick: () => { if (anim.sliding) { anim.sliding = false; dirty(); slideButton.textContent = 'Slide the template'; } else { startSlide(); slideButton.textContent = 'Stop'; } } }, 'Slide the template');
+const noiseButton = el('button', { type: 'button', title: 'Another realisation of the noise, from the same spectrum: the peak moves by about ±1, the filter noise\'s spread', onclick: () => { state.seed += 1; changed(); } }, 'New noise');
+$('#slide-row').append(slideButton, noiseButton);
+const detectorCanvas = $('#detector');
+detectorCanvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  detectorCanvas.setPointerCapture(e.pointerId);
+  slideButton.textContent = 'Slide the template';
+  detectorPointer(e);
+  const move = (ev) => detectorPointer(ev);
+  const up = () => { detectorCanvas.removeEventListener('pointermove', move); detectorCanvas.removeEventListener('pointerup', up); };
+  detectorCanvas.addEventListener('pointermove', move); detectorCanvas.addEventListener('pointerup', up);
+});
+detectorCanvas.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  anim.sliding = false; slideButton.textContent = 'Slide the template';
+  state.lag = clamp(state.lag + (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 0.1 : 0.005), 0, DET_T);
+  dirty();
+});
 
 /** The chirp as sound (its frequencies are in the audible range), through Web Audio. */
 let audio = null;
@@ -869,6 +1072,7 @@ function saveHash() {
     P: state.ligo.P !== DEFAULTS.P ? r5(state.ligo.P) : undefined, M: state.ligo.M !== DEFAULTS.M ? r5(state.ligo.M) : undefined, fc: state.ligo.fc !== DEFAULTS.fc ? r5(state.ligo.fc) : undefined,
     sq: state.sq.on ? 1 : undefined, db: r5(state.sq.dB), an: state.sq.angle, lo: r5(1 - state.sq.eta) || undefined, fd: state.sq.fd ? 1 : undefined,
     src: state.source, d: r5(state.distance),
+    ns: state.seed !== DET_SEED ? state.seed : undefined, dv: state.data === 'raw' ? 'raw' : undefined, tp: state.template ? undefined : 0,
   };
   writeHash(h);
 }
@@ -884,21 +1088,24 @@ function loadHash(h) {
   state.ligo.P = numv(h.P, DEFAULTS.P); state.ligo.M = numv(h.M, DEFAULTS.M); state.ligo.fc = numv(h.fc, DEFAULTS.fc);
   state.sq.on = h.sq === '1'; state.sq.dB = clamp(numv(h.db, 6), 0, 20); state.sq.angle = numv(h.an, 90); state.sq.eta = 1 - clamp(numv(h.lo, 0), 0, 0.99); state.sq.fd = h.fd === '1';
   state.source = SOURCES[h.src] ? h.src : 'bns'; state.distance = clamp(numv(h.d, SOURCES[state.source].d), 1, 1e4);
+  state.seed = Math.round(numv(h.ns, DET_SEED)); state.data = h.dv === 'raw' ? 'raw' : 'white'; state.template = h.tp !== '0'; state.lag = DET_MERGE;
   finishSetup(['mode', 'squeeze', 'homodyne', 'ligo'].includes(h.v) ? h.v : 'mode');
 }
 
 // ----------------------------------------------------------------------- set-ups
 
-/** Everything back to its default unless given, then the view. */
-function setup(o) {
+/** Everything back to its default unless given, then the view; then the page scrolled to the top, or to the picture focus names. */
+function setup(o, focus = null) {
   const d = { view: 'mode', kind: 'laser', alpha: 3, phase: 0, r: 0, psi: 0, eta: 1, period: 4, running: true, show: { ellipse: true, wedge: false },
-    theta: 0, motor: 'stop', rate: 30, shift: 0, ligo: { P: DEFAULTS.P, fc: DEFAULTS.fc, M: DEFAULTS.M }, sq: { on: false, dB: 6, angle: 90, eta: 0.8, fd: false }, source: 'bns', distance: 40, ...o };
+    theta: 0, motor: 'stop', rate: 30, shift: 0, ligo: { P: DEFAULTS.P, fc: DEFAULTS.fc, M: DEFAULTS.M }, sq: { on: false, dB: 6, angle: 90, eta: 0.8, fd: false }, source: 'bns', distance: 40,
+    seed: DET_SEED, data: 'white', template: true, lag: DET_MERGE, ...o };
   Object.assign(state, { ...d, show: { ...d.show }, ligo: { ...d.ligo }, sq: { ...d.sq } });
   finishSetup(d.view);
+  if (focus) $(focus).scrollIntoView({ block: 'end' }); else window.scrollTo(0, 0);
 }
 
 function finishSetup(view) {
-  anim.t = 0; anim.trace = []; anim.sample = null; anim.samplePeriod = -1; anim.sweepDir = 1;
+  anim.t = 0; anim.trace = []; anim.sample = null; anim.samplePeriod = -1; anim.sweepDir = 1; anim.sliding = false;
   // Some history on the field's chart at once: the first periods, recorded without drawing.
   if (view === 'mode' || view === 'squeeze') for (let i = 0; i < TRACE_PERIODS * 60; i++) { anim.t += 1 / 60; recordField(); }
   clearRecord();
@@ -909,6 +1116,7 @@ function finishSetup(view) {
   angleSlider.hidden = state.sq.fd;
   powerSlider.value = state.ligo.P / 1e3; massSlider.value = state.ligo.M; fcSlider.value = state.ligo.fc;
   sourceSeg.value = state.source; distSlider.value = state.distance;
+  dataSeg.value = state.data; templateToggle.on = state.template; slideButton.textContent = 'Slide the template';
   $('#run').textContent = state.running ? 'Pause' : 'Run';
   syncSqPresets();
   alphaSlider.hidden = phaseSlider.hidden = state.kind === 'vacuum';
@@ -937,6 +1145,8 @@ const setups = {
   radiation: () => setup({ view: 'ligo', sq: { on: true, dB: 10, angle: 90, eta: 1, fd: false } }),
   fdsqz: () => setup({ view: 'ligo', sq: { on: true, dB: 10, angle: 90, eta: 1, fd: true } }),
   chirp: () => setup({ view: 'ligo', sq: { on: true, dB: 6, angle: 90, eta: 0.8, fd: true }, source: 'bns', distance: 40 }),
+  buried: () => setup({ view: 'ligo', sq: { on: true, dB: 6, angle: 90, eta: 0.8, fd: true }, source: 'bns', distance: 40 }, '#det-readout'),
+  reach: () => setup({ view: 'ligo', sq: { on: false, dB: 6, angle: 90, eta: 0.8, fd: true }, source: 'bns', distance: 361 }, '#det-readout'),
 };
 drawer($('#help'), $('#help-button'), setups);
 
@@ -966,6 +1176,14 @@ window.__app = {
   sqlFrequency: () => sqlFrequency(ligoParams()),
   snr: () => snr(),
   chirp: () => { const ch = ensureChirp(); return { tc: ch.sig.tc, fisco: ch.fisco, mc: ch.mc, hmax: ch.hmax / state.distance, n: ch.sig.n, fmin: ch.src.fmin }; },
+  /** The detector strip's numbers; white: the first whitened-noise samples (the realisation), mfVar: the filter noise's sample variance. */
+  detector: () => {
+    const F = detectorFindings(), det = detector;
+    let s2 = 0;
+    for (let j = 0; j < det.N; j++) s2 += det.mfNoise[j] ** 2;
+    return { ...F, white: Array.from(det.whiteNoise.slice(0, 64)), mfVar: s2 / det.N, seed: state.seed, sliding: anim.sliding, N: det.N };
+  },
+  slide: () => startSlide(),
   hold(on = true) { testHold = on; lastT = 0; kick(); },
   /** Move the clocks on by dt seconds, n times, drawing the last frame. */
   step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) advance(dt); needDraw = false; drawNow(); return { t: anim.t, theta: state.theta, samples: record.count }; },

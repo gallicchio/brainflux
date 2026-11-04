@@ -34,7 +34,7 @@
 /* Which pictures each view shows, and how tall. */
 .qo .plot-wrap, .qo .pair, .qo .hint { display: none; }
 .qo .hint { margin-top: -2px; }
-.qo[data-view="mode"] #hint-mode, .qo[data-view="squeeze"] #hint-squeeze, .qo[data-view="homodyne"] #hint-homodyne, .qo[data-view="ligo"] #hint-ligo { display: block; }
+.qo[data-view="mode"] #hint-mode, .qo[data-view="squeeze"] #hint-squeeze, .qo[data-view="homodyne"] #hint-homodyne, .qo[data-view="ligo"] #hint-ligo, .qo[data-view="ligo"] #hint-detector { display: block; }
 .qo[data-view="mode"] #top-pair, .qo[data-view="squeeze"] #top-pair { display: grid; }
 .qo[data-view="mode"] #plane-wrap, .qo[data-view="mode"] #trace-wrap { display: block; height: max(300px, calc(46vh - 40px)); }
 .qo[data-view="squeeze"] #plane-wrap, .qo[data-view="squeeze"] #trace-wrap { display: block; height: max(280px, calc(40vh - 40px)); }
@@ -51,10 +51,16 @@
 .qo[data-view="ligo"] #ligo-wrap { display: block; height: 210px; }
 .qo[data-view="ligo"] #sens-wrap { display: block; height: max(300px, calc(42vh - 40px)); }
 .qo[data-view="ligo"] #chirp-wrap { display: block; height: max(140px, calc(18vh - 20px)); }
+.qo[data-view="ligo"] #detector-wrap { display: block; height: max(330px, calc(40vh - 20px)); }
+#detector { cursor: crosshair; touch-action: pan-y; }
 /* In the LIGO view the readout (the signal-to-noise ratio: the payoff) comes right after the hint. */
 .qo[data-view="ligo"] #readout { order: 1; }
 .qo[data-view="ligo"] #sens-wrap { order: 2; }
 .qo[data-view="ligo"] #chirp-wrap { order: 3; }
+.qo[data-view="ligo"] #detector-wrap { order: 4; }
+.qo[data-view="ligo"] #hint-detector { order: 5; }
+.qo[data-view="ligo"] #det-readout { order: 6; }
+.qo:not([data-view="ligo"]) #det-readout { display: none; }
 /* The plane goes into the homodyne pair in that view (it is moved by the script). */
 
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; color: var(--ink-2); font-size: 12px; }
@@ -93,4 +99,5 @@ details[open] summary { margin-bottom: 6px; }
   .qo[data-view="ligo"] #ligo-wrap { height: 200px; }
   .qo[data-view="ligo"] #sens-wrap { height: 300px; }
   .qo[data-view="ligo"] #chirp-wrap { height: 150px; }
+  .qo[data-view="ligo"] #detector-wrap { height: 320px; }
 }

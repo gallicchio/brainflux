@@ -49,6 +49,9 @@
     <div class="hint" id="hint-ligo">Turn <b>Squeezed light</b> on and drag its <b>dB</b> slider: the quantum noise moves, the total follows, and the chirp's signal-to-noise ratio ρ (below) grows</div>
     <div class="plot-wrap" id="sens-wrap"><div class="cap"><b>Strain sensitivity</b> √S<sub>h</sub>(f): the least strain seen in 1 Hz</div><canvas id="sens" aria-label="The strain noise amplitude spectral density against frequency: shot noise, radiation pressure, their sum, the standard quantum limit, the seismic wall, thermal noise and the total, with and without squeezing, and the chirp's spectrum"></canvas></div>
     <div class="plot-wrap" id="chirp-wrap"><div class="cap"><b>The signal</b> h(t): a binary's chirp</div><canvas id="chirp" aria-label="The gravitational-wave strain against time for the chosen binary: the Newtonian chirp up to the innermost stable orbit"></canvas></div>
+    <div class="plot-wrap" id="detector-wrap"><div class="cap"><b>The detector's output</b>: noise drawn from the curve above, the chirp in it, and the matched filter that finds it</div><canvas id="detector" tabindex="0" aria-label="Eight seconds of simulated detector output: Gaussian noise with the noise curve's spectrum and the chirp added at the chosen distance, whitened or raw; below it the matched filter's output against time, which peaks at the signal-to-noise ratio when the template lines up with the chirp; click to slide the template there"></canvas></div>
+    <div class="hint" id="hint-detector">Turn <b>Squeezed light</b> off and on: the same noise, a taller peak.  Drag the <b>distance</b> out to the reach and watch the peak sink into the noise; <b>Slide the template</b> to see the filter at work</div>
+    <div class="readout small" id="det-readout" aria-live="off"></div>
 
     <div class="legend small" id="legend"></div>
     <div class="readout small" id="readout" aria-live="off"></div>
@@ -90,6 +93,11 @@
       <div class="row" id="source-row"></div>
       <div id="chirp-box" class="stack"></div>
       <div class="note" id="chirp-note"></div>
+      <div class="label">The detector's output</div>
+      <div class="row" id="data-row"></div>
+      <div class="note">Whitened: the data divided, frequency by frequency, by the noise there, so the noise comes out flat, in units of its own spread σ, and the chirp is weighted as the matched filter weighs it.  Raw: the strain itself, above 10 Hz.</div>
+      <div class="row" id="slide-row"></div>
+      <div class="note">The matched filter slides a copy of the chirp (the template) along the data and adds up how well they agree, each frequency weighted by how quiet the detector is there.</div>
     </div>
     <div class="panel" id="anim-panel">
       <div class="label">Animation</div>
@@ -118,7 +126,7 @@
     light through a crystal that makes the cloud an ellipse, thin one way and fat the other.
     <b>3 · Homodyne</b> is how one direction of the cloud is measured, with a second laser whose
     phase you turn.  <b>4 · LIGO</b> is the payoff: why an ellipse at the right port lets a
-    gravitational-wave detector hear further, as a number.  Each view has experiments below;
+    gravitational-wave detector hear further, as a number and as a chirp pulled out of the noise.  Each view has experiments below;
     the first of each is its opening state.</p>
   </section>
 
@@ -308,7 +316,7 @@
 
   <article class="exp" data-setup="chirp">
     <h3>14. Detect a chirp: the payoff as a number</h3>
-    <p>The bottom plot is $h(t)$ from two neutron stars of 1.4 solar masses spiralling together
+    <p>The plot under the noise curve is $h(t)$ from two neutron stars of 1.4 solar masses spiralling together
     40 Mpc away (GW170817's distance), seen face on and overhead: the Newtonian chirp, from
     70 Hz up to the innermost stable orbit at 1570 Hz in 5.6 s, louder and faster as it goes.
     Its spectrum is the green band on the sensitivity plot, falling as $f^{-7/6}$; the
@@ -319,6 +327,47 @@
     times more events a year.  Drag the distance out until $\rho$ falls to 8, the usual
     threshold: 360 Mpc without squeezing, 520 Mpc with.  Try the two black holes: heavier, so
     louder, and over in 6 s from 20 Hz.</p>
+  </article>
+
+  <article class="exp" data-setup="buried">
+    <h3>15. The chirp buried in the noise, and the filter that finds it</h3>
+    <p>Under the chirp: eight seconds of what the detector would record, simulated.  The noise is
+    Gaussian, drawn from the total noise curve above (a seeded white noise, each frequency scaled
+    by $\sqrt{S_h(f)}$: How it works), and the chirp of experiment 14 is added to it, merging at
+    7 s.  Press <em>Raw</em> for the strain itself: the noise's spread is $2.8\times10^{-22}$,
+    from every frequency at once (the rumble below 20 Hz, the shot noise rising above 1 kHz), and
+    the chirp, at most $5.0\times10^{-22}$, is nowhere to be seen.  <em>Whitened</em> divides each frequency by the
+    noise there, so the noise comes out flat with spread $\sigma=1$ and the chirp shows as the
+    filter sees it: at most 2.48 σ high, smaller than the noise everywhere (the green band is the
+    template lying on it; turn <em>Template</em> off and the chirp is only a slight thickening
+    of the noise in the last second before 7 s).  The matched filter (bottom) slides the template along the data and
+    adds up how well they agree, each frequency weighted by $1/S_h$: its output $z$ has noise of
+    spread 1, and where the template lines up with the chirp it leaps to $z=104.3$, against the
+    expected $\rho=104.2$ of the read-out.  It adds up 622 cycles over 5.6 s in step, so a signal
+    smaller than the noise at every instant stands a hundred times above it.  <em>Slide the
+    template</em> to watch it work.  Now turn <em>Squeezed light</em> off: the whitened noise is
+    the same realisation, sample for sample (only the spectrum that shapes it has changed), the
+    chirp in it shrinks to 1.59 σ, and the peak falls to 72.3 ($\rho=72.3$): experiment 14's
+    72 → 104, seen.  (With squeezing on, the grey dot marks the peak without it.)  <em>New
+    noise</em> draws another realisation: the peak moves by about ±1.</p>
+  </article>
+
+  <article class="exp" data-setup="reach">
+    <h3>16. At the reach: a peak of 8, just above the noise</h3>
+    <p>The same two neutron stars at 361 Mpc, the reach without squeezing, and squeezing off:
+    $\rho=8.0$.  The chirp in the whitened data is at most 0.18 σ high, nothing an eye could
+    find, yet the filter's output stands out where the template lines up: $z=8.1$, while
+    everywhere else in the 8 s the noise reaches at most 4.0.  Why 8: the output's noise has
+    spread 1 and the 8 s hold a few thousand independent tries, so the noise alone reaches about
+    4; reaching 8 by chance has a probability of $6\times10^{-16}$ a try, which keeps false
+    alarms away over a year of data and many templates (real detectors also have glitches that are
+    not Gaussian, which is why the threshold is not lower).  Drag the distance out to 600 Mpc:
+    $\rho=4.8$, the peak 4.9 against the noise's 4.0, barely; at 1000 Mpc ($\rho=2.9$) the
+    tallest peak is the noise's, at 3.8 s, and the chirp is lost.  Back at 361 Mpc, turn
+    <em>Squeezed light</em> on: $\rho=11.5$, the peak clears the threshold, and it sinks back
+    to 8 only at 521 Mpc, the reach with squeezing.  Press <em>New noise</em> a few times: the
+    peak at $\rho=8$ moves by about ±1 (7.7 to 8.9 for the next six realisations), the noise's
+    largest between 3.9 and 4.8.</p>
   </article>
 
   <section class="theory">
@@ -395,6 +444,31 @@
   an FFT of the sampled $h(t)$ (the one FFT on this page), and the optimal signal-to-noise ratio
   is $\rho^2=4\int|\tilde h|^2/S_n\,df$; the distance at which $\rho=8$ is the horizon for a
   face-on binary, and the volume inside it grows as its cube.</p>
+  <p><b>The detector's output and the matched filter.</b>  A stretch of $T=8$ s at 4096 samples
+  a second, with frequency bins $f_k=k\,\Delta f$, $\Delta f=1/T$, and
+  $\tilde x_k=\Delta t\sum_jx_je^{-2\pi ijk/N}$.  The noise is made in the frequency domain: a
+  seeded white spectrum $w_k$ (complex Gaussian, $\langle|w_k|^2\rangle=1$) shaped by the
+  noise curve,
+  $$\tilde n_k=w_k\sqrt{S_h(f_k)/2\Delta f},$$
+  and transformed back: Gaussian noise whose one-sided spectrum is $S_h$ (the raw data
+  high-passed at 10 Hz).  Changing the squeezing changes $S_h$ and keeps $w_k$: the same
+  realisation, rescaled.  Whitening divides each bin of the chirp's band by
+  $\sqrt{S_h/2\Delta f}$, so the whitened noise is $w$ itself, of unit variance, and the chirp
+  $\tilde h/\sqrt{S_h}$.  The matched filter with the template $T$ (the chirp at 1 Mpc, merging
+  at $t=0$) put at every merger time $t_0$:
+  $$z(t_0)=\frac{4\Delta f}{\sigma}\,\mathrm{Re}\sum_k\frac{\tilde d_k\tilde T_k^*}{S_h(f_k)}\,e^{2\pi if_kt_0},\qquad
+  \sigma^2=4\Delta f\sum_k\frac{|\tilde T_k|^2}{S_h(f_k)},$$
+  the sums over the chirp's band.  For noise alone $z$ is Gaussian with mean 0 and variance
+  exactly 1 (each bin's noise power $S_h/2\Delta f$ cancels one $S_h$ of the weight); for the
+  chirp at distance $d$ merging at $t_0$, $z=\sigma/d$, which is the read-out's
+  $\rho=\sqrt{4\int|\tilde h|^2/S_h\,df}$ (they agree to 0.01 here).  So the output is
+  $\rho$ plus unit noise when the template lines up, and unit noise elsewhere: the
+  Cauchy–Schwarz inequality says no other linear filter does better.  One inverse FFT gives
+  $z$ at every $t_0$ at once; the page makes the series once per realisation and spectrum, and
+  the distance only rescales the chirp's part.  The stretch is a loop to the FFT, so the template
+  slid off the start comes back at the end (the drawing leaves that part out).  LIGO's own
+  filter also maximises over the chirp's phase, taking the modulus of the complex sum; this one
+  knows the phase and keeps the real part.</p>
   </section>
 
   <p class="small muted">New in 2026 for BrainFlux.  Source:
