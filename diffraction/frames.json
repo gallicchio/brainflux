@@ -1,0 +1,4 @@
+{
+  "select": ["#aperture", "#field", "#side"],
+  "wait": 2
+}
