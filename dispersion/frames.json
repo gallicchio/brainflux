@@ -1,0 +1,22 @@
+{
+  "select": [".stage"],
+  "wait": 0.5,
+  "setups": {
+    "one": {"js": "__app.hold(true); __app.setups.one(); for (let i = 0; i < 5000 && __app.state.probe < 2; i++) __app.step(1 / 60); __app.step(0, 1)", "select": ["#resp-wrap", "#pics"]},
+    "wave": {"js": "__app.hold(true); __app.setups.wave(); __app.step(0.25, 1); __app.step(0, 1)", "select": ["#wave-wrap"]},
+    "metal": {"js": "__app.hold(true); __app.setups.metal(); __app.step(0.25, 1); __app.step(0, 1)", "select": ["#pics", "#refl-wrap"]},
+    "ionosphere": {"js": "__app.hold(true); __app.setups.ionosphere(); __app.step(0.25, 1); __app.step(0, 1)", "select": ["#pics", "#refl-wrap"]},
+    "glass": {"js": "__app.hold(true); __app.setups.glass(); __app.step(0.25, 1); __app.step(0, 1)", "select": ["#resp-wrap", "#pics"]},
+    "reststrahlen": {"js": "__app.hold(true); __app.setups.reststrahlen(); __app.step(0.25, 1); __app.step(0, 1)", "select": ["#resp-wrap", "#refl-wrap"]},
+    "sumrule": {"js": "__app.hold(true); __app.setups.sumrule(); __app.step(0.25, 1); __app.step(0, 1)", "select": ["#resp-wrap"]},
+    "sliver": {"js": "__app.hold(true); __app.setups.sliver(); __app.step(0, 1)", "select": ["#kkim-wrap", "#kkre-wrap", "#kkt-wrap"]},
+    "draw": {"js": "__app.hold(true); __app.setups.draw(); __app.step(0, 1)", "select": ["#kkim-wrap", "#kkre-wrap", "#kkt-wrap"]},
+    "acausal": {"js": "__app.hold(true); __app.setups.acausal(); __app.step(0, 1)", "select": ["#kkim-wrap", "#kkre-wrap", "#kkt-wrap"]},
+    "typed": {"js": "__app.hold(true); __app.setups.typed(); __app.step(0, 1)", "select": ["#kkim-wrap", "#kkre-wrap", "#kkt-wrap"]},
+    "delay": {"js": "__app.hold(true); __app.setups.delay(); const [a, c] = __app.run(); __app.anim.t = a + 0.75 * (c - a); __app.step(0, 1)", "select": ["#resp-wrap", "#snap-wrap", "#pulse-wrap"]},
+    "spread": {"js": "__app.hold(true); __app.setups.spread(); const [a, c] = __app.run(); __app.anim.t = a + 0.75 * (c - a); __app.step(0, 1)", "select": ["#resp-wrap", "#snap-wrap", "#pulse-wrap"]},
+    "superluminal": {"js": "__app.hold(true); __app.setups.superluminal(); const [a, c] = __app.run(); __app.anim.t = a + 0.5 * (c - a); __app.step(0, 1)", "select": ["#resp-wrap", "#snap-wrap", "#pulse-wrap"]},
+    "front": {"js": "__app.hold(true); __app.setups.front(); const [a, c] = __app.run(); __app.anim.t = a + 0.4 * (c - a); __app.step(0, 1)", "select": ["#resp-wrap", "#snap-wrap", "#pulse-wrap"]},
+    "precursors": {"js": "__app.hold(true); __app.setups.precursors(); const [a, c] = __app.run(); __app.anim.t = a + 1 * (c - a); __app.step(0, 1)", "select": ["#resp-wrap", "#snap-wrap", "#pulse-wrap"]}
+  }
+}

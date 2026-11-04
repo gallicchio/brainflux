@@ -1,0 +1,21 @@
+{
+  "select": ["#view-wrap"],
+  "wait": 0.6,
+  "setups": {
+    "prism": {"js": "__app.setups.prism(); __app.state.running = false; __app.run(20)"},
+    "circles": {"js": "__app.setups.circles(); __app.state.running = false; __app.run(12)"},
+    "snell": {"js": "__app.setups.snell(); __app.state.running = false; __app.run(20)"},
+    "tir": {"js": "__app.setups.tir(); __app.state.running = false; __app.run(25)"},
+    "ftir": {"js": "__app.setups.ftir(); __app.state.running = false; __app.run(30)"},
+    "brewster": {"js": "__app.setups.brewster(); __app.state.running = false; __app.run(28)"},
+    "guide": {"js": "__app.setups.guide(); __app.state.running = false; __app.run(50)"},
+    "cutoff": {"js": "__app.setups.cutoff(); __app.state.running = false; __app.run(40)"},
+    "lens": {"js": "__app.setups.lens(); __app.state.running = false; __app.run(24)"},
+    "grin": {"js": "__app.setups.grin(); __app.state.running = false; __app.run(24)"},
+    "slits": {"js": "__app.setups.slits(); __app.state.running = false; __app.run(24)"},
+    "crystal": {"js": "__app.setups.crystal(); __app.state.running = false; __app.run(30)"},
+    "pcbend": {"js": "__app.setups.pcbend(); __app.state.running = false; __app.run(30)"},
+    "cavity": {"js": "__app.setups.cavity(); __app.state.running = false; __app.run(60); for (const s of ['#hint', '#readouts']) document.querySelector(s).style.display = 'none'", "select": ["#view-wrap", "#trace-wrap"]},
+    "cherenkov": {"js": "__app.setups.cherenkov(); __app.state.running = false; __app.run(12)"}
+  }
+}
