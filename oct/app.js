@@ -128,6 +128,11 @@ const hash = readHash();
 if (setups[hash.setup]) setups[hash.setup]();
 else if (Object.keys(hash).length) fromHash(hash);
 else setups.start();
+// An address typed or pasted in while the page is open (the page's own writes do not fire this).
+window.addEventListener('hashchange', () => {
+  const h = readHash();
+  if (setups[h.setup]) setups[h.setup](); else if (Object.keys(h).length) fromHash(h);
+});
 
 // --------------------------------------------------------------------- the clock
 

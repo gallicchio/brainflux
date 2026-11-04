@@ -448,7 +448,7 @@ export function init(shared) {
   tiltS = slider({ label: 'tilt (°)', min: -15, max: 15, step: 0.1, value: state.tilt, title: 'Tilt the sample about the y axis', onInput: (v) => { state.tilt = v; rebuildScene(); } });
   roughS = slider({ label: 'roughness (μm)', min: 0, max: 30, step: 0.5, value: state.rough, title: 'How far the top surface wanders up and down', onInput: (v) => { state.rough = v; rebuildScene(); } });
   $('#s-shape-box').append(tiltS, roughS);
-  naS = slider({ label: 'NA', min: 0.01, max: 0.2, log: true, value: state.NA, title: 'The numerical aperture: the sine of the half-angle of the cone of light the lens focuses',
+  naS = slider({ label: 'aperture NA', min: 0.01, max: 0.2, log: true, value: state.NA, title: 'The numerical aperture: the sine of the half-angle of the cone of light the lens focuses',
     onInput: (v) => { state.NA = v; beam = sceneBeam(scene, S.src, state.NA, state.focus); rescan(); } });
   focusS = slider({ label: 'focus depth (μm)', min: 0, max: 700, step: 1, value: state.focus, title: 'How deep in the sample the beam is focused',
     onInput: (v) => { state.focus = v; beam = sceneBeam(scene, S.src, state.NA, state.focus); rescan(); } });
@@ -460,8 +460,8 @@ export function init(shared) {
   rateS = slider({ label: 'speed (A-scans/s)', min: 4, max: 2000, log: true, value: state.rate, title: 'How fast the beam steps across (in a B-scan)',
     onInput: (v) => { state.rate = v; state.vrate = Math.max(1, v / 8); S.onChange(); } });
   $('#s-image-box').append(rateS, noiseS, rangeS);
-  xS = slider({ label: 'x (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Where the cross-section across y is (cyan)', onInput: (v) => { state.ix = Math.max(0, Math.min(VOL.nx - 1, Math.floor(((v * 1000 + scene.halfWidth) / (2 * scene.halfWidth)) * VOL.nx))); dirty = true; S.onChange(); } });
-  yS = slider({ label: 'y (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Where the B-scan is (magenta)', onInput: (v) => { state.iy = Math.max(0, Math.min(VOL.ny - 1, Math.floor(((v * 1000 + scene.halfWidth) / (2 * scene.halfWidth)) * VOL.ny))); dirty = true; S.onChange(); } });
+  xS = slider({ label: 'cross-section at x (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Where the cross-section across y is (cyan)', onInput: (v) => { state.ix = Math.max(0, Math.min(VOL.nx - 1, Math.floor(((v * 1000 + scene.halfWidth) / (2 * scene.halfWidth)) * VOL.nx))); dirty = true; S.onChange(); } });
+  yS = slider({ label: 'B-scan at y (mm)', min: -1.5, max: 1.5, step: 0.001, value: 0, title: 'Where the B-scan is (magenta)', onInput: (v) => { state.iy = Math.max(0, Math.min(VOL.ny - 1, Math.floor(((v * 1000 + scene.halfWidth) / (2 * scene.halfWidth)) * VOL.ny))); dirty = true; S.onChange(); } });
   mS = slider({ label: 'en face at (μm)', min: 0, max: 650, step: 1, value: 300, title: 'The depth of the en-face plane (yellow)', onInput: (v) => { state.m = Math.max(0, Math.min(VOL.nz - 1, Math.floor((v / scene.depth) * VOL.nz))); dirty = true; S.onChange(); } });
   slabS = slider({ label: 'en face over (μm)', min: 1, max: 60, step: 1, value: state.slab, title: 'Average the en-face plane over this much depth (a slab), to calm the speckle', onInput: (v) => { state.slab = v; dirty = true; S.onChange(); } });
   $('#s-slice-box').append(xS, yS, mS, slabS);
