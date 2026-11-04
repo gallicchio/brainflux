@@ -1291,3 +1291,119 @@ phase measurement; the standard quantum limit), and LIGO: an interferometer's ar
 read out as a phase, the shot noise of a coherent state, the squeezed vacuum fed into the
 dark port and the noise falling below the shot-noise limit (the 2019 result, ~3 dB), with
 the trade against radiation-pressure noise and the frequency-dependent squeezing of 2023.
+
+## Prompt 19
+
+> Make sure everyone finishes up and pauses.
+
+### Response 19 (2026-11-03)
+
+Every agent had committed and stopped; every worktree was clean, and `main` and the five
+`wip/` branches on GitHub matched their local commits.
+
+## Prompt 20
+
+> Resume all of the work that you were doing this morning. Take as long as you need to make
+> these apps amazingly interesting and educational. I'll play with them and give you feedback
+> once they are pushed to main and I can look at them on the github pages.
+
+### Response 20 (2026-11-04)
+
+The four agents were resumed from their own transcripts, so each kept what it knew of its
+code, with no deadline and the same briefs.
+
+**Radio interferometry** (`radiointerferometer/`), four numbered views and 22 experiments.
+- *1 · One source*: band-limited noise, a copy a lag τ later, their product (blue above zero,
+  red below) and its average landing on the autocorrelation curve, whose envelope is the
+  Fourier transform of the band (Wiener–Khinchin); a two-sided spectrum with a draggable band
+  edge, real voltage or complex envelope (I and Q), and "multiply by an independent noise"
+  for a product that averages to nothing.
+- *2 · Two sources, two antennas*: the noise drawn as waves crossing the ground; drag the
+  antennas and the sources; the antennas' signals are rebuilt every frame from their own
+  delays out of a slowed-down recording, so B visibly hears A's noise a moment later.  The
+  fringe plot shows the correlation against B's position next to the power B receives: flat
+  for incoherent sources, Young's fringes for coherent ones.  The complex plane shows each
+  source's share as an arrow and the cross terms between the sources as a grey diamond that
+  dies away.  The cross-spectrum is coloured by phase; delay tracking to a reference
+  direction (the electronic delay).
+- *3 · The uv plane*: the sky (1–6 draggable points in presets, a disk, a ring, a galaxy,
+  Fourier, your own picture) beside the ideal V(u, v) in the FFT demo's colours with its
+  display menu, labelled Δx, Δy in metres and u, v in wavelengths; the pair's two dots move
+  symmetrically; the pair's fringe stripes are drawn on the sky and each source is ringed in
+  the colour of the stripe it sits on; the live correlator's dot settles on the colour under
+  the pair.  "Slide the pair, same separation" shows the correlation flat only for far,
+  incoherent sources: why coherent sources and the near field break the uv plane.  The
+  Fourier Etch-a-Sketch: "keep what you measure" paints each average into the sampled plane
+  and shows its inverse transform; intensity correlations (HBT) give |V|² and lose the phase.
+- *4 · Many baselines*: two dishes, the slides' line of eight with every spacing from 1 to 24,
+  the VLA's Y, a ring, a random array, the EHT; Earth rotation; under the sky the dirty image,
+  with an arrow pointing left to it from the sampled plane, and the dirty beam; Högbom CLEAN;
+  natural or uniform weighting.
+At the merge, the lead added the caption "grey above zero, blue below" to the image and a
+paragraph on why a picture goes negative there (no pair measures the zero spacing, so the
+dirty image has no average), and widened one test that compared a running average of noise
+with −0.99 to 0.03, about one σ of its radiometer scatter, to four σ.  `arrays/` is now the
+phased array alone; its old synthesis links open this demo.
+
+**Bloch sphere and NMR** (`nmr/`), four views and 15 experiments, with "TeachSpin (5 MHz)"
+and "Earth's field (board)" at the top.
+- *1 · One spin*: drag the arrow on the Bloch sphere; lab or rotating frame; π/2 and π about
+  x′ and y′ or any pulse of your own (angle, phase, and B₁, which sets the duration); RF
+  offset (the tilted effective field); T₁ and T₂ that can be switched off; noise and
+  averaging; the coil's voltage as a scope shows it, the mixer's outputs and envelope; the
+  spin-½ state cos(θ/2)|↑⟩ + e^{iφ}sin(θ/2)|↓⟩ beside the sphere.
+- *2 · Many spins*: 4096 spins with a Lorentzian spread, a few dozen drawn; the sum arrow; the
+  FID's power spectrum with its width beside 1/(πT₂*); a π pulse closing the fan into an echo.
+- *3 · Pulse sequences*: an editable timeline (drag pulses, set their angle and axis, drag
+  the acquisition window); FID, spin echo, inversion recovery, CPMG, Carr–Purcell; a pulse
+  error; a τ scan that adds one point a frame with a live fit, and a click on the plot runs
+  that delay so the spins can be watched at the null.
+- *4 · The Earth's field*: the board's polarize, switch-off and listen with its design numbers
+  (46.03 µT, 1959.8 Hz, 7.84 mT, 0.4 ms); the clock slows through the switch-off so the
+  field's swing takes 2 s on screen; at 0.4 ms M is left across the field, at 300 ms it
+  follows it round; the FID in µV, the spectrum giving B in nT, T₁ from the polarizing time,
+  a steel tool; "Hear it" plays the FID.  The adiabaticity measure is γB_E²τ/B_p (the field
+  turns only in the ramp's last 1/170), so the switch-off slider runs to 1 s: at 10 ms 68%
+  of M is still left across.
+
+**MRI: from spins to an image** (`mri/`), four views and 20 experiments.
+- *1 · One axis*: tubes of water you drag and resize under a field line you tilt; 33 spins as
+  compasses with a phase strip in the FFT demo's colours; the signal as an arrow and a record
+  against t and k = γ̄Gt; the spectrum of the record so far sharpening into the profile, with
+  lines from each tube to its frequencies.
+- *2 · A slice*: a 3D head; the sinc pulse and G_z, the pulse's band dropped onto f = γ̄G_z z
+  and carried across to the head seen from the side; 501 spins through the pulse by the Bloch
+  equations; the rephasing lobe (95.5% of the slab in step with it, 3.0% without).
+- *3 · The second axis*: 128 × 128 spins as a phase map, k-space filling row by row with k(t)
+  traced, the picture from the rows so far, the whole sequence diagram (π/2, π, G_z, the G_y
+  ladder, G_x, the ADC, the echo) with time slowed through the lobes; step, play, finish,
+  click a row, point at k-space to see its plane wave, "only the centre", "only the edges";
+  spin echo against gradient echo; drag a disk mid-scan for motion ghosts.
+- *4 · Contrast and artefacts*: drag TR and TE on the recovery and decay curves; tissue bars;
+  wrap-around, few lines, noise and averaging, fat's chemical shift, 1.5 or 3 T; and
+  Lauterbur's 1973 projections with back-projection.
+
+**Optical coherence tomography** (`oct/`), four views and 16 experiments, opening where the
+interferometer demo leaves off.
+- *1 · Fringes from a layer*: the Michelson with a reflecting surface in the sample arm; drag
+  the mirror and a burst of fringes appears only where the paths match; drag the spectrum's
+  width (ℓ_c = 0.44 λ₀²/Δλ = 6.2 µm at 840/50 nm); a glass plate's two faces; glass in one arm
+  only (dispersion).
+- *2 · The A-scan*: a cover slip, a three-layer film, a retina-like stack, two surfaces; the
+  motor scans the mirror; the detector's trace, the demodulated envelope as reflectivity
+  against depth (linear or dB) and the grey strip that is one column of a B-scan.  Two
+  surfaces closer than ℓ_c merge, except in windows every λ₀/2 of gap where their fringes are
+  out of step and cancel between them, putting two peaks in the wrong places: explained.
+- *3 · B-scan and volume*: a retina (pit, cyst), an onion, beads in gel, a tilted plate, drawn
+  from the side with the beam to scale above the B-scan building column by column; speckle;
+  the NA against the depth of focus; then a 64 × 64 × 256 volume as three slices in a cube and
+  an en-face plane, each clickable to move the others.
+- *4 · Fourier domain*: the mirror still, a grating and line camera, one FFT for the whole
+  A-scan with the time-domain one overlaid; pixels, the depth range z_max = π/(2nδk), the
+  fall-off, the mirror image, folding; a whole retina B-scan refolded live as the sample
+  moves.
+
+**Tests.**  `tools/test_all.sh` passes on the merged `main`: 372 unit tests in Chromium (315
+before: 18 radio, 18 NMR, 23 MRI, 13 OCT, with the arrays' 7 synthesis tests gone) and the
+scripted run of all 23 demos, the four new ones making 110, 57, 74 and 66 checks.  Firefox
+isn't installed here.
