@@ -214,7 +214,12 @@ function measureNext() {
   }
 }
 
+/** Is there an object to scan?  Not while a picture is still loading for a link that opens on it
+ *  (the scanner then has neither shapes nor a picture, and measuring would throw). */
+const objectReady = () => !!(sc.shapes || sc.raster);
+
 function advance(dt) {
+  if (!objectReady()) return;
   // progress counts the angles of this turn that are due; angle `next` is measured once it is.
   state.progress += (state.speed * dt) / (sc.dth / DEG);
   const t0 = performance.now();
@@ -228,7 +233,7 @@ function advance(dt) {
 
 function finishScan() {
   if (state.keep) { state.keep = false; keepToggle.on = false; }
-  if (state.done) return;
+  if (state.done || !objectReady()) return;
   state.playing = true;
   while (state.next < sc.nA) measureNext();
   dirty = true; schedule();
@@ -237,7 +242,7 @@ function finishScan() {
 /** Measure one more angle and stop there (the Step button, or the → key).  After a finished
  *  scan, the first angle of a new one. */
 function stepScan() {
-  if (jobs.flight || jobs.target) return;   // (every angle is being measured again in the workers)
+  if (jobs.flight || jobs.target || !objectReady()) return;   // (every angle is being measured again in the workers)
   if (scanFinished()) { sc.pass++; restartScan(); }
   state.playing = false;
   measureNext();
