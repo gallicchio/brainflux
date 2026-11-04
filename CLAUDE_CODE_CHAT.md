@@ -1636,3 +1636,71 @@ per cycle, so straight lines between samples misdraw the peaks.  Doing it proper
 phosphor scope does: intensity grading by the time spent in each pixel with soft edges and a
 gamma, continuity between columns, sin(x)/x interpolation where samples are sparse, and an
 ordinary anti-aliased line where there's less than a sample per pixel, in one shared `lib/scope.js`.
+
+## Prompt 26
+
+> Yes to both. If it ends up being too slow on a student's weak or old laptop, maybe we can go back to the old way. I honestly have no idea what will be the speed-limiting part of any of these demos. After you make these changes, do some UI tests and rank them from most responsive to least responsive. For the least responsive ones, figure out where all the time is going.
+
+### Response 26 (2026-11-04)
+
+**Oscilloscope traces.**  `lib/scope.js` draws a dense trace the way a digital phosphor scope
+does: each straight piece between two samples deposits its time over the pixels it crosses,
+split at column boundaries and across rows by overlap (anti-aliased both ways), shared between
+the two nearest columns; a pixel's brightness is its relative density (time in the pixel against
+the column's height of trace) through a gamma, never below a floor wherever the trace passed, so
+a brief spike (the matched filter's peak) still shows.  A (1, 2, 1)/4 filter across columns,
+weighted by how often the trace turns in each column, takes out the beating with the pixel grid
+for bands without blurring cycles that stand apart; thickness is a spread down each column
+(widening each piece left beads and contour lines where pieces meet); band-limited (Lanczos)
+interpolation for sparse oscillations; a picture cache keyed on what the samples depend on;
+sparse traces are plain canvas lines.  `?scope=fast` in the address (or localStorage
+`brainflux.scope` = `fast`) brings back the old per-column min/max for a slow machine.  The
+chirp's diamond pattern and white notches are gone, and its merger peak is no longer cut off.  The detector's noise is a scope's
+noise band; the OCT, Michelson and dispersion carriers are graded bands under their exact
+envelopes; NMR's 5 MHz FID is a band whose edges are the envelope, with Earth's-field audio
+cycles resolved; the radio streams and the drum's signal likewise.  Agents converted the demos
+and each found a weakness of the library on the way, now fixed: smoothing that ran resolvable
+fringes together, beads on thick traces, contour lines on 1-2 px traces, a slow interpolator,
+the fast mode's false diagonals across gaps, its miter spikes.  MRI's plots were all sparse;
+14 other demos have no dense traces.
+
+**Three clocks** (NMR experiment 7): a made-up sample, T₂* = 1 ms (a Lorentzian spread of
+286.5 Hz, so the sum decays exactly exponentially), T₂ = 10 ms, T₁ = 100 ms.  On one log time axis from 0.1 to
+300 ms: the sum |ΣM⊥|/N that the coil sees, the mean of each spin's own |M⊥ᵢ|, and M_z, each
+against its exponential, with dots at the fitted 1/e times (0.9999 ms, 10.000 ms, 100.00 ms);
+a separate CPMG run's echoes land on the T₂ curve and never above it; on the sphere a ring at
+height M_z with radius mean |M⊥ᵢ|, so the fan (T₂*), the shrinking ring (T₂) and the climb (T₁)
+are three different motions; a bar from T₂* to 2T₁ holds T₂'s mark.  At 1 ms the sum is 0.367
+while each spin is still 0.904 long.
+
+**Responsiveness.**  `tools/perf.py` opens every demo, presses every experiment's "Set it up",
+records two seconds of animation frames and the main thread's busy time, then drags up to two
+sliders in steps and times each from the input event to the end of the frame that shows it,
+all with the CPU slowed 4x by DevTools (an older laptop's stand-in; headless Chromium draws
+canvases in software here, so the numbers rank the demos rather than promise a laptop's).  The
+worst experiment of each, most responsive first: fourier and imaging 17 ms (a full 60 frames a
+second), fft2d 33, planewave 42, holography 57, arrays, nmr, radiation and thinfilms about 70,
+drums 74, dispersion 103, phasespace 111, schrodinger2d 122, quantumoptics 137, beams 179,
+interferometer 186, mri 238, tomography 367, diffraction 384, radiointerferometer 473,
+schrodinger1d 830, oct 1037, maxwell2d 1848, action 3131.
+
+The new traces are not the limit anywhere: with `?scope=fast` the seven converted demos rank
+the same within the noise.  The survey's first run found a real bug instead: in ten demos the
+animation loop started a second copy of itself whenever something inside a frame asked for a
+redraw, and NMR's three clocks do that on every slider move, so nine loops ended up running and
+every later NMR experiment fell to 5-6 frames a second.  Fixed in all ten, and the tool now
+counts loops (one each, everywhere).
+
+Where the time goes in the slowest (profiles of self time per function): action's mass slider
+with a typed potential, 3-4 s a step, is the integrator's force (45%) evaluating the typed
+expression node by node (35%) while every true path is shot again; maxwell2d's prism tilt,
+2.3 s, is the material grid rebuilt by a point-in-polygon test per cell (53%, and 18% garbage
+collection); OCT's bandwidth in the Fourier-domain B-scan, 1.0-1.2 s, is the speckle made again
+from all its scatterers (70%); Schrödinger 1D's potential sliders, 0.8-0.9 s, are the
+eigenstates found again (50-65%) and FFTs; the radio's maximum entropy runs at 5-6 frames a
+second on its 2D FFTs; diffraction's white light is a 2D propagation per wavelength.  All are
+full-quality recomputations on the page's one thread; the cures (a coarse version while
+dragging, caching what the slider doesn't touch, a worker) are listed in PLAN.md.
+
+**Tests.**  `tools/test_all.sh`: the unit tests, 355 pictures with no problems, and all 24
+demos' UI runs pass; the ten loop-fixed demos' UI runs pass again after the fix.

@@ -373,3 +373,44 @@ Left for later:
 - Quantum optics: the matched filter over both phases (LIGO's); the template's wrap-around.
 - `lib/plot.js`: a log axis; `tickLabel`'s four significant figures can repeat labels near a
   large value.
+
+## Status, 2026-11-04 (night): oscilloscope traces, three clocks, responsiveness
+
+- `lib/scope.js` draws every dense trace (quantum optics' chirp and detector, NMR's coil, mixer
+  and OUT, OCT's interferograms and camera spectrum, the Michelson's record and the FTS's true
+  interferogram, the dispersion pulse and snapshot, the drum's signal, the radio streams and
+  correlation) as a digital phosphor scope does; `?scope=fast` brings back per-column min/max.
+- NMR experiment 7, "Three clocks": T₂* = 1 ms, T₂ = 10 ms, T₁ = 100 ms on one log time axis
+  (the sum, each spin's own |M⊥|, M_z, a CPMG train's echoes on the T₂ curve), fitted to 0.9999,
+  10.000 and 100.00 ms, and T₂* ≤ T₂ ≤ 2T₁ shown on a bar.
+- A bug in ten demos' animation loops: anything asking for a redraw inside a frame started a
+  second loop (NMR after the three clocks: nine loops).  Fixed; `tools/perf.py` counts loops.
+- Responsiveness, CPU slowed 4x (`tools/perf.py`; `build/perf/graded2-rate4-dpr1.md`), worst
+  experiment's frame or slider step: fourier, imaging 17 ms; fft2d 33; planewave 42; holography
+  57; arrays, nmr, radiation, thinfilms 70-71; drums 74; dispersion 103; phasespace 111;
+  schrodinger2d 122; quantumoptics 137; beams 179; interferometer 186; mri 238; tomography 367;
+  diffraction 384; radiointerferometer 473; schrodinger1d 830; oct 1037; maxwell2d 1848; action
+  3131.  The scope traces aren't the limit anywhere (`?scope=fast` ranks the same).  The slowest
+  are recomputations on a slider step, all on the main thread at full quality.
+
+Left for later (where the time goes, from `tools/perf.py --profile`):
+
+- action, the mass slider with a typed or damped potential (3-4 s a step slowed 4x): the force in
+  the integrator (45%) evaluating the typed expression node by node (`lib/expr.js`, 35%) while all
+  the true paths are shot again.  Compile the expression to a function, or tabulate the force.
+- maxwell2d, the prism's tilt (2.3 s): rebuilding the material grid by a point-in-polygon test
+  per cell (`scene.js` inPoly/rebuild, 53%, and 18% garbage).  Rasterize by scanline, or rebuild
+  only the cells the outline crosses.
+- oct, view 4's bandwidth (1.0-1.2 s): the B-scan's speckle made again from its scatterers
+  (`scan.js`, `sample.js`, about 70%).  Move it to the scan worker, or coarse while dragging.
+- schrodinger1d, the potential's sliders (0.8-0.9 s): the eigenstates found again (`sim.js`
+  eigenstates, 50-65%) and FFTs; "bloch" also runs at 12 frames a second (FFT steps).  Find the
+  eigenstates after the drag, or for the shown levels only.
+- radiointerferometer, maximum entropy (180 ms frames): its iterations' 2D FFTs each frame.
+- diffraction, white light (0.4 s a step): one 2D propagation per wavelength.  Fewer wavelengths
+  while dragging.
+- tomography and mri (0.25-0.37 s): the formula phantom re-evaluated, FFTs, the k-space
+  reconstruction.
+- scope.js: a dense trace that must be recomputed (not copied from its kept picture) costs
+  5-20x the old min/max (putImageData and shading over a band's area); NMR's growing-trace
+  tiling is the pattern to reuse where a record grows.
