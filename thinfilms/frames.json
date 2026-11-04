@@ -1,0 +1,9 @@
+{
+  "select": [".plots"],
+  "wait": 2.5,
+  "setups": {
+    "soap": {"select": ["#film-wrap", ".stack-box"]},
+    "tir": {"select": [".stack-box", ".plots"]},
+    "ftir": {"select": [".stack-box"]}
+  }
+}

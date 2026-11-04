@@ -36,7 +36,20 @@ To publish it: push to GitHub and turn on Pages for the `main` branch, root fold
     python3 tests/ui/fft2d.py              # drive one demo like a student, checking the physics
                                            # (there is one of these for every demo)
     tools/thumbs.py beams                  # remake a demo's thumbnail for the landing page
+    tools/frames.py beams                  # remake the still picture of each of its experiments
 
 `tools/run_page.py` serves the repository and reads back the report the test page posts;
 `tools/cdp.py` drives a page through the Chrome DevTools protocol (standard-library Python
 only).  Both need Chromium (or Chrome) installed.
+
+## Still pictures of the experiments
+
+"Every Animation has Key Frames saved as Pictures" (the 2004 design rules in `PLAN.md`).  Each
+experiment in a drawer has a picture of what it looks like when it is working, under its "Set
+it up" button (clicking the picture sets it up too).  `tools/frames.py <demo>` makes them: it
+opens each `#setup=<name>`, runs the JavaScript the demo's `frames.json` gives for it (through
+`window.__app`, to step a simulation to the moment worth seeing), crops the elements the
+config names, and writes `<demo>/frames/<name>.webp` and `data-frame="WxH"` on the
+experiment's `<article>`.  Remake a demo's pictures whenever its look changes;
+`tools/frames.py --check` (part of `tools/test_all.sh`) checks every picture is there and
+every picture belongs to an experiment.

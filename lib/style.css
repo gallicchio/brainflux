@@ -151,6 +151,10 @@ input.bad, textarea.bad { border-color: var(--warn); }
 .drawer math[display="block"] { margin: 8px 0; }
 .drawer figure { margin: 8px 0; }
 .drawer figure img { max-width: 100%; border-radius: 4px; }
+/* The still picture of an experiment (tools/frames.py), under its "Set it up" button. */
+.drawer figure.frame { margin: 6px 0 8px; }
+.drawer figure.frame img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; background: var(--panel-2); }
+.drawer figure.frame img:hover { border-color: var(--accent); }
 /* "Start here": the first thing in the drawer, in plain words: what the page shows, what to
    drag or click, what to look for.  The theory goes at the end of the drawer, under "How it
    works". */
