@@ -92,6 +92,13 @@
 .timeline-wrap { height: 104px; }
 #timeline { cursor: pointer; }
 
+/* The plots take no drag, so a finger can scroll the page over them; the timeline's drags are
+   sideways.  (The sphere keeps lib's touch-action: none: its tip is dragged every way.) */
+#signal, #raw, #spec, #curve, #zoom, #board, #timeline { touch-action: pan-y; }
+/* In view 1 the coil's voltage comes first: it is what the spinning arrow makes. */
+.nmr[data-view="one"] .plots2 { order: 1; }
+.nmr[data-view="one"] .signal-wrap { order: 2; }
+
 /* Which pictures each view has. */
 .nmr .plot-wrap.v-seq, .nmr .plot-wrap.v-earth, .nmr .spec-wrap, .nmr .curve-wrap, .nmr .zoom-wrap { display: none; }
 .nmr[data-view="many"] .spec-wrap { display: block; }

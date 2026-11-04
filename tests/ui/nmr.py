@@ -203,8 +203,9 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
         b.eval(f'__app.setups.noise(); __app.state.averages = {av}; __app.eng.configure({{averages: {av}}}); __app.runSeq(); __app.runTo(__app.seq.span)')
         rms = b.eval('(() => { const R = __app.eng.record; let s = 0, n = 0; for (let i = 0; i < R.length; i++) { s += R.nx[i] ** 2 + R.ny[i] ** 2; n += 2; } return __app.sigma() * Math.sqrt(s / n); })()')
         rows.append((av, rms, b.eval('__app.fidFit().tau')))
-    check(near(rows[0][1], 0.2, 0.01) and near(rows[1][1], 0.05, 0.003) and near(rows[2][1], 0.0125, 0.001) and all(abs(r_[2] / 6.17e-4 - 1) < 0.05 for r_ in rows)
-          and quotes(b, 'noise', '0.20', '0.050', '0.012', '0.25'),
+    check(near(rows[0][1], 0.2, 0.01) and near(rows[1][1], 0.05, 0.003) and near(rows[2][1], 0.0125, 0.001)
+          and near(rows[0][2], 0.545e-3, 0.5e-6) and near(rows[1][2], 0.606e-3, 0.5e-6) and near(rows[2][2], 0.618e-3, 0.5e-6)
+          and quotes(b, 'noise', '0.20', '0.050', '0.012', '0.25', '0.545 ms', '0.606', '0.618'),
           '10: the noise, r.m.s. ' + ', '.join(f'{r_[1]:.4f} after {r_[0]}' for r_ in rows) + '; T2* fitted ' + ', '.join(f'{r_[2] * 1e3:.3f}' for r_ in rows) + ' ms (0.617)')
     b.screenshot('build/nmr-noise.png')
 
@@ -213,7 +214,9 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     check(b.eval('__app.state.view') == 'earth' and b.eval('__app.state.inst') == 'earth' and visible_hints(b)[0].startswith('Press Polarize and listen'), "11: the board's view, with its own hint")
     sp = [b.eval('__app.boardSpeed()')]
     b.eval('(() => { for (let i = 0; i < 1e4 && __app.eng.t < 3.0001; i++) __app.step(1 / 60); })()'); sp.append(b.eval('__app.boardSpeed()'))
-    check(sp[0] == 1 and near(sp[1], 0.4e-3 / 2.5, 1e-9), f'Auto: real time while it polarizes, ×{sp[1]:.1e} through the switch-off (2.5 s on screen)')
+    # (Through the switch-off the clock slows as the field turns, so that its swing takes 2 s.)
+    t_end = b.eval('(() => { let n = 0; for (; n < 1e5 && __app.eng.t < 3.0004; n++) __app.step(1 / 60); return n / 60; })()')
+    check(sp[0] == 1 and sp[1] < 0.4e-3 / 0.6 + 1e-12 and 2.0 < t_end < 3.2, f'Auto: real time while it polarizes; the 0.4 ms switch-off takes {t_end:.2f} s on screen, slowing as the field turns')
     b.screenshot('build/nmr-board-ramp.png')
     b.eval('__app.runBoard()')
     ar = b.eval('__app.board.afterRamp'); fs = b.eval('__app.fidStart() * 1.199e-6 * 1e6 * 46.03 / 46.028')
@@ -228,14 +231,14 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
         b.eval(f'__app.setups.adiabatic(); __app.board.ramp = {ramp}; __app.startBoard(); __app.runBoard()')
         rows.append((ramp, b.eval('__app.board.afterRamp.across'), b.eval('__app.fidStart() * 1.199e-6 * 1e6')))
     A = b.eval('(() => { const g = 2 * Math.PI * 42.577e6; return g * 46.03e-6 ** 2 * 0.3 / (5.2249e-3 * 1.5); })()')
-    check(near(rows[0][1], 0.989, 0.001) and near(rows[1][1], 0.68, 0.005) and near(rows[2][1], 0.045, 0.001) and near(rows[2][2], 0.035, 0.001) and near(A, 21.7, 0.1)
-          and quotes(b, 'adiabatic', '4.5%', '0.035 μV', '0.029', '13.8 ms', '68%', '22', '4.9'),
+    check(near(rows[0][1], 0.989, 0.001) and near(rows[1][1], 0.689, 0.005) and near(rows[2][1], 0.045, 0.001) and near(rows[2][2], 0.033, 0.0005) and near(A, 21.7, 0.1)
+          and quotes(b, 'adiabatic', '4.5%', '0.033 μV', '0.029', '13.8 ms', '69%', '22', '4.9'),
           '12: left across after ' + ', '.join(f'{r_[0] * 1e3:g} ms: {r_[1] * 100:.1f}% (FID {r_[2]:.3f} μV)' for r_ in rows) + f'; A = {A:.1f} at 300 ms')
     run(b, 'adiabatic'); b.eval('__app.runBoard()')
     b.screenshot('build/nmr-adiabatic.png')
     run(b, 't1board')
     f13 = b.eval('__app.finishBoardScan()')
-    check(near(f13['T1'], 2.51, 0.02) and quotes(b, 't1board', '2.51 s', '0.3 s'), f"13: T1 = {f13['T1']:.3f} s from twelve polarizing times (tap water's 2.5)")
+    check(near(f13['T1'], 2.50, 0.01) and quotes(b, 't1board', '2.50 s', '0.3 s'), f"13: T1 = {f13['T1']:.3f} s from twelve polarizing times (tap water's 2.5)")
     run(b, 'field'); b.eval('__app.runBoard()')
     B14 = b.eval('(__app.eng.f0 + __app.board.spec.peak.f) / 42.577e6 * 1e9'); w14 = b.eval('__app.board.spec.fwhm'); fp = b.eval('__app.eng.f0 + __app.board.spec.peak.f')
     b.eval('__app.board.BE = 50e-6; __app.startBoard(); __app.runBoard()')

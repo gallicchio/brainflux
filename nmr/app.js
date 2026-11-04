@@ -43,7 +43,7 @@ const INSTRUMENTS = {
     label: "Earth's field (board)", short: 'the board',
     title: "The Earth's-field NMR board: a litre of water in the Earth's 46.0 μT (Claremont), protons at 1960 Hz",
     B0: 46.03e-6, B0range: [20e-6, 70e-6], B0unit: { s: 1e6, u: 'μT', dec: 2 },
-    pi2: 10e-3, B1range: [1e-8, 1e-5], B1unit: { s: 1e6, u: 'μT', dec: 3 },
+    pi2: 2.5e-3, B1range: [1e-8, 1e-5], B1unit: { s: 1e6, u: 'μT', dec: 3 },
     offsetRange: [-50, 50], offsetUnit: { s: 1, u: 'Hz', dec: 2 },
     spread: GAMMA_HZ * 5e-9, spreadRange: [0.01, 50], spreadUnit: { s: 1, u: 'Hz', dec: 3 },
     T1range: [0.01, 10], T2range: [0.01, 10],
@@ -72,13 +72,12 @@ const state = {
 };
 
 const eng = new Engine({});
-eng.rng.s = 20261104;
 /** A scripted run: pulses (centres at t), the clock from t0 to span, and again if loop. */
 let run = null, pauseLeft = 0, freeStart = 0, runId = 0;
 // The noise is drawn afresh for every run, from a seed that a set-up resets: so each set-up's
 // first run (the one its help quotes) is the same every time, and its repeats differ.
 let seedCount = 0;
-function reseed() { eng.rng.s = (20261104 + 7919 * seedCount++) >>> 0; eng.rng.spare = null; }
+function reseed() { eng.noiseSeed = (20261104 + 7919 * seedCount++) >>> 0; }
 const view = new SphereView();
 let trail = [];
 
@@ -250,7 +249,7 @@ function drawSphere() {
     if (lab) {
       fields.push({ v: [0, 0, 0.4], from: [0, 0, 1.04], color: C.b0, label: 'B_E (the Earth\'s)', dx: 48 });
       if (s > 0) {
-        fields.push({ v: [0.15 + 0.3 * s, 0, 0], from: [1.16, 0, 0], color: C.coil, label: `B_p = ${(Bp() * s / board.BE).toFixed(0)} B_E`, dy: -16, dx: 10 });
+        fields.push({ v: [0.15 + 0.3 * s, 0, 0], from: [1.16, 0, 0], color: C.coil, label: `B_p = ${(Bp() * s / board.BE).toFixed(Bp() * s / board.BE < 9.95 ? 1 : 0)} B_E`, dy: -16, dx: 10 });
         const b = [Bp() * s, 0, board.BE], n = Math.hypot(...b);
         coneAxis = b.map((x) => x / n);
         if (eng.t >= E.tp) fields.push({ v: coneAxis.map((x) => 1.12 * x), color: C.beff, label: 'B (total)', dash: [6, 4], dy: -16 });
@@ -302,6 +301,11 @@ function sphereNote(fast) {
   if (lab && state.view === 'earth') s = `<b>Lab frame</b>: the Earth's field along z, the coil's axis along x<span class="more"> (east–west, across it)</span>.${fast ? `<span class="more">  The spins turn ${turns} times a second on screen: the cone is the path of the tip.</span>` : ''}`;
   else if (lab) s = `<b>Lab frame</b>: the field B₀ along z, the coil along x.${fast ? `  <span class="more">At this speed the spin turns ${turns} times a second on screen, too fast to draw: the cone is the path of its tip.  </span>Slow the clock, or use the rotating frame.` : ''}`;
   else s = `<b>Rotating frame</b>: turning with the RF, at ${f.toFixed(u.dec)} ${u.u}, so B₀ is gone${state.offsetHz ? ' but for ΔB, as the RF is off resonance' : ''}.`;
+  const P = eng.pulse;
+  if (P) {
+    const done = Math.min(1, Math.max(0, (eng.t - P.t0) / P.dur)), u = unitOf(P.dur);
+    s += `  <b>RF on</b>: ${pulseName(P.angle, P.phase)}, ${(done * P.dur * u.s).toFixed(2)} of ${(P.dur * u.s).toFixed(2)} ${u.u}.`;
+  }
   const note = $('#sphere-note');
   if (note._s !== s) { note.innerHTML = s; note._s = s; }
 }
@@ -341,15 +345,15 @@ function drawPlots() {
     ctx.clearRect(0, 0, width, height);
     drawSignal(ctx, width, height, {
       record: eng.record, t0, t1, ymax: 1.12, sigma: sg, colors: C, sent: eng.sent, now: eng.t,
-      title: 'The mixer\'s outputs', show: { mx: true, my: true, mxy: true, mz: true },
+      title: 'The signal with the RF taken out (the mixer\'s outputs):', show: { mx: true, my: true, mxy: true, mz: true },
     });
   }
   {
     const { ctx, width, height } = fitCanvas($('#raw'));
     ctx.clearRect(0, 0, width, height);
     drawRaw(ctx, width, height, {
-      record: eng.record, omegaRef: eng.omegaRef, t0, t1, ymax: 1.12, sigma: sg, colors: C, sent: eng.sent,
-      title: 'The EMF in the coil (as a scope shows it)',
+      record: eng.record, omegaRef: eng.omegaRef, t0, t1, ymax: 1.12, sigma: sg, colors: C, sent: eng.sent, now: eng.t,
+      title: 'The voltage in the coil (what a scope on it shows)',
     });
   }
   if (state.view === 'many') drawSpec(t0, t1);
@@ -421,6 +425,9 @@ function readout() {
   const [a, b] = windowNow(), tu = timeUnit(b - a), pu = timeUnit(pulseDuration(Math.PI / 2, state.B1));
   lines.push(['Slow motion:', ['time ×', { text: sci(state.speed), w: 8 }, ','], 'so one second here is', [...timeParts(state.speed, unitOf(state.speed), 2, 6)], 'of the real thing',
     ['· t = ', ...timeParts(eng.t, tu, 2, 7)], '· a π/2 pulse lasts', [...timeParts(pulseDuration(Math.PI / 2, state.B1), pu, 2, 6)]]);
+  // Settling at this speed: how long T2 (or T1) takes on screen, when it is too long to watch.
+  const tset = state.T2on ? state.T2 : state.T1on ? state.T1 : 0;
+  if (tset && tset / state.speed > 60) lines.push([`${state.T2on ? 'T₂' : 'T₁'} would take`, [{ text: sci(tset / state.speed), w: 8 }, ' s'], 'on screen at this speed: speed the clock up (in the rotating frame) to watch the spins settle']);
   const box = $('#readout');
   if (box.children.length !== lines.length) box.replaceChildren(...lines.map(() => el('div')));
   lines.forEach((g, i) => setGroups(box.children[i], g));
@@ -989,24 +996,34 @@ function startBoard() {
   dirty();
 }
 
-/** The page's speed in the board's cycle: real time while it polarizes; slow motion through the
- *  switch-off (2.5 s on screen) and the first turns of the precession; then up to real time. */
+/**
+ * The page's speed in the board's cycle: real time while it polarizes; through the switch-off,
+ * slow enough that the total field's direction turns evenly on screen, its swing from the coil's
+ * axis to B_E taking 2 s (it turns only at the end of the ramp: dα/dt = (Bp/B_E τ)/(1 + u²), with
+ * u = Bp s/B_E), and the rest of the ramp at least 0.6 s; then the first turns of the precession
+ * at 10⁻³, speeding up to real time.
+ */
 function boardSpeed() {
   if (board.speedMode === 'real') return 1;
   if (board.speedMode === 'slow') return 1e-3;
   const e = eng.earth;
   if (!e) return 1;
   if (eng.t < e.tp) return 1;
-  if (eng.t < e.tp + e.ramp) return Math.max(1e-7, e.ramp / 2.5);
+  if (eng.t < e.tp + e.ramp) {
+    const s = 1 - (eng.t - e.tp) / e.ramp, u = (Bp() * s) / board.BE;
+    const even = ((Math.PI / 2) / 2) * (board.BE * e.ramp * (1 + u * u)) / Bp();
+    return Math.max(1e-10, Math.min(e.ramp / 0.6, even));
+  }
   return Math.min(1, 1e-3 * 10 ** (Math.max(0, board.listen - 1.5) / 0.6));
 }
 
 function tickBoard(dt) {
   let left = dt;
-  for (let k = 0; k < 6 && left > 1e-6 && !eng.done; k++) {
-    const e = eng.earth, sp = boardSpeed();
+  for (let k = 0; k < 24 && left > 1e-6 && !eng.done; k++) {
+    const e = eng.earth, sp = boardSpeed(), inRamp = eng.t >= e.tp && eng.t < e.tp + e.ramp;
     const bound = eng.t < e.tp ? e.tp : eng.t < e.tp + e.ramp ? e.tp + e.ramp : eng.tEnd;
-    const sim = Math.min(left * sp, bound - eng.t);
+    // (Through the switch-off the speed changes as the field turns: a frame in small pieces.)
+    const sim = Math.min((inRamp ? Math.min(left, dt / 16) : left) * sp, bound - eng.t);
     const listening = eng.t >= e.tp + e.ramp;
     eng.advance(sim, BUDGET);
     if (listening) board.listen += sim / sp;
@@ -1047,7 +1064,7 @@ function boardScanStep() {
   const S = board.scan;
   if (!S || S.points.length >= S.tps.length) return;
   const tp = S.tps[S.points.length], e = new Engine(boardParams());
-  e.rng.s = S.seed++;
+  e.noiseSeed = S.seed++;
   e.setSampling(Infinity);
   e.startEarth({ Bp: Bp(), BE: board.BE, tp, ramp: board.ramp, tl: BOARD.tOpen + 0.05, tOpen: BOARD.tOpen });
   const t0 = tp + board.ramp + BOARD.tOpen;
@@ -1107,9 +1124,11 @@ function drawBoardPlots() {
   {
     const { ctx, width, height } = fitCanvas($('#zoom'));
     ctx.clearRect(0, 0, width, height);
-    const z0 = tOpenAbs(), z1 = z0 + 0.01;
+    // A scope's sweep of 10 ms: the newest 10 ms while the FID comes in, its first 10 ms after.
+    const open = tOpenAbs(), live = run && !eng.done && eng.t > open + 0.01;
+    const z1 = live ? eng.t : open + 0.01, z0 = z1 - 0.01;
     drawRaw(ctx, width, height, { record: eng.record, omegaRef: eng.omegaRef, t0: z0, t1: z1, ymax: 1.1 * V, scale: V, sigma: sg, colors: C,
-      title: 'Its first 10 ms after the receiver opens' });
+      title: eng.t < open ? '10 ms of it: the receiver opens 19 ms after the switch-off' : live ? 'The last 10 ms (μV): the oscillation itself' : 'Its first 10 ms after the receiver opens (μV)' });
   }
   {
     const { ctx, width, height } = fitCanvas($('#spec'));
@@ -1201,7 +1220,7 @@ function hearIt() {
   if (!audio) audio = new AC();
   audio.resume?.();
   const e = new Engine(boardParams());
-  e.rng.s = 77;
+  e.noiseSeed = 77;
   e.setSampling(Infinity);
   e.startEarth({ Bp: Bp(), BE: board.BE, tp: board.tp, ramp: board.ramp, tl: board.tl, tOpen: BOARD.tOpen });
   const t0 = tOpenAbs();

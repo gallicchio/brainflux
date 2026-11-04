@@ -59,7 +59,7 @@ export function buildSequence(name, tau, n, T2s) {
  */
 export function runSequence(params, pulses, span, dt, seed = 11, windows = null) {
   const e = new Engine(params);
-  e.rng.s = seed >>> 0;
+  e.noiseSeed = seed >>> 0;
   e.setSampling(windows ? Infinity : dt);
   const B1 = params.B1 ?? e.p.B1, starts = pulses.map((q) => q.t - pulseDuration(q.angle * DEG, B1) / 2);
   e.reset([0, 0, 1], Math.min(0, ...starts));
@@ -128,7 +128,7 @@ export function echoCurve(params, taus, sigma = 0, { seed = 11 } = {}) {
 export function polarizeCurve(params, earth, tps, sigma = 0, { win = 0.05, seed = 11 } = {}) {
   const amp = tps.map((tp, i) => {
     const e = new Engine(params);
-    e.rng.s = (seed + i) >>> 0;
+    e.noiseSeed = (seed + i) >>> 0;
     e.setSampling(Infinity);
     e.startEarth({ ...earth, tp, tl: earth.tOpen + win });
     const t0 = tp + earth.ramp + earth.tOpen;

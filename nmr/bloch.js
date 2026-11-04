@@ -245,11 +245,13 @@ export function rampField(Bp, BE, tau, t) {
 
 /**
  * Switch the polarizing field off: integrate M (lab frame, starting at t = 0 of the ramp)
+ * (64 steps a Larmor period: with the field's axis turning under it, 16 leave 1% of error at
+ * A = 1, 64 under 0.05%)
  * through the linear ramp of Bp to zero in tau, in the Earth's field BE, relaxing about the
  * field of the moment towards the equilibrium of that field (M0E |B|/BE, with M0E the
  * equilibrium in the Earth's field alone, in the units of M).  Returns M at the end of the ramp.
  */
-export function switchOff(M, Bp, BE, tau, { T1 = Infinity, T2 = Infinity, M0E = 0, perPeriod = 24, onStep = null } = {}) {
+export function switchOff(M, Bp, BE, tau, { T1 = Infinity, T2 = Infinity, M0E = 0, perPeriod = 64, onStep = null } = {}) {
   if (tau <= 0) return M;
   return integrate(M, (t) => rampField(Bp, BE, tau, t), 0, tau, { T1, T2, M0: M0E, axis: 'field', Bref: BE, perPeriod, dtMax: tau / 200, onStep });
 }

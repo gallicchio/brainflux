@@ -11,7 +11,7 @@
 // handed to the ensemble when the listening starts.
 
 import { GAMMA, Ensemble, lorentzianOffsets, effectiveField, pulseDuration, integrate, toRotating, toLab, blochStep, rampField } from './bloch.js';
-import { Record, Rng } from './signal.js';
+import { Record } from './signal.js';
 
 const DEG = Math.PI / 180;
 
@@ -30,7 +30,7 @@ export class Engine {
     this.tEnd = Infinity;     // the sequence's end, if it has one
     this.done = false;
     this.record = new Record();
-    this.rng = new Rng(7);
+    this.noiseSeed = 7;       // the seed of the record's noise (signal.js: gauss2)
     this.dtSample = 1e-6;
     this.nextSample = 0; this.kSample = 0;
     this.pulse = null;        // the pulse on now
@@ -61,7 +61,7 @@ export class Engine {
       this.ens = new Ensemble(lorentzianOffsets(this.p.N, this.p.spreadHz));
       this.ens.set(m);
     }
-    if (this.p.averages !== was.averages) this.record.renoise(this.rng, this.p.averages);
+    if (this.p.averages !== was.averages) this.record.renoise(this.noiseSeed ^ Math.imul(this.p.averages, 0x2545f491), this.p.averages);
     return this;
   }
 
@@ -212,7 +212,7 @@ export class Engine {
     if (ph === 'ramp') {
       let n = 0;
       integrate(e.M, (t) => rampField(e.Bp, e.BE, e.ramp, t - e.tp), this.t, next,
-        { T1, T2, M0: e.M0E, axis: 'field', Bref: e.BE, perPeriod: 16, dtMax: e.ramp / 200, onStep: () => n++ });
+        { T1, T2, M0: e.M0E, axis: 'field', Bref: e.BE, perPeriod: 64, dtMax: e.ramp / 200, onStep: () => n++ });
       return n;
     }
     this.ens.step(dt, this.fieldNow(), T1, T2, e.M0E);
@@ -221,10 +221,10 @@ export class Engine {
 
   /** Record the magnetization now (zero while the board's receiver is off). */
   sample() {
-    const R = this.record;
-    if (this.earth && this.t < this.earth.tp + this.earth.ramp + this.earth.tOpen) { R.push(this.t, 0, 0, 0, this.rng, this.p.averages); return; }
+    const R = this.record, noise = { seed: this.noiseSeed ^ (this.p.averages > 1 ? Math.imul(this.p.averages, 0x2545f491) : 0), dt: this.dtSample, averages: this.p.averages };
+    if (this.earth && this.t < this.earth.tp + this.earth.ramp + this.earth.tOpen) { R.push(this.t, 0, 0, 0, noise); return; }
     const m = this.ens.sum(this._v);
-    R.push(this.t, m[0], m[1], m[2], this.rng, this.p.averages);
+    R.push(this.t, m[0], m[1], m[2], noise);
   }
 
   // ------------------------------------------------------------------------ what is seen

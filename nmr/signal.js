@@ -21,32 +21,35 @@ import { fft } from '../lib/fft.js';
  * thermal noise on the two transverse parts (nx, ny): what is left of unit noise after averaging
  * `averages` repeats.  The repeats' signals are the same, so their average is the signal plus the
  * mean of N standard normal numbers, which is a normal number of r.m.s. 1/√N: one is drawn,
- * divided by √N (meanGauss draws the N, for the tests).
+ * divided by √N (meanGauss draws the N, for the tests).  The noise of a sample depends only on a
+ * seed and on where the sample falls on the grid of the sampling interval, not on the order in
+ * which samples were taken, so a run gives the same noise however its clock was stepped.
  */
 export class Record {
   constructor() { this.clear(); }
 
-  clear() { this.t = []; this.x = []; this.y = []; this.z = []; this.nx = []; this.ny = []; }
+  clear() { this.t = []; this.x = []; this.y = []; this.z = []; this.nx = []; this.ny = []; this.k = []; }
 
   get length() { return this.t.length; }
 
-  push(t, x, y, z, rng = null, averages = 1) {
+  /** A sample; noise: {seed, dt, averages} (no noise when omitted). */
+  push(t, x, y, z, noise = null) {
     this.t.push(t); this.x.push(x); this.y.push(y); this.z.push(z);
-    const k = 1 / Math.sqrt(Math.max(1, averages));
-    this.nx.push(rng ? rng.gauss() * k : 0);
-    this.ny.push(rng ? rng.gauss() * k : 0);
+    if (!noise) { this.nx.push(0); this.ny.push(0); this.k.push(0); return; }
+    const k = noiseIndex(t, noise.dt), g = gauss2(noise.seed, k), f = 1 / Math.sqrt(Math.max(1, noise.averages || 1));
+    this.k.push(k); this.nx.push(g[0] * f); this.ny.push(g[1] * f);
   }
 
-  /** Draw the noise afresh for every sample, as the mean of `averages` repeats. */
-  renoise(rng, averages = 1) {
-    const k = 1 / Math.sqrt(Math.max(1, averages));
-    for (let i = 0; i < this.t.length; i++) { this.nx[i] = rng.gauss() * k; this.ny[i] = rng.gauss() * k; }
+  /** Draw the noise afresh (from another seed) for every sample, as the mean of `averages` repeats. */
+  renoise(seed, averages = 1) {
+    const f = 1 / Math.sqrt(Math.max(1, averages));
+    for (let i = 0; i < this.t.length; i++) { const g = gauss2(seed, this.k[i]); this.nx[i] = g[0] * f; this.ny[i] = g[1] * f; }
   }
 
   /** Drop the samples before tMin (keeping one, for interpolation). */
   trim(tMin) {
     const i = Math.max(0, this.index(tMin));
-    if (i > 0) for (const k of ['t', 'x', 'y', 'z', 'nx', 'ny']) this[k].splice(0, i);
+    if (i > 0) for (const k of ['t', 'x', 'y', 'z', 'nx', 'ny', 'k']) this[k].splice(0, i);
   }
 
   /** The last index whose time is ≤ t (−1 before the first sample). */
@@ -168,6 +171,24 @@ export class Rng {
     this.spare = v * f;
     return u * f;
   }
+}
+
+/** Where a sample at t falls on the grid of interval dt: the index its noise is drawn for. */
+export function noiseIndex(t, dt) { return Math.round(t / (Number.isFinite(dt) && dt > 0 ? dt : 1e-12)) | 0; }
+
+/** A 32-bit integer hash (MurmurHash3's finaliser). */
+function mix32(x) {
+  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b);
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
+/** Two independent standard normal numbers that depend only on (seed, k) (Box–Muller). */
+export function gauss2(seed, k) {
+  const a = mix32((seed ^ mix32(k)) >>> 0), b = mix32((a ^ 0x9e3779b9 ^ mix32(k ^ 0x5bd1e995)) >>> 0);
+  const u1 = (a + 0.5) / 4294967296, u2 = (b + 0.5) / 4294967296;
+  const r = Math.sqrt(-2 * Math.log(u1)), p = 2 * Math.PI * u2;
+  return [r * Math.cos(p), r * Math.sin(p)];
 }
 
 /** The mean of n standard normal numbers: what averaging n repeats does to unit noise. */

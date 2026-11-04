@@ -22,13 +22,14 @@ export function duration(t, digits = 3) {
 }
 
 /** Shade the pulses sent (bands where B1 was on), labelled with their angle and phase. */
-export function pulseBands(ctx, f, sent, c, labelAll = true) {
+export function pulseBands(ctx, f, sent, c, labelAll = true, now = Infinity) {
   ctx.save();
   f.clip();
   ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   let lastX = -1e9;
   for (const p of sent) {
-    const x0 = f.X(p.t0), x1 = Math.max(x0 + 2, f.X(p.t1));
+    if (p.t0 > now) continue;
+    const x0 = f.X(p.t0), x1 = Math.max(x0 + 2, f.X(Math.min(p.t1, now)));
     if (x1 < f.left || x0 > f.right) continue;
     ctx.fillStyle = c.b1; ctx.globalAlpha = 0.22;
     ctx.fillRect(x0, f.top, x1 - x0, f.h);
@@ -103,7 +104,7 @@ export function drawSignal(ctx, width, height, o) {
   const c = o.colors, f = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
   const tu = timeUnit(o.t1 - o.t0), R = o.record, sg = o.sigma || 0, k = o.scale || 1;
   f.x0 = o.t0; f.x1 = o.t1; f.y0 = -o.ymax; f.y1 = o.ymax;
-  pulseBands(ctx, f, o.sent || [], c);
+  pulseBands(ctx, f, o.sent || [], c, true, o.now ?? Infinity);
   ctx.save(); f.clip();
   ctx.strokeStyle = c.line; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(0)); ctx.lineTo(f.right, f.Y(0)); ctx.stroke();
@@ -154,7 +155,7 @@ export function drawRaw(ctx, width, height, o) {
   const c = o.colors, f = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
   const tu = timeUnit(o.t1 - o.t0), k = o.scale || 1;
   f.x0 = o.t0; f.x1 = o.t1; f.y0 = -o.ymax; f.y1 = o.ymax;
-  pulseBands(ctx, f, o.sent || [], c, false);
+  pulseBands(ctx, f, o.sent || [], c, false, o.now ?? Infinity);
   ctx.save(); f.clip();
   ctx.strokeStyle = c.line;
   ctx.beginPath(); ctx.moveTo(f.left, f.Y(0)); ctx.lineTo(f.right, f.Y(0)); ctx.stroke();

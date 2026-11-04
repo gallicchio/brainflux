@@ -192,11 +192,12 @@
     <h3>10. Noise, and averaging it away</h3>
     <p>An FID with thermal noise: a signal-to-noise ratio of 5, so the noise is 0.20 of the full
     signal, r.m.s.  Repeat and average: the signal is the same each time and adds up, the noise
-    does not, and the average of $N$ has $1/\sqrt N$ of the noise: 0.050 after 16, 0.012 after
-    256.  The fit of $T_2^*$ stays within a few per cent of 0.617 ms throughout, because it fits
-    the mixer's output in phase with the FID, which noise leaves at zero on average.  The
-    envelope $|M_{xy}|$ does not go to zero: noise alone has a mean length $\sigma\sqrt{\pi/2}$,
-    0.25 here.</p>
+    does not, and the average of $N$ runs has $1/\sqrt N$ of the noise: 0.050 after 16, 0.012
+    after 256.  Watch the fit of $T_2^*$ beside the sphere: from one run it says 0.545 ms, 12%
+    short of the true 0.617; from 16, 0.606; from 256, 0.618.  It fits the mixer's output in
+    phase with the FID, which noise leaves at zero on average.  The envelope $|M_{xy}|$ does
+    not go to zero: noise alone has a mean length $\sigma\sqrt{\pi/2}$, 0.25 here, which would
+    make the FID look longer.</p>
   </article>
 
   <article class="exp" data-setup="board">
@@ -217,9 +218,9 @@
     <p>The same, with the current switched off in 300 ms instead of 0.4.  As it falls, the
     total field turns from the coil's axis to the Earth's; slowly enough, the spins follow it
     round, and $M$ ends up along $B_E$, with nothing across it to ring: 4.5% is left, an FID of
-    0.035 μV.  The field turns only at the very end of the ramp, through its last 1/170, so what
+    0.033 μV.  The field turns only at the very end of the ramp, through its last 1/170, so what
     matters is $A=\gamma B_E^2\tau/B_p$: 0.029 for the board's 0.4 ms (sudden), 1 at 13.8 ms
-    (68% left across), 22 at 300 ms (adiabatic).  The plainer $\gamma B_E\tau$ would say 4.9 at
+    (69% left across), 22 at 300 ms (adiabatic).  The plainer $\gamma B_E\tau$ would say 4.9 at
     0.4 ms, and be wrong.  Watch the sphere through the switch-off at each speed.</p>
   </article>
 
@@ -227,7 +228,7 @@
     <h3>13. T₁ from the polarizing time</h3>
     <p>The FID's start is the magnetization built while the current flowed, $1-e^{-t_p/T_1}$.
     <em>Measure T₁</em> runs the cycle polarizing for 0.2 to 4.7 s, the board's range, and fits
-    the starts: $T_1=2.51$ s for tap water's 2.5.  Each cycle you run adds its own point.  Try
+    the starts: $T_1=2.50$ s for tap water's 2.5.  Each cycle you run adds its own point.  Try
     <em>Copper sulphate</em>: its ions take the protons' energy far faster, and $T_1$ falls to
     0.3 s, so the FID reaches full size within a second of polarizing.</p>
   </article>

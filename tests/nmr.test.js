@@ -271,9 +271,9 @@ test('the noise is Gaussian with the r.m.s. asked for, and averaging N repeats d
   close(rms(b), 0.25, 0.01, 'the mean of 16 has r.m.s. 1/4');
   // In a record: the noise shown, in units of the signal's peak, is sigma/√averages.
   const R = new Record();
-  for (let i = 0; i < 4000; i++) R.push(i * 1e-5, 0, 0, 0, rng, 1);
+  for (let i = 0; i < 4000; i++) R.push(i * 1e-5, 0, 0, 0, { seed: 11, dt: 1e-5, averages: 1 });
   const one = noiseRms(R, 0, 1, 0.2);
-  R.renoise(rng, 25);
+  R.renoise(12, 25);
   const avg = noiseRms(R, 0, 1, 0.2);
   close(one, 0.2, 0.01, 'σ = 0.2 with no averaging'); close(one / avg, 5, 0.3, '25 averages: 5 times smaller');
   // And by averaging for real: 25 noisy repeats of the same signal, added up and divided.
@@ -296,6 +296,19 @@ test('the spin-½ state of the arrow: cos(θ/2)|↑⟩ + e^{iφ} sin(θ/2)|↓�
   const t = spinHalf([0, Math.sin(1), Math.cos(1)]);
   close(t.theta, 1, 1e-12, 'θ'); close(t.pUp, Math.cos(0.5) ** 2, 1e-12, 'P(↑) = cos²(θ/2)');
   return 'ẑ is |↑⟩; x̂ is (|↑⟩ + |↓⟩)/√2; the amplitudes follow θ and φ';
+});
+
+test('the noise of a sample depends on its place on the grid, not on how the run was stepped', () => {
+  const a = new Engine({ B0, N: 1 }), b = new Engine({ B0, N: 1 });
+  for (const e of [a, b]) { e.noiseSeed = 99; e.setSampling(1e-6); e.reset([0, 1, 0], 0); }
+  a.advance(50e-6);
+  for (let k = 0; k < 37; k++) b.advance(50e-6 / 37);
+  const grid = (e) => e.record.t.map((t, i) => [t, e.record.nx[i]]).filter(([t]) => Math.abs(t / 1e-6 - Math.round(t / 1e-6)) < 1e-9);
+  const ga = grid(a), gb = new Map(grid(b).map(([t, n]) => [Math.round(t / 1e-6), n]));
+  let same = 0;
+  for (const [t, n] of ga) if (gb.get(Math.round(t / 1e-6)) === n) same++;
+  assert(same === ga.length && ga.length >= 50, `${same} of ${ga.length} grid samples have the same noise`);
+  return `${ga.length} samples on the grid: the same noise whether the clock ran in 1 step or 37`;
 });
 
 test('the engine: lab and rotating frames agree, pulses sent now queue after one another, the record has every pulse', () => {
