@@ -193,6 +193,14 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     check(near(f9['tau'], 0.025, 0.0001) and near(f9['null'], 0.0173, 0.0001) and quotes(b, 'ir', '25.0 ms', '17.3 ms', 'fifteen'),
           f"9: T1 = {f9['tau'] * 1e3:.2f} ms from the scan, the null at {f9['null'] * 1e3:.2f} ms = T1 ln 2")
     b.screenshot('build/nmr-ir.png')
+    # Clicking the plot at the null runs the sequence there: the π/2 then finds nothing to tip.
+    cb = b.box('#curve'); fx = (48 + f9['null'] / (0.04 * 0.025 * 100 * 1.05) * (cb[2] - 60)) / cb[2]
+    b.click('#curve', (fx, 0.5)); b.eval('__app.step(0, 1)')
+    tau_c = b.eval('__app.seq.tau')
+    b.eval('__app.runTo(__app.seq.span)')
+    fidc = b.eval('Math.abs(__app.eng.record.meanY(__app.seq.acq[0], __app.seq.acq[0] + 3e-5))')
+    check(abs(tau_c / f9['null'] - 1) < 0.05 and fidc < 0.05 and b.eval('__app.seq.scan') is not None,
+          f"clicking the plot at the null runs the sequence at τ = {tau_c * 1e3:.2f} ms: the FID's start is {fidc:.3f} (the scan's points stay)")
     run(b, 'echo'); b.eval("__app.setView('seq'); __app.setups.cpmg(); __app.setPreset('echo'); __app.startScan()")
     f6 = b.eval('__app.finishScan().fit')
     check(near(f6['tau'], 0.02, 0.0005), f"the echo scanned over τ gives T2 = {f6['tau'] * 1e3:.2f} ms (oil's 20 ms)")
@@ -212,6 +220,13 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     # ---- 11-15. the Earth's-field board
     run(b, 'board')
     check(b.eval('__app.state.view') == 'earth' and b.eval('__app.state.inst') == 'earth' and visible_hints(b)[0].startswith('Press Polarize and listen'), "11: the board's view, with its own hint")
+    notes = []
+    for t in (1.0, 3.0002, 3.01, 3.5):
+        b.eval(f'(() => {{ for (let i = 0; i < 2e4 && __app.eng.t < {t}; i++) __app.step(1 / 60); }})()')
+        notes.append(text_of(b, '#sphere-note').split('.')[0].split(':')[0])
+    check(notes == ['Polarizing', 'Switching off', 'The receiver is off for 19 ms while the relay hands the coil over; M goes round the Earth\'s field', 'Listening'],
+          f'the note on the sphere says what the cycle is doing: {[n[:24] for n in notes]}')
+    run(b, 'board')
     sp = [b.eval('__app.boardSpeed()')]
     b.eval('(() => { for (let i = 0; i < 1e4 && __app.eng.t < 3.0001; i++) __app.step(1 / 60); })()'); sp.append(b.eval('__app.boardSpeed()'))
     # (Through the switch-off the clock slows as the field turns, so that its swing takes 2 s.)

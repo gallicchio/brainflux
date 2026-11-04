@@ -299,11 +299,18 @@ function sphereNote(fast) {
   const lab = state.frame === 'lab', u = inst().fUnit, f = (eng.f0 + state.offsetHz) * u.s;
   let s;
   const turns = Math.round(turnsPerFrame() * 60).toLocaleString('en');
-  if (lab && state.view === 'earth') s = `<b>Lab frame</b>: the Earth's field along z, the coil's axis along x<span class="more"> (east–west, across it)</span>.${fast ? `<span class="more">  The spins turn ${turns} times a second on screen: the cone is the path of the tip.</span>` : ''}`;
-  else if (lab) s = `<b>Lab frame</b>: the field B₀ along z, the coil along x.${fast ? `  <span class="more">At this speed the spin turns ${turns} times a second on screen, too fast to draw: the cone is the path of its tip.  </span>Slow the clock, or use the rotating frame.` : ''}`;
+  const E = state.view === 'earth' && eng.earth;
+  if (E) {
+    const t = eng.t, now = t < E.tp ? `<b>Polarizing</b>: the current's field B_p magnetizes the water along the coil (${(100 * polarizedAt(t)).toFixed(0)}% so far)`
+      : t < E.tp + E.ramp ? `<b>Switching off</b>: B_p falls and the total field turns from the coil's axis to the Earth's; ${adiabaticity(Bp(), board.BE, board.ramp) < 0.3 ? 'too fast for M, which stays where it was' : 'slowly enough for M to follow it'}`
+        : t < tOpenAbs() ? '<b>The receiver is off</b> for 19 ms while the relay hands the coil over; M goes round the Earth\'s field'
+          : eng.done ? '<b>Done</b>: the cycle starts again (Repeat)' : `<b>Listening</b>: M goes round the Earth's field at ${eng.f0.toFixed(0)} Hz and the coil picks it up`;
+    const cone = fast && t >= E.tp + E.ramp;
+    s = `${now}.  <span class="more">${lab ? `Lab frame: the Earth's field along z, the coil's axis along x (east–west).${cone ? `  The spins turn ${turns} times a second on screen: the cone is the path of the tip.` : ''}` : 'Rotating frame, at the Larmor frequency in the Earth\'s field.'}</span>`;
+  } else if (lab) s = `<b>Lab frame</b>: the field B₀ along z, the coil along x.${fast ? `  <span class="more">At this speed the spin turns ${turns} times a second on screen, too fast to draw: the cone is the path of its tip.  </span>Slow the clock, or use the rotating frame.` : ''}`;
   else s = `<b>Rotating frame</b>: turning with the RF, at ${f.toFixed(u.dec)} ${u.u}, so B₀ is gone${state.offsetHz ? ' but for ΔB, as the RF is off resonance' : ''}.`;
   const P = eng.pulse;
-  if (P) {
+  if (P && !E) {
     const done = Math.min(1, Math.max(0, (eng.t - P.t0) / P.dur)), u = unitOf(P.dur);
     s += `  <b>RF on</b>: ${pulseName(P.angle, P.phase)}, ${(done * P.dur * u.s).toFixed(2)} of ${(P.dur * u.s).toFixed(2)} ${u.u}.`;
   }
@@ -922,9 +929,9 @@ function drawSeqCurve() {
     const xu = timeUnit(xmax);
     const fit = S && S.fit ? (ir ? (x) => S.fit.A * (1 - 2 * Math.exp(-x / S.fit.tau)) : (x) => S.fit.A * Math.exp(-x / S.fit.tau)) : null;
     const tq = (v) => [{ v: v * xu.s, dec: 2, w: 6 }, ` ${xu.u}`];
-    drawCurve(ctx, width, height, {
+    curveFrame = drawCurve(ctx, width, height, {
       x: S ? S.x : [], y: S ? S.y : [], fit, xmax, ymin: ir ? -1.1 : 0, ymax: 1.1, colors: C, xunit: xu,
-      title: ir ? 'The FID\'s start against τ (the mixer, with its sign)' : 'The echo\'s height against 2τ',
+      title: ir ? 'The FID\'s start against τ: click to run at a τ' : 'The echo\'s height against 2τ: click to run there',
       xlabel: ir ? `delay τ (${xu.u})` : `time of the echo, 2τ (${xu.u})`,
       current: ir ? seq.tau : 2 * seq.tau,
       marks: S && S.fit && ir ? [{ x: S.fit.null, label: 'null: T₁ ln 2' }] : [],
@@ -950,6 +957,20 @@ function drawSeqCurve() {
     note: ff ? ['fit: T₂* = ', ...canvasTime(ff.tau)] : null,
   });
 }
+
+// Clicking the plot of a scan runs the sequence at the delay clicked: the spins at the null, say.
+let curveFrame = null;
+$('#curve').addEventListener('pointerdown', (e) => {
+  if (state.view !== 'seq' || !(seq.preset === 'ir' || seq.preset === 'echo') || !curveFrame) return;
+  const r = $('#curve').getBoundingClientRect(), x = curveFrame.invX(e.clientX - r.left);
+  if (!(x > 0)) return;
+  const tau = seq.preset === 'ir' ? x : x / 2, R = SEQ[state.inst].tauRange;
+  seq.tau = Math.max(R[0], Math.min(R[1], tau));
+  const scan = seq.scan;
+  buildSeq(); seq.scan = scan;
+  state.speed = seq.span / SCREEN; speedSlider.value = state.speed;
+  syncSeq(); runSeq(); scheduleHash();
+});
 
 function seqReadout(lines) {
   const S = seq.scan, tu = (t) => time3(t), dash = [{ text: '–', w: 6, class: 'b' }, ''];
