@@ -287,7 +287,7 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     # ------------------------------------------------------------------ 4 · Contrast and artefacts
     setup(b, 'contrast')
     hints = visible_hints(b)
-    check(len(hints) == 1 and hints[0].startswith('Drag the TR line'), f'view 4: its own hint ({hints[0][:40]}...)')
+    check(len(hints) == 1 and hints[0].startswith('TR and TE are sweeping'), f'view 4: its own hint, while TR and TE sweep ({hints[0][:40]}...)')
     w = b.eval('__app.draw().weights')
     want = {'fat': '0.672', 'water': '0.117', 'white': '0.318', 'grey': '0.282', 'lesion': '0.237'}
     check(all(quoted(w[k], v) for k, v in want.items()), 'T₁-weighted: ' + ', '.join(f'{k} {w[k]:.3f}' for k in want))
@@ -297,12 +297,17 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     check(all(quoted(w[k], v) for k, v in {'fat': '0.788', 'grey': '0.659', 'white': '0.587', 'water': '0.524'}.items()), 'proton density: ' + ', '.join(f'{k} {w[k]:.3f}' for k in w))
     b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, TR: 8000, TE: 15 })'); w = b.eval('__app.draw().weights')
     check(quoted(w['water'], '0.858') and max(w, key=w.get) == 'water', f"TR 8 s: CSF {w['water']:.3f}, the brightest")
+    # The opening sweeps from T1- to T2-weighting and back; a drag takes over.
+    setup(b, 'contrast')
+    sw = b.eval('(() => { const v = __app.views.contrast, out = [[v.s.TR, v.s.TE]]; for (const n of [420, 420]) { __app.step(1 / 60, n); out.push([v.s.TR, v.s.TE]); } return out; })()')
+    check(sw[0] == [500, 15] and sw[1] == [3000, 100] and sw[2][0] == 500, f'view 4 opens sweeping TR and TE from T₁- to T₂-weighting and back in 14 s ({sw})')
     # Drag the TR and TE lines.
     setup(b, 'contrast'); p = b.eval('__app.draw()'); box = b.box('#v4-main'); th = p['trHandle']; tg = p['teHandle']
     b.drag('#v4-main', (th['x'] / box[2], (th['y'] + 30) / box[3]), ((th['x'] + 80) / box[2], (th['y'] + 30) / box[3]), steps=6)
     b.drag('#v4-main', (tg['x'] / box[2], (tg['y'] + 30) / box[3]), ((tg['x'] + 80) / box[2], (tg['y'] + 30) / box[3]), steps=6)
-    s4 = b.eval('__app.views.contrast.s')
-    check(s4['TR'] > 1000 and s4['TE'] > 60, f"dragging the TR and TE lines sets them ({s4['TR']:.0f} ms, {s4['TE']:.0f} ms)")
+    s4 = b.eval('__app.views.contrast.s'); b.eval('__app.step(1 / 60, 60)'); s5 = b.eval('__app.views.contrast.s')
+    check(s4['TR'] > 1000 and s4['TE'] > 60 and not s4['sweep'] and s5['TR'] == s4['TR'] and visible_hints(b)[0].startswith('Drag the TR line'),
+          f"dragging the TR and TE lines stops the sweep and sets them ({s4['TR']:.0f} ms, {s4['TE']:.0f} ms); the hint says to drag")
     # Wrap.
     setup(b, 'wrap'); col = b.eval('__app.views.contrast.columnX0()'); p = b.eval('__app.draw()')
     fold = [y for y, v, t in col if v > 0.5]

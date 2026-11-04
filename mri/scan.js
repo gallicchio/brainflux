@@ -127,11 +127,20 @@ export function gaussianPair(rand) {
  * faster than it needs and filters the frequencies outside the field of view away, so what lies
  * outside is simply cut off.  Returns the weighted total and its fat part, N x N.
  */
+const RASTERS = new Map();
 export function pictureOf(shapes, seq, B0, N, fov, ss = 4) {
   const dx = fov / N, [, , y0, y1] = shapesExtent(shapes);
   let ny = Math.ceil(2 * Math.max(Math.abs(y0), Math.abs(y1), fov / 2) / dx) + 2;
   if (ny % 2) ny++;
-  const raster = rasterize(shapes, N, ny, dx, ss);
+  // (The rasterized object does not depend on the sequence: the last few are kept, so that
+  // changing TR or TE only reweights it.)
+  const key = `${N}|${ny}|${dx}|${ss}|${JSON.stringify(shapes)}`;
+  let raster = RASTERS.get(key);
+  if (!raster) {
+    raster = rasterize(shapes, N, ny, dx, ss);
+    RASTERS.set(key, raster);
+    if (RASTERS.size > 8) RASTERS.delete(RASTERS.keys().next().value);
+  }
   const w = weightedImage(raster, seq, B0);
   const fold = (src) => {
     const out = new Float64Array(N * N);

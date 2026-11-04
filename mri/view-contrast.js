@@ -27,8 +27,9 @@ export class ContrastView {
     this.canvas = $('#v4-main');
     this.s = {
       obj: 'head', mode: 'fourier', type: 'se', TR: 500, TE: 15, N: 128, fov: 256, lines: 128, sigma: 0, nsa: 1, fat: false, Gx: 4, B0: 1.5, T2p: 60,
-      nA: 12, filter: true, rate: 3, playing: true,
+      nA: 12, filter: true, rate: 3, playing: true, sweep: false,
     };
+    this.sweepU = 0; this.sweepDir = 1;
     this.acq = new Acquisition();
     this.lb = { j: 0, u: 0 };   // Lauterbur: angles measured, and the next one's progress
     this.drag = null;
@@ -65,6 +66,7 @@ export class ContrastView {
     document.querySelector('#main').dataset.mode = s.mode;
     const hint = document.querySelector('#v4-hint');
     if (hint) hint.textContent = s.mode === 'lauterbur' ? 'Watch the gradient turn: each angle\'s spectrum is one projection, smeared back across the picture; raise the angles to sharpen it'
+      : s.sweep ? 'TR and TE are sweeping from T₁- to T₂-weighting: drag the TR line or the TE line to take over; the dots where they cross the curves are each tissue\'s brightness'
       : 'Drag the TR line on the recovery curves and the TE line on the echo\'s: the dots where they cross are each tissue\'s brightness in the picture';
     this.madeAt = this.app.slice?.z ?? 0;
     this.dirty = true;
@@ -103,7 +105,24 @@ export class ContrastView {
     return this.bp;
   }
 
+  /** The opening's sweep: TR and TE glide together (logarithmically) from T1-weighting
+   *  (500, 15 ms) to T2-weighting (3000, 100 ms) and back, 7 s each way, until a drag. */
+  sweepTo(u) {
+    const s = this.s;
+    this.sweepU = u;
+    s.TR = Math.round(500 * 6 ** u); s.TE = +(15 * (100 / 15) ** u).toFixed(1);
+    this.trSl.value = s.TR; this.teSl.value = s.TE;
+    this.custom('TR'); this.rebuild();
+  }
+  stopSweep() { if (this.s.sweep) { this.s.sweep = false; this.sweepBtn.on = false; this.app.scheduleHash(); } }
+
   advance(dt) {
+    if (this.s.mode === 'fourier' && this.s.sweep) {
+      let u = this.sweepU + (this.sweepDir * dt) / 7;
+      if (u >= 1) { u = 1; this.sweepDir = -1; } else if (u <= 0) { u = 0; this.sweepDir = 1; }
+      this.sweepTo(u);
+      return;
+    }
     if (this.s.mode !== 'lauterbur' || !this.s.playing) return;
     const lb = this.lb;
     if (lb.j >= this.s.nA) { this.setPlaying(false); return; }
@@ -112,7 +131,7 @@ export class ContrastView {
     if (lb.j >= this.s.nA) { lb.u = 0; this.setPlaying(false); }
     this.dirty = true;
   }
-  get animating() { return this.s.mode === 'lauterbur' && this.s.playing; }
+  get animating() { return (this.s.mode === 'lauterbur' && this.s.playing) || (this.s.mode === 'fourier' && this.s.sweep); }
   /** Lauterbur: measure one more angle and stop. */
   step() {
     if (this.s.mode !== 'lauterbur') return;
@@ -125,7 +144,7 @@ export class ContrastView {
   // ------------------------------------------------------------------- controls
 
   buildControls() {
-    const s = this.s, set = (k, rebuild = true) => (v) => { s[k] = v; this.custom(k); if (rebuild) this.rebuild(); this.app.kick(); };
+    const s = this.s, set = (k, rebuild = true) => (v) => { if (k === 'TR' || k === 'TE') this.stopSweep(); s[k] = v; this.custom(k); if (rebuild) this.rebuild(); this.app.kick(); };
     this.modeSeg = segmented([{ value: 'fourier', label: 'Phase encoding', title: 'The picture as views 1 to 3 make it: k-space line by line, then the inverse 2D FFT' },
       { value: 'lauterbur', label: 'Lauterbur (1973)', title: 'How MRI began: a gradient turned to many angles, each spectrum a projection, back-projected' }], s.mode,
       (v) => { s.mode = v; this.lb.j = 0; this.lb.u = 0; this.rebuild(); this.setPlaying(v === 'lauterbur'); }, { label: 'Picture by' });
@@ -140,7 +159,8 @@ export class ContrastView {
     this.teSl = slider({ label: 'echo time TE (ms)', min: 4, max: 250, log: true, value: s.TE, step: 0.5, title: 'From the π/2 pulse to the echo: the time the signal has to fade', onInput: set('TE') });
     $('#v4-contrast-box').append(this.trSl, this.teSl);
     this.typeSeg = segmented([{ value: 'se', label: 'Spin echo' }, { value: 'gre', label: 'Gradient echo' }], s.type, (v) => { s.type = v; this.rebuild(); this.app.kick(); }, { label: 'Sequence' });
-    $('#v4-type-row').append(this.typeSeg);
+    this.sweepBtn = toggle('Sweep', s.sweep, (on) => { s.sweep = on; if (on) { this.sweepU = 0; this.sweepDir = 1; } this.app.kick(); this.app.scheduleHash(); }, 'Let TR and TE glide by themselves between T₁- and T₂-weighting');
+    $('#v4-type-row').append(this.typeSeg, this.sweepBtn);
     // The scan's settings.
     this.fovSl = slider({ label: 'field of view (mm)', min: 120, max: 320, step: 1, value: s.fov, title: 'How big a square the picture covers; k-space is sampled every 1/FOV', onInput: (v) => { s.fov = v; this.rebuild(); this.app.kick(); } });
     this.linesSl = slider({ label: 'phase lines', min: 8, max: 256, step: 1, value: s.lines, title: 'How many rows of k-space are measured (the middle ones); the rest are taken as zero', onInput: (v) => { s.lines = Math.round(v); this.rebuild(); this.app.kick(); } });
@@ -169,6 +189,7 @@ export class ContrastView {
     if (k === 'TR' || k === 'TE') for (const [id, b] of Object.entries(this.cBtns)) b.setAttribute('aria-pressed', String(CONTRASTS[id].TR === this.s.TR && CONTRASTS[id].TE === this.s.TE));
   }
   setContrast(id) {
+    this.stopSweep();
     const cpr = CONTRASTS[id];
     this.s.TR = cpr.TR; this.s.TE = cpr.TE; this.trSl.value = cpr.TR; this.teSl.value = cpr.TE;
     this.custom('TR'); this.rebuild(); this.app.kick();
@@ -181,6 +202,7 @@ export class ContrastView {
     this.modeSeg.value = s.mode; this.trSl.value = s.TR; this.teSl.value = s.TE; this.typeSeg.value = s.type; this.fovSl.value = s.fov;
     this.linesSl.setRange(8, s.N); this.linesSl.value = s.lines; this.nSeg.value = s.N; this.lastN = s.N; this.noiseSl.value = 100 * s.sigma; this.nsaSl.value = s.nsa;
     this.fatBtn.on = s.fat; this.gxSl.value = s.Gx; this.objSeg.value = s.obj; this.b0Seg.value = s.B0; this.nASl.value = s.nA; this.filterBtn.on = s.filter;
+    this.sweepBtn.on = s.sweep; this.sweepU = 0; this.sweepDir = 1;
     this.custom('TR');
     this.lb.j = o.angles ?? 0; this.lb.u = 0;
     this.rebuild();
@@ -469,7 +491,7 @@ export class ContrastView {
       if (near(this.trHandle, px, py)) this.drag = 'TR'; else if (near(this.teHandle, px, py)) this.drag = 'TE';
       else if (this.trHandle && px >= this.trHandle.b.x0 && px <= this.trHandle.b.x1 && py >= this.trHandle.b.y0 && py <= this.trHandle.b.y1) this.drag = 'TR';
       else if (this.teHandle && px >= this.teHandle.b.x0 && px <= this.teHandle.b.x1 && py >= this.teHandle.b.y0 && py <= this.teHandle.b.y1) this.drag = 'TE';
-      if (this.drag) { cv.setPointerCapture(e.pointerId); this.moveDrag(px); }
+      if (this.drag) { this.stopSweep(); cv.setPointerCapture(e.pointerId); this.moveDrag(px); }
     });
     cv.addEventListener('pointermove', (e) => {
       const [px, py] = xy(e);
