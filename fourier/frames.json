@@ -1,0 +1,9 @@
+{
+  "select": ["#wave", "#spectrum"],
+  "wait": 0.6,
+  "setups": {
+    "square": {"js": "(() => { const box = document.querySelector('#terms-box input[type=number]'); box.value = '15'; box.dispatchEvent(new Event('change')); })()"},
+    "phases": {"js": "(() => { let s = 12345; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; document.querySelector('#scramble').click(); })()"},
+    "draw": {"js": "(() => { const c = document.querySelector('#wave'), r = c.getBoundingClientRect(); c.setPointerCapture = () => {}; const v = (t) => t < 0.45 ? 0.9 * Math.sin(Math.PI * t / 0.45) : t < 0.7 ? -0.3 : t < 0.85 ? -0.3 + 0.9 * (t - 0.7) / 0.15 : 0.6 * (1 - t) / 0.15; const at = (t) => ({ clientX: r.left + 47 + 1002 * t, clientY: r.top + 167 - 115 * v(t), button: 0, buttons: 1, pointerId: 1, bubbles: true }); c.dispatchEvent(new PointerEvent('pointerdown', at(0))); for (let i = 1; i <= 400; i++) c.dispatchEvent(new PointerEvent('pointermove', at(i / 400))); c.dispatchEvent(new PointerEvent('pointerup', at(1))); })()"}
+  }
+}
