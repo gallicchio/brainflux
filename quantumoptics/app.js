@@ -275,7 +275,7 @@ function motorStep(dt) {
   else { th += anim.sweepDir * state.rate * dt; if (th >= 180) { th = 180; anim.sweepDir = -1; } if (th <= 0) { th = 0; anim.sweepDir = 1; } }
   th = ((th % 360) + 360) % 360;
   state.theta = th;
-  if (thetaSlider) thetaSlider.value = th;
+  if (thetaSlider) thetaSlider.value = Math.round(th);   // the box shows whole degrees as it turns
 }
 
 function histogramAt(thetaDeg) {
@@ -874,7 +874,12 @@ function setView(v) {
   $('#lo-panel').hidden = v !== 'homodyne';
   $('#ligo-panel').hidden = v !== 'ligo';
   $('#chirp-panel').hidden = v !== 'ligo';
-  $('#anim-panel').hidden = v === 'ligo';
+  // The clock's button: in the homodyne view, beside the motor and the record it runs (that
+  // view's controls are long, and the Animation panel would fall below the fold); else in
+  // the Animation panel.
+  const clockHome = v === 'homodyne' ? $('#clock-row') : $('#anim-row');
+  if ($('#run').parentNode !== clockHome) { clockHome.prepend($('#run')); clockHome.append($('#show-row')); }
+  $('#anim-panel').hidden = v === 'ligo' || v === 'homodyne';
   if (v !== 'ligo' && anim.sliding) { anim.sliding = false; state.lag = DET_MERGE; slideButton.textContent = 'Slide the template'; }
   periodSlider.hidden = v === 'homodyne';
   wedgeToggle.hidden = v === 'homodyne';

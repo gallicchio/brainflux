@@ -75,7 +75,8 @@
       <div class="label">Local oscillator (LO)</div>
       <div class="note">A strong laser beam of the same frequency; its phase θ sets which quadrature X<sub>θ</sub> the photocurrent reads.</div>
       <div id="lo-box" class="stack"></div>
-      <div class="row"><span class="small muted">Motor</span><span id="motor-box"></span><button type="button" id="clear" title="Forget the measured noise record">Clear record</button></div>
+      <div class="row"><span class="small muted">Motor</span><span id="motor-box"></span></div>
+      <div class="row" id="clock-row"><button type="button" id="clear" title="Forget the measured noise record">Clear record</button></div>
       <div id="shift-box" class="stack"></div>
       <div class="note" id="shift-note">A small extra phase on the signal, as an interferometer's arm would give: can the detector see it?</div>
     </div>
@@ -101,7 +102,7 @@
     </div>
     <div class="panel" id="anim-panel">
       <div class="label">Animation</div>
-      <div class="row"><button type="button" id="run" class="primary" title="Stop or start the clock (space)">Pause</button><span id="show-row" class="row"></span></div>
+      <div class="row" id="anim-row"><button type="button" id="run" class="primary" title="Stop or start the clock (space)">Pause</button><span id="show-row" class="row"></span></div>
       <div id="anim-box" class="stack"></div>
     </div>
   </aside>

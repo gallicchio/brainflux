@@ -329,6 +329,17 @@ with Browser('quantumoptics/index.html', size=(1400, 900)) as b:
     t = b.eval("(() => { __app.state.sq.on = true; const t0 = performance.now(); for (let i = 0; i < 3; i++) { __app.state.sq.dB = 3 + i; __app.draw(); } return (performance.now() - t0) / 3; })()")
     check(t < 200, f'a new spectrum (a squeezing slider\'s step) makes the noise and draws in {t:.0f} ms')
 
+    # ---- the Pause button is in reach in every view (it was below the fold in the homodyne view)
+    run(b, 'scan', 0.2)
+    rb = b.box('#run')
+    check(b.eval("!!document.querySelector('#run').closest('#lo-panel')") and rb[3] > 0 and rb[1] + rb[3] < 760, f"homodyne: the Pause button sits beside the motor, its bottom {rb[1] + rb[3]:.0f} px down")
+    b.click('#run'); paused = not b.eval('__app.state.running') and b.eval("document.querySelector('#run').textContent") == 'Run'
+    b.click('#run')
+    check(paused and b.eval('__app.state.running'), 'and it stops and starts the clock')
+    run(b, 'squeezevac', 0.2)
+    rb = b.box('#run')
+    check(b.eval("!!document.querySelector('#run').closest('#anim-panel')") and rb[3] > 0 and rb[1] + rb[3] < 760, f"squeezing: back in the Animation panel, its bottom {rb[1] + rb[3]:.0f} px down")
+
     # ---- every experiment's read-out is made of numbers
     bad = []
     for name in names:
