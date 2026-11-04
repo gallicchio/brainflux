@@ -1,0 +1,21 @@
+{
+  "select": [".view-wrap"],
+  "wait": 0.6,
+  "js": "__app.runUntil(0.55 * __app.tEnd)",
+  "setups": {
+    "disk": {"js": "__app.runUntil(0.55 * __app.tEnd)"},
+    "shadow": {"js": "__app.runUntil(0.5 * __app.tEnd)"},
+    "classical": {"select": [".analysis .panel:nth-child(2)"], "js": "__app.runUntil()"},
+    "born": {"select": [".analysis .panel:nth-child(2)"], "js": "__app.runUntil()"},
+    "ring": {"select": [".analysis .panel:nth-child(1)"], "js": "__app.runUntil(0.62 * __app.tEnd)"},
+    "swave": {"select": [".analysis .panel:nth-child(2)", ".pw-wrap"], "js": "__app.runUntil()"},
+    "resonance": {"js": "__app.runUntil(0.8 * __app.tEnd)"},
+    "coulomb": {"select": [".analysis .panel:nth-child(2)"], "js": "__app.runUntil()"},
+    "two": {"select": [".analysis .panel:nth-child(2)"], "js": "__app.runUntil()"},
+    "slits": {"js": "__app.runUntil(0.6 * __app.tEnd)"},
+    "crystal": {"select": [".analysis .panel:nth-child(1)"], "js": "__app.runUntil(0.55 * __app.tEnd)"},
+    "offbragg": {"select": [".analysis .panel:nth-child(1)"], "js": "__app.runUntil(0.55 * __app.tEnd)"},
+    "impact": {"js": "__app.runUntil(0.55 * __app.tEnd)"},
+    "typed": {"js": "__app.runUntil(0.55 * __app.tEnd)"}
+  }
+}

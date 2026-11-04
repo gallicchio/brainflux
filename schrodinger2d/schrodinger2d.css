@@ -21,6 +21,9 @@
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .mom-wrap { aspect-ratio: 1; background: #000; border-radius: 6px; overflow: hidden; }
 .mom-wrap canvas, .xs-wrap canvas, .pw-wrap canvas { width: 100%; height: 100%; }
+.mom-wrap canvas { cursor: crosshair; }
+/* The momentum transfer at the chosen angle: fixed slots, wrapping only between groups. */
+#q-readout { color: var(--ink-2); line-height: 1.35; }
 .xs-wrap { height: 230px; }
 .pw-wrap { height: 120px; }
 #xs-legend { gap: 10px; }

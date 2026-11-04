@@ -77,7 +77,8 @@ def readouts(b):
     # The left edges of the readouts, and the top edges of the table's rows (which are all there
     # from the start, the values still to come shown as such).
     where = ("[...[...document.querySelectorAll('#readouts .ro')].map(e => e.getBoundingClientRect().left),"
-             " ...[...document.querySelectorAll('#sigmas tr')].map(e => e.getBoundingClientRect().top)].map(v => Math.round(v * 10) / 10)")
+             " ...[...document.querySelectorAll('#sigmas tr')].map(e => e.getBoundingClientRect().top),"
+             " ...[...document.querySelectorAll('#q-readout .fixnum')].flatMap(e => [e.getBoundingClientRect().left, e.getBoundingClientRect().top])].map(v => Math.round(v * 10) / 10)")
     seen, ts = [], []
     # Through t = 10 (a digit more), to the end (the box empties, "done" appears), and over a
     # few animation frames of the next run.
@@ -89,7 +90,7 @@ def readouts(b):
         b.sleep(0.25)
         seen.append(b.eval(where)); ts.append(b.eval('__app.sim.t'))
     moved = [i for i in range(1, len(seen)) if seen[i] != seen[0]]
-    check(len(seen[0]) >= 7 and not moved, f"readouts stay put over t = {', '.join(f'{t:.1f}' for t in ts)}"
+    check(len(seen[0]) >= 16 and not moved, f"readouts stay put over t = {', '.join(f'{t:.1f}' for t in ts)}"
           + ('' if not moved else f': moved at t = {ts[moved[0]]:.2f}, {seen[0]} -> {seen[moved[0]]}'))
 
 def first_screen(b):
@@ -106,11 +107,15 @@ def first_screen(b):
     check(all(w in ro for w in ('time t', 'momentum k₀', 'wavelength λ', 'energy E', 'probability in the box', 'time step')),
           f'the readouts carry words beside their symbols: "{ro[:90]}…"')
     legend = text(b, '#xs-legend')
-    check(all(w in legend for w in ('measured', 'partial waves at k₀', 'Born', 'exact at k₀')), f'the cross-section legend names its curves: "{legend}"')
+    check(all(w in legend for w in ('measured', 'partial waves at k₀', 'Born', 'exact at k₀', 'classical')), f'the cross-section legend names its curves: "{legend}"')
     pwl = b.eval("document.querySelector('.pw-wrap').parentElement.querySelector('.panel-head .muted').textContent")
     check('green ticks: exact' in pwl and 'must be 1' in pwl, f'the partial-wave legend names the ticks and the dots: "{pwl}"')
     glosses = b.eval("[...document.querySelectorAll('.panel-gloss')].map((e) => e.textContent)")
-    check(len(glosses) == 2 and glosses[0].startswith('dσ/dθ') and 'phase shift' in glosses[1], f'the cross-section and partial-wave panels carry a gloss: {glosses}')
+    check(len(glosses) == 3 and all(w in glosses[0] for w in ('measured (blue)', "Born's |Ṽ(k − k₀)|²", 'point at the circle', 'momentum transfer q = k − k₀'))
+          and glosses[1].startswith('dσ/dθ') and 'phase shift' in glosses[2], f'the momentum, cross-section and partial-wave panels carry a gloss: {glosses}')
+    q = text(b, '#q-readout')
+    check(all(w in q for w in ('angle θ', '60°', 'momentum transfer q = 2k₀ sin(θ/2) =', '2.000', 'dσ/dθ there: measured', 'Born')),
+          f'under the momentum picture, the angle, q and dσ/dθ there, in words: "{q}"')
     check(text(b, '#mom-note').startswith('the wave sorted by momentum'), f'the momentum panel says what it shows: "{text(b, "#mom-note")}"')
     # In the dark theme too.
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
@@ -135,10 +140,10 @@ def drawer(b):
         setups: exps.map((e) => e.dataset.setup).filter((s) => !window.__app.setups[s]), equations: theory ? theory.querySelectorAll('math').length : 0,
         glossed: [...dr.querySelectorAll('.exp em')].map((e) => e.textContent.trim()) }; })()""")
     check(d['first'] and d['h3'] == 'Start here' and d['math'] == 0 and 60 < d['words'] < 220, f"the drawer opens with a Start-here block in plain words ({d['words']} words, no equations)")
-    check(d['firstExp'] == 'disk' and d['n'] == 13 and d['buttons'] == 13 and not d['setups'], f"{d['n']} experiments, the first the opening state, each with a Set-it-up button and a set-up ({d['firstExp']})")
+    check(d['firstExp'] == 'disk' and d['n'] == 14 and d['buttons'] == 14 and not d['setups'], f"{d['n']} experiments, the first the opening state, each with a Set-it-up button and a set-up ({d['firstExp']})")
     check(d['theoryLast'] and d['theoryAfter'] and d['equations'] >= 10, f"the theory comes last, with its equations kept ({d['equations']} pieces of mathematics)")
     terms = ['differential cross section', 'optical theorem', 'first Born approximation', 'momentum transfer', 'partial wave', 'phase shift', 'S-matrix',
-             'unitarity', 'reciprocal lattice', "Ewald's construction", "Fraunhofer's", 'impact parameter']
+             'unitarity', 'reciprocal lattice', "Ewald's construction", "Fraunhofer's", 'impact parameter', 'extinction paradox']
     missing = [t for t in terms if not any(g.startswith(t) for g in d['glossed'])]
     check(not missing, 'the terms are glossed on first use' + ('' if not missing else f': missing {missing}'))
     b.click('#help-button'); b.sleep(0.5)
@@ -163,6 +168,18 @@ def disk(b):
     check(30 < tot['born'] / tot['flux'] < 40, f"help: Born's total {tot['born']:.0f} is 35 times the measured ({tot['born'] / tot['flux']:.1f})")
     worst = max(abs(absS(b, m) - 1) for m in range(-6, 7))
     check(worst < 0.01, f'|S_m| = 1 to {worst:.4f} for |m| <= 6')
+    # Classical particles bounce off where V = E: r = a + w ln(V0/E - 1) = 1.77, a hard disk 2r wide.
+    c = b.eval("""(() => { const c = __app.classical, d = __app.detector, M = d.M, row = [...document.querySelectorAll('#sigmas tr')].find((r) => r.textContent.startsWith('classical'));
+      return c && { r: c.r, back: c.dsdt[M / 2], at90: c.dsdt[M / 4], fwd: c.dsdt[0], row: row && row.textContent, meas180: d.crossSection()[M / 2] }; })()""")
+    if not c:
+        check(False, 'the hard disk has a classical curve')
+    else:
+        r = 1.5 + 0.25 * __import__('math').log(8 / 2 - 1)
+        check(abs(c['r'] - r) < 1e-9 and abs(c['back'] - r / 2) < 1e-9 and abs(c['at90'] - r / 2 * 0.5 ** 0.5) < 1e-9 and c['fwd'] == 0,
+              f"classical: r = a + w ln(V0/E - 1) = {c['r']:.3f}, (r/2)|sin(θ/2)|: {c['fwd']:.3f} forward, {c['at90']:.3f} at 90°, {c['back']:.3f} back")
+        check(c['row'] and c['row'].endswith('3.549'), f"the table's classical line is 2r = 3.549: \"{c['row']}\"")
+        check(abs(tot['flux'] / (2 * c['r']) - 2.34) < 0.05 and abs(c['meas180'] - 0.73) < 0.015,
+              f"help: σ is 2.3 times the classical 3.55 ({tot['flux'] / (2 * c['r']):.2f}); straight back the wave sends 0.73 ({c['meas180']:.3f})")
     b.screenshot('build/s2d-disk-done.png')
 
 def swave(b):
@@ -208,6 +225,71 @@ def bump(b):
     set_potential(b, 'V0 exp(-r^2/(2 a^2))', {'V0': -1, 'a': 1}); b.eval('__app.runUntil()')
     tot = totals(b)
     check(2.44 < tot['exact'] < 2.52 and 2.63 < e1 < 2.71, f"help, V0 = -1: exact 2.48 ({tot['exact']:.2f}) against 2.67 ({e1:.2f}) for V0 = 1")
+
+def momentum_circle(b):
+    """Born's dσ/dθ and the measured one round the momentum circle; q = k − k0 at the chosen angle."""
+    setup(b, 'ring')
+    if not finish(b, 'bump, scattered view'): return
+    rd = lambda a: b.eval(f'__app.setAngle({a})')
+    # The bump's closed form: m^2 |V~(q)|^2 / (2 pi k), V~ = 2 pi a^2 V0 exp(-q^2 a^2 / 2), a = V0 = 1, k = 2.
+    import math
+    born = lambda t: 2 * math.pi * math.exp(-(4 * math.sin(math.radians(t) / 2)) ** 2) / 2
+    worst = max(abs(rd(t)['born'] / born(t) - 1) for t in (0, 15, 30, 45, 60, -60))
+    check(worst < 0.01, f"the readout's Born dσ/dθ is the bump's transform at q = 2k₀ sin(θ/2), to {worst:.4f}")
+    r30, r60 = rd(30), rd(60)
+    check(abs(r60['q'] - 2) < 1e-9 and abs(rd(90)['q'] - 2 * 2 ** 0.5) < 1e-9 and abs(rd(180)['q'] - 4) < 1e-9, 'q = 2k₀ sin(θ/2): k₀ at 60°, 2k₀ straight back')
+    check(abs(r30['measured'] - 1.07) < 0.03 and abs(r30['born'] - 1.08) < 0.01 and abs(r60['measured'] - 0.171) < 0.006 and abs(r60['born'] - 0.058) < 0.001,
+          f"help: at 30° measured 1.07 and Born 1.08 ({r30['measured']:.3f}, {r30['born']:.3f}); at 60°, 0.171 and 0.058 ({r60['measured']:.3f}, {r60['born']:.4f})")
+    rd(60); txt = text(b, '#q-readout')
+    check('60°' in txt and '2.000' in txt and '0.171' in txt and '0.058' in txt, f'the readout shows them: "{txt}"')
+    cur = b.eval('(() => { const c = __app.momentumCurves(); return { top: c.top, born: Math.max(...c.born), meas: Math.max(...c.measured) }; })()')
+    check(abs(cur['top'] - max(cur['born'], cur['meas'])) < 1e-12 and cur['born'] / cur['meas'] < 1.3, f"both curves on one scale, the larger's peak at the top ({cur})")
+    # The pointer turns k: a point straight up from the centre is 90 degrees.
+    box = b.box('#momentum')
+    b.mouse('mouseMoved', box[0] + box[2] / 2, box[1] + box[3] * 0.2)
+    b.sleep(0.2)
+    a = b.eval('__app.state.qAngle')
+    check(a == 90 and '2.828' in text(b, '#q-readout'), f"the pointer above the centre sets θ = 90° ({a}) and q = 2.828: \"{text(b, '#q-readout')}\"")
+    b.mouse('mouseMoved', box[0] + box[2] * 0.52, box[1] + box[3] * 0.51)   # near the centre: no change
+    b.sleep(0.2)
+    check(b.eval('__app.state.qAngle') == 90, 'near the centre the pointer leaves k alone')
+    b.screenshot('build/s2d-momentum.png', '.analysis .panel')
+    # Where Born fails: twice too high at V0 = 2, fifty times for the hard disk, and nothing behind it.
+    set_potential(b, 'V0 exp(-r^2/(2 a^2))', {'V0': 2, 'a': 1}); b.eval('__app.runUntil()')
+    r0 = rd(0)
+    check(abs(r0['born'] - 4 * math.pi) < 0.01 and abs(r0['measured'] - 5.53) < 0.1, f"help, V0 = 2: Born 12.6 straight ahead against 5.53 ({r0['born']:.2f}, {r0['measured']:.2f})")
+    b.eval("document.querySelector('#targets button').click()"); b.sleep(0.2); b.eval('__app.state.view = "scattered"; __app.runUntil()')
+    r0, r180 = rd(0), rd(180)
+    check(abs(r0['born'] - 303) < 3 and abs(r0['measured'] - 5.66) < 0.1 and 45 < r0['born'] / r0['measured'] < 60,
+          f"help, the hard disk: Born's lobe fifty times the measured, 303 against 5.66 ({r0['born']:.1f}, {r0['measured']:.2f})")
+    check(abs(r180['born'] - 0.136) < 0.005 and abs(r180['measured'] - 0.73) < 0.015, f"help: straight back Born 0.14 against 0.73 ({r180['born']:.3f}, {r180['measured']:.3f})")
+    b.eval('__app.setAngle(60)')
+    b.screenshot('build/s2d-momentum-disk.png', '.analysis .panel')
+
+
+def classical(b):
+    """The bigger, harder disk at a shorter wave: classical at large angles, the forward peak, twice 2r."""
+    setup(b, 'classical')
+    if not finish(b, 'classical'): return
+    c = b.eval("""(() => { const d = __app.detector, M = d.M, s = d.crossSection(), cl = __app.classical, dth = 2 * Math.PI / M, f = d.fluence;
+      const deg = (j) => Math.abs(((d.theta[j] * 180 / Math.PI + 180) % 360) - 180);
+      const win = (lo, hi, g) => { let a = 0; for (let j = 0; j < M; j++) if (deg(j) >= lo && deg(j) <= hi) a += g[j] * dth; return a; };
+      return { r: cl.r, flux: d.totals().scattered, k: __app.state.k0, fwd: win(0, 30, s), rest: win(30, 180, s), b90: win(90, 180, s), c90: win(90, 180, cl.dsdt),
+        c30: win(0, 30, cl.dsdt), exact: __app.exact.pw.sigma, optical: __app.pw.optical }; })()""")
+    r = 2.5 + 0.15 * __import__('math').log(15 / 4.5 - 1)
+    print(f"note  classical: r {c['r']:.3f}, sigma {c['flux']:.3f} (exact {c['exact']:.3f}, optical {c['optical']:.3f}), 2r {2 * c['r']:.3f}; within 30 deg {c['fwd']:.3f}, beyond {c['rest']:.3f}; beyond 90: {c['b90']:.3f} against {c['c90']:.3f}")
+    check(abs(c['r'] - r) < 1e-9 and abs(c['r'] - 2.63) < 0.005 and abs(2 * c['r'] - 5.25) < 0.01 and abs(c['k'] * c['r'] - 8) < 0.15,
+          f"help: r = 2.63 where V = E, 2r = 5.25, kr ≈ 8 ({c['r']:.3f}, {2 * c['r']:.3f}, {c['k'] * c['r']:.2f})")
+    check(abs(c['b90'] - 3.71) < 0.05 and abs(c['c90'] - 3.74) < 0.01, f"help: beyond 90° the wave and the particles hold 3.71 and 3.74 ({c['b90']:.3f}, {c['c90']:.3f})")
+    check(abs(c['fwd'] - 5.7) < 0.1 and abs(c['fwd'] / c['rest'] - 1) < 0.05 and abs(c['c30'] - 0.18) < 0.005,
+          f"help: within ±30° a peak of 5.7, as much as everywhere else ({c['fwd']:.2f}, {c['rest']:.2f}), where the particles send 0.18 ({c['c30']:.3f})")
+    check(abs(c['flux'] - 11.4) < 0.1 and abs(c['flux'] / (2 * c['r']) - 2.2) < 0.05 and abs(c['exact'] / c['flux'] - 1) < 0.03,
+          f"help: σ = 11.4, 2.2 times 2r ({c['flux']:.2f}, {c['flux'] / (2 * c['r']):.2f}; exact {c['exact']:.2f})")
+    b.screenshot('build/s2d-classical-done.png')
+    # Over the top of the wall no classical curve: V0 below E.
+    set_potential(b, 'V0/(1 + exp((r - a)/w))', {'V0': 4, 'a': 2.5, 'w': 0.15})
+    check(b.eval('__app.classical') is None and 'classical' not in text(b, '#xs-legend'), 'no classical curve when the packet can go over the wall (V0 < E)')
+
 
 def resonance(b):
     # The attractive well: the m = +-3 wave through pi/2 just below k0; the run goes on until the
@@ -282,6 +364,16 @@ def crystal(b):
         frac[name] = window(b, 2 * a, 15)
         print(f"note  {name}: turned {a} degrees, {frac[name]:.3f} of the packet within 15 degrees of {2 * a} degrees")
         b.screenshot(f'build/s2d-{name}-done.png')
+        if name == 'crystal':
+            # The help: the momentum transfer to the Bragg beam at 60 degrees is G = 2 pi / c, the
+            # lattice point (n1, n2) = (0, 1) turned by 30 degrees.
+            q = b.eval('__app.setAngle(60)')['q']
+            check(abs(q - 3.1416) < 1e-3 and '3.142' in text(b, '#q-readout'), f'help: at 60° the momentum transfer is 2k₀ sin α = 2π/c = 3.142 ({q:.4f})')
+        else:
+            # Off it, the set-up puts k at 2 alpha = 40 degrees: q = 2k0 sin 20 = 2.15, 0.68 of 2 pi / c.
+            q = b.eval('__app.q()')
+            check(q['theta'] == 40 and abs(q['q'] - 2.149) < 1e-3 and abs(q['q'] / 3.1416 - 0.68) < 0.005,
+                  f"help: off the Bragg angle the arrow is at 2α = 40° ({q['theta']}), q = 2.15 ({q['q']:.3f}), 0.68 of 2π/c")
     check(frac['crystal'] > 0.2 and frac['crystal'] > 4 * frac['offbragg'],
           f"Bragg: {frac['crystal']:.3f} reflected at the Bragg angle, {frac['offbragg']:.3f} off it")
     check(0.24 < frac['crystal'] < 0.29 and 0.035 < frac['offbragg'] < 0.055, 'help: 26% at the Bragg angle, 4.5% at 20 degrees')
@@ -313,7 +405,7 @@ with Browser('schrodinger2d/index.html', size=(1500, 1000)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1)
     b.screenshot('build/s2d-start.png')
     for name, fn in [('first screen', first_screen), ('drawer', drawer), ('readouts', readouts), ('hard disk', disk), ('slow packet', swave),
-                     ('bump', bump), ('resonance', resonance), ('screened Coulomb', coulomb), ('two disks', two), ('double slit', slits),
+                     ('bump', bump), ('momentum circle', momentum_circle), ('classical', classical), ('resonance', resonance), ('screened Coulomb', coulomb), ('two disks', two), ('double slit', slits),
                      ('crystal', crystal), ('experiments', experiments), ('phone', phone)]:
         section(name, fn, b)
     errors = [c for c in b.console if c.startswith(('EXCEPTION', 'error'))]

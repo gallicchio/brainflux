@@ -1,10 +1,10 @@
 // The 2D scattering demo: a packet, a target, and the scattering theory measured as it goes.
 
-import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, radialWaves, preparePotential2D, fraunhofer } from './sim.js';
+import { Sim2D, Packet, Detector, fromPartialWaves, bornCrossSection, radialWaves, preparePotential2D, fraunhofer, classicalHardDisk, wallRadius } from './sim.js';
 import { fft2Centered } from '../lib/fft.js';
 import { colorize, autoBrightness } from '../lib/complexcolor.js';
 import { parse } from '../lib/expr.js';
-import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt } from '../lib/ui.js';
+import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, niceTicks } from '../lib/plot.js';
 
 // The targets: typed potentials in x, y, r, theta, with their parameters.
@@ -31,10 +31,11 @@ const state = {
   show: { circle: true, potential: true },
   running: false,
   speed: 4,
+  qAngle: 60,             // the direction of k on the momentum panel's circle, whole degrees
 };
 
 let sim, packet, detector, Vexpr, Vparams = {};
-let dt = 0.05, born = null, exact = null, waves = null, pwResult = null, slit = null, warning = '';
+let dt = 0.05, born = null, exact = null, waves = null, pwResult = null, slit = null, classical = null, warning = '';
 let finished = false, tEnd = 30, potentialImage = null, round = true, wideTarget = false;
 
 // --------------------------------------------------------------------- set-up
@@ -131,6 +132,13 @@ function restart() {
   const th = Array.from(detector.theta);
   born = state.target.extended ? null : bornCrossSection(sim, state.k0, th);
   slit = state.target.extended ? slitPattern(th, prep.V) : null;
+  // Classical particles off the disk: a hard disk of the radius where V = E, where one coming
+  // head on is turned back (see wallRadius); none if the packet's energy is over the top.
+  classical = null;
+  if (state.target.id === 'disk') {
+    const r = wallRadius(Vparams.V0, Vparams.a, Vparams.w, E);
+    if (r > 0) classical = { r, dsdt: classicalHardDisk(r, th) };
+  }
   // Turning matters only for a target that isn't round; phase shifts belong to round ones.
   round = !(Vexpr && ['x', 'y', 'theta'].some((v) => Vexpr.uses(v)));
   turnSlider.hidden = round;
@@ -332,32 +340,56 @@ function crystalLattice() {
   return state.target.id === 'crystal' && Vparams.c > 0 ? { c: Vparams.c, a: (state.turn * Math.PI) / 180 } : null;
 }
 
+let momHalf = 0;   // the momentum picture shows |kx|, |ky| up to momHalf dk
+
 function drawMomentum() {
-  // Every other frame while running: the transform costs as much as a time step.
-  if (state.running && frames % 2) return;
+  // Every other frame while running: the transform costs as much as a time step.  (The curves
+  // and the arrows on it are drawn every time.)
+  if (!(state.running && frames % 2) || !momCanvas) {
+    const n = state.n;
+    const [re, im] = state.view === 'scattered' ? scatteredGrid() : [Float64Array.from(sim.re), Float64Array.from(sim.im)];
+    fft2Centered(re, im, n, n);
+    // Show |k| up to 2.2 k0: a square of side 2 * 2.2 k0 / dk pixels around the centre.
+    const dk = (2 * Math.PI) / state.L, half = Math.min(n / 2, Math.ceil((2.2 * state.k0) / dk));
+    const m = 2 * half, sub = new Float64Array(m * m), subI = new Float64Array(m * m);
+    for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
+      const src = (n / 2 + half - 1 - j) * n + (n / 2 - half + i);
+      sub[j * m + i] = re[src]; subI[j * m + i] = im[src];
+    }
+    if (!momCanvas || momCanvas.width !== m) { momCanvas = document.createElement('canvas'); momCanvas.width = momCanvas.height = m; }
+    const c = momCanvas, cctx = c.getContext('2d'), img = cctx.createImageData(m, m);
+    colorize(sub, subI, img.data, autoBrightness(sub, subI, 0.97) * 0.3, 'magnitude');
+    cctx.putImageData(img, 0, 0);
+    momHalf = half;
+  }
+  paintMomentum();
+}
+
+/**
+ * dsigma/dtheta at the direction theta (radians) from a curve given at the detector's angles,
+ * interpolated between them.
+ */
+function atAngle(curve, theta) {
+  const M = detector.M, u = ((((theta / (2 * Math.PI)) * M) % M) + M) % M, j = Math.floor(u), f = u - j;
+  return (1 - f) * curve[j % M] + f * curve[(j + 1) % M];
+}
+
+/**
+ * The momentum picture and what is drawn on it: the energy circle |k| = k0; outside it, the
+ * cross section for each direction of k as a distance out from the circle, measured (the flux
+ * through the detector) and Born's, m^2 |V~(k - k0)|^2 / (2 pi hbar^4 k), on one scale; the
+ * incident k0, a k on the circle at the chosen angle and the momentum transfer q = k - k0.
+ */
+function paintMomentum() {
   const cv = $('#momentum');
   const { ctx, width, height } = fitCanvas(cv);
-  const n = state.n;
-  const [re, im] = state.view === 'scattered' ? scatteredGrid() : [Float64Array.from(sim.re), Float64Array.from(sim.im)];
-  fft2Centered(re, im, n, n);
-  // Show |k| up to 2.2 k0: a square of side 2 * 2.2 k0 / dk pixels around the centre.
-  const dk = (2 * Math.PI) / state.L, half = Math.min(n / 2, Math.ceil((2.2 * state.k0) / dk));
-  const m = 2 * half, sub = new Float64Array(m * m), subI = new Float64Array(m * m), map = new Int32Array(m * m);
-  for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
-    const src = (n / 2 + half - 1 - j) * n + (n / 2 - half + i);
-    sub[j * m + i] = re[src]; subI[j * m + i] = im[src]; map[j * m + i] = j * m + i;
-  }
-  if (!momCanvas || momCanvas.width !== m) { momCanvas = document.createElement('canvas'); momCanvas.width = momCanvas.height = m; }
-  const c = momCanvas, cctx = c.getContext('2d'), img = cctx.createImageData(m, m);
-  colorize(sub, subI, img.data, autoBrightness(sub, subI, 0.97) * 0.3, 'magnitude');
-  cctx.putImageData(img, 0, 0);
   ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(c, 0, 0, width, height);
+  ctx.drawImage(momCanvas, 0, 0, width, height);
+  const dk = (2 * Math.PI) / state.L, half = momHalf, k0 = state.k0;
   // The energy shell |k| = k0, and the axes.
   const s = width / (2 * half * dk), cx = width / 2, cy = height / 2;
-  ctx.strokeStyle = 'rgba(255,210,80,0.8)'; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.arc(cx, cy, state.k0 * s, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  const P = (kx, ky) => [cx + kx * s, cy - ky * s];
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(width, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, height); ctx.stroke();
   // The crystal's reciprocal lattice, G = (2 pi / c)(n1, n2) turned with the crystal, drawn from
   // the incident spot: k0 + G.  A wave k0 + G is allowed where it is also on the energy circle:
@@ -366,21 +398,114 @@ function drawMomentum() {
   const lat = crystalLattice();
   if (lat) {
     const g = (2 * Math.PI) / lat.c, ca = Math.cos(lat.a), sa = Math.sin(lat.a), lim = half * dk, near = Math.PI / (3.5 * lat.c);
-    const nmax = Math.ceil((lim + state.k0) / g) + 1;
+    const nmax = Math.ceil((lim + k0) / g) + 1;
     for (let n1 = -nmax; n1 <= nmax; n1++) for (let n2 = -nmax; n2 <= nmax; n2++) {
-      const kx = state.k0 + g * (n1 * ca - n2 * sa), ky = g * (n1 * sa + n2 * ca);
+      const kx = k0 + g * (n1 * ca - n2 * sa), ky = g * (n1 * sa + n2 * ca);
       if (Math.abs(kx) > lim || Math.abs(ky) > lim) continue;
-      const on = Math.abs(Math.hypot(kx, ky) - state.k0) < near;
+      const on = Math.abs(Math.hypot(kx, ky) - k0) < near;
       ctx.beginPath(); ctx.arc(cx + kx * s, cy - ky * s, 3.5, 0, 2 * Math.PI);
       if (on) { ctx.fillStyle = 'rgba(255,210,80,0.9)'; ctx.fill(); } else { ctx.strokeStyle = 'rgba(140,200,255,0.8)'; ctx.lineWidth = 1.2; ctx.stroke(); }
     }
   }
+  // dsigma/dtheta round the circle: a distance out from it in proportion, the larger curve's
+  // peak 0.75 k0 out.  Elastic scattering puts the scattered wave on the circle, at each
+  // direction of k as much as dsigma/dtheta sends there; Born says how much: the potential's
+  // Fourier transform at k - k0.  Where a curve is less than a pixel out it is left out, so
+  // as not to hide the circle.
+  const curves = momentumCurves();
+  if (curves.top > 0) {
+    const th = detector.theta, M = detector.M, room = 0.75 * k0, px = 1 / s;
+    for (const [vals, colour, dash, lw] of [[curves.born, 'rgba(205,206,212,0.95)', [5, 4], 1.4], [curves.measured, 'rgba(110,170,255,0.95)', [], 1.7]]) {
+      if (!vals) continue;
+      ctx.strokeStyle = colour; ctx.setLineDash(dash); ctx.lineWidth = lw;
+      ctx.beginPath();
+      let on = false;
+      for (let a = 0; a <= M; a++) {
+        const j = a % M, out = (room * Math.max(0, vals[j])) / curves.top;
+        if (out < px) { on = false; continue; }
+        const [x, y] = P((k0 + out) * Math.cos(th[j]), (k0 + out) * Math.sin(th[j]));
+        if (on) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        on = true;
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  // The energy circle over them.
+  ctx.strokeStyle = 'rgba(255,210,80,0.8)'; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(cx, cy, k0 * s, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+  // k0, a k on the circle at the chosen angle, and the momentum transfer q = k - k0 between their tips.
+  const t = (state.qAngle * Math.PI) / 180, kx = k0 * Math.cos(t), ky = k0 * Math.sin(t);
+  const arrow = (x0, y0, x1, y1, colour, lw, head) => {
+    const [a, b] = P(x0, y0), [c, d] = P(x1, y1), len = Math.hypot(c - a, d - b);
+    if (len < 1) return;
+    const ux = (c - a) / len, uy = (d - b) / len;
+    ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = lw;
+    ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c - ux * head * 0.8, d - uy * head * 0.8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c, d); ctx.lineTo(c - ux * head - uy * head * 0.45, d - uy * head + ux * head * 0.45);
+    ctx.lineTo(c - ux * head + uy * head * 0.45, d - uy * head - ux * head * 0.45); ctx.closePath(); ctx.fill();
+  };
+  arrow(0, 0, k0, 0, 'rgba(255,255,255,0.75)', 1.2, 7);
+  arrow(0, 0, kx, ky, 'rgba(255,255,255,0.75)', 1.2, 7);
+  arrow(k0, 0, kx, ky, 'rgb(255,120,190)', 2, 9);
+  ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // Each label beside the middle of its arrow, on the side away from the triangle's inside.
+  const label = (text, mx, my, ox, oy, colour) => {
+    const [x, y] = P(mx, my), n = Math.hypot(ox, oy) || 1;
+    ctx.fillStyle = colour; ctx.fillText(text, x + (ox / n) * 10, y - (oy / n) * 10);
+  };
+  const qx = kx - k0, qy = ky, side = Math.sign(state.qAngle) || 1;
+  if (Math.abs(state.qAngle) > 3) {
+    label('q', k0 + qx / 2, qy / 2, qy * side, -qx * side, 'rgb(255,150,205)');
+    label('k', kx / 2, ky / 2, -ky * side, kx * side, 'rgba(255,255,255,0.85)');
+  }
+  label('k₀', k0 / 2, 0, 0, -side, 'rgba(255,255,255,0.85)');
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '11px system-ui, sans-serif';
   ctx.fillText('kx →', width - 34, cy - 4); ctx.fillText('ky ↑', cx + 4, 12);
   ctx.fillText(`dashed: |k| = k₀ = ${fmt(state.k0, 3)}, the packet's energy`, 6, height - 6);
 }
 
-const COLORS = { flux: null, pw: '#e07b39', born: '#8a8b91', exact: '#2e9e5b', fraunhofer: '#e07b39' };
+/** The curves drawn round the momentum circle: measured and Born's dsigma/dtheta, and the larger peak. */
+function momentumCurves() {
+  const measured = !state.target.extended && detector.fluence > 1e-6 ? detector.crossSection() : null;
+  const b = state.target.extended ? null : born;
+  let top = 0;
+  for (const c of [measured, b]) if (c) for (const v of c) if (v > top) top = v;
+  return { measured, born: b, top };
+}
+
+/** The readout under the momentum picture: the chosen angle, q there, and dsigma/dtheta measured and by Born. */
+function qReadout() {
+  const t = (state.qAngle * Math.PI) / 180, q = 2 * state.k0 * Math.abs(Math.sin(t / 2)), c = momentumCurves();
+  const fig = (v) => (v === null ? '–' : !(v >= 0.0005) ? '0.000' : v >= 1000 ? v.toExponential(1).replace('e+', 'e') : v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : v >= 1 ? 2 : 3));
+  const meas = c.measured ? atAngle(c.measured, t) : null, bornV = c.born ? atAngle(c.born, t) : null;
+  setGroups($('#q-readout'), [
+    ['angle θ ', { text: String(state.qAngle).replace('-', '−'), w: 4 }, '°,'],
+    ['momentum transfer q = 2k₀ sin(θ/2) = ', { text: q.toFixed(3), w: 6 }, ';'],
+    ['dσ/dθ there: measured ', { text: fig(meas), w: 6 }, ','],
+    ['Born ', { text: fig(bornV), w: 6 }],
+  ]);
+  return { theta: state.qAngle, q, measured: meas, born: bornV };
+}
+
+// Point at the momentum picture (or drag a finger round it) to turn k round the circle.
+{
+  const cv = $('#momentum');
+  const pick = (e) => {
+    if (!momHalf) return;
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left - r.width / 2, y = r.height / 2 - (e.clientY - r.top);
+    const ring = (state.k0 * r.width) / (2 * momHalf * ((2 * Math.PI) / state.L));   // the circle's radius, CSS pixels
+    if (Math.hypot(x, y) < 0.25 * ring) return;
+    let a = Math.round((Math.atan2(y, x) * 180) / Math.PI);
+    if (a === -180) a = 180;
+    if (a !== state.qAngle) { state.qAngle = a; paintMomentum(); qReadout(); }
+  };
+  cv.addEventListener('pointermove', pick);
+  cv.addEventListener('pointerdown', (e) => { pick(e); cv.setPointerCapture?.(e.pointerId); });
+}
+
+const COLORS = { flux: null, pw: '#e07b39', born: '#8a8b91', exact: '#2e9e5b', fraunhofer: '#e07b39', classical: '#9a6bd1' };
 
 function drawCrossSection() {
   const cv = $('#xsec');
@@ -398,6 +523,7 @@ function drawCrossSection() {
   if (pwResult) series.push(['pw', pwResult.f.map(([a, b]) => a * a + b * b)]);
   if (born) series.push(['born', born]);
   if (exact) series.push(['exact', exact.pw.f.map(([a, b]) => a * a + b * b)]);
+  if (classical) series.push(['classical', classical.dsdt]);
   if (warning) { ctx.save(); ctx.fillStyle = c.warn; ctx.font = '12px system-ui, sans-serif'; ctx.fillText(warning.split(':')[0], f.left + 6, f.top + 14); ctx.restore(); }
   // Log scale, from the largest value down five decades.
   let top = 0;
@@ -407,8 +533,8 @@ function drawCrossSection() {
   f.x0 = -180; f.x1 = 180; f.y0 = lb; f.y1 = lt;
   f.clip();
   for (const [key, s] of series) {
-    ctx.strokeStyle = COLORS[key]; ctx.lineWidth = key === 'flux' ? 2 : 1.6;
-    ctx.setLineDash(key === 'flux' ? [] : key === 'exact' ? [2, 3] : [6, 4]);
+    ctx.strokeStyle = COLORS[key]; ctx.lineWidth = key === 'flux' ? 2 : key === 'classical' ? 1.2 : 1.6;
+    ctx.setLineDash(key === 'flux' ? [] : key === 'exact' ? [2, 3] : key === 'classical' ? [3, 3] : [6, 4]);
     ctx.beginPath();
     let on = false;
     for (let a = 0; a <= M; a++) {
@@ -515,6 +641,7 @@ function drawWaves() {
 }
 
 function updateReadouts() {
+  qReadout();
   const inBox = boxNorm();
   // Each number in a slot of its own width, with fixed decimals: nothing moves as they change.
   $('#readouts').innerHTML = [
@@ -537,6 +664,7 @@ function updateReadouts() {
   }
   if (born) rows.push(['first Born approximation', born.reduce((s, v) => s + v * dth, 0)]);
   if (exact) rows.push(['exact: the radial equation', exact.pw.sigma]);
+  if (classical) rows.push(['classical: the width it blocks, 2r', 2 * classical.r]);
   if (state.target.extended) {
     // Through the wall: the far half of the detector, and the openings' width.
     const half = (P) => P.reduce((s, v, j) => s + (Math.cos(detector.theta[j] - (state.turn * Math.PI) / 180) > 0 ? v * dth : 0), 0);
@@ -556,6 +684,7 @@ function updateReadouts() {
   const legend = state.target.extended ? [['flux', 'measured'], ['fraunhofer', 'Fraunhofer']]
     : [['flux', 'measured'], ...(round ? [['pw', 'partial waves at k₀']] : []), ['born', 'Born']];
   if (exact) legend.push(['exact', 'exact at k₀']);
+  if (classical) legend.push(['classical', 'classical']);
   $('#xs-legend').innerHTML = legend.filter(([k]) => k !== 'born' || born).map(([k, l]) => `<span><i style="border-color:${COLORS[k] || themeColors().accent}${k === 'flux' ? '' : ';border-top-style:dashed'}"></i>${l}</span>`).join('');
 }
 
@@ -679,8 +808,8 @@ window.addEventListener('resize', () => kick());
 // --------------------------------------------------------------------- experiments
 
 const byId = (id) => TARGETS.find((t) => t.id === id);
-function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, turn = 0, view = 'total', params, speed = 4, L = 64 } = {}) {
-  Object.assign(state, { k0, sy, sx, b, turn, view, speed, L });
+function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, turn = 0, view = 'total', params, speed = 4, L = 64, angle = 60 } = {}) {
+  Object.assign(state, { k0, sy, sx, b, turn, view, speed, L, qAngle: angle });
   boxSlider.value = L; turnSlider.value = turn;
   packetSliders.k0.value = k0; packetSliders.sy.value = sy; packetSliders.sx.value = sx; packetSliders.b.value = b;
   viewSeg.value = view; speedSlider.value = speed;
@@ -691,6 +820,7 @@ function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, turn = 0, view = 'total', par
 const setups = {
   disk: () => go('disk'),
   shadow: () => go('disk', { view: 'scattered' }),
+  classical: () => go('disk', { k0: 3, sy: 8, params: { V0: 15, a: 2.5, w: 0.15 } }),
   born: () => go('bump'),
   ring: () => go('bump', { view: 'scattered' }),
   swave: () => go('disk', { k0: 0.8, sx: 3, sy: 8, L: 112, params: { a: 1, w: 0.2 }, speed: 6 }),
@@ -699,7 +829,7 @@ const setups = {
   two: () => go('two', { sy: 8 }),
   slits: () => go('slits', { sy: 8, sx: 2 }),
   crystal: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 30 }),
-  offbragg: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 20 }),
+  offbragg: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 20, angle: 40 }),
   impact: () => go('disk', { sy: 1.5, b: 1.5 }),
   typed: () => go('typed'),
 };
@@ -722,4 +852,5 @@ else {
 
 window.__app = { state, get sim() { return sim; }, get detector() { return detector; }, get packet() { return packet; }, get pw() { return pwResult; },
   get waves() { return waves; }, get exact() { return exact; }, get born() { return born; }, get slit() { return slit; }, get finished() { return finished; },
-  get tEnd() { return tEnd; }, get dt() { return dt; }, setups, restart, runUntil, ready: true, parse };
+  get tEnd() { return tEnd; }, get dt() { return dt; }, get classical() { return classical; }, q: () => qReadout(), setAngle: (deg) => { state.qAngle = Math.round(deg); if (sim) paintMomentum(); return qReadout(); },
+  momentumCurves, setups, restart, runUntil, ready: true, parse };
