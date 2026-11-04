@@ -7,10 +7,12 @@
 import { $, segmented, slider, drawer, readHash, writeHash, setGroups } from '../lib/ui.js';
 import { Source, SOURCES } from './source.js';
 import * as F from './fringes-view.js';
+import * as A from './ascan-view.js';
 
-const VIEWS = { fringes: F };
+const VIEWS = { fringes: F, ascan: A };
 const VIEW_LIST = [
   { value: 'fringes', label: '1 · Fringes from a layer', title: 'One reflecting surface in the sample arm: a burst of fringes where the paths match' },
+  { value: 'ascan', label: '2 · The A-scan', title: 'A layered sample, scanned in depth: the envelope of the fringes is its reflectivity against depth' },
 ];
 const app = { view: 'fringes' };
 
@@ -95,11 +97,15 @@ const setups = {
   bandwidth: () => go('fringes', { bw: 10, d: 20, z: 60, motor: 'sweep', speed: 20, win: [0, 120] }),
   two: () => go('fringes', { d: 30, z: 40, two: true, t: 100, n: 1.5, motor: 'sweep', speed: 30, win: [15, 215] }),
   dispersion: () => go('fringes', { bw: 150, d: 40, z: 50, glass: 2, motor: 'sweep', speed: 3, win: [30, 70] }),
+  ascan: () => go('ascan', { sample: 'slide', scale: 'lin', noise: -60 }),
+  resolution: () => go('ascan', { sample: 'pair', gap: 8, scale: 'lin', noise: -120, whole: true, d: 10 }),
+  retina: () => go('ascan', { sample: 'retina', scale: 'db', noise: -60 }),
 };
 
 // --------------------------------------------------------------------- start
 
 F.init(shared);
+A.init(shared);
 drawer($('#help'), $('#help-button'), setups);
 lightReadout();
 
@@ -124,11 +130,11 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => VI
 
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key === ' ' && app.view === 'fringes') { e.preventDefault(); F.setMotor(F.state.motor === 'stop' ? 'sweep' : 'stop'); }
+  if (e.key === ' ' && (app.view === 'fringes' || app.view === 'ascan')) { e.preventDefault(); const V = VIEWS[app.view]; V.setMotor(V.state.motor === 'stop' ? 'sweep' : 'stop'); }
 });
 
 window.__app = {
-  ready: true, setups, setView, views: VIEWS, F, src: shared.src, shared,
+  ready: true, setups, setView, views: VIEWS, F, A, src: shared.src, shared,
   get view() { return app.view; },
   /** Hold the clock (the tests move it with step) or let it run again. */
   hold(on = true) { held = on; last = 0; },

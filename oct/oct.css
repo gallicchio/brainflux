@@ -59,6 +59,17 @@
 #f-trace, #f-spec { cursor: crosshair; }
 #f-trace { cursor: ew-resize; }
 
+/* View 2: the sample, the trace, the A-scan and its grey strip, on one depth axis. */
+#v-ascan { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.strip-box { height: 64px; }
+.a-trace-box { height: max(150px, calc(28vh - 50px)); }
+.a-scan-box { height: max(200px, calc(42vh - 110px)); }
+.grey-box { height: 22px; }
+#v-ascan canvas { cursor: ew-resize; }
+.seg.button-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
+.seg.button-grid > button, .seg.button-grid > button:first-child, .seg.button-grid > button:last-child { border-radius: 6px; margin: 0; }
+.seg.button-grid { gap: 4px; }
+
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .controls .slider { grid-template-columns: minmax(7.6em, auto) 1fr 4.8em; }

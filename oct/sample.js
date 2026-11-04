@@ -52,21 +52,22 @@ export const fresnel = (n1, n2) => (n2 - n1) / (n2 + n1);
 export const STACKS = {
   slide: {
     label: 'Cover slip', title: 'A microscope cover slip, 170 μm of glass (n = 1.52): a front face and a back face',
-    n: 1.52, depth: 230, layers: [{ z: 0, r: fresnel(1, 1.52) }, { z: 170, r: fresnel(1.52, 1) }],
+    n: 1.52, depth: 230, layers: [{ z: 0, r: fresnel(1, 1.52), name: 'front face' }, { z: 170, r: fresnel(1.52, 1), name: 'back face' }],
   },
   film: {
-    label: 'Three-layer film', title: 'Three plastic layers laminated together (n ≈ 1.5), 30, 60 and 45 μm thick: four interfaces, the inner ones weak',
-    n: 1.5, depth: 190, layers: [{ z: 0, r: 0.2 }, { z: 30, r: 0.04 }, { z: 90, r: -0.04 }, { z: 135, r: -0.2 }],
+    label: 'Three-layer film', title: 'Three plastic layers laminated together (n ≈ 1.5), 30, 60 and 45 μm thick: four interfaces, the two inside weak',
+    n: 1.5, depth: 190, layers: [{ z: 0, r: 0.2, name: 'front' }, { z: 30, r: 0.04, name: 'first bond' }, { z: 90, r: -0.04, name: 'second bond' }, { z: 135, r: -0.2, name: 'back' }],
   },
   retina: {
-    label: 'Retina-like stack', title: 'A stack like the retina\'s layers (n = 1.38): weak interfaces 40 to 90 μm apart, the photoreceptors and the pigment epithelium brightest',
+    label: 'Retina-like stack', title: 'A stack like the retina\'s layers (n = 1.38): nine weak interfaces, the deepest ones (the photoreceptors and the pigment epithelium) brightest',
     n: 1.38, depth: 420,
-    layers: [{ z: 0, r: 0.03 }, { z: 40, r: 0.02 }, { z: 120, r: 0.015 }, { z: 160, r: 0.015 }, { z: 190, r: 0.015 },
-      { z: 280, r: 0.02 }, { z: 300, r: 0.05 }, { z: 320, r: 0.07 }, { z: 340, r: 0.03 }],
+    layers: [{ z: 0, r: 0.03, name: 'inner limiting membrane' }, { z: 40, r: 0.02, name: 'nerve fibres' }, { z: 120, r: 0.015, name: 'inner plexiform' },
+      { z: 160, r: 0.015, name: 'inner nuclear' }, { z: 190, r: 0.015, name: 'outer plexiform' }, { z: 280, r: 0.02, name: 'outer limiting membrane' },
+      { z: 300, r: 0.05, name: 'photoreceptors' }, { z: 320, r: 0.07, name: 'pigment epithelium' }, { z: 340, r: 0.03, name: 'Bruch\'s membrane' }],
   },
   pair: {
-    label: 'Two surfaces', title: 'Two reflecting surfaces a settable optical distance apart (in air, n = 1): the resolution test',
-    n: 1, depth: 240, gap: 8, layers: [{ z: 100, r: 0.2 }, { z: 108, r: 0.2 }],
+    label: 'Two surfaces', title: 'Two reflecting surfaces a settable distance apart (in air, n = 1): how close can they be and still be told apart?',
+    n: 1, depth: 8, gap: 8, layers: [{ z: 0, r: 0.2, name: 'first surface' }, { z: 8, r: 0.2, name: 'second surface' }],
   },
 };
 
@@ -74,7 +75,7 @@ export const STACKS = {
 export function makeStack(name, opts = {}) {
   const s = STACKS[name] || STACKS.slide;
   const st = { name, n: opts.n ?? s.n, depth: s.depth, layers: s.layers.map((l) => ({ ...l })) };
-  if (name === 'pair') { st.gap = opts.gap ?? s.gap; st.layers[1].z = st.layers[0].z + st.gap / st.n; }
+  if (name === 'pair') { st.gap = opts.gap ?? s.gap; st.layers[1].z = st.layers[0].z + st.gap / st.n; st.depth = st.layers[1].z; }
   return st;
 }
 
@@ -99,7 +100,7 @@ export function bursts(stack, offset = 0, beta = 0) {
   const out = [];
   let through = 1;
   for (const l of [...stack.layers].sort((p, q) => p.z - q.z)) {
-    out.push({ D: 2 * (offset + stack.n * l.z), a: l.r * through, z: l.z, r: l.r, beta });
+    out.push({ D: 2 * (offset + stack.n * l.z), a: l.r * through, z: l.z, r: l.r, beta, name: l.name });
     through *= 1 - l.r * l.r;
   }
   return out;

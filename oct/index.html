@@ -40,6 +40,27 @@
         <div class="readout" id="f-readout"><div id="f-readout-1"></div><div id="f-readout-2"></div><div id="f-readout-3"></div></div>
       </div>
     </div>
+
+    <!-- 2 · The A-scan -->
+    <div class="view" id="v-ascan">
+      <div class="cell">
+        <div class="head"><h2>The sample in the sample arm</h2><span class="note">drawn in optical depth; yellow: the depth the reference mirror matches now</span></div>
+        <div class="box strip-box"><canvas id="a-strip" aria-label="The sample's layers at their optical depths, and the depth the reference mirror matches: click to put the mirror there"></canvas></div>
+        <div class="gloss" id="a-describe"></div>
+        <div class="hint" id="a-hint">The motor scans the reference mirror through the whole sample, as in view 1: every layer makes its own burst.  Click on any plot to put the mirror there.</div>
+      </div>
+      <div class="cell">
+        <div class="head"><h2>The detector's signal</h2><span class="note">the fringes, far too fine to see one by one at this scale, and the detector's noise</span></div>
+        <div class="box a-trace-box"><canvas id="a-trace" aria-label="The detector's signal against the mirror's position, recorded as the mirror moves"></canvas></div>
+      </div>
+      <div class="cell">
+        <div class="head"><h2>The A-scan: the envelope of the fringes</h2><span class="note">the sample's reflectivity against depth</span><span class="spacer"></span><span id="a-scale-box"></span></div>
+        <div class="box a-scan-box"><canvas id="a-scan" aria-label="The A-scan: the envelope of the fringes, demodulated from the detector's signal, against depth"></canvas></div>
+        <div class="box grey-box"><canvas id="a-grey" aria-label="The same A-scan as a strip of grey levels"></canvas></div>
+        <div class="gloss">The same A-scan in grey, brighter where the sample reflects more: one column of the cross-sections in view 3.</div>
+        <div class="readout" id="a-readout"><div id="a-readout-1"></div><div id="a-readout-2"></div></div>
+      </div>
+    </div>
   </section>
 
   <aside class="controls">
@@ -67,6 +88,19 @@
       <div class="row motor-row"><span class="small muted">Motor</span><span id="f-motor-box"></span></div>
       <div id="f-speed-box" class="stack"></div>
       <div class="row"><button type="button" class="small-btn" id="f-fit" title="Fit the trace's window to the surfaces">Fit to the sample</button><button type="button" class="small-btn" id="f-clear" title="Forget what the detector has recorded">Clear the trace</button></div>
+    </div>
+
+    <div class="panel for-ascan">
+      <div class="label">The sample</div>
+      <div id="a-sample-box"></div>
+      <div id="a-gap-box" class="stack" hidden></div>
+    </div>
+    <div class="panel for-ascan">
+      <div class="label">The scan</div>
+      <div class="row motor-row"><span class="small muted">Motor</span><span id="a-motor-box"></span><button type="button" class="small-btn" id="a-whole" title="Record the whole range at once">Whole scan</button></div>
+      <div id="a-speed-box"></div>
+      <div id="a-noise-box"></div>
+      <div class="gloss">The noise floor: the reflection that is as strong as the detector's noise.  A real detector's noise is mostly shot noise, the graininess of light itself: with 1 mW on the sample at 840 nm and 400 A-scans a second, its floor is about −100 dB, one part in 10¹⁰ of the light.  Here it is raised so that you can see it.</div>
     </div>
   </aside>
 </main>

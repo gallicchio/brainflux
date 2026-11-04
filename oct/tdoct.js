@@ -66,8 +66,8 @@ export function dcLevel(bursts, src) {
  * The band-pass window used to demodulate, at wavenumber k: 1 within 3σ_k of k₀, falling as cos²
  * to 0 at 4σ_k; and its noise-equivalent width ∫ W² dk (for calibrating the noise).
  */
-export function bandWindow(src, k) {
-  const u = Math.abs(k - src.k0) / src.sigk;
+export function bandWindow(src, k, sigk = src.sigk) {
+  const u = Math.abs(k - src.k0) / sigk;
   if (u <= 3) return 1;
   if (u >= 4) return 0;
   const c = Math.cos((Math.PI / 2) * (u - 3));
@@ -110,14 +110,16 @@ export function demodulate(trace, src) {
   fft(re, im);
   // Keep the positive frequencies only, doubled, inside the band-pass window.  The FFT bin m is
   // the wavenumber 2π m / (L h).
-  const dk = (2 * Math.PI) / (L * h);
+  // (A nearly monochromatic source would make the window narrower than the transform's bins:
+  // it is kept at least two bins wide.)
+  const dk = (2 * Math.PI) / (L * h), sw = Math.max(src.sigk, dk / 1.5);
   re[0] = im[0] = 0;
   for (let m = 1; m < L / 2; m++) {
-    const w = 2 * bandWindow(src, m * dk);
+    const w = 2 * bandWindow(src, m * dk, sw);
     re[m] *= w; im[m] *= w;
     re[L - m] = im[L - m] = 0;
   }
-  { const w = bandWindow(src, (L / 2) * dk); re[L / 2] *= w; im[L / 2] *= w; }
+  { const w = bandWindow(src, (L / 2) * dk, sw); re[L / 2] *= w; im[L / 2] *= w; }
   ifft(re, im);
   const A = new Float64Array(N);
   for (let j = 0; j < N; j++) A[j] = Math.hypot(re[j], im[j]);
