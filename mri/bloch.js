@@ -238,3 +238,55 @@ export function spectrumOf(re, im, dt, pad = 2048, fftCentered) {
   for (let m = 0; m < M; m++) { f[m] = (m - M / 2) / (M * dt); R[m] *= scale; I[m] *= scale; mag[m] = Math.hypot(R[m], I[m]); }
   return { f, re: R, im: I, mag, M, df: 1 / (M * dt) };
 }
+
+/**
+ * The spectrum of the part of a record measured so far: S(f) = integral from 0 to tNow of
+ * s(t) e^{+2 pi i f t} dt (the sign of spectrumOf), by the trapezoid rule on the samples
+ * (t, re, im) at spacing dt, the last interval cut at tNow.  At the frequencies fs (kHz);
+ * returns {re, im}.  For the whole record of an FID under a gradient, 2 GB G Re S(GB G x) is
+ * the profile rho(x), blurred over 1 / (2 GB G tNow): the longer the record, the finer it is.
+ */
+export function partialSpectrum(t, re0, im0, tNow, fs, taper = 0) {
+  const n = t.length, dt = n > 1 ? t[1] - t[0] : 1, outRe = new Float64Array(fs.length), outIm = new Float64Array(fs.length);
+  if (!(tNow > 0)) return { re: outRe, im: outIm };
+  // A taper (a Tukey window over the last fraction `taper` of what is recorded so far) brings the
+  // record smoothly to zero at tNow, so that the spectrum does not ring from the cut; it leaves
+  // the area of the absorption, s(0)/2, as it is.
+  let re = re0, im = im0;
+  if (taper > 0) {
+    const t0 = (1 - taper) * tNow, w = (tt) => (tt <= t0 ? 1 : tt >= tNow ? 0 : 0.5 * (1 + Math.cos((Math.PI * (tt - t0)) / (taper * tNow))));
+    re = Float64Array.from(re0, (v, i) => v * w(t[i])); im = Float64Array.from(im0, (v, i) => v * w(t[i]));
+  }
+  // Whole intervals up to sample m, then the piece from t[m] to tNow (none once the record is over).
+  const m = Math.min(n - 1, Math.floor(tNow / dt + 1e-9)), h = m < n - 1 ? Math.min(dt, tNow - t[m]) : 0;
+  const frac = h / dt, j = Math.min(n - 1, m + 1), keep = taper > 0 ? 0 : 1;
+  const endRe = keep * (re[m] + (re[j] - re[m]) * frac), endIm = keep * (im[m] + (im[j] - im[m]) * frac);
+  for (let q = 0; q < fs.length; q++) {
+    const w = TWO_PI * fs[q];
+    let sr = 0, si = 0;
+    for (let i = 0; i <= m && m > 0; i++) {
+      const a = w * t[i], c = Math.cos(a), s = Math.sin(a), wt = i === 0 || i === m ? 0.5 * dt : dt;
+      sr += wt * (re[i] * c - im[i] * s); si += wt * (re[i] * s + im[i] * c);
+    }
+    if (h > 0) {
+      const a0 = w * t[m], a1 = w * (t[m] + h);
+      sr += 0.5 * h * (re[m] * Math.cos(a0) - im[m] * Math.sin(a0) + endRe * Math.cos(a1) - endIm * Math.sin(a1));
+      si += 0.5 * h * (re[m] * Math.sin(a0) + im[m] * Math.cos(a0) + endRe * Math.sin(a1) + endIm * Math.cos(a1));
+    }
+    outRe[q] = sr; outIm[q] = si;
+  }
+  return { re: outRe, im: outIm };
+}
+
+/**
+ * Offsets of the Larmor frequency (kHz) for n spins, as an uneven magnet gives them: drawn
+ * from a Lorentzian of half-width 1 / (2 pi T2prime) (T2prime in ms), so that together they
+ * dephase as exp(-t / T2prime), and seeded, so that each spin keeps its own.
+ */
+export function lorentzOffsets(n, T2prime, seed = 3) {
+  let s = (seed >>> 0) || 1;
+  const rand = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+  const out = new Float64Array(n), hw = 1 / (TWO_PI * T2prime);
+  for (let i = 0; i < n; i++) out[i] = Number.isFinite(T2prime) ? hw * Math.tan(Math.PI * (rand() - 0.5) * 0.98) : 0;
+  return out;
+}

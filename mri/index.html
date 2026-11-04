@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MRI: from spins to an image · BrainFlux</title>
+<meta name="description" content="How magnetic resonance makes a picture: a gradient turns position into frequency, a shaped pulse picks a slice, phase encoding fills k-space line by line and the inverse Fourier transform makes the image; then contrast from T1 and T2, and the artefacts of a real scan.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="mri.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>MRI: from spins to an image</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="mri" id="main" data-view="axis">
+  <section class="stage">
+    <div class="row view-row" id="view-row"></div>
+
+    <!-- 1 · One axis: frequency encoding -->
+    <div class="view" id="view-axis">
+      <div class="plot-wrap v1-main"><canvas id="v1-main" tabindex="0" aria-label="The field along the sample, the sample with its spins seen from above and their phase as colour, the spectrum of the signal with lines from each piece of the sample to its frequencies, and the signal itself, the sum of the spins' arrows. Drag the pieces of the sample; drag the round handle at the end of the field line to change the gradient."></canvas></div>
+      <div class="hint" id="v1-hint">Drag a piece of the sample (its sides to widen it); drag the ● at the end of the field line to tilt it, and watch the spectrum</div>
+      <div class="readout small" id="v1-readout" aria-live="off"></div>
+    </div>
+  </section>
+
+  <aside class="controls" id="controls">
+    <!-- view 1 -->
+    <div class="panel only-axis" id="v1-gradient-panel">
+      <div class="label">The gradient</div>
+      <div id="v1-gradient-box" class="stack"></div>
+      <div class="small muted">How fast the field rises along x.  The Larmor frequency rises with it: <span id="v1-gloss"></span></div>
+    </div>
+    <div class="panel only-axis">
+      <div class="label">Listening</div>
+      <div class="row" id="v1-play-row"></div>
+      <div id="v1-speed-box"></div>
+    </div>
+    <div class="panel only-axis">
+      <div class="label">The sample</div>
+      <div class="small muted">Tubes of water along x, seen from above.  Drag them about.</div>
+      <div class="button-grid" id="v1-samples"></div>
+      <div class="row" id="v1-piece-row"></div>
+      <details id="v1-more">
+        <summary class="small">More: the magnet's evenness, the field</summary>
+        <div class="stack" id="v1-more-box"></div>
+      </details>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>An MRI scanner makes its picture from the radio signal of the protons in water.  The page
+    builds that up in four steps, one per tab.</p>
+    <p><b>1 · One axis.</b>  A row of spins, tipped over by a pulse, turns in a magnetic field.
+    The field rises along the sample (the tilted line), so each spin turns at a rate that tells
+    where it is, and the signal's spectrum is a picture of the sample along that line.  Drag the
+    pieces of the sample and watch the spectrum follow; tilt the field line and watch it widen.</p>
+  </section>
+
+  <article class="exp" data-setup="axis">
+    <h3>1. A field that rises along x turns position into frequency</h3>
+    <p>Two tubes of water, 12 mm and 6 mm wide, in a field that rises by $G=2$ mT/m along $x$.
+    A π/2 pulse tips every spin into the plane (the <a href="../nmr/">NMR demo</a> shows how), and
+    then each turns at its own Larmor frequency,
+    $$f(x)=\bar\gamma\,(B_0+Gx),\qquad \bar\gamma=\frac{\gamma}{2\pi}=42.58\ \mathrm{MHz/T}.$$
+    The page watches from a frame that turns at $f_0=\bar\gamma B_0$ (63.87 MHz at 1.5 T), as the
+    receiver does, so what is left is $\bar\gamma Gx$: 85.2 Hz for every millimetre.  Watch the
+    arrows: those on the right turn clockwise, those on the left the other way, the faster the
+    further out.  The signal is the sum of all the arrows, and its spectrum is the sample: each
+    tube becomes a band of frequencies as wide as it is, $\Delta f=\bar\gamma G\,w$ (1.02 kHz
+    for the 12 mm tube).  Read it backwards, $x=\Delta f/\bar\gamma G$, and you have a picture
+    along one line: a one-dimensional image.  Now drag the gradient to zero: every spin turns at
+    $f_0$, the arrows stay together, and the spectrum is one line.</p>
+  </article>
+
+  <article class="exp" data-setup="drag">
+    <h3>2. Move a tube, and its frequencies move with it</h3>
+    <p>One tube, 20 mm wide, 10 mm left of the centre.  Drag it about by its middle, or widen it by
+    its sides: its band in the spectrum follows, through the lines that join each edge to its
+    frequency.  Every 10 mm it moves, its band moves $10\,\bar\gamma G=0.852$ kHz; at the
+    centre it sits at $f_0$, and its spins stand still in this frame.  Point at the spectrum: the
+    dashed line goes back up to the spins that turn at that frequency.  Drag the top of a tube
+    down to give it fewer protons (a tube of oil, or of a gel): its band is lower in proportion,
+    since the spectrum counts the spins at each frequency.</p>
+  </article>
+
+  <article class="exp" data-setup="stronger">
+    <h3>3. A stronger gradient spreads the same tubes over more frequencies</h3>
+    <p>The same two tubes at $G=5$ mT/m: 212.9 Hz per mm, so the spectrum is 2.5 times as wide and
+    1 kHz is now 4.70 mm, not 11.74 mm.  The lines from the tubes to the spectrum fan out further.
+    The arrows also wind up 2.5 times as fast, so the record needed for the same detail is shorter,
+    1.174 ms instead of 2.936 ms (the page stops listening when neighbouring arrows, 2 mm apart,
+    point opposite ways: experiment 5).  Scanners use gradients of tens of mT/m, and a field of
+    1.5 T rises by only $5\times32=0.16$ mT across this sample, about a ten-thousandth of
+    itself; that is enough.</p>
+  </article>
+
+  <article class="exp" data-setup="winding">
+    <h3>4. The phase winds across the sample, and the signal is how much of it is left</h3>
+    <p>One tube, 20 mm wide, slowed down.  Under the gradient the phase winds along $x$ (the
+    colours in the strip): after a time $t$ it has wound once every $1/k$ mm, with
+    $$k=\bar\gamma G\,t,$$
+    the turns per millimetre (the top axis of the signal's record).  The signal is the sum of the
+    arrows, so it is the overlap of the tube with that winding.  At $t=1/(\bar\gamma G w)=0.587$
+    ms exactly one turn fits in the tube: its arrows point every way, and the signal is zero.
+    Half a turn more and the signal comes back, upside down, to 21.7% at 0.840 ms (the sinc of a
+    tube's width).  So each moment of the record measures one spatial frequency $k$ of the
+    sample: its Fourier component $\int\rho(x)\,e^{-2\pi ikx}dx$.  That is why its spectrum is
+    the profile: the record is the profile's Fourier transform, written down one $k$ at a time.</p>
+  </article>
+
+  <article class="exp" data-setup="resolution">
+    <h3>5. The longer you listen, the finer the detail</h3>
+    <p>Three tubes 3 mm wide and 7 mm apart.  The spectrum so far starts as one blob, and only
+    later splits into three: a record that has reached $k$ can show detail down to $1/2k$ (the
+    readout says how fine, as it goes).  The page stops at $k=0.25$ per mm, when neighbouring
+    arrows 2 mm apart point opposite ways, and the detail is 2 mm: the arrows are the pixels of
+    this one-dimensional image.  Listening longer would show finer detail, but only for spins
+    closer together than the arrows.  (Under <em>More</em>, a magnet's unevenness, $T_2^*$,
+    blurs each edge too: with $T_2^*=2$ ms every line of the spectrum is $1/\pi T_2^*=159$ Hz
+    wide, 1.87 mm at this gradient.)</p>
+  </article>
+
+  <section class="theory">
+  <h3>How it works</h3>
+  <p>To be written as the views are built.</p>
+  </section>
+
+  <p class="small muted">New in 2026 for BrainFlux.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

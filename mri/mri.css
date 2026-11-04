@@ -1,0 +1,63 @@
+/* MRI: the pictures on the left (which ones depends on the view), the controls on the right. */
+
+:root {
+  --piece-0: #1f8f8a;    /* the pieces of the sample, and their frequencies */
+  --piece-1: #c45a16;
+  --piece-2: #7b3fb5;
+  --piece-3: #2f7a2f;
+  --field: #2f62d8;      /* the field B(x) */
+  --spec: #1d1d1f;       /* the spectrum */
+  --sig-re: #2f62d8;     /* the signal's real and imaginary parts */
+  --sig-im: #c8501a;
+  --fan: rgba(90, 100, 120, 0.16);
+  --ring: rgba(90, 100, 120, 0.35);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --piece-0: #4fd6d0;
+    --piece-1: #ff9a5c;
+    --piece-2: #c79bff;
+    --piece-3: #7ad694;
+    --field: #7aa2ff;
+    --spec: #ececef;
+    --sig-re: #7aa2ff;
+    --sig-im: #ff9a5c;
+    --fan: rgba(170, 180, 200, 0.16);
+    --ring: rgba(170, 180, 200, 0.35);
+  }
+}
+
+.mri {
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px;
+  padding: 12px; max-width: 1500px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.view-row { justify-content: center; }
+.plot-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.plot-wrap canvas { width: 100%; height: 100%; }
+
+/* One view at a time, and only its controls. */
+.view { display: none; flex-direction: column; gap: 6px; }
+.mri[data-view="axis"] #view-axis { display: flex; }
+.mri:not([data-view="axis"]) .only-axis { display: none; }
+
+/* 1 · One axis: one canvas, the field, the sample and its spins, the spectrum and the signal */
+.v1-main { height: max(540px, calc(100vh - 230px)); max-height: 720px; }
+#v1-main { cursor: default; }
+
+.readout { color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 3em; line-height: 1.5; }
+.readout b, .readout .fixnum.b { color: var(--ink); font-weight: 600; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.button-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.button-grid button { padding: 3px 4px; font-size: 13px; }
+/* Play and Pause take the same room, so that the buttons beside them stay put. */
+.play { min-width: 5.2em; }
+details summary { cursor: pointer; color: var(--ink-2); }
+details[open] summary { margin-bottom: 6px; }
+
+@media (max-width: 900px) {
+  .mri { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  .v1-main { height: 860px; max-height: none; }
+}
