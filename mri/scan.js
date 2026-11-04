@@ -13,7 +13,7 @@
 
 import { fft2Centered } from '../lib/fft.js';
 import { GB, lorentzOffsets } from './bloch.js';
-import { rasterize, weightedImage, projection, shapesExtent } from './phantom.js';
+import { rasterize, weightedImage, projection, shapesExtent, tissueAt } from './phantom.js';
 import { prepareRaster, projectRaster, backproject, padRow, filterResponse, filterRow, filterWork, circleRows } from '../tomography/radon.js';
 
 // ------------------------------------------------------------------- the sequence
@@ -128,7 +128,7 @@ export function gaussianPair(rand) {
  * outside is simply cut off.  Returns the weighted total and its fat part, N x N.
  */
 const RASTERS = new Map();
-export function pictureOf(shapes, seq, B0, N, fov, ss = 4) {
+export function pictureOf(shapes, seq, B0, N, fov, ss = 4, withParts = false) {
   const dx = fov / N, [, , y0, y1] = shapesExtent(shapes);
   let ny = Math.ceil(2 * Math.max(Math.abs(y0), Math.abs(y1), fov / 2) / dx) + 2;
   if (ny % 2) ny++;
@@ -151,8 +151,42 @@ export function pictureOf(shapes, seq, B0, N, fov, ss = 4) {
     return out;
   };
   const total = fold(w.total), fat = fold(w.fat);
-  return { total, fat, weights: w.weights, dx, raster, folded: Math.max(Math.abs(y0), Math.abs(y1)) > fov / 2 + 1e-9 };
+  // (Each tissue's own part of the picture, when its decay during the readout is wanted.)
+  let parts = null;
+  if (withParts) {
+    parts = [];
+    for (const [name, wt] of Object.entries(w.weights)) {
+      const f = raster.fills[name], img = new Float64Array(f.length);
+      for (let i = 0; i < f.length; i++) img[i] = wt * f[i];
+      const t = tissueAt(name, B0);
+      parts.push({ name, shift: !!t.shift, T2: t.T2, img: fold(img) });
+    }
+  }
+  return { total, fat, weights: w.weights, parts, dx, raster, folded: Math.max(Math.abs(y0), Math.abs(y1)) > fov / 2 + 1e-9 };
 }
+
+/**
+ * How much each column of k-space (each kx, so each moment of the readout) keeps of a tissue's
+ * signal as it decays during the readout, relative to the echo at kx = 0: the readout reaches
+ * kx at tau = kx / (GB Gx) ms from the echo, by which time the echo has gone on fading as
+ * exp(-tau / T2) (from the pi/2 pulse, so it is larger before the echo than after); and the
+ * uneven field's T2': refocused at the echo of a spin echo, exp(-|tau| / T2'), or going on
+ * from the pi/2 pulse in a gradient echo, exp(-tau / T2').  The k-space of a spread of
+ * frequencies is the picture smeared along x: a symmetric exp(-|tau|/T) is a Lorentzian of
+ * full width 1 / (pi T GB Gx) mm at half height, Tro / (pi T) pixels.  Returns Float64Array(N).
+ */
+export function readoutDecay(seq, T2) {
+  const { N, dk, Gx, type, T2prime = Infinity } = seq, out = new Float64Array(N);
+  for (let p = 0; p < N; p++) {
+    const tau = ((p - N / 2) * dk) / (GB * Gx);
+    out[p] = Math.exp(-tau / T2 - (type === 'se' ? Math.abs(tau) : tau) / T2prime);
+  }
+  return out;
+}
+
+/** The full width at half maximum, in pixels, of the smear along x that a decay with time
+ *  constant T (ms, about the echo) gives over a readout of Tro ms: Tro / (pi T). */
+export const readoutBlurPixels = (Tro, T) => Tro / (Math.PI * T);
 
 /**
  * K-space from a picture: the unitary centred 2D FFT of the non-fat part plus that of the fat
@@ -170,6 +204,26 @@ export function kspaceOf(total, fat, N, dk, fatShift = 0) {
     fft2Centered(fr, fi, N, N, false);
     for (let q = 0; q < N; q++) for (let p = 0; p < N; p++) {
       const o = q * N + p, phi = -2 * Math.PI * (p - N / 2) * dk * fatShift, c = Math.cos(phi), s = Math.sin(phi);
+      re[o] += fr[o] * c - fi[o] * s; im[o] += fr[o] * s + fi[o] * c;
+    }
+  }
+  return { re, im };
+}
+
+/**
+ * K-space tissue by tissue, each decaying during the readout at its own rate: the sum over the
+ * picture's parts ({img, shift, T2}, from pictureOf with parts) of the FFT of each, times
+ * decayOf(part) (a weight for each column, readoutDecay), with the fat shift's phase ramp on
+ * the parts that turn 3.4 ppm slower.  With every weight 1 it is kspaceOf.  Returns {re, im}.
+ */
+export function kspaceOfParts(parts, N, dk, fatShift = 0, decayOf = null) {
+  const re = new Float64Array(N * N), im = new Float64Array(N * N);
+  for (const part of parts) {
+    const fr = Float64Array.from(part.img), fi = new Float64Array(N * N);
+    fft2Centered(fr, fi, N, N, false);
+    const D = decayOf ? decayOf(part) : null, shift = part.shift ? fatShift : 0;
+    for (let q = 0; q < N; q++) for (let p = 0; p < N; p++) {
+      const o = q * N + p, d = D ? D[p] : 1, phi = -2 * Math.PI * (p - N / 2) * dk * shift, c = d * Math.cos(phi), s = d * Math.sin(phi);
       re[o] += fr[o] * c - fi[o] * s; im[o] += fr[o] * s + fi[o] * c;
     }
   }
@@ -215,25 +269,35 @@ export class Acquisition {
    * on or off (3.4 ppm of f0 under the readout gradient), seed.  The rows measured so far keep
    * what they measured (a row is a copy, taken when it is measured), so an object that changes
    * during a scan gives the artefacts of motion; call remeasure() to measure them all again.
+   * noiseAbs: the noise of one average in the picture's own units (a pixel of water, fully
+   * recovered and not faded, is 1), in place of sigma: the noise a real receiver sets (the
+   * Earth's-field board's).  gain: the signal's size (the polarization: 1/170 without the
+   * board's polarizing coil).  decay: each tissue fades during the readout (readoutDecay).
    */
-  set({ shapes, seq, B0 = 1.5, sigma = 0, nsa = 1, chemicalShift = false, seed = 7 }) {
+  set({ shapes, seq, B0 = 1.5, sigma = 0, noiseAbs = null, nsa = 1, gain = 1, chemicalShift = false, decay = false, seed = 7 }) {
     const N = seq.N;
     if (N !== this.N) {
       this.N = N; this.mask = new Uint8Array(N);
       this.mre = new Float64Array(N * N); this.mim = new Float64Array(N * N);
     }
-    this.seq = seq; this.B0 = B0; this.sigma = sigma; this.nsa = nsa;
-    const pic = pictureOf(shapes, seq, B0, N, seq.fov);
+    this.seq = seq; this.B0 = B0; this.sigma = sigma; this.nsa = nsa; this.gain = gain; this.decay = decay;
+    const pic = pictureOf(shapes, seq, B0, N, seq.fov, 4, decay);
+    if (gain !== 1) {
+      for (const a of [pic.total, pic.fat, ...(pic.parts || []).map((p) => p.img)]) for (let i = 0; i < a.length; i++) a[i] *= gain;
+      for (const k of Object.keys(pic.weights)) pic.weights[k] *= gain;
+    }
     this.picture = pic;
     // Fat precesses 3.4 ppm slower than water; under the readout gradient that reads as a
     // shift of -3.4e-6 f0 / (GB Gx) mm along x.
     this.fatShift = chemicalShift ? -(3.4e-6 * 42.577e3 * B0) / (GB * seq.Gx) : 0;   // kHz / (kHz/mm)
-    const k = kspaceOf(pic.total, pic.fat, N, seq.dk, this.fatShift);
+    const k = decay ? kspaceOfParts(pic.parts, N, seq.dk, this.fatShift, (part) => readoutDecay(seq, part.T2))
+      : kspaceOf(pic.total, pic.fat, N, seq.dk, this.fatShift);
     this.kre = k.re; this.kim = k.im;
     let max = 0;
     for (const v of pic.total) max = Math.max(max, v);
     this.peak = max;
-    const noise = noiseField(N, (sigma * max) / Math.sqrt(nsa), seed);
+    this.noise = (noiseAbs ?? sigma * max) / Math.sqrt(nsa);
+    const noise = noiseField(N, this.noise, seed);
     this.nre = new Float64Array(N * N); this.nim = new Float64Array(N * N);
     for (let i = 0; i < N * N; i++) { this.nre[i] = k.re[i] + noise.re[i]; this.nim[i] = k.im[i] + noise.im[i]; }
     this.stale = true;

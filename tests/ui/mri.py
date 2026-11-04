@@ -16,7 +16,7 @@ def check(cond, msg):
     if not cond: failures.append(msg)
 
 SETUPS = ['axis', 'drag', 'stronger', 'winding', 'resolution', 'slice', 'moveslice', 'thin', 'rephase',
-          'encode', 'fill', 'centre', 'spinecho', 'motion', 'contrast', 'wrap', 'lines', 'noise', 'fat', 'lauterbur']
+          'encode', 'fill', 'centre', 'spinecho', 'motion', 'contrast', 'wrap', 'lines', 'noise', 'fat', 'blur', 'lowfield', 'earth', 'lauterbur']
 VIEWS = {'axis': '#v1-main', 'slice': '#v2-main', 'kspace': '#v3-main', 'contrast': '#v4-main'}
 GB = 0.042577
 
@@ -90,7 +90,7 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     check(len(hints) == 1 and hints[0].startswith('Drag a piece') and 'field line' in hints[0], f'one hint under the picture says what to drag ({hints})')
     tabs = b.eval("[...document.querySelectorAll('#view-row button')].map((e) => e.textContent)")
     check(tabs == ['1 · One axis', '2 · A slice', '3 · The second axis', '4 · Contrast and artefacts'], f'four numbered tabs, one per step of the story ({tabs})')
-    check(b.eval('Object.keys(__app.setups).join()') == ','.join(SETUPS), f'the twenty set-ups keep their names ({len(SETUPS)})')
+    check(b.eval('Object.keys(__app.setups).join()') == ','.join(SETUPS), f'the set-ups keep their names, in order ({len(SETUPS)})')
     dr = b.eval("""(() => { const d = document.querySelector('#help'), kids = [...d.children], first = kids[1];
         return { first: first.className + ':' + (first.querySelector('h3') || {}).textContent, math: first.querySelectorAll('math').length,
           text: first.textContent, theoryLast: kids.findIndex((e) => e.classList.contains('theory')) > kids.findLastIndex((e) => e.classList.contains('exp')),
@@ -98,9 +98,10 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
           errors: d.querySelectorAll('merror').length }; })()""")
     check(dr['first'] == 'start:Start here' and dr['math'] == 0 and all(f'{i} ·' in dr['text'] for i in (1, 2, 3, 4)) and dr['theoryLast'] and dr['theoryHead'] == 'How it works',
           f"the drawer starts with Start here (no equations, a word on each of the four views) and ends with How it works")
-    check(dr['exps'] == 20 and dr['buttons'] == 20 and dr['errors'] == 0, f"{dr['exps']} experiments, each with a Set it up button; the equations all render ({dr['errors']} errors)")
+    check(dr['exps'] == len(SETUPS) and dr['buttons'] == len(SETUPS) and dr['errors'] == 0, f"{dr['exps']} experiments, each with a Set it up button; the equations all render ({dr['errors']} errors)")
     nums = b.eval("[...document.querySelectorAll('#help .exp h3')].map((h) => parseInt(h.textContent))")
-    check(nums == list(range(1, 21)), 'the experiments are numbered 1 to 20 in order')
+    order = b.eval("[...document.querySelectorAll('#help .exp')].map((a) => a.dataset.setup)")
+    check(nums == list(range(1, len(SETUPS) + 1)) and order == SETUPS, f'the experiments are numbered 1 to {len(SETUPS)} in the order of the set-ups')
     b.screenshot('build/mri-start.png')
 
     # ------------------------------------------------------------------ 1 · One axis
@@ -169,6 +170,21 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     setup(b, 'axis')
     worst, compared, seen = keeps_still(b, '#v1-readout > div', [lambda: b.eval('__app.step(0.13, 1)')] * 14)
     check(worst <= 0.5 and len(seen) >= 8, f'view 1: the readout keeps still while its numbers change (largest shift {worst:.1f} px, {compared} comparisons, {len(seen)} readings)')
+    # The magnets: four buttons; 1.5 T says how small the gradient is next to B0.
+    setup(b, 'axis')
+    mags = b.eval("[...document.querySelectorAll('#v1-magnet-row button')].map((e) => e.textContent)")
+    ro = readout(b, 'axis')
+    check(mags == ['46 µT', '0.117 T', '1.5 T', '3 T'] and '63.87 MHz' in ro and '0.0043% of B₀' in ro, f'view 1: four magnets; at 1.5 T the gradient adds 0.0043% of B₀ across the sample ({mags})')
+    # The Earth's field: the same picture, in µT/m and Hz, the record 20 times longer.
+    p0 = b.eval('__app.draw()')
+    b.eval("[...document.querySelectorAll('#v1-magnet-row button')][0].click()"); b.eval('(() => { const v = __app.views.axis; v.clock.stage = "record"; v.clock.t = 0.35; })()')
+    p1 = b.eval('__app.draw()'); ro = readout(b, 'axis')
+    lab = b.eval("document.querySelector('#v1-gradient-box label').textContent"); gv = b.eval("+document.querySelector('#v1-gradient-box input[type=number]').value")
+    span = 100e-6 * 0.032 / 46.03e-6
+    check(lab == 'gradient G (µT/m)' and gv == 100 and '4.26 Hz for each millimetre' in ro and '2.35 mm' in ro and '1959.8 Hz' in ro and quoted(100 * span, '7.0') and f'{100 * span:.1f}% of B₀' in ro and '2.72 mm' in ro,
+          f"view 1 at 46 µT: 100 µT/m, 4.26 Hz per mm, 10 Hz is 2.35 mm; ±3.2 µT is {100 * span:.1f}% of B₀; spins 50 mm up a tube misplaced 2.72 mm")
+    check(p1['phases'] == p0['phases'] and 'of 58.7 ms' in ro and '7.0 ms' in ro, 'and the spins and the spectrum are the same pictures, the record 20 times longer (7.0 of 58.7 ms, against 0.35 of 2.936)')
+    b.eval("__app.views.axis.setMagnet('1.5')")
 
     # ------------------------------------------------------------------ 2 · A slice
     setup(b, 'slice')
@@ -348,6 +364,76 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     worst, compared, seen = keeps_still(b, '#v4-readout > div', steps)
     check(worst <= 0.5 and len(seen) >= 4, f'view 4: the readout keeps still while its numbers change (largest shift {worst:.1f} px, {len(seen)} readings)')
 
+    # Decay during the readout: a poor magnet's T2' smears the picture along x, not along y.
+    WIDTH = r"""((x0, y0, half) => { const v = __app.views.contrast, N = v.s.N, dx = v.s.fov / N, img = v.img.mag;
+      const i0 = Math.round(x0 / dx + N / 2), j0 = Math.round(N / 2 - y0 / dx), H = Math.round(half / dx);
+      const fw = (vals) => { let im = 0; vals.forEach((q, k) => { if (q > vals[im]) im = k; }); const h = vals[im] / 2; let a = im, b = im;
+        while (a > 0 && vals[a - 1] >= h) a--; while (b < vals.length - 1 && vals[b + 1] >= h) b++;
+        const fa = a > 0 ? a - (vals[a] - h) / (vals[a] - vals[a - 1]) : a, fb = b < vals.length - 1 ? b + (vals[b] - h) / (vals[b] - vals[b + 1]) : b; return [(fb - fa) * dx, vals[im]]; };
+      const row = [], col = [];
+      for (let k = -H; k <= H; k++) { row.push(img[j0 * N + i0 + k]); col.push(img[(j0 + k) * N + i0]); }
+      return [fw(row), fw(col)]; })"""
+    scalp = lambda: b.eval(f'[{WIDTH}(0, 106.5, 12)[1], {WIDTH}(91.5, 0, 12)[0]]')   # [front, along y], [side, along x]
+    setup(b, 'blur')
+    v = b.eval('(() => { const v = __app.views.contrast; return [v.seq.Tro, v.blurs().white, v.TE, v.s.decay, document.querySelector("#v4-more").open]; })()')
+    (fw, fp), (sw, sp) = scalp(); ro = readout(b, 'contrast')
+    check(quoted(v[0], '78.3') and quoted(v[1], '3.12') and v[3] and v[4] and quoted(fw, '7.0') and quoted(sw, '8.0') and quoted(100 * sp / fp, '78') and '3.12' in ro,
+          f'decay during the readout: {v[0]:.1f} ms, T₂′ 8 ms smears {v[1]:.2f} px (1 mm); the scalp {fw:.2f} mm at the front, {sw:.2f} mm at the side and {100 * sp / fp:.0f}% as bright (help: 7.0, 8.0, 78%)')
+    b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, decay: false })'); (fw0, fp0), (sw0, sp0) = scalp()
+    check(near(fw0, 7.0, 0.05) and near(sw0, 7.0, 0.05) and near(sp0, fp0, 1e-6) and near(fw0, fw, 0.05), f'off, the scalp is {fw0:.2f} mm at the front and {sw0:.2f} at the side; along y the decay changed nothing ({fw:.2f})')
+    b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, decay: true, T2p: 60 })'); a = b.eval('__app.views.contrast.blurs().white')
+    b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, T2p: 8, Gx: 4 })'); g4 = b.eval('[__app.views.contrast.seq.Tro, __app.views.contrast.blurs().white]')
+    b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, Gx: 0.3 })'); top_se = b.eval('__app.views.contrast.vmax')
+    b.eval("__app.views.contrast.set({ ...__app.views.contrast.s, type: 'gre' })"); ge = b.eval('[__app.views.contrast.TE, Math.max(...Object.values(__app.views.contrast.weights)), __app.views.contrast.vmax]')
+    t2s = max(1 / (1 / t2 + 1 / 8) for t2 in (2000, 80, 100, 90, 200))
+    check(quoted(a, '0.42') and quoted(g4[0], '5.9') and quoted(g4[1], '0.23') and quoted(ge[0], '81') and ge[1] < 1e-4 and t2s < 8 and quoted(math.exp(-math.pi / 2) * 100, '21') and 2000 < top_se / ge[2] < 3000,
+          f'T₂′ 60 ms: {a:.2f} px; 4 mT/m: {g4[0]:.2f} ms, {g4[1]:.2f} px; a gradient echo at {ge[0]:.0f} ms keeps {ge[1]:.0e} (T₂* at most {t2s:.2f} ms), its picture {top_se / ge[2]:.0f} times fainter')
+    b.screenshot('build/mri-exp-blur.png')
+
+    # 0.117 T: T1 shortens, and grey and white matter look alike.
+    setup(b, 'lowfield')
+    w = b.eval('__app.draw().weights'); ro = readout(b, 'contrast')
+    t1 = b.eval("import(new URL('phantom.js', location.href).href).then((m) => ['grey', 'white', 'fat', 'water'].map((n) => [m.tissueAt(n, __app.views.contrast.s.B0).T1, m.tissueAt(n, 1.5).T1]))")
+    check(quoted(t1[0][0], '427') and quoted(t1[1][0], '341') and quoted(t1[2][0], '155') and quoted(t1[3][0] / 1000, '3.77') and quoted(t1[0][1] / t1[1][1], '1.46') and quoted(t1[0][0] / t1[1][0], '1.25'),
+          f'T₁ at 0.117 T: grey {t1[0][0]:.1f}, white {t1[1][0]:.1f}, fat {t1[2][0]:.1f}, CSF {t1[3][0]:.0f} ms; grey/white {t1[0][1] / t1[1][1]:.3f} at 1.5 T, {t1[0][0] / t1[1][0]:.3f} here')
+    check(quoted(w['grey'], '0.475') and quoted(w['white'], '0.456') and quoted(100 * (1 - w['white'] / w['grey']), '4') and '5.00 MHz' in ro and '6.13 × 10⁻³' in ro and quoted(1 / 6.13e-3, '163'),
+          f"0.117 T, T₁-weighted: grey {w['grey']:.3f}, white {w['white']:.3f} ({100 * (1 - w['white'] / w['grey']):.1f}% darker); each proton 6.13 × 10⁻³ of 1.5 T's")
+    fsh = re.search(r'turn\s+([\d.]+) Hz slower than water, which at\s+4\.00 mT/m would read as\s+([\d.]+) mm', ro)
+    check(fsh is not None and fsh.group(1) == '17' and fsh.group(2) == '0.10', f'its chemical shift: {fsh and fsh.groups()} (help: 17 Hz, 0.10 mm)')
+    b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, TR: 250 })'); w2 = b.eval('__app.draw().weights')
+    b.eval("__app.views.contrast.setContrast('t2')"); w3 = b.eval('__app.draw().weights')
+    check(quoted(w2['grey'], '0.305') and quoted(w2['white'], '0.308') and quoted(w3['water'], '0.522') and quoted(w3['grey'], '0.294') and quoted(w3['white'], '0.230'),
+          f"TR 250 ms: grey {w2['grey']:.3f}, white {w2['white']:.3f}; T₂-weighted: fluid {w3['water']:.3f}, grey {w3['grey']:.3f}, white {w3['white']:.3f}")
+    setup(b, 'contrast'); b.eval("__app.views.contrast.setContrast('t1')"); w15 = b.eval('__app.draw().weights')
+    check(quoted(100 * (w15['white'] / w15['grey'] - 1), '13'), f"at 1.5 T white matter is {100 * (w15['white'] / w15['grey'] - 1):.1f}% brighter than grey")
+    b.screenshot('build/mri-exp-lowfield.png')
+
+    # 46 µT: the tubes, the board's noise, the polarizing coil.
+    setup(b, 'earth')
+    st = b.eval('''(() => { const v = __app.views.contrast; return { w: v.weights, TE: v.TE, Tro: v.seq.Tro, snr: v.snrWater, bg: v.background() * v.acq.picture.total.reduce((a, q) => Math.max(a, q), 0),
+      noise: v.acq.noise, shift: v.acq.fatShift, obj: v.s.obj, dis: [...v.objSeg.querySelectorAll('button')].map((e) => e.disabled), pol: !v.polRow.hidden, slider: v.noiseSl.input.disabled }; })()''')
+    ro = readout(b, 'contrast'); w = st['w']
+    check(st['obj'] == 'tubes' and st['dis'] == [True, True, False] and st['pol'] and st['slider'], "46 µT: the tubes only (the head and the disks greyed out), the polarizing coil's button, the noise is the board's")
+    nz = b.eval("import(new URL('magnets.js', location.href).href).then((m) => m.BOARD_NOISE * 1e9)")
+    check(quoted(w['tap'], '0.654') and quoted(w['cuso4'], '0.586') and quoted(w['oil'], '0.178') and quoted(st['TE'], '134') and quoted(st['Tro'], '58.7') and quoted(nz, '0.46'),
+          f"tap water {w['tap']:.3f}, copper sulphate {w['cuso4']:.3f}, oil {w['oil']:.3f} at TE {st['TE']:.1f} ms; the readout {st['Tro']:.1f} ms; the board's noise {nz:.3f} nV/√Hz")
+    check('1959.8 Hz' in ro and '4.26 Hz over each mm' in ro and '1.60 × 10⁻⁷' in ro and quoted(-st['shift'], '0.0016') and '0.0067 Hz' in ro and '2.72 mm' in ro,
+          f"f₀ 1959.8 Hz, 4.26 Hz per mm, 1.6 × 10⁻⁷ per proton, oil's shift {-st['shift']:.4f} mm (6.7 mHz), the tubes' ends misplaced 2.72 mm")
+    snr8 = st['snr'] * w['tap'] * math.sqrt(8)
+    check(quoted(st['snr'], '5.7') and quoted(st['snr'] * w['tap'], '3.7') and quoted(snr8, '10.5') and quoted(32 * 8 * 3 / 60, '12.8') and '12.8 min' in ro and '1.60 mL' in ro and near(st['bg'] / st['noise'], 1, 0.15),
+          f"a 4 mm pixel of water: SNR {st['snr']:.2f}; the brightest tube {st['snr'] * w['tap']:.2f}, with 8 averages {snr8:.2f}, in 12.8 min; the picture's noise {st['bg']:.4f} against 1/(SNR √8) = {st['noise']:.4f}")
+    b.eval('__app.views.contrast.polBtn.click()'); off = b.eval('[__app.views.contrast.weights.tap, __app.views.contrast.snrWater, __app.views.contrast.s.pol]')
+    ratio = 7.84e-3 / 46.03e-6
+    check(not off[2] and quoted(off[0] * off[1] * math.sqrt(8), '0.062') and quoted(ratio, '170') and quoted(ratio ** 2 / 1000, '29') and quoted(12.8 * ratio ** 2 / 1440, '258'),
+          f'the polarizing coil off: the brightest tube\'s SNR {off[0] * off[1] * math.sqrt(8):.3f}; {ratio ** 2:.0f} times the averages, {12.8 * ratio ** 2 / 1440:.0f} days')
+    b.screenshot('build/mri-exp-earth-nopol.png')
+    setup(b, 'earth'); b.screenshot('build/mri-exp-earth.png')
+    b.eval("[...document.querySelectorAll('#v4-mag-row button')][2].click()")
+    st = b.eval('(() => { const v = __app.views.contrast; return { w: v.weights, TE: v.TE, Tro: v.seq.Tro, shift: v.acq.fatShift, Gx: v.s.Gx, obj: v.s.obj, pol: !v.polRow.hidden }; })()')
+    ro = readout(b, 'contrast')
+    check(st['obj'] == 'tubes' and st['Gx'] == 4 and not st['pol'] and quoted(st['w']['oil'], '0.788') and st['TE'] == 15 and quoted(st['Tro'], '1.5') and quoted(-st['shift'], '1.3') and '170.31 Hz' in ro,
+          f"the same tubes at 1.5 T: 4 mT/m (170.3 Hz per mm), the readout {st['Tro']:.2f} ms, TE 15 ms, oil {st['w']['oil']:.3f}, its shift {-st['shift']:.2f} mm")
+
     # ------------------------------------------------------------------ every set-up, once
     bad = []
     for name in SETUPS:
@@ -370,7 +456,7 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     reload(b)
     s = b.eval('__app.views.axis.s')
     check(b.eval('__app.view') == 'axis' and s['G'] == 3.25 and len(s['pieces']) == 2 and s['pieces'][0]['rho'] == 0.6, f'view 1 comes back from its address (G = {s["G"]}, {len(s["pieces"])} tubes)')
-    for name, view, key in (('rephase', 'slice', 'rp=0'), ('spinecho', 'kspace', 't2p=8'), ('fat', 'contrast', 'fat=1')):
+    for name, view, key in (('rephase', 'slice', 'rp=0'), ('spinecho', 'kspace', 't2p=8'), ('fat', 'contrast', 'fat=1'), ('earth', 'contrast', 'B0=0.00004603'), ('blur', 'contrast', 'dc=1')):
         setup(b, name)
         b.wait(f"location.hash.includes('v={view}') && location.hash.includes({json.dumps(key)})", timeout=10)
         h = b.eval('location.hash')

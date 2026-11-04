@@ -58,6 +58,11 @@
       <div class="small muted">How fast the field rises along x.  The Larmor frequency rises with it: <span id="v1-gloss"></span></div>
     </div>
     <div class="panel only-axis">
+      <div class="label">The magnet</div>
+      <div class="row" id="v1-magnet-row"></div>
+      <div class="small muted" id="v1-magnet-gloss"></div>
+    </div>
+    <div class="panel only-axis">
       <div class="label">Listening</div>
       <div class="row" id="v1-play-row"></div>
       <div id="v1-speed-box"></div>
@@ -68,7 +73,7 @@
       <div class="button-grid" id="v1-samples"></div>
       <div class="row" id="v1-piece-row"></div>
       <details id="v1-more">
-        <summary class="small">More: the magnet's evenness, the field</summary>
+        <summary class="small">More: the magnet's evenness</summary>
         <div class="stack" id="v1-more-box"></div>
       </details>
     </div>
@@ -117,6 +122,13 @@
       <div class="label">The picture, made by</div>
       <div class="row" id="v4-mode-row"></div>
     </div>
+    <div class="panel only-contrast">
+      <div class="label">What is scanned, and in what magnet</div>
+      <div class="row" id="v4-obj-row"></div>
+      <div class="row" id="v4-mag-row"></div>
+      <div class="small muted" id="v4-mag-gloss"></div>
+      <div id="v4-pol-row"></div>
+    </div>
     <div class="panel only-contrast only-fourier">
       <div class="label">Contrast</div>
       <div class="row" id="v4-contrast-row"></div>
@@ -128,16 +140,17 @@
       <div id="v4-scan-box" class="stack"></div>
       <div class="small muted">A field of view smaller than the head wraps it round along y; fewer phase lines blur along y; averaging lowers the noise as 1/√n.</div>
       <div id="v4-fat-box" class="stack"></div>
+      <div id="v4-decay-box" class="stack"></div>
+      <details id="v4-more">
+        <summary class="small">More: the magnet's evenness</summary>
+        <div class="stack" id="v4-more-box"></div>
+      </details>
     </div>
     <div class="panel only-contrast only-lauterbur">
       <div class="label">Lauterbur's projections</div>
       <div class="row" id="v4-lb-row"></div>
       <div id="v4-lb-box" class="stack"></div>
       <div class="small muted">No phase encoding: the readout gradient is turned to one angle after another, and the spectrum of each FID is the slice projected along that direction.</div>
-    </div>
-    <div class="panel only-contrast">
-      <div class="label">What is scanned</div>
-      <div class="row" id="v4-obj-row"></div>
     </div>
   </aside>
 </main>
@@ -163,7 +176,8 @@
     point at k-space to see its stripes.</p>
     <p><b>4 · Contrast and artefacts.</b>  The finished picture, with its settings: drag the TR
     and TE lines and watch which tissues turn bright; shrink the field of view, drop lines, add
-    noise, shift the fat.  And how MRI began, in 1973, without phase encoding.</p>
+    noise, shift the fat.  Then the same picture in weaker magnets, down to the Earth's field,
+    where the signal is tiny.  And how MRI began, in 1973, without phase encoding.</p>
   </section>
 
   <article class="exp" data-setup="axis">
@@ -420,8 +434,82 @@
     and water.  At 3 T the shift doubles.</p>
   </article>
 
+  <article class="exp" data-setup="blur">
+    <h3>20. The echo fades while it is read, and the picture smears along x</h3>
+    <p>So far each line was read as if all of it came at the echo.  But a readout takes time, and
+    the echo goes on changing while it is read.  Here the readout gradient is weak (0.3 mT/m) and
+    the pixels 1 mm, so the readout lasts 78.3 ms (the band on the echo's curves), and the magnet
+    is a poor one, $T_2'=8$ ms as in experiment 13; <em>Decay during the readout</em> is on.  The
+    π pulse brings the spins of each pixel back in step only at the echo; before and after, they
+    drift apart again, as $e^{-|t-TE|/T_2'}$.  The early and late samples are the edges of k-space
+    along $k_x$, and a spread of frequencies in a pixel is a spread of positions along the
+    readout: each pixel is smeared along $x$, into a Lorentzian as wide as
+    $$\Delta x=\frac{1}{\pi T_2'\,\bar\gamma G_x}=\frac{T_{ro}}{\pi T_2'}\ \text{pixels}=3.12\ \text{mm}.$$
+    The scalp, 7 mm thick, keeps its 7.0 mm at the front and back (along $y$), but at the sides
+    it spreads to 8.0 mm and falls to 78% of its brightness at the front.  Along $y$ nothing
+    smears: each line's phase is wound before its readout begins.  Give the magnet back its
+    60 ms (under <em>More</em>): 0.42 pixels; or the readout gradient 4 mT/m, a readout of
+    5.9 ms: 0.23 pixels.  T₂ goes on fading during the readout too, but it dims as it smears: a
+    T₂ short enough to smear a tissue by a pixel has faded it below $e^{-\pi/2}=21\%$ by the
+    echo, so in a readout centred on the echo its smear hardly shows.  Choose <em>Gradient
+    echo</em>: $T_2^*$ is under 8 ms and the echo comes at 81 ms, by when nothing is left (the
+    bars); the picture, scaled up some 2500 times, is what the start of the readout caught before
+    the signal faded, the edges of k-space: outlines.  (View 1 shows the same smear in one
+    dimension, experiment 5.)</p>
+  </article>
+
+  <article class="exp" data-setup="lowfield">
+    <h3>21. At 0.117 T, T₁ is shorter and grey and white matter look alike</h3>
+    <p>The TeachSpin's magnet of the <a href="../nmr/#setup=larmor">NMR demo</a>, 0.117 T, protons
+    at 5.000 MHz; low-field scanners image heads at about this field.  Three things change from
+    1.5 T.  The signal: each proton gives $(B_0/1.5\ \mathrm{T})^2=1/163$ as much (its
+    polarization falls with the field, and so does the voltage it induces, turning more slowly),
+    which a low-field scanner makes up with bigger pixels and longer scans.  The chemical shift,
+    3.4 ppm of 5 MHz: 17 Hz, 0.10 mm at 4 mT/m.  And T₁: the protons of tissue give up their
+    energy through the slow motions of big molecules, which match a low Larmor frequency better,
+    so T₁ shortens with the field: grey matter 427 ms, white 341, fat 155 (950, 650 and 260 at
+    1.5 T; from values measured in heads at 50 mT, O'Reilly and Webb 2022).  Water's barely
+    changes, 3.77 s: its molecules tumble far faster than any of these frequencies.  T₁-weighted
+    (TR 500 ms, TE 15 ms), every tissue has recovered further, and grey (0.475) and white matter
+    (0.456) look alike: at 1.5 T white was 13% brighter than grey, here it is 4% darker.  A
+    shorter TR does not bring it back (250 ms: 0.305 against 0.308): the ratio of their T₁s has
+    fallen from 1.46 to 1.25, too little to beat white matter's fewer protons.  Press
+    <em>T₂-weighted</em>: T₂ hardly depends on the field, and the picture is nearly the 1.5 T
+    one (fluid 0.522, grey 0.294, white 0.230, against 0.502, 0.282 and 0.228), which is why
+    low-field scanners lean on T₂.</p>
+  </article>
+
+  <article class="exp" data-setup="earth">
+    <h3>22. The same picture at 46 µT: what changes and why</h3>
+    <p>No magnet at all: the Earth's field, 46.0 µT where the NMR demo's
+    <a href="../nmr/#setup=board">board</a> is, protons at 1959.8 Hz.  The sample is the honest
+    one at this field, tubes standing in the board's coil: tap water, water with copper
+    sulphate, oil, and two thin tubes of water.  <b>The gradient</b> must be weak next to $B_0$:
+    100 µT/m, 4.26 Hz per mm (not the 170 of 4 mT/m).  Stronger, it would be a good part of the
+    field itself, and by Maxwell's equations a $B_z$ that grows along $x$ comes with a $B_x$ that
+    grows along $z$, which misplaces the tubes' ends, 50 mm up and down, by $Gz^2/2B_0=2.72$ mm.
+    So the readout is slow, 58.7 ms (1.5 ms at 1.5 T), and the echo cannot come before TE =
+    134 ms.  <b>The relaxation times</b>: water's are seconds at every field, and the copper
+    sulphate's ions bring its T₁ to 0.3 s and T₂ to 0.25 s; at so long an echo oil (T₂ 80 ms) has
+    nearly gone (0.178), the copper sulphate dims (0.586), and tap water is brightest (0.654), short
+    of 1 because 3 s of polarizing is not much more than its T₁ of 2.5 s.  <b>The chemical
+    shift</b>: 3.4 ppm of 1960 Hz is 6.7 mHz, which the readout reads as 0.0016 mm, so the oil
+    stays where it is (dashed); at 1.5 T it moves 1.3 mm.  <b>The signal</b>: the Earth's field
+    would polarize the water 170 times less than the board's coil does (7.84 mT for 3 s before
+    each line), and the voltage a proton induces goes as the field it turns in, so each gives
+    1.6 × 10⁻⁷ of its signal at 1.5 T.  With the board's coil and receiver (0.46 nV/√Hz of
+    noise), a 4 mm pixel of water, 1.6 mL through the tubes' height, has a signal-to-noise ratio
+    of 5.7 per average; the brightest tube 3.7, and averaging 8 times makes it 10.5 (the noise
+    falls as $1/\sqrt n$), in 32 lines × 8 × 3 s = 12.8 minutes.  Turn the <em>polarizing
+    coil</em> off and the picture drowns (0.062): making it up would take $170^2=29\,000$ times as
+    many averages, 258 days.  Then choose 1.5 T: the same tubes, clean, at 170 Hz per mm and TE
+    15 ms, the oil bright (0.788).  (The board itself has no gradient coils or pulses; Earth's-field
+    imagers add them, as Callaghan's group did, Halse and others 2006.  In view 1, 46 µT shows
+    the one-dimensional picture in µT/m and Hz.)</p>
+  </article>
+
   <article class="exp" data-setup="lauterbur">
-    <h3>20. How it began: Lauterbur's projections (1973)</h3>
+    <h3>23. How it began: Lauterbur's projections (1973)</h3>
     <p>The first MR image, of two tubes of water, was made without phase encoding.  Paul
     Lauterbur put the sample in a gradient, which by view 1 makes the FID's spectrum the sample's
     profile along the gradient: its projection.  Then he turned the gradient and measured again,
@@ -476,12 +564,51 @@
   $1/T_2^*=1/T_2+1/T_2'$ instead of $T_2$.  The tissues' values, at 1.5 T: water (CSF)
   $\rho=1$, $T_1=4000$, $T_2=2000$ ms; fat 0.95, 260, 80; grey matter 0.8, 950, 100; white matter
   0.7, 650, 90; a lesion (oedema) 0.9, 1500, 200.  $T_1$ grows with the field (to 4300, 370,
-  1330, 830, 2000 at 3 T); $T_2$ hardly does.</p>
-  <p><b>Approximations.</b>  The slice is a plane (no partial volume across its thickness); $T_2$
-  decay during a readout and the time between lines are left out; the field's unevenness is a
-  spread of offsets with no shape in space; noise is added to each k-space sample, independent
-  and Gaussian.  The page skips the waiting between lines, which a scanner spends recovering
-  along $z$: a 64-line spin-echo picture with TR = 500 ms takes 32 s.</p>
+  1330, 830, 2000 at 3 T); $T_2$ hardly does.  At low field $T_1$ is shorter: measured in heads at
+  50 mT (O'Reilly and Webb, <i>Magn. Reson. Med.</i> 87, 884, 2022), CSF 3695, fat 130, grey 327,
+  white 275 ms; between 50 mT and 1.5 T the page takes a power of the field through the two
+  values, $T_1=T_1(50\,\mathrm{mT})\,(B_0/50\,\mathrm{mT})^b$, which at 0.117 T gives 3769, 155,
+  427, 341 (the lesion's is a guess, scaled as grey matter's).  The tubes: tap water $\rho=1$,
+  $T_1=2.5$ s, $T_2=2$ s, and water with copper sulphate 0.3 and 0.25 s, at every field; oil as
+  fat, with $T_1=0.1$ s while the board's coil polarizes it (the NMR demo's values).</p>
+  <p><b>Decay during the readout</b> (<em>More</em> in view 4 holds $T_2'$).  The readout reaches
+  $k_x$ at $\tau=k_x/\bar\gamma G_x$ from the echo, so each column of k-space is weighted, tissue
+  by tissue, by what the echo has left then: $e^{-\tau/T_2}$ (from the π/2 pulse, so more before
+  the echo than after) times $e^{-|\tau|/T_2'}$ for a spin echo, whose π pulse undoes the field's
+  spread only at the echo, or $e^{-\tau/T_2'}$ for a gradient echo.  A symmetric
+  $e^{-|\tau|/T}$ in k-space is a Lorentzian in the picture, of full width at half height
+  $1/(\pi T\bar\gamma G_x)$, or $T_{ro}/\pi T$ pixels, since $\bar\gamma G_x\,\Delta x=1/T_{ro}$.
+  The page makes k-space as the sum of each tissue's FFT times its weights.</p>
+  <p><b>The magnets.</b>  46.0 µT (the Earth's, where the NMR demo's board is: 1959.8 Hz),
+  0.117 T (the TeachSpin's: 5.000 MHz), 1.5 T (63.87 MHz) and 3 T (127.7 MHz).  The protons'
+  polarization is $\tanh(\gamma\hbar B/2kT)\approx\gamma\hbar B/2kT$, 5.2 parts per million at
+  1.5 T and 20 °C, so their magnetization goes as the field that polarizes them, $B_{pol}$; the
+  voltage it induces in a coil goes as the rate it turns, $\propto B_0$: per proton the signal
+  is $B_{pol}B_0/(1.5\ \mathrm T)^2$ of a 1.5 T scanner's.  In the Earth's field the board's coil
+  polarizes ($B_{pol}=7.84$ mT, 170 times $B_E$) and the protons are heard in $B_E$.  How the
+  noise scales depends on whether the coil or the body makes it, so for the scanners the noise is
+  the slider's; at 46 µT it is the board's.  A litre of water fully polarized there induces
+  1.199 µV, 285 times the receiver's noise in its 82.65 Hz bandwidth, so the noise at the coil is
+  $1.199\ \mu\mathrm V/(285\sqrt{82.65\ \mathrm{Hz}})=0.463$ nV/√Hz, and a pixel of volume $V$ in
+  a picture of $N_y$ lines, each read for $T_{ro}$ and averaged $n$ times, has
+  $$\mathrm{SNR}=\frac{1.199\ \mu\mathrm V\,(V/1\ \mathrm L)\sqrt{N_yT_{ro}\,n}}{0.463\ \mathrm{nV}/\sqrt{\mathrm{Hz}}}$$
+  (to factors of order one), with no slice: the tubes are seen through their 100 mm height.  Three
+  more things go with the field.  The field's unevenness, in tesla, is a fixed fraction of it, so
+  $T_2'$ grows as $1/B_0$: 60 ms at 1.5 T, 30 at 3 T, 770 at 0.117 T, and 1.5 s in the Earth's
+  field (the board's 5 nT across its bottle).  Fat's chemical shift is 3.4 ppm of $f_0$.  And
+  the gradients must stay small next to $B_0$: a field whose $z$ part grows along $x$ has, by
+  $\nabla\times\mathbf B=0$, an $x$ part $Gz$ that grows along $z$, so at height $z$ the field is
+  $\sqrt{(B_0+Gx)^2+(Gz)^2}\approx B_0+Gx+G^2z^2/2B_0$, and the spins there are read
+  $Gz^2/2B_0$ too far along $x$: 0.002 mm at 2 mT/m in 1.5 T, 2.7 mm at 100 µT/m in 46 µT (the
+  page leaves it out).  View 1 shows the Earth's field with its gradients 20 times weaker than
+  in a scanner, µT/m for mT/m: the phase $2\pi\bar\gamma Gxt$ is the same with $G$ divided by 20
+  and $t$ multiplied by 20, so its pictures are the same, with frequencies in Hz and the record
+  20 times longer.</p>
+  <p><b>Approximations.</b>  The slice is a plane (no partial volume across its thickness); the
+  time between lines is left out, and the decay during a readout unless it is asked for; the
+  field's unevenness is a spread of offsets with no shape in space; noise is added to each k-space
+  sample, independent and Gaussian.  The page skips the waiting between lines, which a scanner
+  spends recovering along $z$: a 64-line spin-echo picture with TR = 500 ms takes 32 s.</p>
   </section>
 
   <p class="small muted">New in 2026 for BrainFlux.  Source:

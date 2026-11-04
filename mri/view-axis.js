@@ -7,8 +7,17 @@
 // neighbouring arrows point opposite ways: the finest detail the record can show is 2 mm, one
 // arrow's spacing (the sampling theorem, Δx = 1/2k).  A stronger gradient winds faster, so the
 // record is shorter: T = k / (GB G), at most 5 ms.
+//
+// The magnet: 1.5 T, 3 T, 0.117 T (the TeachSpin's) or the Earth's 46 µT.  Only f0 changes in
+// a scanner's field.  In the Earth's field the gradients must be far weaker (a few mT/m across
+// the sample would be more than the field itself), so the view's gradient, frequencies and times
+// are shown `scale` = 20 times weaker, lower and longer: G in µT/m, f in Hz, the record tens of
+// ms.  The physics inside is the same in these units (phase = 2 pi GB G x t is unchanged when G
+// is divided by 20 and t multiplied by 20), so the view keeps its own numbers and converts them
+// for the labels: Gshown = G / scale, f shown = f / scale, t shown = t scale.
 
 import { GB, larmorMHz, TWO_PI, blocksFID, blocksProfile, partialSpectrum, lorentzOffsets } from './bloch.js';
+import { MAGNETS, MAGNET_IDS, magnetOf, larmorHz, gradientSpan, concomitantShift } from './magnets.js';
 import { el, $, slider, segmented, toggle, setSlots } from '../lib/ui.js';
 import { fitCanvas, themeColors, fillSlots, niceTicks, tickLabel } from '../lib/plot.js';
 import { compass, complexImage, wheel, arrow, handle, cssComplex, FONT, SMALL, BOLD } from './draw.js';
@@ -50,6 +59,41 @@ export class AxisView {
   // ------------------------------------------------------------------- the physics
 
   get T() { return recordLength(this.s.G); }
+
+  // ------------------------------------------------- the magnet, and the units it is shown in
+
+  get mag() { return magnetOf(this.s.B0); }
+  get earth() { return this.mag.id === 'earth'; }
+  /** How much weaker the gradients are shown (20 in the Earth's field, else 1). */
+  get sc() { return this.mag.scale; }
+  /** The gradient as shown (mT/m, or µT/m in the Earth's field), from the view's own G. */
+  gShown(G) { return (G / this.sc) * this.mag.gMul; }
+  /** A frequency (the view's kHz) as shown: kHz, or Hz in the Earth's field. */
+  fShown(f) { return this.earth ? (f * 1000) / this.sc : f; }
+  get fUnit() { return this.earth ? 'Hz' : 'kHz'; }
+  /** A time (the view's ms) as shown: the Earth's field's are 20 times longer. */
+  tShown(t) { return t * this.sc; }
+  /** The field's change (the view's mT) as shown: mT, or µT in the Earth's field. */
+  bShown(B) { return this.earth ? (B * 1000) / this.sc : B; }
+  get bUnit() { return this.earth ? 'µT' : 'mT'; }
+  /** Hz per mm, as shown. */
+  get perMM() { return (GB * this.s.G * 1000) / this.sc; }
+
+  setMagnet(id) {
+    const s = this.s, m = MAGNETS[id];
+    s.B0 = m.B0;
+    this.syncMagnet();
+    this.recompute();
+    this.app.kick();
+  }
+  /** The controls whose units follow the magnet. */
+  syncMagnet() {
+    const m = this.mag, s = this.s;
+    this.gSlider.querySelector('label').textContent = `gradient G (${m.gUnit})`;
+    this.gSlider.setRange(0, this.gShown(GMAX)); this.gSlider.value = +this.gShown(s.G).toPrecision(4);
+    this.t2Slider.setRange(this.tShown(1), this.tShown(200)); this.t2Slider.value = +this.tShown(s.T2s).toPrecision(4);
+    this.b0Seg.value = m.id;
+  }
 
   /** Everything that depends on the settings: the offsets, the record, its full spectrum. */
   recompute() {
@@ -120,8 +164,10 @@ export class AxisView {
 
   buildControls() {
     const s = this.s;
-    this.gSlider = slider({ label: 'gradient G (mT/m)', min: 0, max: GMAX, step: 0.01, value: s.G, title: 'How fast the field rises along x, in millitesla per metre', onInput: (v) => { s.G = v; this.recompute(); } });
+    this.gSlider = slider({ label: 'gradient G (mT/m)', min: 0, max: GMAX, step: 0.01, value: s.G, title: 'How fast the field rises along x, in millitesla per metre (µT/m in the Earth\'s field)', onInput: (v) => { s.G = (v * this.sc) / this.mag.gMul; this.recompute(); } });
     $('#v1-gradient-box').append(this.gSlider);
+    this.b0Seg = segmented(MAGNET_IDS.map((id) => ({ value: id, label: MAGNETS[id].label, title: MAGNETS[id].title })), this.mag.id, (id) => this.setMagnet(id), { label: 'Magnet' });
+    $('#v1-magnet-row').append(this.b0Seg);
     this.playBtn = el('button', { type: 'button', class: 'primary play', title: 'Pause or go on (space bar)', onclick: () => this.setPlaying(!s.playing) }, 'Pause');
     $('#v1-play-row').append(this.playBtn,
       el('button', { type: 'button', title: 'Tip the spins over again with a new π/2 pulse and listen again', onclick: () => { this.pulseAgain(); this.setPlaying(true); } }, 'Pulse again'));
@@ -135,12 +181,10 @@ export class AxisView {
     $('#v1-piece-row').append(
       el('button', { type: 'button', title: 'Add a tube of water at the centre', onclick: () => this.addPiece() }, '+ tube'),
       el('button', { type: 'button', title: 'Remove the tube you last touched', onclick: () => this.removePiece() }, 'remove'));
-    this.t2Slider = slider({ label: 'T₂* (ms)', min: 1, max: 200, log: true, value: s.T2s, title: 'How long the spins stay in step on their own: a magnet whose field is not quite even makes neighbouring spins drift apart in T₂*', onInput: (v) => { s.T2s = v; this.recompute(); } });
-    this.b0Seg = segmented([{ value: 1.5, label: '1.5 T' }, { value: 3, label: '3 T' }], s.B0, (v) => { s.B0 = v; this.dirty = true; this.app.scheduleHash(); }, { label: 'Field B0' });
+    this.t2Slider = slider({ label: 'T₂* (ms)', min: 1, max: 200, log: true, value: s.T2s, title: 'How long the spins stay in step on their own: a magnet whose field is not quite even makes neighbouring spins drift apart in T₂*', onInput: (v) => { s.T2s = v / this.sc; this.recompute(); } });
     $('#v1-more-box').append(this.t2Slider,
-      el('div', { class: 'small muted' }, 'T₂*: the magnet is never perfectly even, so spins at the same place drift apart and the signal fades in T₂* (each line of the spectrum widens to 1/πT₂*).'),
-      el('div', { class: 'row' }, el('span', { class: 'small muted' }, 'field B₀'), this.b0Seg),
-      el('div', { class: 'small muted' }, 'The main field sets the frequency at the centre, f₀ = γ̄B₀; the gradient only adds to it.'));
+      el('div', { class: 'small muted' }, 'T₂*: the magnet is never perfectly even, so spins at the same place drift apart and the signal fades in T₂* (each line of the spectrum widens to 1/πT₂*).'));
+    this.syncMagnet();
   }
 
   setPlaying(on) { this.s.playing = on; this.playBtn.textContent = on ? 'Pause' : 'Play'; this.app.kick(); }
@@ -162,7 +206,7 @@ export class AxisView {
     if (o.sample && SAMPLES[o.sample]) this.loadSample(o.sample);
     if (o.pieces) { s.pieces = o.pieces.map((p) => ({ ...p })); this.custom(); }
     for (const k of ['G', 'slow', 'T2s', 'B0']) if (o[k] !== undefined) s[k] = o[k];
-    this.gSlider.value = s.G; this.speedSlider.value = s.slow; this.t2Slider.value = s.T2s; this.b0Seg.value = s.B0;
+    this.speedSlider.value = s.slow; this.syncMagnet();
     this.setPlaying(o.playing ?? true);
     this.recompute();
     if (o.t !== undefined) Object.assign(this.clock, { stage: 'record', t: Math.min(o.t, this.T), u: 1 });
@@ -172,11 +216,11 @@ export class AxisView {
   toHash() {
     const s = this.s, r = (v) => +(+v).toPrecision(4);
     return { G: r(s.G), smp: s.sample || undefined, pc: s.sample ? undefined : s.pieces.map((p) => [p.x, p.w, p.rho].map(r).join('_')).join('~'),
-      sl: s.slow !== 2 ? r(s.slow) : undefined, t2: s.T2s !== 200 ? r(s.T2s) : undefined, B0: s.B0 !== 1.5 ? s.B0 : undefined };
+      sl: s.slow !== 2 ? r(s.slow) : undefined, t2: s.T2s !== 200 ? r(s.T2s) : undefined, B0: this.mag.id !== '1.5' ? r(s.B0) : undefined };
   }
   fromHash(h) {
     const num = (v, d) => (v !== undefined && Number.isFinite(+v) ? +v : d);
-    const o = { G: Math.max(0, Math.min(GMAX, num(h.G, 2))), slow: num(h.sl, 2), T2s: num(h.t2, 200), B0: num(h.B0, 1.5) === 3 ? 3 : 1.5 };
+    const o = { G: Math.max(0, Math.min(GMAX, num(h.G, 2))), slow: num(h.sl, 2), T2s: num(h.t2, 200), B0: magnetOf(Math.max(1e-6, num(h.B0, 1.5))).B0 };
     if (h.pc) {
       const pieces = h.pc.split('~').map((q) => q.split('_').map(Number)).filter((a) => a.length === 3 && a.every(Number.isFinite)).map(([x, w, rho]) => ({ x, w, rho }));
       if (pieces.length) o.pieces = pieces.slice(0, 4);
@@ -241,24 +285,26 @@ export class AxisView {
     ctx.fillText('The field along the sample', b.x0, b.y0 - 8);
     const tw = ctx.measureText('The field along the sample').width;
     ctx.font = FONT; ctx.fillStyle = c.ink2;
+    const m = this.mag, f0 = larmorHz(this.s.B0);
     if (this.lay.narrow) ctx.fillText(': B = B₀ + G x', b.x0 + tw, b.y0 - 8);
-    else fillSlots(ctx, [`: B = B₀ + G x, with B₀ = ${this.s.B0} T at the centre (f₀ = `, { v: larmorMHz(this.s.B0), dec: 2, w: 6 }, ' MHz)'], b.x0 + tw, b.y0 - 8);
+    else fillSlots(ctx, [`: B = B₀ + G x, with B₀ = ${m.label} at the centre (f₀ = `, ...(this.earth ? [{ v: f0, dec: 1, w: 6 }, ' Hz)'] : [{ v: f0 / 1e6, dec: 2, w: 6 }, ' MHz)'])], b.x0 + tw, b.y0 - 8);
     ctx.strokeStyle = c.line; ctx.lineWidth = 1; ctx.strokeRect(b.x0 + 0.5, b.y0 + 0.5, b.x1 - b.x0 - 1, b.y1 - b.y0 - 1);
     // B0 itself (zero on these axes).
     const y0 = this.BY(0);
     ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(b.x0, y0); ctx.lineTo(b.x1, y0); ctx.stroke(); ctx.setLineDash([]);
-    // Ticks: B - B0 in mT on the left, f - f0 in kHz on the right.
+    // Ticks: B - B0 in mT (µT) on the left, f - f0 in kHz (Hz) on the right, at round values of what is shown.
     ctx.font = SMALL; ctx.fillStyle = c.ink2; ctx.textBaseline = 'middle';
-    for (const v of niceTicks(-0.95 * Bm, 0.95 * Bm, this.lay.narrow ? 3 : 4)) {
-      const y = this.BY(v);
+    const bs = this.bShown(1), fs = this.fShown(1);
+    for (const v of niceTicks(-0.95 * Bm * bs, 0.95 * Bm * bs, this.lay.narrow ? 3 : 4)) {
+      const y = this.BY(v / bs);
       ctx.textAlign = 'right'; ctx.fillText(tickLabel(v), b.x0 - 4, y);
     }
     // (The frequency's ticks at round kHz, wherever they fall on the field's scale.)
-    for (const f of niceTicks(-0.95 * 42.577 * Bm, 0.95 * 42.577 * Bm, 3)) {
-      ctx.textAlign = 'left'; ctx.fillText(tickLabel(f), b.x1 + 11, this.BY(f / 42.577));
+    for (const f of niceTicks(-0.95 * 42.577 * Bm * fs, 0.95 * 42.577 * Bm * fs, 3)) {
+      ctx.textAlign = 'left'; ctx.fillText(tickLabel(f), b.x1 + 11, this.BY(f / fs / 42.577));
     }
-    ctx.save(); ctx.translate(this.lay.narrow ? 9 : 13, (b.y0 + b.y1) / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText(this.lay.narrow ? 'B − B₀' : 'B − B₀ (mT)', 0, 0); ctx.restore();
-    if (!this.lay.narrow) { ctx.save(); ctx.translate(this.lay.W - 13, (b.y0 + b.y1) / 2); ctx.rotate(Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('f − f₀ (kHz)', 0, 0); ctx.restore(); }
+    ctx.save(); ctx.translate(this.lay.narrow ? 9 : 13, (b.y0 + b.y1) / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText(this.lay.narrow ? 'B − B₀' : `B − B₀ (${this.bUnit})`, 0, 0); ctx.restore();
+    if (!this.lay.narrow) { ctx.save(); ctx.translate(this.lay.W - 13, (b.y0 + b.y1) / 2); ctx.rotate(Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText(`f − f₀ (${this.fUnit})`, 0, 0); ctx.restore(); }
     // The field line, from one edge of the field of view to the other.
     const xa = this.X(-HALF), xb = this.X(HALF), ya = this.BY(-G * HALF * 1e-3), yb = this.BY(G * HALF * 1e-3);
     ctx.strokeStyle = c.field; ctx.lineWidth = 2.5;
@@ -367,9 +413,10 @@ export class AxisView {
     // Ticks: the frequency in kHz, and under it where that frequency comes from, in mm.
     ctx.save();
     ctx.font = SMALL; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    for (const v of niceTicks(-FAXIS, FAXIS, this.lay.narrow ? 5 : 8)) ctx.fillText(tickLabel(v), this.F(v), b.y1 + 3);
+    const fsc = this.fShown(1);
+    for (const v of niceTicks(-FAXIS * fsc, FAXIS * fsc, this.lay.narrow ? 5 : 8)) ctx.fillText(tickLabel(v), this.F(v / fsc), b.y1 + 3);
     ctx.textAlign = 'right';
-    ctx.fillText('f − f₀ (kHz)', b.x1, b.y1 + 31);
+    ctx.fillText(`f − f₀ (${this.fUnit})`, b.x1, b.y1 + 31);
     if (G > 0.2) {
       ctx.fillStyle = c.ink3; ctx.textAlign = 'center';
       for (const x of this.lay.narrow ? [-20, 0, 20] : [-30, -20, -10, 0, 10, 20, 30]) { const f = GB * G * x; if (Math.abs(f) < FAXIS * 0.97) ctx.fillText(`${tickLabel(x)}`, this.F(f), b.y1 + 17); }
@@ -446,7 +493,7 @@ export class AxisView {
       ctx.strokeStyle = c.ink2; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
       ctx.beginPath(); ctx.moveTo(X(now), f.y0); ctx.lineTo(X(now), f.y1); ctx.stroke(); ctx.setLineDash([]);
       ctx.font = SMALL; ctx.fillStyle = c.ink2; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      for (const v of niceTicks(0, T, 4)) ctx.fillText(tickLabel(v), X(v), f.y1 + 3);
+      for (const v of niceTicks(0, this.tShown(T), 4)) ctx.fillText(tickLabel(v), X(v / this.sc), f.y1 + 3);
       ctx.textAlign = 'right'; ctx.fillText('t (ms)', f.x1, f.y1 + 17);
       // k = GB G t along the top: how tightly the phase is wound.
       const kT = GB * this.s.G * T;
@@ -478,30 +525,40 @@ export class AxisView {
   }
 
   readout() {
-    const s = this.s, G = s.G, per = GB * G * 1000, box = $('#v1-readout');
+    const s = this.s, G = s.G, per = this.perMM, box = $('#v1-readout'), m = this.mag, earth = this.earth, sc = this.sc;
     const lines = [];
+    // (In the Earth's field: µT/m, Hz, and "10 Hz is" in place of "1 kHz is".)
+    const gd = { v: this.gShown(G), dec: earth ? 1 : 2, w: 5, class: 'b' }, ref = earth ? 10 : 1000;
     lines.push(G > 0.005
-      ? ['Gradient ', { v: G, dec: 2, w: 4, class: 'b' }, ' mT/m: the Larmor frequency rises by ', { v: per, dec: 1, w: 5, class: 'b' }, ' Hz for each millimetre, so a difference of 1 kHz is ', { v: 1000 / per, dec: 2, w: 6, class: 'b' }, ' mm.']
+      ? ['Gradient ', gd, ` ${m.gUnit}: the Larmor frequency rises by `, { v: per, dec: earth ? 2 : 1, w: 5, class: 'b' }, ` Hz for each millimetre, so a difference of ${earth ? '10 Hz' : '1 kHz'} is `, { v: ref / per, dec: 2, w: 6, class: 'b' }, ' mm.']
       : ['No gradient: every spin turns at f₀, and the spectrum is one line.', { text: '', w: 0 }]);
-    const T = this.T, t = this.tNow, k = GB * G * t;
+    const T = this.T, t = this.tNow, k = GB * G * t, tw = earth ? 5 : 5, td = earth ? 1 : 3;
     if (this.clock.stage === 'pulse') lines.push(['A π/2 pulse tips the spins into the plane; listening starts when it ends (t = 0).']);
     else if (G > 0.005) {
       const done = this.clock.stage === 'hold';
-      lines.push([done ? 'Recorded for ' : 'Listening: t = ', { v: t, dec: 3, w: 5, class: 'b' }, done ? ' ms' : ` ms of `, ...(done ? [] : [{ v: T, dec: 3, w: 5 }, ' ms']),
+      lines.push([done ? 'Recorded for ' : 'Listening: t = ', { v: t * sc, dec: td, w: tw, class: 'b' }, done ? ' ms' : ` ms of `, ...(done ? [] : [{ v: T * sc, dec: td, w: tw }, ' ms']),
         ': the phase now winds once every ', { v: k > 1e-6 ? 1 / k : Infinity, dec: 2, w: 6, class: 'b' }, ' mm across the sample, so the spectrum shows detail down to ', { v: k > 1e-6 ? 1 / (2 * k) : Infinity, dec: 2, w: 6, class: 'b' }, ' mm.']);
-    } else lines.push(['Listening: t = ', { v: t, dec: 3, w: 5, class: 'b' }, ' ms of ', { v: T, dec: 3, w: 5 }, ' ms; all the arrows stay together.']);
+    } else lines.push(['Listening: t = ', { v: t * sc, dec: td, w: tw, class: 'b' }, ' ms of ', { v: T * sc, dec: td, w: tw }, ' ms; all the arrows stay together.']);
     const h = this.hoverXF && this.hover;
     if (h) {
-      const { x, f } = this.hoverXF;
+      const { x, f } = this.hoverXF, fd = { v: this.fShown(f), dec: earth ? 1 : 3, w: 7, plus: '+' };
       lines.push(Number.isFinite(x) && Math.abs(x) <= HALF
-        ? ['Pointer: the spins at x = ', { v: x, dec: 1, w: 6, plus: '+' }, ' mm turn at f₀ ', { v: f, dec: 3, w: 7, plus: '+' }, ' kHz.']
-        : ['Pointer: f₀ ', { v: f, dec: 3, w: 7, plus: '+' }, ' kHz: no spins in the field of view turn at that frequency.']);
+        ? ['Pointer: the spins at x = ', { v: x, dec: 1, w: 6, plus: '+' }, ' mm turn at f₀ ', fd, ` ${this.fUnit}.`]
+        : ['Pointer: f₀ ', fd, ` ${this.fUnit}: no spins in the field of view turn at that frequency.`]);
     } else lines.push(['Point at the sample or the spectrum to read off where a frequency comes from.']);
+    // The magnet: f0, and how small the gradient is next to B0 (it must be, for B to stay along z).
+    const f0 = larmorHz(s.B0), Greal = this.gShown(G) / m.gMul, span = gradientSpan(Greal, FOV, s.B0) / 2;
+    lines.push([`The magnet, ${m.label}: f₀ = `, ...(earth ? [{ v: f0, dec: 1, w: 6, class: 'b' }, ' Hz'] : [{ v: f0 / 1e6, dec: 2, w: 6, class: 'b' }, ' MHz']),
+      '; the gradient adds ±', { v: span * s.B0 * (earth ? 1e6 : 1e3), dec: earth ? 2 : 3, w: 5 }, earth ? ' µT' : ' mT', ' across the 64 mm, ', { v: 100 * span, dec: earth ? 1 : 4, w: 6, class: 'b' }, '% of B₀, and its sideways field misplaces spins 50 mm up a tube by ',
+      { v: concomitantShift(Greal, 50, s.B0), dec: earth ? 2 : 4, w: 6 }, ' mm.', earth ? '  So it must be µT/m: a few mT/m would be more than the Earth\'s field itself.' : '']);
     if (box.children.length !== lines.length) box.replaceChildren(...lines.map(() => el('div')));
     lines.forEach((l, i) => setSlots(box.children[i], l));
     const gloss = $('#v1-gloss');
-    setSlots(gloss, G > 0.005 ? [{ v: per, dec: 1, w: 5 }, ' Hz per mm here.'] : ['not at all, with G = 0.']);
-    setSlots($('#v1-speed-note'), ['1 ms of the spins takes ', { v: s.slow, dec: 2, w: 5 }, ' s here (they turn ', { v: s.slow * 1000, dec: 0, w: 6 }, ' times slower).']);
+    setSlots(gloss, G > 0.005 ? [{ v: per, dec: earth ? 2 : 1, w: 5 }, ' Hz per mm here.'] : ['not at all, with G = 0.']);
+    setSlots($('#v1-speed-note'), ['1 ms of the spins takes ', { v: s.slow / sc, dec: earth ? 3 : 2, w: 5 }, ' s here (they turn ', { v: (s.slow * 1000) / sc, dec: 0, w: 6 }, ' times slower).']);
+    setSlots($('#v1-magnet-gloss'), earth
+      ? ['The Earth\'s field: protons at ', { v: f0, dec: 1, w: 6 }, ' Hz.  The gradient must be µT/m here (the readout says why), so the same pictures come in Hz, not kHz, and the record lasts tens of milliseconds.']
+      : ['Protons at ', { v: f0 / 1e6, dec: 2, w: 6 }, ' MHz.  The main field sets the frequency at the centre, f₀ = γ̄B₀; the gradient only adds to it.']);
   }
 
   // ------------------------------------------------------------------- the pointer
@@ -563,7 +620,7 @@ export class AxisView {
     if (d.type === 'field') {
       const Bm = GMAX * HALF * 1e-3, b = this.lay.field, B = (((b.y0 + b.y1) / 2 - py) / ((b.y1 - b.y0) / 2 - 4)) * Bm;
       s.G = Math.max(0, Math.min(GMAX, +(B / (HALF * 1e-3)).toFixed(2)));
-      this.gSlider.value = s.G;
+      this.gSlider.value = +this.gShown(s.G).toPrecision(4);
     } else {
       const p = s.pieces[d.i], x = this.invX(px);
       this.custom();
