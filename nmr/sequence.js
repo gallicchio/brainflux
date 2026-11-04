@@ -141,9 +141,10 @@ export function polarizeCurve(params, earth, tps, sigma = 0, { win = 0.05, seed 
   return { tp: tps, amp, fit: { A: fit.A, T1: fit.tau, rms: fit.rms } };
 }
 
-/** What a switch-off in `ramp` leaves across the Earth's field, starting from M along the coil. */
-export function leftAcross(Bp, BE, ramp, M = 1) {
-  const v = switchOff([M, 0, 0], Bp, BE, ramp);
+/** What a switch-off in `ramp` leaves across the Earth's field, starting from M along the coil
+ *  (whose axis is at `angle` to the field: square to it by default). */
+export function leftAcross(Bp, BE, ramp, M = 1, angle = Math.PI / 2) {
+  const v = switchOff([M * Math.sin(angle), 0, M * Math.cos(angle)], Bp, BE, ramp, { angle });
   return { across: Math.hypot(v[0], v[1]), along: v[2] };
 }
 

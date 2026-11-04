@@ -6,6 +6,10 @@ import {
 import { Record, Rng, meanGauss, rms, noiseRms, rawColumns, spectrum, fitShape } from '../nmr/signal.js';
 import { Engine } from '../nmr/engine.js';
 import { buildSequence, runSequence, recoveryCurve, echoAmplitudes, echoCurve, polarizeCurve, leftAcross } from '../nmr/sequence.js';
+import {
+  TANK, RECEIVER, K_B, bankC, switchesOn, codeFor, resonance, capacitanceFor, quality, tankWidth, tuneFor, tankH, filterH,
+  noiseDensity, kTC, receiverNoise, synthOut,
+} from '../nmr/receiver.js';
 
 const B0 = 5e6 / GAMMA_HZ;            // the TeachSpin's field: protons at 5 MHz
 const B1 = pulseField(Math.PI / 2, 2.5e-6);   // a π/2 pulse in 2.5 μs
@@ -337,4 +341,142 @@ test('fitShape recovers a time constant from a rise, a decay and a recovery with
   close(d.tau, 0.07, 0.005, 'decay'); close(r.tau, 0.12, 0.012, 'rise'); close(v.tau, 0.05, 0.003, 'recovery');
   close(d.A, 0.8, 0.03, 'decay A'); close(r.A, 1.3, 0.05, 'rise A'); close(v.A, 0.9, 0.03, 'recovery A');
   return `τ = ${d.tau.toFixed(4)} (0.07), ${r.tau.toFixed(4)} (0.12), ${v.tau.toFixed(4)} (0.05) with noise of 0.02`;
+});
+
+// ------------------------------------------------------------ the board's tank and receiver
+// The reference numbers are the board's design arithmetic (sim/design.json of
+// github.com/gallicchio/earth-nmr-pcb), computed there independently of this code.
+
+const DESIGN = {
+  fL: 1959.756157384, Cres: 2.4623161259651864e-7, Q: 37.245717738511196, Rp: 12284.306177122584,
+  code: 75, Cdip: 2.4729e-7, fdip: 1955.5578369142356, Cmax: 8.4119e-7,
+  emf: 1.1988426305747933e-6, vTank: 4.4651754231283e-5, fidOut: 0.8806016966064107,
+  enTank: 1.4098754989668371e-8, enTotal: 1.720739526753291e-8, nbw: 82.65051555845032,
+  db1960: -0.25152878027065817, db60: -85.23029245395115, fLo: 687.8599123088075, fHi: 4216.965034285822,
+};
+
+test('the tank: resonance at 1/(2π√(LC)) with |H| = Q = ωL/R and −90° there, 1 below, 0 and −180° above, f/Q wide at half power', () => {
+  const C = bankC(75), fT = resonance(C), Q = quality(fT);
+  const h = tankH(fT, C);
+  close(h.mag, Q, 1e-9 * Q, '|H| at the resonance');
+  close(h.phase, -Math.PI / 2, 1e-12, 'its phase');
+  close(tankH(1, C).mag, 1, 1e-5, 'far below');
+  assert(tankH(50 * fT, C).mag < 1e-3 && tankH(50 * fT, C).phase < -Math.PI + 0.02, 'far above: nothing, and −180°');
+  // The half-power points of |H|², by bisection on either side of the peak.
+  const peak = Math.max(...Array.from({ length: 2001 }, (_, k) => tankH(fT * (0.99 + k * 1e-5), C).mag)) ** 2;
+  const half = (lo, hi) => { for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if ((tankH(m, C).mag ** 2 > peak / 2) === (lo < fT)) hi = m; else lo = m; } return (lo + hi) / 2; };
+  const w = half(fT, 2 * fT) - half(fT / 2, fT);
+  close(w / tankWidth(), 1, 2 / Q ** 2, 'the width against R/(2πL)');
+  close(tankWidth(), fT / Q, 1e-9, 'R/(2πL) = f/Q');
+  return `C = ${(C * 1e9).toFixed(2)} nF: f_T = ${fT.toFixed(2)} Hz, |H| = Q = ${Q.toFixed(3)}, −90°; ${w.toFixed(2)} Hz wide at half power (R/2πL = ${tankWidth().toFixed(2)} Hz)`;
+});
+
+test('the bank and the handbook\'s procedure: switches 1 2 4 7 for Claremont, the tank at 1955.6 Hz; a 3.3 nF step moves it 13 Hz', () => {
+  const t = tuneFor(46.028e-6, 42.577478e6);
+  close(t.f, DESIGN.fL, 1e-6, 'the protons\' frequency');
+  close(t.C / DESIGN.Cres, 1, 1e-9, 'C = 1/(4π²f²L)');
+  assert(t.code === DESIGN.code && t.switches.join(' ') === '1 2 4 7', `the code ${t.code}: switches ${t.switches}`);
+  close(t.Cset, DESIGN.Cdip, 1e-15, 'their capacitance, the clamp\'s 0.39 nF with it');
+  close(t.fT, DESIGN.fdip, 1e-6, 'the tank\'s frequency then');
+  close(bankC(0), 0.39e-9, 1e-18, 'all off: the clamp alone');
+  close(bankC(255), DESIGN.Cmax, 1e-15, 'all on');
+  close(codeFor(capacitanceFor(1955.5578)), 75, 0, 'and back');
+  // Each code is about 3.3 nF more than the last (binary weights of 3.3 nF): 13 Hz near 2 kHz.
+  const step = resonance(bankC(76)) - resonance(bankC(75)), dC = bankC(76) - bankC(75);
+  assert(dC > 3.1e-9 && dC < 3.4e-9 && step < -12 && step > -14, `code 75 → 76: ${(dC * 1e9).toFixed(2)} nF, ${step.toFixed(2)} Hz`);
+  // Near Claremont (±10% of the field) the nearest code always leaves the protons on the tank's top.
+  let worst = 1;
+  for (let B = 41.4e-6; B <= 50.6e-6; B += 0.01e-6) { const u = tuneFor(B); worst = Math.min(worst, tankH(u.f, u.Cset).mag / quality(u.f)); }
+  assert(worst > 0.93, `worst |H|/Q from 41.4 to 50.6 μT: ${worst}`);
+  // The largest capacitance tunes the board's coil down to 1061 Hz (24.9 μT) only.
+  close(resonance(bankC(255)), 1060.7, 0.5, 'the lowest frequency');
+  return `${t.f.toFixed(2)} Hz needs ${(t.C * 1e9).toFixed(2)} nF: switches ${t.switches.join(' ')} = ${(t.Cset * 1e9).toFixed(2)} nF → ${t.fT.toFixed(2)} Hz; one step: ${step.toFixed(1)} Hz; within ±10% of the field |H| ≥ ${worst.toFixed(3)} Q`;
+});
+
+test('the receiver: ×20 301 with −0.25 dB at 1960 Hz, −85 dB at 60 Hz, half power at 688 Hz and 4.2 kHz; the FID 44.7 μV on the tank, 0.881 V at OUT', () => {
+  const db = (f) => 20 * Math.log10(filterH(f).mag);
+  close(db(DESIGN.fL), DESIGN.db1960, 1e-6, 'at the protons\' frequency');
+  close(db(60), DESIGN.db60, 1e-6, 'at the mains\' 60 Hz');
+  // The −3 dB points from the peak, by bisection (the design read them off a grid 0.58% apart).
+  let peak = 0;
+  for (let f = 1000; f < 3000; f += 1) peak = Math.max(peak, filterH(f).mag);
+  const corner = (lo, hi, rising) => { for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if ((filterH(m).mag > peak / Math.SQRT2) === rising) hi = m; else lo = m; } return (lo + hi) / 2; };
+  const fLo = corner(300, 1500, true), fHi = corner(2500, 9000, false);
+  assert(fLo <= DESIGN.fLo && fLo > DESIGN.fLo / 1.0058 && fHi >= DESIGN.fHi && fHi < DESIGN.fHi * 1.0058, `corners ${fLo}, ${fHi}`);
+  // Tuned exactly, the tank gives Q times the EMF; ×20 301 and the filters: OUT.
+  const h = tankH(DESIGN.fL, DESIGN.Cres);
+  close(h.mag, DESIGN.Q, 1e-6 * DESIGN.Q, 'Q');
+  close(DESIGN.emf * h.mag, DESIGN.vTank, 1e-12, 'on the tank');
+  close(DESIGN.emf * h.mag * RECEIVER.gain.high * filterH(DESIGN.fL).mag, DESIGN.fidOut, 1e-6, 'at OUT');
+  return `${db(DESIGN.fL).toFixed(4)} dB at ${DESIGN.fL.toFixed(1)} Hz, ${db(60).toFixed(2)} dB at 60 Hz; half power at ${fLo.toFixed(1)} and ${fHi.toFixed(0)} Hz; FID ${(DESIGN.emf * h.mag * 1e6).toFixed(2)} μV on the tank, ${(DESIGN.emf * h.mag * RECEIVER.gain.high * filterH(DESIGN.fL).mag).toFixed(4)} V at OUT`;
+});
+
+test('the noise: the coil\'s is √(kT/C) whatever its resistance (equipartition), √(4kT Q²R) per √Hz at the top; 17.2 nV/√Hz in all there, 12.6 mV at OUT', () => {
+  const C = bankC(75);
+  const n = receiverNoise(C, { filters: false });
+  close(n.coil / kTC(C), 1, 1e-3, '∫ 4kTR |H|² df = kT/C');
+  const lossy = { ...TANK, R: 3 * TANK.R };
+  close(receiverNoise(C, { tank: lossy, filters: false }).coil / kTC(C), 1, 1e-3, 'three times the resistance: the same');
+  // At the design's exact tuning: the tank's part √(4kT Rp), Rp = Q²R, and the total.
+  const d = noiseDensity(DESIGN.fL, DESIGN.Cres);
+  close(d.coil / DESIGN.enTank, 1, 1e-5, 'the tank\'s thermal noise at the top');
+  close(d.total / DESIGN.enTotal, 1, 1e-5, 'with the preamplifier\'s and the bias resistors\'');
+  close(DESIGN.Q ** 2 * TANK.R, DESIGN.Rp, 1e-6, 'Rp');
+  // The noise bandwidth of |H|²/Q²: (π/2) f/Q.
+  const nbw = (receiverNoise(DESIGN.Cres, { filters: false }).coil ** 2) / (4 * K_B * TANK.T * TANK.R * DESIGN.Q ** 2);
+  close(nbw / DESIGN.nbw, 1, 2e-3, 'the noise bandwidth');
+  const out = receiverNoise(C);
+  const vout = out.total * RECEIVER.gain.high;
+  assert(vout > 0.012 && vout < 0.013, `at OUT on HIGH: ${vout} V r.m.s.`);
+  assert(out.amp > 4 * out.coil, 'over the whole band, the preamplifier\'s noise is most of it');
+  return `√(kT/C) = ${(kTC(C) * 1e9).toFixed(1)} nV (integrated ${(n.coil * 1e9).toFixed(1)}, and ${(receiverNoise(C, { tank: lossy, filters: false }).coil * 1e9).toFixed(1)} with 3R); ${(d.total * 1e9).toFixed(2)} nV/√Hz at the top; band ${nbw.toFixed(2)} Hz; OUT ${(vout * 1e3).toFixed(2)} mV r.m.s. (the coil's ${(out.coil * RECEIVER.gain.high * 1e3).toFixed(2)}, the preamplifier's ${(out.amp * RECEIVER.gain.high * 1e3).toFixed(2)})`;
+});
+
+test('OUT at an audio rate: the FID through the tank\'s gain and phase, and noise of the r.m.s. integrated', () => {
+  const C = bankC(75), fL = 1959.734, fs = 48000, K = tankH(fL, C).mag * filterH(fL).mag * RECEIVER.gain.high;
+  const phi = tankH(fL, C).phase + filterH(fL).phase, w = 2 * Math.PI * fL;
+  const sig = synthOut({ fs, t0: 3.2, n: 500, fL, C, emf: (t, m) => { m[0] = 1e-6; m[1] = 0; }, noise: false });
+  let err = 0;
+  for (let j = 0; j < 500; j++) err = Math.max(err, Math.abs(sig[j] - K * 1e-6 * Math.sin(w * (3.2 + j / fs) + phi)));
+  close(err, 0, 1e-6, 'the FID at OUT');
+  const rmsOf = (a) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
+  const rows = [];
+  for (const [code, avg] of [[75, 1], [0, 1], [75, 16]]) {
+    const c = bankC(code), want = (receiverNoise(c).total * RECEIVER.gain.high) / Math.sqrt(avg);
+    const got = rmsOf(synthOut({ fs, t0: 1, n: fs, fL, C: c, seed: 9, averages: avg }));
+    close(got / want, 1, 0.03, `code ${code}, ${avg} averaged`);
+    rows.push(`${(got * 1e3).toFixed(2)} mV (${(want * 1e3).toFixed(2)})`);
+  }
+  // The same stretch of OUT whichever stretch it was computed in.
+  const a = synthOut({ fs, t0: 1, n: 2000, fL, C, seed: 3 }), b = synthOut({ fs, t0: 1 + 1000 / fs, n: 1000, fL, C, seed: 3 });
+  let d = 0;
+  for (let j = 0; j < 1000; j++) d = Math.max(d, Math.abs(a[1000 + j] - b[j]));
+  assert(d < 1e-3 * rmsOf(a), `two computations of the same stretch differ by ${d}`);
+  return `the FID ×${K.toFixed(0)} at ${(phi * 180 / Math.PI).toFixed(1)}°; noise at OUT, r.m.s. of 1 s: tuned ${rows[0]}, no tank ${rows[1]}, 16 averaged ${rows[2]}`;
+});
+
+test('the coil\'s angle α to the Earth\'s field: sin α of M precesses, the coil sees sin α of that, so the FID goes as sin² α', () => {
+  const Bp = 5.2249e-3 * 1.5, BE = 46.03e-6, rows = [];
+  for (const deg of [90, 58.89, 31.11, 10]) {
+    const a = (deg * Math.PI) / 180;
+    // A sudden switch-off (0.1 μs) leaves M where it was: sin α of it across the field.  (While
+    // Bp is still many times BE the spins follow its slight turning a little: by 1° at 10 μs,
+    // 8.7° at the board's 0.4 ms, which costs cos 8.7° across a coil square to the field, but
+    // more, to first order, across a coil at a slant.)
+    close(leftAcross(Bp, BE, 0.1e-6, 1, a).across, Math.sin(a), 2e-3, `${deg}°: left across`);
+    // The board's cycle: polarize along the coil, switch off in 0.1 μs, listen.
+    const e = new Engine({ N: 1, T1: 1, T2: 1 });
+    e.setSampling(1e-3);
+    e.startEarth({ Bp, BE, tp: 60, ramp: 0.1e-6, tl: 0.1, tOpen: 0.019, angle: a });
+    e.advance(e.tEnd - e.t);
+    const t0 = 60 + 0.1e-6 + 0.02, m = e.record.envelopeMax(t0, t0 + 0.01).max / Math.exp(-0.02);
+    // The EMF in a coil along n̂ is −d(M·n̂)/dt: the precessing part of M, times sin α.
+    const fid = m * Math.sin(a), board = leftAcross(Bp, BE, 0.4e-3, 1, a).across * Math.sin(a);
+    close(fid, Math.sin(a) ** 2, 3e-3, `${deg}°: the FID`);
+    rows.push(`${deg}°: ${fid.toFixed(4)} (sin² ${(Math.sin(a) ** 2).toFixed(4)}; ${board.toFixed(4)} after the board's 0.4 ms)`);
+  }
+  close(adiabaticity(Bp, BE, 0.4e-3, Math.PI / 6), 2 * adiabaticity(Bp, BE, 0.4e-3), 1e-12, 'the field turns 1/sin α more slowly at the end');
+  close(polarized(Infinity, 1, Bp, BE, 0), 1, 1e-12, 'a coil along the field polarizes along it');
+  close(leftAcross(Bp, BE, 10e-6, 1, 0).across, 0, 1e-9, 'and leaves nothing across it');
+  return rows.join('; ');
 });

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bloch sphere and NMR · BrainFlux</title>
-<meta name="description" content="Send pulses into a spin and watch it on the Bloch sphere: precession, the rotating frame, the free induction decay, spin echoes, T1 and T2, noise and averaging, and the Earth's-field NMR board's polarize-and-listen.">
+<meta name="description" content="Send pulses into a spin and watch it on the Bloch sphere: precession, the rotating frame, the free induction decay, spin echoes, T1 and T2, noise and averaging, and the Earth's-field NMR board's polarize-and-listen, its tuned tank and its coil's angle.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../lib/style.css">
 <link rel="stylesheet" href="nmr.css">
@@ -32,8 +32,8 @@
         <div class="hint" id="sphere-hint">Drag the arrow's tip to tip the spin, or press a pulse button; drag anywhere else on the sphere to turn it</div>
       </div>
       <div class="side">
-        <div class="panel spin-half" id="spin-half">
-          <div class="label">Spin ½</div>
+        <details class="panel spin-half" id="spin-half" open>
+          <summary class="label">Spin ½<span class="fold-note"> · the quantum state of the arrow</span></summary>
           <div class="small">The arrow is the direction of the spin, ⟨S⟩, of the quantum state</div>
           <div class="state" id="state-formula">$|\psi\rangle=\cos\frac{\theta}{2}\,\text{|↑⟩}+e^{i\varphi}\sin\frac{\theta}{2}\,\text{|↓⟩}$</div>
           <div class="amps" id="amps"></div>
@@ -42,6 +42,10 @@
             <span>P(↓)</span><span class="pbar down"><i id="bar-down"></i></span><span class="fixnum" id="p-down" style="width: 4.5ch"></span>
           </div>
           <div class="why" id="spin-why">↑ is along B₀, the lower energy for a proton.  P(↑) is the chance of finding the spin up if you measured it along B₀.</div>
+        </details>
+        <div class="tank-col v-earth" id="tank-col">
+          <div class="plot-wrap tank-wrap" id="tank-wrap"><canvas id="tank" aria-label="The tank's response against frequency: its gain and phase, the coil's noise through it, the preamplifier's noise, and the protons' frequency.  Drag to retune it"></canvas></div>
+          <div class="hint" id="tank-hint">Drag the tank's peak along to retune it (the switches of SW1 follow); the red line is the protons' frequency</div>
         </div>
         <div class="plot-wrap curve-wrap" id="curve-wrap"><canvas id="curve" aria-label="What the sequence measures, against the delay or the time, with the fitted time constant"></canvas></div>
       </div>
@@ -61,6 +65,7 @@
   <aside class="controls" id="controls">
     <div class="panel" id="seq-panel" data-views="seq"></div>
     <div class="panel" id="earth-panel" data-views="earth"></div>
+    <div class="panel" id="tank-panel" data-views="earth"></div>
     <div class="panel" id="pulse-panel" data-views="one many seq"></div>
     <div class="panel" id="spins-panel" data-views="one many seq earth"></div>
     <div class="panel" id="clock-panel" data-views="one many seq"></div>
@@ -91,7 +96,7 @@
     of the TeachSpin (5 MHz) or of the board (2 kHz).</p>
   </section>
 
-  <article class="exp" data-setup="larmor">
+  <article class="exp" data-setup="larmor" data-frame="720x419">
     <h3>1. The spin goes round the field at the Larmor frequency</h3>
     <p>One spin, tipped 45° from the field $B_0$, seen in the lab.  It goes round $B_0$ at the
     Larmor frequency $f_0=\gamma B_0/2\pi$, with $\gamma/2\pi=42.577$ MHz/T for a proton:
@@ -102,7 +107,7 @@
     as big as the part of the arrow across the field, $|M_{xy}|$.</p>
   </article>
 
-  <article class="exp" data-setup="pulse90">
+  <article class="exp" data-setup="pulse90" data-frame="720x419">
     <h3>2. A π/2 pulse tips the spin over, and the coil starts to ring</h3>
     <p>The arrow starts along $B_0$, with nothing across it and no signal.  A pulse of RF at the
     Larmor frequency turns it down to the equator.  In the lab it spirals down, twelve and a
@@ -113,7 +118,7 @@
     quarter turn takes it to the bottom, and the ringing stops.</p>
   </article>
 
-  <article class="exp" data-setup="rotating">
+  <article class="exp" data-setup="rotating" data-frame="720x548">
     <h3>3. The rotating frame: the same pulse without the spinning</h3>
     <p>Turn with the RF, at the Larmor frequency, and $B_0$ is gone: in this frame nothing
     moves the spin but $B_1$, which stands still along $x'$.  The spiral of experiment 2 becomes
@@ -123,7 +128,7 @@
     goes to $-x'$.  The axis of a pulse is the phase of its RF.</p>
   </article>
 
-  <article class="exp" data-setup="offres">
+  <article class="exp" data-setup="offres" data-frame="720x548">
     <h3>4. Off resonance: the pulse misses, and the mixer beats</h3>
     <p>The RF is 50 kHz above the Larmor frequency, half the rate $\gamma B_1/2\pi=100$ kHz at
     which $B_1$ turns the spin.  In the frame of the RF, $B_0$ is no longer quite cancelled:
@@ -135,7 +140,7 @@
     RF's frequency until the mixer stops beating.</p>
   </article>
 
-  <article class="exp" data-setup="spread">
+  <article class="exp" data-setup="spread" data-frame="720x561">
     <h3>5. Many spins: the signal dies, though no spin does</h3>
     <p>A real sample is many spins, and the magnet's field is not quite the same through it,
     so their frequencies spread, here over $\Delta f=500$ Hz (the full width of a Lorentzian).
@@ -146,7 +151,7 @@
     500 Hz wide at half power: $1/(\pi T_2^*)$.</p>
   </article>
 
-  <article class="exp" data-setup="echo">
+  <article class="exp" data-setup="echo" data-frame="720x463">
     <h3>6. The spin echo: a π pulse brings the signal back</h3>
     <p>As in experiment 5, with a π pulse about $x'$ at $\tau=1.5$ ms, when the fan has spread
     all the way round.  It flips the fan over: the faster spins are now behind by as much as
@@ -157,7 +162,7 @@
     pulls the sum's $M_z$ back up all the while: 0.08 by 5 ms.</p>
   </article>
 
-  <article class="exp" data-setup="cpmg">
+  <article class="exp" data-setup="cpmg" data-frame="720x531">
     <h3>7. T₂ from a train of echoes</h3>
     <p>A π/2 pulse, then sixteen π pulses about $y'$, at $\tau$, $3\tau$, $5\tau$… with
     $\tau=2$ ms.  Each refocuses the fan, so an echo comes every 4 ms, out to 64 ms, and the
@@ -167,7 +172,7 @@
     (1958): the π pulses about $y'$, along the spins, not about $x'$.</p>
   </article>
 
-  <article class="exp" data-setup="mg">
+  <article class="exp" data-setup="mg" data-frame="720x531">
     <h3>8. Why Meiboom and Gill: pulses that are slightly wrong</h3>
     <p>The same train with the π pulses about $x'$ (Carr–Purcell), and every pulse 10% too
     long: a π that is really 198°, as a width set by hand can be.  About $x'$ each pulse's error
@@ -177,7 +182,7 @@
     pulse, −10%, fails the same way about $x'$ (10.6 ms).</p>
   </article>
 
-  <article class="exp" data-setup="ir">
+  <article class="exp" data-setup="ir" data-frame="720x240">
     <h3>9. T₁ by inversion recovery</h3>
     <p>A π pulse turns $M$ to $-z$; it climbs back with $T_1$, as $1-2e^{-\tau/T_1}$; a π/2 at
     $\tau$ tips what it has reached over, and the FID's start reads it, with its sign on the
@@ -190,7 +195,7 @@
     folds the curve up at the null.)</p>
   </article>
 
-  <article class="exp" data-setup="noise">
+  <article class="exp" data-setup="noise" data-frame="720x531">
     <h3>10. Noise, and averaging it away</h3>
     <p>An FID with thermal noise: a signal-to-noise ratio of 5, so the noise is 0.20 of the full
     signal, r.m.s.  Repeat and average: the signal is the same each time and adds up, the noise
@@ -202,7 +207,7 @@
     make the FID look longer.</p>
   </article>
 
-  <article class="exp" data-setup="board">
+  <article class="exp" data-setup="board" data-frame="720x201">
     <h3>11. The Earth's-field board: polarize, switch off, listen</h3>
     <p>No magnet and no RF pulse.  A litre of water sits in a coil whose axis lies across the
     Earth's field (east–west).  For 3 s a current of 1.5 A makes 7.84 mT along the coil, 170
@@ -210,43 +215,114 @@
     $1-e^{-t/T_1}$: 0.699 of all of it by 3 s for tap water ($T_1=2.5$ s).  Then the current is
     switched off in 0.4 ms, before the protons can follow, so $M$ is left across the Earth's
     field: 98.9% of it.  That is the π/2 pulse.  It goes round $B_E$ at 1960 Hz and makes
-    0.78 μV in the same coil, dying away with $T_2^*=0.86$ s.  The board multiplies it by its
-    tank's $Q$ of 37 and its gain of 20 301: about 0.6 V at OUT.  Press <em>Hear it</em>: the
-    whistle the board's headphones give.</p>
+    0.78 μV in the same coil, dying away with $T_2^*=0.86$ s.  The coil and its capacitors are
+    a tank tuned to the protons, which multiplies it by 36.6: 28.6 μV.  The receiver's gain
+    and filters take that to 0.56 V at OUT (the plot under the board's cycle), 45 times the
+    receiver's noise.  Press <em>Hear it</em>: OUT, as the board's headphones give it.</p>
   </article>
 
-  <article class="exp" data-setup="adiabatic">
+  <article class="exp" data-setup="adiabatic" data-frame="720x201">
     <h3>12. Sudden or adiabatic: switch it off slowly and nothing rings</h3>
     <p>The same, with the current switched off in 300 ms instead of 0.4.  As it falls, the
     total field turns from the coil's axis to the Earth's; slowly enough, the spins follow it
     round, and $M$ ends up along $B_E$, with nothing across it to ring: 4.5% is left, an FID of
-    0.033 μV.  The field turns only at the very end of the ramp, through its last 1/170, so what
+    0.034 μV, 25 mV at OUT, twice the receiver's noise.  The field turns only at the very end of
+    the ramp, through its last 1/170, so what
     matters is $A=\gamma B_E^2\tau/B_p$: 0.029 for the board's 0.4 ms (sudden), 1 at 13.8 ms
     (69% left across), 22 at 300 ms (adiabatic).  The plainer $\gamma B_E\tau$ would say 4.9 at
     0.4 ms, and be wrong.  Watch the sphere through the switch-off at each speed.</p>
   </article>
 
-  <article class="exp" data-setup="t1board">
-    <h3>13. T₁ from the polarizing time</h3>
+  <article class="exp" data-setup="angle" data-frame="393x331">
+    <h3>13. Which way to lay the coil: the FID goes as sin² of its angle to the field</h3>
+    <p>Here the coil lies level, pointing north–south.  In Claremont the field dips 58.9° below
+    the horizontal towards magnetic north, so the coil's axis is at $\alpha=58.9°$ to $B_E$.  The
+    current builds $M$ along the coil; switched off suddenly, only its part across the field,
+    $M\sin\alpha$, goes round $B_E$: the tip sweeps a cone about the field, not its equator.  And
+    the coil picks up only the part of that turning $M$ along its own axis, $\sin\alpha$ of it
+    again: the EMF goes as $\sin^2\alpha$, 0.733 here.  The FID at OUT is 0.384 V against 0.56 V
+    east–west: 0.68 of it, a little less than $\sin^2\alpha$, because during the 0.4 ms
+    switch-off the spins follow the field's first turning towards $B_E$ by a few degrees, and at
+    a slant that comes straight off the part across (78.5% of $M$ is left across, not
+    $\sin\alpha$ = 85.6%).  Press <em>Upright</em> (31.1°): 0.133 V.  Drag the coil's end on the
+    sphere along $B_E$: nothing rings.  The handbook says lay it level and east–west (magnetic):
+    square to the field anywhere on Earth.  North–south is nearly as good only where the field
+    dips steeply, upright only near the magnetic equator, where the field lies nearly level.  East
+    by the map instead of by the compass (11° off here, $\alpha$ = 84.2°) costs 2 to 3%: 1% by
+    $\sin^2\alpha$, the rest for the switch-off's few degrees, which at any slant come off the part
+    across.  (With the current the other way round they would add to it instead: at a slant,
+    which way round the coil is wired matters a little.)</p>
+  </article>
+
+  <article class="exp" data-setup="tune" data-frame="359x331">
+    <h3>14. Tune the tank to the protons</h3>
+    <p>The coil and the capacitors that the eight switches of SW1 put across it make a resonant
+    circuit, a tank: it multiplies the FID by $|H|$, up to $Q=\omega L/R=37$ at its resonance
+    $f_T=1/2\pi\sqrt{LC}$, in a band 52.6 Hz wide.  Here every switch is OFF, as a new board
+    comes: only the clamp's 0.39 nF is across the coil, the tank rings at 49 kHz, far above the
+    band, and the FID passes at ×1.00: 17 mV at OUT, 1.3 times the receiver's noise.  The
+    handbook's recipe (§4): the protons here are at 42.577 Hz/μT × 46.03 μT = 1959.8 Hz; the
+    coil's 26.8 mH resonates there with $C=1/4\pi^2f^2L$ = 246.2 nF; of the switches' 3.3, 6.8,
+    13.3, 26.8, 53.8, 106.8, 210 and 420 nF, 210 + 26.8 + 6.8 + 3.3 come nearest, switches
+    1 2 4 7, and with the clamp's that makes 247.29 nF: the tank at 1955.6 Hz, 4.3 Hz below the
+    protons.  Click those four switches, or drag the tank's peak, or press <em>Tune to the
+    protons</em>: ×36.6, 0.56 V at OUT.  One step either side is still ×35.6 (switches 2 4 7) or
+    ×30.9 (3 4 7): each step of 3.3 nF moves the tank 13 Hz.</p>
+  </article>
+
+  <article class="exp" data-setup="elsewhere" data-frame="359x331">
+    <h3>15. Another place: the protons slide off the tank</h3>
+    <p>The board, tuned in Claremont, taken where the Earth's field is 50.0 μT, as further north.
+    The protons are now at 2129 Hz, 173 Hz above the tank, more than three of its widths: on the
+    tank's plot the red line stands out on the tail.  The gain there is ×5.34, not ×36.6, and the
+    FID at OUT is 0.090 V instead of 0.56, though the EMF in the coil is a little larger,
+    0.86 μV, as it grows with the frequency.  Press <em>Tune to the protons</em>: the recipe asks
+    for 208.7 nF, switches 2 3 4 5 6 give 207.89 nF with the clamp's, the tank is at 2132.8 Hz and
+    the gain ×40.2: 0.67 V.  Another day needs nothing: the field drifts through a day by a few
+    tens of nanotesla, about a hertz, and the tank is 52.6 Hz, 1240 nT, wide.  It is a new place
+    that needs the switches reset.</p>
+  </article>
+
+  <article class="exp" data-setup="tanknoise" data-frame="359x331">
+    <h3>16. The tank narrows the noise band</h3>
+    <p>Here the tank is tuned 55 Hz below the protons (switches 1 2 3 4 7).  The coil's 8.9 Ω has
+    thermal noise, $\sqrt{4kTR}$ = 0.38 nV/√Hz, in series with the EMF, so the tank multiplies it
+    just as it multiplies the FID: read on the right axis, the tank's curve is that noise, 14
+    nV/√Hz at its peak.  In all it is $\sqrt{kT/C}$, 0.125 μV for these 260.6 nF, whatever $R$
+    and $Q$ are, as equipartition says ($\tfrac12C\langle V^2\rangle=\tfrac12kT$), and nearly all
+    of it in the tank's band.  The preamplifier adds its own 9.8 nV/√Hz (dashed), flat over the
+    receiver's whole band, 0.7 to 4.2 kHz: most of the 12.6 mV r.m.s. at OUT.  Off the tank's
+    top the protons get ×15.4: 0.24 V at OUT, 19 times the noise.  Press <em>Tune to the
+    protons</em>: the FID and the coil's own noise there are both ×36.6, and the FID is 45 times
+    the noise at OUT, which has hardly changed.  The tank does not lower the noise: it lifts the
+    FID, and the coil's noise with it, above the preamplifier's, in its band, so that the
+    receiver adds only 1.7 dB to the coil's own.  Press <em>All off</em> and <em>Hear it</em>:
+    ×1, and the whistle is lost in the hiss.  (The spectrum still finds the line: in its own
+    0.5 Hz there is little noise.)</p>
+  </article>
+
+  <article class="exp" data-setup="t1board" data-frame="265x331">
+    <h3>17. T₁ from the polarizing time</h3>
     <p>The FID's start is the magnetization built while the current flowed, $1-e^{-t_p/T_1}$.
     <em>Measure T₁</em> runs the cycle polarizing for 0.2 to 4.7 s, the board's range, and fits
-    the starts: $T_1=2.50$ s for tap water's 2.5.  Each cycle you run adds its own point.  Try
+    the starts: $T_1=2.49$ s for tap water's 2.5.  Each cycle you run adds its own point.  Try
     <em>Copper sulphate</em>: its ions take the protons' energy far faster, and $T_1$ falls to
     0.3 s, so the FID reaches full size within a second of polarizing.</p>
   </article>
 
-  <article class="exp" data-setup="field">
-    <h3>14. The Earth's field to a nanotesla</h3>
+  <article class="exp" data-setup="field" data-frame="513x134">
+    <h3>18. The Earth's field to a nanotesla</h3>
     <p>Listening for 4.8 s, the spectrum's line is 0.37 Hz wide, $1/(\pi T_2^*)$, and its peak
     falls at 1959.82 Hz: $B=f/42.577$ Hz/μT = 46 030.0 nT, the field that was set.  One
     nanotesla moves the line 0.043 Hz, a tenth of its width, and an FID this clean locates the
     peak far better than that, so the board reads the field to a few nanotesla: enough to watch it
     drift through the day.  Set the Earth's field to 50 μT, as further north: the peak gives
-    50 000.0 nT.</p>
+    49 999.8 nT, a little less cleanly, as the tank, still tuned for Claremont, gives the FID
+    only ×5.3 there (experiment 15).</p>
   </article>
 
-  <article class="exp" data-setup="steel">
-    <h3>15. A steel tool nearby</h3>
+  <article class="exp" data-setup="steel" data-frame="720x222">
+    <h3>19. A steel tool nearby</h3>
     <p>Steel near the coil bends the field, so it differs across the bottle: 100 nT here, not
     5.  The protons' frequencies spread over 4.26 Hz, $T_2'=1/(\pi\Delta f)$ falls from 1.5 s to
     75 ms, and the FID dies within a tenth of a second ($T_2^*=72$ ms), its line 4.4 Hz wide.
@@ -302,6 +378,46 @@
   they were: tilted 8.7° towards $B_E$ at the board's 0.4 ms, 98.9% across, and 2.5° at a tenth
   of that time.  The FID's EMF is the board's design value, 1.199 μV for a litre of water
   fully polarized at 1.5 A and precessing at 1960 Hz, scaled by the current and the field.</p>
+  <p><b>The coil's angle.</b>  With the coil's axis $\hat n$ at the angle $\alpha$ to $B_E$
+  (along $\hat z$), $\hat n=\hat z\cos\alpha+\hat e\sin\alpha$, the polarizing field and so
+  $\mathbf M$ lie along $\hat n$.  Switched off suddenly, the part along the field, $M\cos\alpha$,
+  stays and the part across, $M\sin\alpha$, goes round $B_E$:
+  $\mathbf M(t)=M\cos\alpha\,\hat z+M\sin\alpha\,(\hat e\cos\omega_0t-\hat f\sin\omega_0t)$, with
+  $\hat f$ square to both.  By reciprocity the coil's flux is proportional to
+  $\mathbf M\cdot\hat n=M\cos^2\alpha+M\sin^2\alpha\cos\omega_0t$, so its EMF, $-d\Phi/dt$, has
+  the amplitude $\omega_0M\sin^2\alpha$: one $\sin\alpha$ for what precesses, one for what the
+  coil sees of it.  For a coil lying level at the compass bearing $\varphi$ from magnetic north,
+  where the field dips by $I$, $\cos\alpha=\cos I\cos\varphi$: east–west is square to the field
+  for any $I$; north–south gives $\sin^2I$ (0.733 in Claremont, $I$ = 58.9°), upright
+  $\cos^2I$.  With the angle, the field during the switch-off turns from $\hat n$ to $\hat z$,
+  its last radian in $\tau B_E/(B_p\sin\alpha)$.</p>
+  <p><b>The tank.</b>  The EMF is induced in the coil itself, in series with its inductance $L$
+  (26.8 mH) and resistance $R$ (8.86 Ω); the bank's capacitance $C$ is across the coil, and the
+  preamplifier reads the voltage on it.  So the tank multiplies the EMF by
+  $$H(f)=\frac{1}{1-\omega^2LC+i\omega RC},$$
+  1 at low frequencies, $Q=\omega_TL/R$ with the phase −90° at its resonance
+  $f_T=1/2\pi\sqrt{LC}$, and nothing, at −180°, far above; $|H|^2$ is $f_T/Q=R/2\pi L$ = 52.6 Hz
+  wide at half height, whatever $C$ is.  It answers in $2Q/\omega_T$ = 6 ms, far quicker than the
+  FID changes, so the FID on the tank is the EMF times $H(f_0)$.  The bank is the clamp's 0.39 nF
+  and eight switches of 3.3 to 420 nF in binary steps of 3.3 nF; the handbook tunes it by
+  $C=1/4\pi^2f_0^2L$ and the nearest sum.  The receiver then multiplies by 101 (the
+  instrumentation amplifier), filters with a fourth-order high-pass at 0.7 kHz and a
+  second-order low-pass at 4.1 kHz (0.97 at 1960 Hz), and multiplies by 201 (GAIN at HIGH).
+  These are the board's design numbers, and the page's tests check them against its design
+  arithmetic.</p>
+  <p><b>The noise.</b>  The coil's resistance has thermal noise $\sqrt{4kTR}$ per √Hz in series
+  with the EMF, so on the tank it is $\sqrt{4kTR}\,|H(f)|$: the tank's own shape, 14 nV/√Hz at
+  the top.  Integrated over all frequencies, $\int_0^\infty4kTR|H|^2df=kT/C$: the equipartition
+  theorem's $\tfrac12C\langle V^2\rangle=\tfrac12kT$, 0.128 μV for 247 nF, whatever $R$ is (the
+  bias resistors' current noise through the tank adds 0.6%).  The preamplifier's own 9.8 nV/√Hz
+  is flat, so over the receiver's band it gives 0.61 μV on the tank's scale, 12.3 of the 12.6 mV
+  r.m.s. at OUT.  Near $f_T$ the coil's noise is the larger, and the receiver adds only 1.7 dB to
+  it: the signal-to-noise ratio is then the coil's own, which no better amplifier could improve.
+  The page draws OUT at 48 kHz for the 10 ms plot and for <em>Hear it</em>: the FID times the
+  tank's and the filters' gain and phase at $f_0$, plus white noise through a digital copy of
+  the tank (the coil's) and alone (the preamplifier's), both through the filters, times the gain.
+  For what is read in a narrow band at $f_0$ (the spectrum, the FID's start, the $T_1$ scan) it
+  adds noise of the density at $f_0$ to the record.</p>
   <p><b>Spin ½.</b>  For one proton the arrow is the expectation value $\langle\mathbf S\rangle$
   (times $2/\hbar$) of the state $\cos\frac\theta2\,\text{|↑⟩}+e^{i\varphi}\sin\frac\theta2\,\text{|↓⟩}$:
   every pure state of a spin ½ is a point on the sphere.  Its Hamiltonian
