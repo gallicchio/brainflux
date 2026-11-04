@@ -550,7 +550,7 @@ function drawChirp() {
   f.y0 /= scale; f.y1 /= scale;
   f.axes({ colors: c, xlabel: 'time (s)', ylabel: `h(t), ×10${sup(Math.round(Math.log10(scale)))}` });
   ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-  fillSlots(ctx, [`${ch.src.label.toLowerCase()} at `, { v: d, dec: 0, w: 4 }, ' Mpc: from ', { v: ch.src.fmin, dec: 0, w: 3 }, ' Hz to the ISCO at ', { v: ch.fisco, dec: 0, w: 4 }, ' Hz in ', { v: s.tc, dec: 2, w: 5 }, ' s'], f.right - 4, f.top + 4);
+  fillSlots(ctx, [`${ch.src.label.toLowerCase()} at `, { v: d, dec: 0, w: 4 }, ' Mpc: from ', { v: ch.src.fmin, dec: 0, w: 3 }, ' Hz to the innermost stable orbit at ', { v: ch.fisco, dec: 0, w: 4 }, ' Hz in ', { v: s.tc, dec: 2, w: 5 }, ' s'], f.right - 4, f.top + 4);
   ctx.restore();
 }
 
@@ -606,7 +606,7 @@ function readoutLigo(box) {
   const e24 = (x) => Math.sqrt(x) / 1e-24;
   const fs = sqlFrequency(p), r = snr(), ch = ensureChirp();
   const groups = [
-    ['At 100 Hz', 'shot noise ', num(e24(b100.shot), 2, 5), ', radiation pressure ', num(e24(b100.rp), 2, 5), ', thermal ', num(e24(b100.thermal), 2, 5), ', total ', bold(num(e24(b100.total), 2, 5)), ' × 10⁻²⁴ /√Hz without squeezing; the SQL is touched at ', num(fs, 0, 4), ' Hz'],
+    ['At 100 Hz', 'shot noise ', num(e24(b100.shot), 2, 5), ', radiation pressure ', num(e24(b100.rp), 2, 5), ', thermal ', num(e24(b100.thermal), 2, 5), ', total ', bold(num(e24(b100.total), 2, 5)), ' × 10⁻²⁴ /√Hz without squeezing; the standard quantum limit is touched at ', num(fs, 0, 4), ' Hz'],
   ];
   if (sq.on) groups.push(['With squeezing', 'total ', bold(num(e24(s100.total), 2, 5)), ' × 10⁻²⁴ /√Hz at 100 Hz; shot noise at 1 kHz down by ', bold(num(-10 * Math.log10(s1k.shot / v1k.shot), 1, 5)), ' dB; radiation pressure at 10 Hz changed by ', num(10 * Math.log10(s10.rp / v10.rp), 1, 5, { plus: '+' }), ' dB']);
   groups.push(['Signal-to-noise ratio', 'ρ = ', bold(num(r.without, 1, 6)), ' without squeezing', ...(sq.on ? [', ', bold(num(r.with, 1, 6)), ' with: ', bold(num(r.ratio, 2, 5)), ' times as far, a volume ', bold(num(r.ratio ** 3, 2, 5)), ' times as big; '] : ['; ']),
@@ -772,7 +772,24 @@ $('#ifo-box').append(powerSlider, massSlider, fcSlider);
 const sourceSeg = segmented(Object.entries(SOURCES).map(([value, s]) => ({ value, label: s.label, title: s.title })), state.source, (v) => { state.source = v; state.distance = SOURCES[v].d; distSlider.value = state.distance; changed(); }, { label: 'The source' });
 $('#source-row').append(sourceSeg);
 const distSlider = slider({ label: 'distance (Mpc)', min: 10, max: 2000, log: true, value: state.distance, title: 'How far away the binary is: the signal falls as 1/d', onInput: (v) => { state.distance = v; changed(); } });
-$('#chirp-box').append(distSlider);
+const hearButton = el('button', { type: 'button', title: 'Play the chirp as sound: its frequencies are in the audible range', onclick: () => hearChirp() }, 'Hear it');
+$('#chirp-box').append(distSlider, el('div', { class: 'row' }, hearButton));
+$('#chirp-note').textContent = 'The Newtonian chirp of the two masses, face on and overhead, from its starting frequency to the innermost stable orbit, where the inspiral ends.  ρ, in the read-out, is the signal-to-noise ratio of a matched filter; 8 is the usual threshold for a detection.';
+
+/** The chirp as sound (its frequencies are in the audible range), through Web Audio. */
+let audio = null;
+function hearChirp() {
+  try {
+    const ch = ensureChirp(), s = ch.sig;
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const buf = audio.createBuffer(1, s.n, s.fs), d = buf.getChannelData(0);
+    let m = 0;
+    for (let i = 0; i < s.n; i++) m = Math.max(m, Math.abs(s.h[i]));
+    for (let i = 0; i < s.n; i++) d[i] = (0.5 * s.h[i]) / m;
+    const src = audio.createBufferSource();
+    src.buffer = buf; src.connect(audio.destination); src.start();
+  } catch (e) { /* no audio here */ }
+}
 
 // Animation.
 const periodSlider = slider({ label: 'seconds per period', min: 1, max: 12, step: 0.5, value: state.period, title: 'How slowly the cloud turns: seconds of your time per period of the light', onInput: (v) => { state.period = v; scheduleHash(); } });
@@ -790,6 +807,7 @@ document.addEventListener('keydown', (e) => {
 /** After any change of the state: sliders in step, the record cleared where it no longer applies, redraw. */
 function changed() {
   syncSqPresets();
+  anim.sample = null;              // the point on the stick belongs to the old cloud: draw a new one
   alphaSlider.hidden = phaseSlider.hidden = state.kind === 'vacuum';
   lossSlider.value = Math.round(100 * (1 - state.eta));
   kindSeg.value = state.kind;
