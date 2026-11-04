@@ -62,7 +62,9 @@
 
 /* 3 · The second axis */
 .v3-main { height: max(580px, calc(100vh - 230px)); max-height: 780px; }
-#v3-main { touch-action: pan-y; }
+/* (On a phone these tall pictures must let a finger scroll the page: their drags are sideways,
+   but for view 1's field handle and the tubes' tops, which have the gradient slider beside them.) */
+#v1-main, #v2-main, #v3-main, #v4-main { touch-action: pan-y; }
 
 /* 4 · Contrast and artefacts */
 .v4-main { height: max(560px, calc(100vh - 230px)); max-height: 760px; }
