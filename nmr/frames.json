@@ -1,0 +1,25 @@
+{
+  "select": [".sphere-area", "#signal-wrap"],
+  "wait": 0.6,
+  "setups": {
+    "larmor": {"select": [".sphere-area", "#raw-wrap"], "js": "__app.setups.larmor(); __app.hold(true); __app.step(1 / 60, 300)"},
+    "pulse90": {"select": [".sphere-area", "#raw-wrap"], "js": "__app.setups.pulse90(); __app.hold(true); __app.runTo(4.2e-6)"},
+    "rotating": {"js": "__app.setups.rotating(); __app.hold(true); __app.runTo(3.4e-6)"},
+    "offres": {"js": "__app.setups.offres(); __app.hold(true); __app.runTo(28e-6)"},
+    "spread": {"select": [".sphere-area", "#signal-wrap", "#spec-wrap"], "js": "__app.setups.spread(); __app.hold(true); __app.runTo(4e-3)"},
+    "echo": {"js": "__app.setups.echo(); __app.hold(true); __app.runTo(3.0e-3)"},
+    "cpmg": {"js": "__app.setups.cpmg(); __app.hold(true); __app.runTo(0.0659)"},
+    "mg": {"js": "__app.setups.mg(); __app.hold(true); __app.runTo(0.0659)"},
+    "ir": {"select": [".sphere-area"], "js": "__app.setups.ir(); __app.hold(true); __app.finishScan()"},
+    "noise": {"js": "__app.setups.noise(); __app.hold(true); __app.runSeq(); __app.runTo(__app.seq.span)"},
+    "board": {"select": ["#board-wrap", "#signal-wrap"], "js": "__app.setups.board(); __app.hold(true); __app.runBoard()"},
+    "adiabatic": {"select": ["#board-wrap", "#signal-wrap"], "js": "__app.setups.adiabatic(); __app.hold(true); __app.runBoard()"},
+    "angle": {"select": ["#sphere-wrap"], "js": "__app.setups.angle(); __app.hold(true); __app.runTo(3.3)"},
+    "tune": {"select": ["#tank-wrap"], "js": "__app.setups.tune(); __app.hold(true); __app.setCode(75); __app.runBoard()"},
+    "elsewhere": {"select": ["#tank-wrap"], "js": "__app.setups.elsewhere(); __app.hold(true); __app.runBoard()"},
+    "tanknoise": {"select": ["#tank-wrap"], "js": "__app.setups.tanknoise(); __app.hold(true); __app.runBoard()"},
+    "t1board": {"select": ["#curve-wrap"], "js": "__app.setups.t1board(); __app.hold(true); __app.finishBoardScan()"},
+    "field": {"select": ["#spec-wrap"], "js": "document.querySelector('.sphere-area').style.display = 'none'; __app.setups.field(); __app.hold(true); __app.runBoard()"},
+    "steel": {"select": ["#signal-wrap", "#spec-wrap"], "js": "document.querySelector('.sphere-area').style.display = 'none'; __app.setups.steel(); __app.hold(true); __app.runBoard()"}
+  }
+}
