@@ -1,0 +1,81 @@
+/* Optical coherence tomography: the pictures of one view at a time on the left, the light and
+   that view's controls on the right. */
+
+:root {
+  --sig: #2f62d8;        /* the detector's signal, the fringes */
+  --env: #c8501a;        /* their envelope: the A-scan */
+  --gate: #9a7400;       /* the coherence gate: the depth the mirror matches */
+  --layer: #7b3fb5;      /* where the sample's layers really are */
+  --mirrorc: #1f7a3a;    /* the reference mirror */
+  --noisec: #8a8b91;
+  --faint: rgba(0, 0, 0, 0.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sig: #7aa2ff;
+    --env: #ff9a5c;
+    --gate: #ffd866;
+    --layer: #c79bff;
+    --mirrorc: #7ad694;
+    --noisec: #7d7e86;
+    --faint: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.oct {
+  display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 12px;
+  padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start;
+}
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.view-row { justify-content: flex-start; }
+.view-row .seg > button { padding: 4px 12px; }
+.view { display: grid; gap: 10px; min-width: 0; }
+.oct:not([data-view="fringes"]) #v-fringes, .oct:not([data-view="ascan"]) #v-ascan,
+.oct:not([data-view="scan"]) #v-scan, .oct:not([data-view="fourier"]) #v-fourier { display: none; }
+.oct:not([data-view="fringes"]) .for-fringes, .oct:not([data-view="ascan"]) .for-ascan,
+.oct:not([data-view="scan"]) .for-scan, .oct:not([data-view="fourier"]) .for-fourier { display: none; }
+
+.cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.head { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; min-height: 24px; }
+.head h2 { font-size: 15px; margin: 0; white-space: nowrap; }
+.head .note { color: var(--ink-2); font-size: 12px; }
+.head .spacer { flex: 1; }
+.box { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.box canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dark-box { background: #1b1d22; border-color: #2a2c33; }
+.cell > .hint { margin: 0 2px; }
+.readout { color: var(--ink-2); font-size: 13px; line-height: 1.55; min-height: 3em; }
+.readout > div { min-height: 1.55em; }
+
+/* View 1: the interferometer and the light side by side, the trace under them. */
+#v-fringes { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); grid-template-areas: "schem side" "trace trace"; }
+#v-fringes .schem-cell { grid-area: schem; }
+#v-fringes .side-cell { grid-area: side; }
+#v-fringes .trace-cell { grid-area: trace; }
+.schem-box { aspect-ratio: 100 / 64; }
+.spec-box { height: 128px; }
+.zoom-box { height: max(150px, calc(100% - 128px - 60px)); flex: 1; min-height: 150px; }
+.trace-box { height: max(200px, calc(100vh - 640px)); }
+#f-trace, #f-spec { cursor: crosshair; }
+#f-trace { cursor: ew-resize; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.controls .panel { display: flex; flex-direction: column; gap: 6px; }
+.controls .slider { grid-template-columns: minmax(7.6em, auto) 1fr 4.8em; }
+.gloss { color: var(--ink-2); font-size: 12px; line-height: 1.4; }
+.readout-line { color: var(--ink); font-size: 13px; }
+.controls details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.controls details[open] summary { margin-bottom: 6px; }
+.motor-row { gap: 8px; }
+.motor-row .seg > button { min-width: 34px; padding: 3px 6px; }
+.small-btn { padding: 1px 8px; min-height: 24px; font-size: 12px; }
+
+@media (max-width: 900px) {
+  .oct { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  #v-fringes { grid-template-columns: minmax(0, 1fr); grid-template-areas: "schem" "trace" "side"; }
+  .trace-box { height: 230px; }
+  .zoom-box { height: 170px; flex: none; }
+  .bar { flex-wrap: wrap; }
+  .bar h1 { font-size: 15px; }
+  .view-row .seg > button { padding: 4px 8px; font-size: 13px; }
+}

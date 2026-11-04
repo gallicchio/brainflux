@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optical Coherence Tomography · BrainFlux</title>
+<meta name="description" content="From white-light fringes to a 3D image: a Michelson with a broadband source finds the depth of every reflecting layer in a sample, an A-scan at a time, then a cross-section and a volume, and the Fourier-domain way that does it all at once.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="oct.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Optical coherence tomography</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="oct" id="main" data-view="fringes">
+  <section class="stage">
+    <div class="row view-row" id="view-row"></div>
+
+    <!-- 1 · Fringes from a layer -->
+    <div class="view" id="v-fringes">
+      <div class="cell schem-cell">
+        <div class="head"><h2>A Michelson with a sample in one arm</h2><span class="note">seen from above</span></div>
+        <div class="box dark-box schem-box"><canvas id="f-schem" tabindex="0" aria-label="The interferometer from above: drag the reference mirror along its rail; the sample is below the beam splitter"></canvas></div>
+        <div class="hint" id="f-hint">Drag the reference mirror (or click on the trace below): fringes appear only while its distance matches the surface's depth.</div>
+      </div>
+      <div class="cell side-cell">
+        <div class="head"><h2>The light</h2><span class="note">its spectrum: drag a ◇ to change its width</span></div>
+        <div class="box spec-box"><canvas id="f-spec" aria-label="The source's spectrum against wavelength: drag a diamond to change the bandwidth"></canvas></div>
+        <div class="head"><h2>The fringes, magnified</h2><span class="note">the signal within 8 μm of the mirror</span></div>
+        <div class="box zoom-box"><canvas id="f-zoom" aria-label="The detector's signal within 8 micrometres of the mirror's position, fringe by fringe"></canvas></div>
+      </div>
+      <div class="cell trace-cell">
+        <div class="head"><h2>The detector's signal against the mirror's position</h2><span class="note">what it has recorded so far</span></div>
+        <div class="box trace-box"><canvas id="f-trace" aria-label="The detector's signal against the mirror's position d: click or drag to move the mirror there"></canvas></div>
+        <div class="readout" id="f-readout"><div id="f-readout-1"></div><div id="f-readout-2"></div><div id="f-readout-3"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel" id="light-panel">
+      <div class="label">The light</div>
+      <div class="row" id="lam-box"></div>
+      <div id="bw-box"></div>
+      <div class="gloss">Δλ, the bandwidth: the width of the spectrum at half its height.  The broader the light, the shorter the coherence length.</div>
+      <div class="readout-line" id="light-readout"></div>
+    </div>
+
+    <div class="panel for-fringes">
+      <div class="label">The sample</div>
+      <div id="f-sample-box" class="stack"></div>
+      <div id="f-plate-box" class="stack"></div>
+      <details id="f-more">
+        <summary>More: glass in one arm only (dispersion)</summary>
+        <div id="f-glass-box" class="stack"></div>
+        <div class="gloss">A block of BK7 glass in the sample arm with no twin in the reference arm.  Glass delays each colour differently (dispersion), so the colours' fringes no longer line up: the burst spreads and its fringes are chirped.  (The mirror is put back by the glass's group delay, so the burst stays where it was.)</div>
+      </details>
+    </div>
+    <div class="panel for-fringes">
+      <div class="label">The reference mirror</div>
+      <div id="f-mirror-box" class="stack"></div>
+      <div class="row motor-row"><span class="small muted">Motor</span><span id="f-motor-box"></span></div>
+      <div id="f-speed-box" class="stack"></div>
+      <div class="row"><button type="button" class="small-btn" id="f-fit" title="Fit the trace's window to the surfaces">Fit to the sample</button><button type="button" class="small-btn" id="f-clear" title="Forget what the detector has recorded">Clear the trace</button></div>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+  <section class="start"><h3>Start here</h3>
+  <p>In the interferometer demo, white light made fringes only within a few micrometres of equal
+  paths.  This page starts there and ends with a 3D picture of the inside of an eye.</p>
+  </section>
+
+  <article class="exp" data-setup="start">
+    <h3>1. One surface: fringes only where the paths match</h3>
+    <p>To be written.</p>
+  </article>
+
+  <section id="how">
+  <h3>How it works</h3>
+  <p>To be written.</p>
+  </section>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

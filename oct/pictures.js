@@ -24,137 +24,148 @@ function board(ctx, canvas, width, height, P) {
 }
 
 /**
- * The Michelson from above, 100 × 64 units: the source on the left, the beam splitter in the
- * middle, the reference mirror on its rail to the right, the sample below, the detector (or the
- * spectrometer) above.  The reference arm and the sample arm are drawn in optical path, so that
- * the mirror at position d is level with the depth d it matches.
- *   o: { fd (spectrometer instead of a detector), win: [lo, hi] (the mirror positions the rail
- *       shows, μm), d (the mirror's position; in fd it stays at o.dFixed), surfaces: [{ d, r,
- *       label }] (the sample's reflecting surfaces, at optical depth), slab: { d0, d1 } (the drawn
- *       block, optical), lc (the gate's width, μm), level (the detector's reading, 0..1),
- *       spectrum: Float32Array (fd: the camera's pixels, 0..1), label (the sample's name) }
- * Returns the hit boxes for dragging: { mirror: [x, y, w, h], P, u, rail: [x0, x1, y] }.
+ * The Michelson from above, 100 × 64 units: the source on the left, the beam splitter, the
+ * reference mirror on its rail to the right, the sample below, the detector (or the
+ * spectrometer) above.  The reference arm and the sample arm are drawn on one scale of path, so
+ * that the mirror at position d is level with the depth d it matches; the gaps between the beam
+ * splitter and the scales are not to scale.
+ *   o: { fd (a spectrometer instead of a detector, the mirror fixed at o.dFixed), win: [lo, hi]
+ *       (the mirror positions the rail shows, μm), d (the mirror's position), surfaces: [{ d, r,
+ *       label }] (the sample's reflecting surfaces, at optical depth), slab: { d0, d1 } (a block
+ *       drawn behind them), lc (the gate's width, μm), level (the detector's reading, 0..1),
+ *       spectrum: Float32Array (fd: the camera's pixels, 0..1), label (the sample's name),
+ *       glass (mm of uncompensated glass in the sample arm), sourceLabel }
+ * Returns { mirror: [x, y, w, h] (its hit box, CSS px), u (px per unit), span, toD(px) }.
  */
 export function drawMichelson(canvas, o) {
   const { ctx, width, height } = fitCanvas(canvas);
   const u = Math.min(width / 100, height / 64), ox = (width - 100 * u) / 2, oy = (height - 64 * u) / 2;
   const P = (x, y) => [ox + x * u, oy + y * u];
   board(ctx, canvas, width, height, P);
+  const fs = (n) => Math.max(9, Math.min(13, (n * u) / 5));   // font sizes that grow a little with the picture
   const line = (pts, w, style, dash) => {
     ctx.strokeStyle = style; ctx.lineWidth = w; ctx.setLineDash(dash || []); ctx.beginPath();
     pts.forEach(([x, y], i) => { const [px, py] = P(x, y); if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); });
     ctx.stroke(); ctx.setLineDash([]);
   };
-  const label = (s, x, y, align = 'center', col = TEXT, size = 11) => {
-    ctx.fillStyle = col; ctx.font = `${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  const label = (s, x, y, align = 'center', col = TEXT, size = 10) => {
+    ctx.fillStyle = col; ctx.font = `${fs(size)}px system-ui, sans-serif`; ctx.textAlign = align; ctx.textBaseline = 'middle';
     const [px, py] = P(x, y); ctx.fillText(s, px, py);
   };
-  const BSx = 40, by = 30, EQ = 72, SY = 46;          // the beam splitter, the rail's centre, the sample arm's centre
-  const [lo, hi] = o.win, W = hi - lo, c = 0.5 * (lo + hi), span = 20;
-  const off = (d) => Math.max(-span - 3, Math.min(span + 3, (span * (d - c)) / (W / 2)));   // μm → drawn units
-  const mx = EQ + (o.fd ? off(o.dFixed) : off(o.d));
-  // Beams: glow, then core.  The sample arm reaches the sample's first surface and on into it.
-  const lastD = o.surfaces.length ? Math.max(...o.surfaces.map((s) => s.d)) : c;
-  const yEnd = SY + Math.max(off(lastD), 0) + 1;
-  const beams = [[[16, by], [BSx, by]], [[BSx, by], [mx - 0.5, by]], [[BSx, by], [BSx, yEnd]], [[BSx, by], [BSx, 8]]];
+  const by = 22, BSx = 40, EQ = 74, SY = 46, span = 15, railY = by + 7, sx = BSx + 10;
+  const [lo, hi] = o.win, W = hi - lo, c = 0.5 * (lo + hi);
+  const off = (d) => (span * (d - c)) / (W / 2);              // μm → drawn units from the scale's middle
+  const clampOff = (d) => Math.max(-span - 2, Math.min(span + 2, off(d)));
+  const mx = EQ + clampOff(o.fd ? o.dFixed : o.d);
+  // Beams: glow, then core.  The sample arm goes down to the deepest surface in view.
+  const deepest = o.surfaces.length ? Math.max(...o.surfaces.map((q) => q.d)) : c;
+  const yEnd = SY + Math.max(-span, Math.min(span + 2, off(deepest))) + 1.5;
+  const beams = [[[14, by], [BSx, by]], [[BSx, by], [mx - 0.4, by]], [[BSx, by], [BSx, yEnd]], [[BSx, by], [BSx, o.fd ? 9 : 5.5]]];
   ctx.lineCap = 'round';
-  for (const bm of beams) line(bm, 3.2 * u, `rgba(${BEAM_RGB},0.18)`);
-  for (const bm of beams) line(bm, Math.max(1.2, 0.45 * u), BEAM);
-  const arrow = (x, y, dx, dy) => { const [px, py] = P(x, y), s = 1.5 * u; ctx.fillStyle = BEAM; ctx.beginPath(); ctx.moveTo(px + dx * s, py + dy * s); ctx.lineTo(px - dx * s - dy * s * 0.7, py - dy * s + dx * s * 0.7); ctx.lineTo(px - dx * s + dy * s * 0.7, py - dy * s - dx * s * 0.7); ctx.closePath(); ctx.fill(); };
-  arrow(27, by, 1, 0); arrow(BSx, 19, 0, -1); arrow(Math.min(mx - 4, EQ - 2), by, 1, 0); arrow(BSx, 39, 0, 1);
-  // The source: a superluminescent diode with a fibre.
-  ctx.fillStyle = '#3a3d46'; { const [x0, y0] = P(2, by - 3.2); ctx.fillRect(x0, y0, 11 * u, 6.4 * u); }
-  label(o.sourceLabel || 'SLD', 7.5, by - 0.2, 'center', TEXT, 10);
-  label('broadband, infrared', 7.5, by + 6, 'center', DIM, 9);
-  line([[14.5, by - 2.5], [14.5, by + 2.5]], 1.4, 'rgba(180,200,255,0.8)');
+  for (const bm of beams) line(bm, 3 * u, `rgba(${BEAM_RGB},0.16)`);
+  for (const bm of beams) line(bm, Math.max(1.2, 0.42 * u), BEAM);
+  const arrow = (x, y, dx, dy) => { const [px, py] = P(x, y), s = 1.4 * u; ctx.fillStyle = BEAM; ctx.beginPath(); ctx.moveTo(px + dx * s, py + dy * s); ctx.lineTo(px - dx * s - dy * s * 0.7, py - dy * s + dx * s * 0.7); ctx.lineTo(px - dx * s + dy * s * 0.7, py - dy * s - dx * s * 0.7); ctx.closePath(); ctx.fill(); };
+  arrow(27, by, 1, 0); arrow(BSx, 14, 0, -1); arrow(50, by, 1, 0); arrow(BSx, 27.5, 0, 1);
+  // The source.
+  ctx.fillStyle = '#3a3d46'; { const [x0, y0] = P(2, by - 3.4); ctx.fillRect(x0, y0, 11 * u, 6.8 * u); }
+  label(o.sourceLabel || 'SLD', 7.5, by, 'center', TEXT, 10);
+  label('broadband,', 7.5, by + 5.4, 'center', DIM, 9);
+  label('infrared', 7.5, by + 8.2, 'center', DIM, 9);
   // Beam splitter.
-  line([[BSx - 4, by + 4], [BSx + 4, by - 4]], 0.9 * u, GLASS);
-  label('beam splitter', BSx - 6, by + 7.5, 'center', DIM, 9);
-  // The rail of the reference mirror, with its scale.
-  const railY = by + 9.5;
-  line([[EQ - span - 3, railY], [EQ + span + 3, railY]], 1, 'rgba(255,255,255,0.25)');
+  line([[BSx - 3.5, by + 3.5], [BSx + 3.5, by - 3.5]], 0.85 * u, GLASS);
+  label('beam splitter', BSx - 5, by - 5, 'right', DIM, 9);
+  // Uncompensated glass in the sample arm.
+  if (o.glass > 0) {
+    const [gx, gy] = P(BSx - 3, by + 3.6);
+    ctx.fillStyle = 'rgba(150,200,240,0.35)'; ctx.fillRect(gx, gy, 6 * u, 2.6 * u);
+    ctx.strokeStyle = 'rgba(150,200,240,0.8)'; ctx.lineWidth = 1; ctx.strokeRect(gx, gy, 6 * u, 2.6 * u);
+    label(`BK7 glass, ${+o.glass.toFixed(2)} mm, no twin`, BSx - 4, by + 4.9, 'right', '#9fd0ff', 9);
+  }
+  // The reference mirror's rail and its scale.
+  line([[EQ - span - 2, railY], [EQ + span + 2, railY]], 1, 'rgba(255,255,255,0.25)');
   const tick = niceStep(W);
-  for (let d = Math.ceil(lo / tick) * tick; d <= hi + 1e-9; d += tick) {
+  for (let d = Math.ceil(lo / tick) * tick; d <= hi + 1e-9 * tick; d += tick) {
     const x = EQ + off(d);
-    line([[x, railY - 1], [x, railY + 1]], 1, 'rgba(255,255,255,0.4)');
-    label(fmtUm(d), x, railY + 3.2, 'center', DIM, 8);
+    line([[x, railY - 0.9], [x, railY + 0.9]], 1, 'rgba(255,255,255,0.4)');
+    label(fmtUm(d), x, railY + 2.8, 'center', DIM, 8);
   }
-  label('mirror position d (μm)', EQ, railY + 6.5, 'center', DIM, 9);
-  if (!o.fd) label('reference mirror: drag it', EQ, by - 11.5, 'center', TEXT, 10);
-  else label('reference mirror, fixed', EQ, by - 11.5, 'center', TEXT, 10);
-  // The mirror on its carriage.
-  const [mpx, mpy] = P(mx, by), hl = 7 * u;
-  ctx.fillStyle = '#2d3039'; ctx.fillRect(mpx + 1.2 * u, mpy - 8 * u, 5 * u, 16 * u);
-  ctx.strokeStyle = '#e6e9f0'; ctx.lineWidth = 0.9 * u; ctx.beginPath(); ctx.moveTo(mpx, mpy - hl); ctx.lineTo(mpx, mpy + hl); ctx.stroke();
-  if (!o.fd) { ctx.fillStyle = GATE; ctx.beginPath(); ctx.arc(mpx, mpy - hl - 2.2 * u, Math.max(3.5, 1.1 * u), 0, 2 * Math.PI); ctx.fill(); }
-  // The sample arm: the same scale going down.  Its rail ticks are the depths the mirror matches.
-  const sx = BSx + 9.5;
-  line([[sx, SY - span - 3], [sx, SY + span + 3]], 1, 'rgba(255,255,255,0.25)');
-  for (let d = Math.ceil(lo / tick) * tick; d <= hi + 1e-9; d += tick) {
+  label('mirror position d (μm)', EQ, railY + 6, 'center', DIM, 9);
+  label(o.fd ? 'reference mirror: fixed' : 'reference mirror: drag it', EQ + 2, 12.5, 'center', TEXT, 10);
+  // The mirror on its carriage, with its grip.
+  const [mpx, mpy] = P(mx, by), hl = 5.5 * u;
+  ctx.fillStyle = '#2d3039'; ctx.fillRect(mpx + 1 * u, mpy - 6.5 * u, 4.5 * u, 13 * u);
+  ctx.strokeStyle = '#e6e9f0'; ctx.lineWidth = 0.85 * u; ctx.beginPath(); ctx.moveTo(mpx, mpy - hl); ctx.lineTo(mpx, mpy + hl); ctx.stroke();
+  if (!o.fd) { ctx.fillStyle = GATE; ctx.beginPath(); ctx.arc(mpx + 3.2 * u, mpy, Math.max(3.5, 1.1 * u), 0, 2 * Math.PI); ctx.fill(); }
+  // The sample arm's scale of optical depth: the same numbers as the rail's.
+  line([[sx, SY - span - 2], [sx, SY + span + 2]], 1, 'rgba(255,255,255,0.25)');
+  for (let d = Math.ceil(lo / tick) * tick; d <= hi + 1e-9 * tick; d += tick) {
     const y = SY + off(d);
-    line([[sx - 1, y], [sx + 1, y]], 1, 'rgba(255,255,255,0.4)');
-    label(fmtUm(d), sx + 2.2, y, 'left', DIM, 8);
+    line([[sx - 0.9, y], [sx + 0.9, y]], 1, 'rgba(255,255,255,0.4)');
+    label(fmtUm(d), sx + 1.8, y, 'left', DIM, 8);
   }
-  label('optical depth (μm)', sx + 2, SY + span + 5.5, 'left', DIM, 9);
-  // The sample: a block between its first and last surface (drawn in optical path), its surfaces.
+  label('depth (optical)', sx - 1, SY - span - 4.2, 'left', DIM, 9);
+  // The sample: a block between its surfaces (in optical path), and its surfaces.
+  const yOf = (d) => SY + off(d), inView = (y) => y >= SY - span - 2 && y <= SY + span + 2;
   if (o.slab) {
-    const y0 = SY + off(o.slab.d0), y1 = SY + off(o.slab.d1);
-    const [bx, byy] = P(BSx - 8, Math.min(y0, y1)), [, by1] = P(BSx - 8, Math.max(y0, y1));
-    ctx.fillStyle = 'rgba(120,170,220,0.16)'; ctx.fillRect(bx, byy, 16 * u, Math.max(1, by1 - byy));
-    ctx.strokeStyle = 'rgba(120,170,220,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(bx, byy, 16 * u, Math.max(1, by1 - byy));
+    const y0 = Math.max(SY - span - 2, yOf(o.slab.d0)), y1 = Math.min(SY + span + 2, yOf(o.slab.d1));
+    if (y1 > y0) {
+      const [bx, byy] = P(BSx - 7, y0), [, by1] = P(BSx - 7, y1);
+      ctx.fillStyle = 'rgba(120,170,220,0.18)'; ctx.fillRect(bx, byy, 14 * u, by1 - byy);
+      if (o.label && y1 - y0 > 6) label(o.label, BSx - 8, (y0 + y1) / 2, 'right', TEXT, 10);
+    }
   }
-  for (const s of o.surfaces) {
-    const y = SY + off(s.d);
-    if (y < SY - span - 3 || y > SY + span + 3) continue;
-    const a = Math.min(1, 0.35 + 3 * Math.abs(s.r));
-    line([[BSx - 8, y], [BSx + 8, y]], Math.max(1.2, 0.5 * u), `rgba(240,240,250,${a})`);
-    if (s.label) label(s.label, BSx - 9, y, 'right', DIM, 9);
+  for (const q of o.surfaces) {
+    const y = yOf(q.d);
+    if (!inView(y)) continue;
+    const a = Math.min(1, 0.45 + 3 * Math.abs(q.r));
+    line([[BSx - 7, y], [BSx + 7, y]], Math.max(1.2, 0.45 * u), `rgba(240,240,250,${a})`);
+    if (q.label) label(q.label, BSx - 8, y, 'right', DIM, 9);
   }
-  label(o.label || 'the sample', BSx - 9, SY - span - 1, 'right', TEXT, 10);
-  // The gate: the depth that the mirror matches now, and the coherence length about it.
+  // The gate: the depth the mirror matches now, and the coherence length about it.
   if (!o.fd) {
-    const gy = SY + off(o.d), half = (span * (o.lc / 2)) / (W / 2);
-    const [gx0, gy0] = P(BSx - 11, gy - half), [gx1, gy1] = P(BSx + 11, gy + half);
-    ctx.fillStyle = 'rgba(255,224,138,0.18)'; ctx.fillRect(gx0, gy0, gx1 - gx0, Math.max(1, gy1 - gy0));
-    line([[BSx - 11, gy], [BSx + 11, gy]], 1.2, GATE, [4, 3]);
-    label('the mirror\'s match: ±ℓ_c/2', BSx + 12, gy, 'left', GATE, 9);
+    const gy = yOf(o.d), half = Math.max(0.25, (span * (o.lc / 2)) / (W / 2));
+    if (inView(gy)) {
+      const [gx0, gy0] = P(BSx - 9, gy - half), [gx1, gy1] = P(BSx + 9, gy + half);
+      ctx.fillStyle = 'rgba(255,224,138,0.2)'; ctx.fillRect(gx0, gy0, gx1 - gx0, Math.max(1, gy1 - gy0));
+      line([[BSx - 9, gy], [BSx + 9, gy]], 1.2, GATE, [4, 3]);
+    }
+    label('yellow: the depth the mirror matches, ±ℓ_c/2', 2, 62, 'left', GATE, 9);
   } else {
-    label('every depth at once', BSx + 12, SY - span - 1, 'left', GATE, 9);
+    label('the camera sees every depth at once', 2, 62, 'left', GATE, 9);
   }
   // The detector, or the spectrometer.
   if (!o.fd) {
-    line([[BSx - 5, 8], [BSx + 5, 8]], 0.8 * u, '#9aa0ad');
-    label('detector', BSx + 7, 8, 'left', TEXT, 10);
-    // Its reading: a meter.
-    const [qx, qy] = P(BSx + 7, 11.5), mw = 18 * u, mh = 2.2 * u;
-    ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(qx, qy, mw, mh);
+    line([[BSx - 4.5, 5], [BSx + 4.5, 5]], 0.8 * u, '#9aa0ad');
+    label('detector and its signal', BSx + 6, 4.6, 'left', TEXT, 10);
+    const [qx, qy] = P(BSx + 6, 6.9), mw = 13 * u, mh = 1.6 * u;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(qx, qy, mw, mh);
     ctx.fillStyle = BEAM; ctx.fillRect(qx, qy, mw * Math.max(0, Math.min(1, o.level ?? 0)), mh);
-    label('signal', BSx + 7 + 19, 12.6, 'left', DIM, 9);
   } else {
-    // A grating that fans the wavelengths across a line camera.
-    const gx = BSx, gy = 10;
-    line([[gx - 5, gy + 2.5], [gx + 5, gy - 2.5]], 1.2, '#c9ccd4');
-    for (let i = -4; i <= 4; i++) line([[gx + i * 1.1 - 0.5, gy - i * 0.55 + 0.25], [gx + i * 1.1 + 0.5, gy - i * 0.55 - 0.25]], 1, 'rgba(255,255,255,0.4)');
-    label('grating', gx - 7, gy + 2, 'right', TEXT, 10);
-    const camY = 3, camX0 = gx + 8, camX1 = gx + 46;
+    const gx = BSx, gy = 9;
+    line([[gx - 4, gy + 2], [gx + 4, gy - 2]], 1.2, '#c9ccd4');
+    label('grating', gx - 5, gy + 1.5, 'right', TEXT, 10);
+    const camY = 3.2, camX0 = gx + 7, camX1 = gx + 38;
     for (let i = 0; i <= 10; i++) {
       const t = i / 10, x = camX0 + (camX1 - camX0) * t;
-      line([[gx, gy], [x, camY]], 0.8, `rgba(${BEAM_RGB},${0.1 + 0.25 * Math.exp(-8 * (t - 0.5) ** 2)})`);
+      line([[gx, gy], [x, camY + 1.3]], 0.8, `rgba(${BEAM_RGB},${0.1 + 0.3 * Math.exp(-8 * (t - 0.5) ** 2)})`);
     }
-    const [cx0, cy0] = P(camX0, camY - 1.6), cw = (camX1 - camX0) * u, ch = 3.2 * u;
+    const [cx0, cy0] = P(camX0, camY - 1.3), cw = (camX1 - camX0) * u, ch = 2.6 * u;
     ctx.fillStyle = '#2d3039'; ctx.fillRect(cx0, cy0, cw, ch);
     if (o.spectrum) {
       const n = o.spectrum.length;
       for (let i = 0; i < n; i++) {
         const v = Math.max(0, Math.min(1, o.spectrum[i]));
-        ctx.fillStyle = `rgba(${BEAM_RGB},${0.15 + 0.85 * v})`;
-        ctx.fillRect(cx0 + (cw * i) / n, cy0 + 0.4 * u, cw / n + 0.5, ch - 0.8 * u);
+        ctx.fillStyle = `rgba(${BEAM_RGB},${0.08 + 0.92 * v})`;
+        ctx.fillRect(cx0 + (cw * i) / n, cy0 + 0.3 * u, cw / n + 0.6, ch - 0.6 * u);
       }
     }
-    label('line camera: the spectrum', camX1 + 2, camY, 'left', TEXT, 10);
+    label('line camera: one pixel per wavelength', camX1 + 1, camY, 'left', TEXT, 9);
   }
-  const [rx, ry] = P(mx - 1.5, by - 8);
-  return { mirror: [rx, ry, 8 * u, 16 * u], P, u, rail: [P(EQ - span, by)[0], P(EQ + span, by)[0], mpy], EQ, off, span, c, W };
+  const perPx = W / (2 * span * u);
+  return {
+    mirror: [mpx - 2 * u, mpy - 7 * u, 8 * u, 14 * u], u, span,
+    toD: (px) => c + (px - (ox + EQ * u)) * perPx, perPx,
+  };
 }
 
 function niceStep(W) {
