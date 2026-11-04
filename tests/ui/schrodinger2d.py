@@ -369,6 +369,11 @@ def crystal(b):
             # lattice point (n1, n2) = (0, 1) turned by 30 degrees.
             q = b.eval('__app.setAngle(60)')['q']
             check(abs(q - 3.1416) < 1e-3 and '3.142' in text(b, '#q-readout'), f'help: at 60° the momentum transfer is 2k₀ sin α = 2π/c = 3.142 ({q:.4f})')
+        else:
+            # Off it, the set-up puts k at 2 alpha = 40 degrees: q = 2k0 sin 20 = 2.15, 0.68 of 2 pi / c.
+            q = b.eval('__app.q()')
+            check(q['theta'] == 40 and abs(q['q'] - 2.149) < 1e-3 and abs(q['q'] / 3.1416 - 0.68) < 0.005,
+                  f"help: off the Bragg angle the arrow is at 2α = 40° ({q['theta']}), q = 2.15 ({q['q']:.3f}), 0.68 of 2π/c")
     check(frac['crystal'] > 0.2 and frac['crystal'] > 4 * frac['offbragg'],
           f"Bragg: {frac['crystal']:.3f} reflected at the Bragg angle, {frac['offbragg']:.3f} off it")
     check(0.24 < frac['crystal'] < 0.29 and 0.035 < frac['offbragg'] < 0.055, 'help: 26% at the Bragg angle, 4.5% at 20 degrees')

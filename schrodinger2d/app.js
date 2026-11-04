@@ -808,8 +808,8 @@ window.addEventListener('resize', () => kick());
 // --------------------------------------------------------------------- experiments
 
 const byId = (id) => TARGETS.find((t) => t.id === id);
-function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, turn = 0, view = 'total', params, speed = 4, L = 64 } = {}) {
-  Object.assign(state, { k0, sy, sx, b, turn, view, speed, L });
+function go(id, { k0 = 2, sy = 6, sx = 2.5, b = 0, turn = 0, view = 'total', params, speed = 4, L = 64, angle = 60 } = {}) {
+  Object.assign(state, { k0, sy, sx, b, turn, view, speed, L, qAngle: angle });
   boxSlider.value = L; turnSlider.value = turn;
   packetSliders.k0.value = k0; packetSliders.sy.value = sy; packetSliders.sx.value = sx; packetSliders.b.value = b;
   viewSeg.value = view; speedSlider.value = speed;
@@ -829,7 +829,7 @@ const setups = {
   two: () => go('two', { sy: 8 }),
   slits: () => go('slits', { sy: 8, sx: 2 }),
   crystal: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 30 }),
-  offbragg: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 20 }),
+  offbragg: () => go('crystal', { k0: Math.PI, sy: 3, sx: 2.2, turn: 20, angle: 40 }),
   impact: () => go('disk', { sy: 1.5, b: 1.5 }),
   typed: () => go('typed'),
 };
