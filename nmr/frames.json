@@ -8,6 +8,7 @@
     "offres": {"js": "__app.setups.offres(); __app.hold(true); __app.runTo(28e-6)"},
     "spread": {"select": [".sphere-area", "#signal-wrap", "#spec-wrap"], "js": "__app.setups.spread(); __app.hold(true); __app.runTo(4e-3)"},
     "echo": {"js": "__app.setups.echo(); __app.hold(true); __app.runTo(3.0e-3)"},
+    "threeclocks": {"select": [".sphere-area", "#clocks-wrap"], "js": "__app.setups.threeclocks(); __app.hold(true); __app.runTo(0.012)"},
     "cpmg": {"js": "__app.setups.cpmg(); __app.hold(true); __app.runTo(0.0659)"},
     "mg": {"js": "__app.setups.mg(); __app.hold(true); __app.runTo(0.0659)"},
     "ir": {"select": [".sphere-area"], "js": "__app.setups.ir(); __app.hold(true); __app.finishScan()"},

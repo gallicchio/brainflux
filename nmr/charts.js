@@ -424,6 +424,230 @@ export function drawCurve(ctx, width, height, o) {
   return f;
 }
 
+/** A tick's label on a log time axis: 0.1 ms, 1 ms, 10 ms, 100 ms, 1 s… (unit: its decade's). */
+function logTimeLabel(t, withUnit) {
+  const u = t < 0.99e-4 ? { s: 1e6, u: 'μs' } : t < 0.99 ? { s: 1e3, u: 'ms' } : { s: 1, u: 's' };
+  const v = +(t * u.s).toPrecision(3);
+  return withUnit ? `${v} ${u.u}` : String(v);
+}
+
+/** "e" with a superscript (or "1 − e" and one), at (x, y) on its baseline; align 'left' or
+ *  'right'.  Returns its width. */
+function expText(ctx, pre, sup, x, y, align = 'left') {
+  ctx.save();
+  ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  ctx.font = '13px system-ui, sans-serif';
+  const w1 = ctx.measureText(pre).width;
+  ctx.font = '10px system-ui, sans-serif';
+  const w2 = ctx.measureText(sup).width, x0 = align === 'right' ? x - w1 - w2 - 1 : x;
+  ctx.fillText(sup, x0 + w1 + 1, y - 6);
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillText(pre, x0, y);
+  ctx.restore();
+  return w1 + w2 + 1;
+}
+
+/** Legend items {text, color, kind: 'line' | 'dash' | 'dot'} as a swatch and words in ink, wrapped
+ *  into rows of maxWidth from (x, y).  Returns the number of rows (draw: false only measures). */
+function legendRows(ctx, x, y, items, c, maxWidth, draw = true) {
+  ctx.save();
+  ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  let px = x, row = 0;
+  for (const it of items) {
+    ctx.font = `${it.bold ? '600 ' : ''}12px system-ui, sans-serif`;
+    const sw = it.color ? 20 : 0, w = sw + ctx.measureText(it.text).width;
+    if (px > x && px + w > x + maxWidth) { px = x; row++; }
+    if (draw) {
+      const yy = y + 16 * row;
+      if (it.color) {
+        ctx.strokeStyle = it.color; ctx.fillStyle = it.color; ctx.lineWidth = 2;
+        if (it.kind === 'dot') { ctx.beginPath(); ctx.arc(px + 7, yy + 7, 3.5, 0, 2 * Math.PI); ctx.fill(); }
+        else {
+          if (it.kind === 'dash') { ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5; }
+          ctx.beginPath(); ctx.moveTo(px, yy + 7); ctx.lineTo(px + 15, yy + 7); ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
+      ctx.fillStyle = it.bold ? c.ink : c.ink2;
+      ctx.fillText(it.text, px + sw, yy);
+    }
+    px += w + 14;
+  }
+  ctx.restore();
+  return row + 1;
+}
+
+/**
+ * The three clocks after one π/2 pulse, against the time since it on a log axis: what the coil
+ * sees, the length of the sum's part across the field |ΣM⊥|/N; each spin's own part, the mean of
+ * |M⊥ᵢ|; and M_z.  Under each, faint and dashed, its exponential for the times set, labelled; the
+ * times themselves as lines, named in a strip on top, where a bar from T₂* to 2T₁ holds T₂'s
+ * mark (the rule T₂* ≤ T₂ ≤ 2T₁); a CPMG run's echoes, with a dot on each one's top; a dot where
+ * each fit puts its curve's 1/e.  Everything with time is drawn only up to `now`.
+ * opts: {t0, t1 (the axis, s), now, trace: {t, sig, perp, mz}, set: {T2s, T2, T1} (Infinity
+ * when off), fits: {T2s, T2, T1: {A, tau} or null}, echo: {t, y, from, peaks: {t, amp}} or null,
+ * pulses: [{t0, t1, angle, phase}] (sent after the first), colors, short (shorter words)}.
+ * Returns the frame (its x is log10 of the time).
+ */
+export function drawClocks(ctx, width, height, o) {
+  const c = o.colors, S = o.set, short = !!o.short;
+  // The legend's rows decide where the strip and the plot begin.
+  const items = [
+    { text: 'After one π/2 pulse:', bold: true },
+    { text: short ? 'the sum |ΣM⊥|/N (the coil)' : 'what the coil sees, the sum |ΣM⊥|/N', color: c.mxy },
+    { text: short ? 'each spin\'s own |M⊥ᵢ|' : 'each spin\'s own part across B₀, the mean |M⊥ᵢ|', color: c.perp },
+    { text: 'Mz', color: c.mz },
+    ...(o.echo ? [{ text: short ? 'echoes (CPMG)' : 'another run\'s echoes (CPMG)', color: c.b1, kind: 'dot' }] : []),
+    { text: 'for the times set', color: c.ink3, kind: 'dash' },
+  ];
+  const L = 44, Rm = 14, rows = legendRows(ctx, 6, 4, items, c, width - 12, false), strip = 30;
+  const top = 6 + 16 * rows + strip;
+  const f = new Frame(ctx, width, height, { left: L, right: Rm, top, bottom: 36 });
+  const lg = (t) => Math.log10(t);
+  f.x0 = lg(o.t0); f.x1 = lg(o.t1); f.y0 = 0; f.y1 = 1.05;
+  const X = (t) => f.X(lg(t)), inX = (t) => t >= o.t0 && t <= o.t1;
+  const E1 = Math.exp(-1);
+  const now = o.now ?? Infinity;
+
+  ctx.save(); f.clip();
+  // 1/e and 1 − 1/e, the levels the times are read at.
+  ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.setLineDash([2, 4]); ctx.globalAlpha = 0.7;
+  for (const v of [E1, 1 - E1]) { ctx.beginPath(); ctx.moveTo(f.left, f.Y(v)); ctx.lineTo(f.right, f.Y(v)); ctx.stroke(); }
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink3; ctx.textBaseline = 'bottom';
+  ctx.textAlign = 'right'; ctx.fillText('1/e', f.right - 4, f.Y(E1) - 2);
+  ctx.textAlign = 'left'; ctx.fillText('1 − 1/e', f.left + 4, f.Y(1 - E1) - 2);
+  // The times set, as lines up into the strip.
+  const lines = [[S.T2s, c.mxy], [S.T2, c.perp], [S.T1, c.mz], [2 * S.T1, c.ink3]];
+  ctx.restore();
+  ctx.save();
+  ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+  for (const [t, col] of lines) {
+    if (!Number.isFinite(t) || !inX(t)) continue;
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.moveTo(Math.round(X(t)) + 0.5, f.top - strip + 15); ctx.lineTo(Math.round(X(t)) + 0.5, f.bottom); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.save(); f.clip();
+  // Pulses sent by hand during the run.
+  for (const p of o.pulses || []) {
+    if (!(p.t0 > 0) || p.t0 > now) continue;
+    const x0 = X(p.t0), x1 = Math.max(x0 + 2, X(Math.min(p.t1, now)));
+    ctx.fillStyle = c.b1; ctx.globalAlpha = 0.25; ctx.fillRect(x0, f.top, x1 - x0, f.h); ctx.globalAlpha = 1;
+    ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(pulseName(p.angle, p.phase), x1 + 3, f.top + 2);
+  }
+  // The exponentials for the times set, faint.
+  const curve = (fn, col) => {
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.globalAlpha = 0.65;
+    ctx.beginPath();
+    for (let px = 0; px <= f.w; px += 2) { const t = 10 ** f.invX(f.left + px), y = f.Y(fn(t)); if (px) ctx.lineTo(f.left + px, y); else ctx.moveTo(f.left, y); }
+    ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  };
+  const ex = (T) => (t) => (Number.isFinite(T) ? Math.exp(-t / T) : 1);
+  curve((t) => 1 - ex(S.T1)(t), c.mz);
+  curve(ex(S.T2), c.perp);
+  curve(ex(S.T2s), c.mxy);
+  // The CPMG run's echoes so far.
+  if (o.echo && o.echo.t.length) {
+    const { t, y } = o.echo;
+    ctx.strokeStyle = c.b1; ctx.lineWidth = 1.3; ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    let on = false;
+    for (let i = 0; i < t.length && t[i] <= now; i++) {
+      if (t[i] < o.echo.from || t[i] < o.t0 / 2) continue;
+      const px = X(t[i]), py = f.Y(y[i]);
+      if (on) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      on = true;
+    }
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  // The three curves as they come.
+  const T = o.trace;
+  const trace = (ys, col) => {
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+    let on = false;
+    for (let i = 0; i < T.t.length; i++) {
+      if (T.t[i] < o.t0 * 0.9) continue;
+      const px = X(T.t[i]), py = f.Y(ys[i]);
+      if (on) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      on = true;
+    }
+    ctx.stroke();
+  };
+  if (T && T.t.length) { trace(T.mz, c.mz); trace(T.perp, c.perp); trace(T.sig, c.mxy); }
+  const dot = (x, y, col, r = 4.5) => {
+    ctx.fillStyle = c.panel; ctx.beginPath(); ctx.arc(x, y, r + 2, 0, 2 * Math.PI); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill();
+  };
+  if (o.echo && o.echo.peaks) o.echo.peaks.t.forEach((t, i) => { if (t <= now) dot(X(t), f.Y(o.echo.peaks.amp[i]), c.b1, 3.5); });
+  // Where each fit puts its curve's 1/e.
+  const F = o.fits || {};
+  if (F.T2s) dot(X(F.T2s.tau), f.Y(F.T2s.A * E1), c.mxy);
+  if (F.T2) dot(X(F.T2.tau), f.Y(F.T2.A * E1), c.perp);
+  if (F.T1) dot(X(F.T1.tau), f.Y(1 - F.T1.A * E1), c.mz);
+  // The exponentials' names beside their 1/e points, where the other curves are not.
+  ctx.fillStyle = c.ink2;
+  if (Number.isFinite(S.T2s) && inX(S.T2s)) expText(ctx, 'e', '−t/T₂*', X(S.T2s) + 9, f.Y(E1) - 5);
+  if (Number.isFinite(S.T2) && inX(S.T2)) expText(ctx, 'e', '−t/T₂', X(S.T2) + 9, f.Y(E1) - 5);
+  if (Number.isFinite(S.T1) && inX(S.T1)) expText(ctx, '1 − e', '−t/T₁', X(S.T1) - 9, f.Y(1 - E1) - 5, 'right');
+  // The clock now.
+  if (now >= o.t0 && now <= o.t1) {
+    ctx.strokeStyle = c.ink3; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(now), f.top); ctx.lineTo(X(now), f.bottom); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
+  // The axes: y as usual, x by decades with the steps between.
+  f.axes({ colors: c, xTicks: false, xlabel: 'time after the π/2 pulse (log scale)' });
+  ctx.save();
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.strokeStyle = c.ink3; ctx.lineWidth = 1;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const perDecade = f.w / (f.x1 - f.x0);
+  let lastRight = -Infinity;
+  for (let k = Math.floor(f.x0) - 1; k <= Math.ceil(f.x1); k++) {
+    for (let m = 1; m <= 9; m++) {
+      const t = m * 10 ** k;
+      if (t < o.t0 * 0.999 || t > o.t1 * 1.001) continue;
+      const px = Math.round(X(t)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(px, f.bottom); ctx.lineTo(px, f.bottom + (m === 1 ? 5 : 3)); ctx.stroke();
+      const label = m === 1 ? logTimeLabel(t, true) : (m === 2 || m === 5) && perDecade > 170 ? logTimeLabel(t, false) : null;
+      if (!label) continue;
+      const w = ctx.measureText(label).width;
+      if (px - w / 2 < lastRight + 6 || px + w / 2 > f.right + Rm) continue;
+      ctx.fillText(label, px, f.bottom + 6);
+      lastRight = px + w / 2;
+    }
+  }
+  ctx.restore();
+
+  // The strip: the times' names over their lines, and the bar T₂* … 2T₁ with T₂'s mark in it.
+  ctx.save();
+  const sy = f.top - strip;
+  ctx.font = '600 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = c.ink;
+  const names = [[S.T2s, 'T₂*'], [S.T2, 'T₂'], [S.T1, 'T₁'], [2 * S.T1, '2T₁']];
+  let last = -Infinity;
+  for (const [t, name] of names) {
+    if (!Number.isFinite(t) || !inX(t)) continue;
+    const x = X(t), w = ctx.measureText(name).width, xc = Math.max(x, last + w / 2 + 4);
+    ctx.fillStyle = name === '2T₁' ? c.ink2 : c.ink;
+    ctx.fillText(name, Math.min(f.right + Rm - w / 2 - 1, xc), sy);
+    last = xc + w / 2;
+  }
+  const a = Number.isFinite(S.T2s) ? X(Math.max(o.t0, S.T2s)) : f.left, b = Number.isFinite(S.T1) ? X(Math.min(o.t1, 2 * S.T1)) : f.right;
+  const by = sy + 21;
+  ctx.strokeStyle = c.perp; ctx.globalAlpha = 0.35; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(a, by); ctx.lineTo(b, by); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+  if (Number.isFinite(S.T2) && inX(S.T2)) dot(X(S.T2), by, c.perp, 4);
+  ctx.font = '12px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.textBaseline = 'middle';
+  const rule = 'T₂* ≤ T₂ ≤ 2T₁', rw = ctx.measureText(rule).width;
+  if (a - 10 - rw > 4) { ctx.textAlign = 'right'; ctx.fillText(rule, a - 10, by); }
+  else if (b + 10 + rw < width - 4) { ctx.textAlign = 'left'; ctx.fillText(rule, b + 10, by); }
+  ctx.restore();
+
+  legendRows(ctx, 6, 4, items, c, width - 12);
+  return f;
+}
+
 /** A line of coloured labels at the top of a plot, cut short to fit maxWidth. */
 export function legend(ctx, x, y, items, c, maxWidth = 1e9) {
   ctx.save();

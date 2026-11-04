@@ -64,6 +64,7 @@ export class SphereView {
    *   fields: [{v, color, label, dash, from}] (arrows from the origin, or from `from`; v of any length),
    *   spins: [{v, color, width}] (thin arrows, the fan), sum: v or null (the main arrow),
    *   trail: [v...], projections: bool, cone: {axis, v} or null (the sum precessing too fast to draw),
+   *   rings: [{z, r, color, width, label}] (circles about ẑ at the height z, of radius r),
    *   tipHover: bool }
    */
   draw(ctx, scene) {
@@ -83,6 +84,8 @@ export class SphereView {
     this.circle(ctx, (t) => [Math.cos(t), Math.sin(t), 0], c.ink3, 'back');
     this.circle(ctx, (t) => [Math.cos(t), 0, Math.sin(t)], c.line, 'back');
     this.circle(ctx, (t) => [0, Math.cos(t), Math.sin(t)], c.line, 'back');
+    const rings = (scene.rings || []).filter((g) => g.r > 0.004);
+    for (const g of rings) this.circle(ctx, (t) => [g.r * Math.cos(t), g.r * Math.sin(t), g.z], g.color, 'back', g.width);
 
     // The axes, behind the arrows where they are behind the sphere's centre.
     const L = 1.22, labels = scene.axisLabels || ['x', 'y', 'z'];
@@ -101,6 +104,17 @@ export class SphereView {
     this.circle(ctx, (t) => [Math.cos(t), Math.sin(t), 0], c.ink3, 'front');
     this.circle(ctx, (t) => [Math.cos(t), 0, Math.sin(t)], c.line, 'front');
     this.circle(ctx, (t) => [0, Math.cos(t), Math.sin(t)], c.line, 'front');
+    for (const g of rings) {
+      this.circle(ctx, (t) => [g.r * Math.cos(t), g.r * Math.sin(t), g.z], g.color, 'front', g.width);
+      // Its label beside the point of it nearest the reader, while the ring is wide enough.
+      if (g.label && g.r > 0.2) {
+        const a = Math.atan2(this.d[1], this.d[0]), p = this.P([g.r * Math.cos(a), g.r * Math.sin(a), g.z]);
+        ctx.save();
+        ctx.font = '600 12px system-ui, sans-serif'; ctx.fillStyle = g.color; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillText(g.label, p[0] + 6, p[1] + 3);
+        ctx.restore();
+      }
+    }
 
     for (const it of items) if (it.depth >= 0) it.draw();
 
@@ -195,10 +209,11 @@ export class SphereView {
     return Math.atan2(Math.abs(a), Math.abs(b));
   }
 
-  /** A great circle (or any closed curve) given by f(t), its near or far half. */
-  circle(ctx, f, color, half) {
+  /** A great circle (or any closed curve) given by f(t), its near or far half (width: the near
+   *  half's line, the far one's a little thinner). */
+  circle(ctx, f, color, half, width = 1.2) {
     ctx.save();
-    ctx.strokeStyle = color; ctx.lineWidth = half === 'front' ? 1.2 : 1;
+    ctx.strokeStyle = color; ctx.lineWidth = half === 'front' ? width : Math.max(1, width - 0.2);
     if (half === 'back') { ctx.setLineDash([3, 4]); ctx.globalAlpha = 0.6; }
     ctx.beginPath();
     let on = false;
