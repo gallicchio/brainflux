@@ -401,11 +401,12 @@ Left for later (where the time goes, from `tools/perf.py --profile`):
 - maxwell2d, the prism's tilt (2.3 s): rebuilding the material grid by a point-in-polygon test
   per cell (`scene.js` inPoly/rebuild, 53%, and 18% garbage).  Rasterize by scanline, or rebuild
   only the cells the outline crosses.
-- oct, view 4's bandwidth (1.0-1.2 s): the B-scan's speckle made again from its scatterers
-  (`scan.js`, `sample.js`, about 70%).  Move it to the scan worker, or coarse while dragging.
-- schrodinger1d, the potential's sliders (0.8-0.9 s): the eigenstates found again (`sim.js`
-  eigenstates, 50-65%) and FFTs; "bloch" also runs at 12 frames a second (FFT steps).  Find the
-  eigenstates after the drag, or for the shown levels only.
+- schrodinger1d: done (the levels found again only when the potential changes, and only those
+  in view while a slider moves); "bloch" still runs at 12 frames a second slowed 4x (its FFT
+  steps, the work itself).
+- oct: the scatterers are kept per scene now (bandwidth 250 to 150 ms; view 4's frames 17 ms);
+  what is left of a bandwidth step is summing their fields, which does depend on it.
+- maxwell2d: the index alone no longer rasterizes again (about 130 ms); the tilt still does.
 - radiointerferometer, maximum entropy (180 ms frames): its iterations' 2D FFTs each frame.
 - diffraction, white light (0.4 s a step): one 2D propagation per wavelength.  Fewer wavelengths
   while dragging.

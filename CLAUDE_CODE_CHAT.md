@@ -1704,3 +1704,68 @@ dragging, caching what the slider doesn't touch, a worker) are listed in PLAN.md
 
 **Tests.**  `tools/test_all.sh`: the unit tests, 355 pictures with no problems, and all 24
 demos' UI runs pass; the ten loop-fixed demos' UI runs pass again after the fix.
+
+## Prompt 27
+
+> How does Schrödinger 1D do its time steps and reverse time steps? Is it still a simple step forward like in my original code, or does it do something more sophisticated, like numerically solve for the eigenstates and add them up with time dependent phases? Does it use the same method for potentials with simple, closed form eigenstates and for typed potentials with no closed form?
+
+### Response 27 (2026-11-04)
+
+Neither: the split-operator (Strang) method, the same for every potential.  A step of h is
+e^{−iVh/2} · F⁻¹ e^{−ik²h/2m} F · e^{−iVh/2}: the potential applied where it is diagonal
+(position), the kinetic energy where it is diagonal (momentum, through the FFT), every factor a
+pure phase, so the norm is kept to round-off at any h, the kinetic step is exact (a packet of
+momentum k moves at k/m, which Crank–Nicolson's finite differences get wrong for fast packets),
+and the only error is the O(h³) per step of T and V not commuting.  Walls are the odd extension
+(a sine transform); the absorbing layer is a mask between steps; V(x, t) is evaluated at each
+step's middle.  Backwards is the same step with h < 0, the exact inverse of +h because the
+splitting is symmetric; t = 0 comes back to the method's accuracy rather than bit for bit (each
+frame picks its own step length), and the absorber makes it irreversible, so experiment 19 uses
+walls.  The eigenstates (`eigenstates()`, of the finite-difference Hamiltonian: Sturm-sequence
+bisection, Richardson-extrapolated energies, inverse iteration) are only for the levels drawn,
+the stationary starting states and the bars of the state's weights; a stationary start is put
+on the grid and stepped like anything else.  The presets are typed formulas too, so closed forms
+appear only in the unit tests (n + ½, n²π²/2L², a stationary state staying put).  What adapts
+to a potential is the step: capped by 0.33/|V − E| where ψ lives, a trial run that halves it
+until energy is kept to 1%, and jumps found and softened.  A sum over eigenstates would be exact
+and reversible for a fixed V but can't do scattering (the continuum) or V(x, t).
+
+## Prompt 28
+
+> Yes, make that change. If there are similar things, where you know you are recomputing something expensive every time even though it does not change, make those changes too. I asked about backwards time just because you reported that it was slow. Given your way of going backwards, what is your reason for stopping at t=0 rather than letting a backwards animation go to negative times?
+>
+> Separately, when building the Earth NMR demo, did you find any problems or issues with the Earth Field NMR PCB or its suggested use?
+
+### Response 28 (2026-11-04)
+
+**Recomputing what hasn't changed.**  A probe timed every slider of every experiment on its own.
+Schrödinger 1D: a packet's x₀, σ or k₀ restarted the run and re-applied the same potential,
+finding all 60 stationary states again; now they are found only when the potential changes,
+while a potential's (or the mass's) slider moves only those in view, the rest 200 ms after it
+stops with the time step's trial run, and a step's cost is timed once per grid: every slider
+under 40 ms (the mass was 360).  "Backwards" was slow only through those sliders; running back
+costs what running forward does.  OCT: a change of bandwidth made a new scene, and the scatterer
+cache held one scene, so two views kept throwing each other's scatterers away; the
+Fourier-domain B-scan worked out the fall-off and fold for every pixel of every column each
+frame though they depend on depth alone (view 4's frames 50 to 17 ms slowed 4x).  maxwell2d: a
+change of index alone rasterized every polygon again; now the materials are retuned in place,
+checked equal to a full rebuild (296 to about 130 ms).  Diffraction already kept the aperture's
+transform; action's slow sliders change the true paths themselves, so they stay.
+
+**Why stop at t = 0.**  No physics or numerics: negative h is as good as positive, and t < 0 is
+the state's past under the same Hamiltonian.  It was a choice for the experiment's point, to land
+on ψ₀ exactly and pause there for comparison.  Caveats past it: the absorbing layer isn't
+reversible (what reaches it vanishes, where the true past came in from outside); a packet
+narrowest at t = 0 would be seen wider and focusing.  Offered: pause at t = 0, Play goes on.
+
+**The board.**  No fault turned up: the receiver model matched `sim/design.json` number for
+number (247.29 nF, 1955.6 Hz, Q 37.25, 0.8806 V at OUT, 17.21 nV/√Hz).  Points about its use:
+the handbook's "about 0.8 V at the start" is the fully polarized FID; at its suggested 3 s and
+tap water's T₁ of about 2.5 s M is 70% built, about 0.56 V (0.75 V at the timer's 4.7 s
+maximum).  With the reference coil the bank tunes down only to 1061 Hz, 24.9 µT, against the
+22-67 µT the handbook quotes for the Earth.  The 0.4 ms switch-off is far faster than the spins
+need (γB_E²τ/B_p = 0.029): integrating the Bloch equation through the ramp, 98.9% of M is left
+across at 0.4 ms (about 100 V on the coil), 97.3% at 1 ms (40 V), 95.7% at 1.6 ms (25 V), so a
+clamp near 40-50 V would cost about 1.5% of the signal and keep the coil and its cable far below
+130 V; the author's call.  East–west (magnetic) is confirmed; at a slant the real switch-off makes
+the loss a little more than sin²α (north–south 0.68, not 0.733).
