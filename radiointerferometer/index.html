@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radio interferometry · BrainFlux</title>
+<meta name="description" content="Why two antennas listening to incoherent noise measure the Fourier transform of the sky: band-limited noise and its coherence time, the same noise reaching two antennas a little apart in time, the fringe in their correlation, the uv plane you map by dragging the pair, a Fourier Etch-a-Sketch, why coherent sources break it, whole arrays and the turning Earth, the dirty image and CLEAN.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../lib/style.css">
+<link rel="stylesheet" href="radiointerferometer.css">
+</head>
+<body>
+<header class="bar">
+  <a class="home" href="../">Brain<span>Flux</span></a>
+  <h1>Radio interferometry</h1>
+  <span class="spacer"></span>
+  <button type="button" id="help-button" aria-expanded="false" aria-controls="help">Experiments &amp; help</button>
+</header>
+
+<main class="rif" id="main" data-view="one">
+  <section class="stage">
+    <div class="view-row" id="view-row"></div>
+
+    <!-- 1 · One source: the noise, multiply and average, its spectrum and autocorrelation. -->
+    <div class="view-block" id="block-one">
+      <figure class="plot" id="fig-stream1">
+        <figcaption id="cap-stream1">The noise one source sends, x(t), and a copy of it τ later (dashed)</figcaption>
+        <div class="plot-wrap tall"><canvas id="stream1" aria-label="The voltage a source of noise sends, against time, with a copy of it shifted by the lag τ"></canvas></div>
+      </figure>
+      <div class="hint" id="hint-one">Drag the lag τ on the autocorrelation plot: the copy slides along, and the average of the product follows the curve.  Drag the band’s edge on the spectrum to change Δν</div>
+      <figure class="plot" id="fig-product1">
+        <figcaption id="cap-product1">Multiply them: x(t) × x(t + τ), and its average (the line)</figcaption>
+        <div class="plot-wrap mid"><canvas id="product1" aria-label="The product of the signal and its shifted copy, filled above and below zero, with its average"></canvas></div>
+        <div class="foot" id="product1-foot"></div>
+      </figure>
+      <div class="pair">
+        <figure class="plot" id="fig-spec1">
+          <figcaption id="cap-spec1">Its spectrum: the band the receiver lets through</figcaption>
+          <div class="plot-wrap tall"><canvas id="spec1" aria-label="The spectrum of the noise; drag the edge of the band to change its width"></canvas></div>
+          <div class="foot" id="spec1-foot"></div>
+        </figure>
+        <figure class="plot" id="fig-lag1">
+          <figcaption id="cap-lag1">Its autocorrelation R(τ): the average of the product at every lag</figcaption>
+          <div class="plot-wrap tall"><canvas id="lag1" aria-label="The autocorrelation against the lag τ; drag the marker to choose τ"></canvas></div>
+          <div class="foot" id="lag1-foot"></div>
+        </figure>
+      </div>
+    </div>
+
+    <!-- 2 · Two sources, two antennas. -->
+    <div class="view-block" id="block-two">
+      <div class="two-grid">
+        <figure class="plot" id="fig-scene">
+          <figcaption>The sky and the ground: the noise arriving as waves (red crests, blue troughs)</figcaption>
+          <div class="plot-wrap scene-wrap"><canvas id="scene" aria-label="One or two sources on the sky and two antennas on the ground, with the waves of noise arriving: drag any of them"></canvas></div>
+        </figure>
+        <figure class="plot" id="fig-plane2">
+          <figcaption>The correlator’s output ⟨v_A v_B*⟩ in the complex plane</figcaption>
+          <div class="plot-wrap square-wrap"><canvas id="plane2" aria-label="The complex plane: the running average of A times B conjugate settling, and each source’s share"></canvas></div>
+          <div class="legend small" id="legend2"></div>
+          <div class="foot" id="plane2-foot"></div>
+        </figure>
+        <figure class="plot" id="fig-fringe">
+          <figcaption>The fringe: the correlation as B moves (the heavy curve), and the power B receives (orange)</figcaption>
+          <div class="plot-wrap fringe-wrap"><canvas id="fringe" aria-label="The correlation of A and B against B’s position, and the power at B; drag to move B"></canvas></div>
+          <div class="foot" id="fringe-foot"></div>
+        </figure>
+      </div>
+      <div class="hint" id="hint-two">Drag antenna B along the ground (or on the fringe plot): the correlator’s dot winds round as the separation grows.  Drag a source along the sky to change its angle</div>
+      <div class="live-grid four" id="live2">
+        <figure class="plot"><figcaption><span class="sw s1"></span>Source 1 sends</figcaption><div class="plot-wrap small"><canvas id="src1" aria-label="Source 1’s own noise against time"></canvas></div></figure>
+        <figure class="plot" id="fig-src2"><figcaption><span class="sw s2"></span>Source 2 sends</figcaption><div class="plot-wrap small"><canvas id="src2" aria-label="Source 2’s own noise against time"></canvas></div></figure>
+        <figure class="plot"><figcaption><span class="sw a"></span><span id="cap-vA2">Antenna A hears</span></figcaption><div class="plot-wrap small"><canvas id="vA2" aria-label="Antenna A’s voltage against time: the sources’ noise, delayed, plus its own"></canvas></div></figure>
+        <figure class="plot"><figcaption><span class="sw b"></span><span id="cap-vB2">Antenna B hears</span></figcaption><div class="plot-wrap small"><canvas id="vB2" aria-label="Antenna B’s voltage against time"></canvas></div></figure>
+        <figure class="plot"><figcaption>A × B, and its average</figcaption><div class="plot-wrap small"><canvas id="prod2" aria-label="The product of the two antennas’ voltages, and its average"></canvas></div></figure>
+        <figure class="plot"><figcaption>Spectra: A, B, and A·B* coloured by its phase</figcaption><div class="plot-wrap small"><canvas id="spec2" aria-label="The spectra of A and B across the band, and their cross-spectrum, coloured by its phase"></canvas></div></figure>
+        <figure class="plot"><figcaption>Autocorrelations of A and B</figcaption><div class="plot-wrap small"><canvas id="auto2" aria-label="The autocorrelations of A and B against lag"></canvas></div></figure>
+        <figure class="plot"><figcaption>Cross-correlation of A and B against lag</figcaption><div class="plot-wrap small"><canvas id="cross2" aria-label="The cross-correlation of A and B against lag: its peak is at the delay"></canvas></div></figure>
+      </div>
+    </div>
+
+    <!-- 3 · The uv plane, and 4 · Many baselines. -->
+    <div class="view-block" id="block-uv">
+      <div class="uvgrid" id="uvgrid">
+        <figure class="cell" id="sky-cell">
+          <div class="cell-head"><h2>The sky</h2><span class="note" id="sky-note">drag a source</span></div>
+          <div class="canvas-wrap"><canvas id="sky" aria-label="The sky: point sources you can drag, or a picture, with the pair’s stripes drawn over it"></canvas></div>
+          <div class="foot" id="sky-foot"></div>
+        </figure>
+        <figure class="cell" id="uv-cell">
+          <div class="cell-head"><h2 id="uv-title">The uv plane: V(u, v)</h2><select id="uv-mode" aria-label="How to draw V"></select></div>
+          <div class="canvas-wrap"><canvas id="uv" aria-label="The correlation V a pair would measure at every separation (u, v): drag the dot"></canvas></div>
+          <div class="foot" id="uv-foot"></div>
+        </figure>
+        <figure class="cell" id="plane-cell">
+          <div class="cell-head"><h2>What the pair measures</h2><span class="note">⟨v_A v_B*⟩, live</span></div>
+          <div class="canvas-wrap"><canvas id="plane3" aria-label="The complex plane: the running average of A times B conjugate, the last hundred chunks, and the exact V under the dot"></canvas></div>
+          <div class="legend small" id="legend3"></div>
+          <div class="foot" id="plane3-foot"></div>
+        </figure>
+        <figure class="cell" id="recon-cell">
+          <div class="cell-head"><h2 id="recon-title">Image from the samples</h2></div>
+          <div class="canvas-wrap"><canvas id="recon" aria-label="The image made from the sampled uv plane"></canvas></div>
+          <div class="foot" id="recon-foot"></div>
+        </figure>
+        <figure class="cell" id="sampled-cell">
+          <div class="cell-head"><h2 id="sampled-title">Sampled uv plane</h2><span class="note" id="sampled-note">V where a pair has measured it</span></div>
+          <div class="canvas-wrap"><canvas id="sampled" aria-label="The uv plane where it has been sampled, black elsewhere"></canvas></div>
+          <div class="foot" id="sampled-foot"></div>
+        </figure>
+        <div class="flow-arrow" id="flow-arrow" aria-hidden="true"><b>⟵</b><span>inverse <br>transform</span></div>
+        <figure class="cell" id="beam-cell">
+          <div class="cell-head"><h2>Dirty beam</h2><span class="note">the image of one point</span></div>
+          <div class="canvas-wrap"><canvas id="beam" aria-label="The dirty beam: the image one point source would give with this sampling"></canvas></div>
+          <div class="foot" id="beam-foot"></div>
+        </figure>
+        <figure class="cell" id="ground-cell">
+          <div class="cell-head"><h2 id="ground-title">The pair on the ground</h2><span class="note" id="ground-note">drag A or B</span></div>
+          <div class="canvas-wrap"><canvas id="ground" aria-label="The antennas on the ground, from above: drag one"></canvas></div>
+          <div class="foot" id="ground-foot"></div>
+        </figure>
+        <div class="hint" id="hint-uv">Drag the ● on the uv plane: the pair’s separation (its mirror ○ follows).  The live dot in “What the pair measures” settles on the colour under the ●</div>
+        <div class="flow-caption small" id="flow-caption">The flow: the sky → one correlation for each pair → the sampled uv plane → its inverse Fourier transform → the image</div>
+        <figure class="plot live" id="fig-streams3"><figcaption><span class="sw a"></span>A and <span class="sw b"></span>B hear</figcaption><div class="plot-wrap"><canvas id="streams3" aria-label="What antennas A and B hear, against time"></canvas></div></figure>
+        <figure class="plot live" id="fig-spec3"><figcaption>Spectra, and A·B* coloured by phase</figcaption><div class="plot-wrap"><canvas id="spec3" aria-label="The spectra of A and B, and their cross-spectrum coloured by its phase"></canvas></div></figure>
+        <figure class="plot live" id="fig-slide3"><figcaption>Slide the pair, same separation</figcaption><div class="plot-wrap"><canvas id="slide3" aria-label="The correlation as the pair slides sideways, keeping its separation; drag to slide it"></canvas></div><div class="foot" id="slide3-foot"></div></figure>
+      </div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="panel" id="signal-panel">
+      <div class="label">The noise</div>
+      <div id="signal-box" class="stack"></div>
+      <div class="small muted gloss" id="band-note"></div>
+      <div class="row" id="signal-row"></div>
+      <div class="row" id="corr-row"></div>
+    </div>
+    <div class="panel" id="scene-panel">
+      <div class="label">The sources</div>
+      <div class="row" id="scene-row"></div>
+      <div id="scene-box" class="stack"></div>
+      <div class="row" id="coh2-row"></div>
+      <div class="small muted gloss" id="coh2-note">Coherent: one transmitter feeds both sources, so they send the same noise.  Real sky sources are never coherent with each other.</div>
+    </div>
+    <div class="panel" id="pair-panel">
+      <div class="label">The antennas</div>
+      <div id="pair-box" class="stack"></div>
+      <div class="row" id="pair-row"></div>
+      <div class="small muted gloss" id="pair-note">Delay tracking: the correlator delays one antenna’s signal by the geometric delay towards the reference direction (an <em>electronic delay</em>), so that both hear the same stretch of noise.</div>
+    </div>
+    <div class="panel" id="sources-panel">
+      <div class="label">The sky</div>
+      <div class="button-grid" id="point-presets"></div>
+      <div class="button-grid pictures-grid" id="picture-presets"></div>
+      <div class="row" id="own-row"></div>
+      <div id="sky-box" class="stack"></div>
+      <div class="row" id="stripes-row"></div>
+    </div>
+    <div class="panel" id="sketch-panel">
+      <div class="label">Fourier Etch-a-Sketch</div>
+      <div class="row" id="sketch-row"></div>
+      <div class="small muted gloss">Keep each measurement where the pair was, and at its mirror point: the image under the sky is the inverse transform of everything kept so far.  Hold Shift to move without painting.</div>
+    </div>
+    <div class="panel" id="array-panel">
+      <div class="label">A whole array</div>
+      <div class="button-grid" id="layouts"></div>
+      <div id="array-box" class="stack"></div>
+      <div class="row" id="earth-row"></div>
+      <div id="earth-box" class="stack"></div>
+    </div>
+    <div class="panel" id="clean-panel">
+      <div class="label">Making the image</div>
+      <div class="row" id="clean-row"></div>
+      <div id="clean-box" class="stack"></div>
+      <div class="small muted gloss" id="clean-note">CLEAN supposes the sky is made of points: it finds the brightest pixel, takes a little of the dirty beam out there, and repeats.</div>
+    </div>
+    <div class="panel" id="units-panel">
+      <div class="label">Units</div>
+      <div class="row" id="units-row"></div>
+      <div class="small muted gloss" id="units-note"></div>
+    </div>
+    <div class="panel" id="more-panel">
+      <details id="more">
+        <summary class="small">More</summary>
+        <div id="more-box" class="stack"></div>
+        <div class="small muted gloss" id="more-note">Coherent sources share one noise: their cross terms never average away.  HBT (Hanbury Brown and Twiss) correlates the intensities |v|² instead of the voltages, as the optics lab does: it gives |V|², without the phase.</div>
+      </details>
+    </div>
+  </aside>
+</main>
+
+<aside class="drawer" id="help" aria-label="Experiments and help">
+  <header><h2>Experiments</h2></header>
+
+  <section class="start">
+    <h3>Start here</h3>
+    <p>A radio source sends noise: a hiss, like the static between stations.  Two antennas some
+    way apart hear the same hiss, one of them a moment later.  Multiply what they hear and
+    average, and that small delay survives as a phase.  This one number is what an
+    interferometer measures, and enough of them make a picture of the sky.</p>
+    <p>The page tells it in four steps, the numbered buttons at the top.  <b>1 · One source</b>:
+    the noise itself, and what multiplying and averaging do to it.  <b>2 · Two sources, two
+    antennas</b>: drag antenna B along the ground and watch the dot in the complex plane wind
+    round.  <b>3 · The uv plane</b>: the correlation a pair would measure at every separation, in
+    colour; drag the ● and the live dot settles on the colour under it.  <b>4 ·
+    Many baselines</b>: a whole array, the turning Earth, and the image that comes out.</p>
+    <p>Look for this: one antenna alone sees no pattern at all, but the average of the product
+    of two antennas makes fringes as their separation grows; the fringes of different sources
+    add; and the map of every separation is the Fourier transform of the sky.</p>
+  </section>
+
+  <h3 class="part">1 · One source</h3>
+
+  <article class="exp" data-setup="noise">
+    <h3>1. Band-limited noise: lumps that last about 1/Δν</h3>
+    <p>One source of noise, through a band 5% as wide as the carrier ν₀ (Δν = 45 MHz at
+    915 MHz).  The top plot is the voltage it sends: a sine at $\nu_0$ whose size and phase
+    wander, and the grey curve is its envelope.  The lumps last about $1/\Delta\nu$ = 20 cycles
+    (22 ns): that is the <em>coherence time</em>.  The spectrum below is flat across the band
+    and empty outside it.  Drag the band's edge on the spectrum, or the slider, to 1%: the lumps
+    stretch to 100 cycles.  The receiver's filter is what makes the hiss "nearly one frequency"
+    (quasi-monochromatic) for that long.</p>
+  </article>
+
+  <article class="exp" data-setup="lag">
+    <h3>2. Multiply and average: the autocorrelation, one lag at a time</h3>
+    <p>The dashed curve is the same signal a lag $\tau$ later.  The middle plot is their
+    product $x(t)\,x(t+\tau)$, blue above zero and red below, and its average is
+    $R(\tau)$, the <em>autocorrelation</em>, the dot on the autocorrelation plot.  At $\tau=0$ the
+    product is $x^2$, never negative, and its average is the power.  Here $\tau$ is half a
+    cycle: the copy is upside down, the product is mostly negative, and $R=-0.99$.  Drag
+    $\tau$ along: $R$ oscillates at $\nu_0$, a cycle per cycle of lag, under an envelope that
+    first reaches zero at $\tau=1/\Delta\nu$, 20 cycles, where the lumps no longer line up.
+    That envelope is the Fourier transform of the band (the Wiener–Khinchin theorem): a flat
+    band of width $\Delta\nu$ gives $\mathrm{sinc}(\Delta\nu\,\tau)$.</p>
+  </article>
+
+  <article class="exp" data-setup="white">
+    <h3>3. White noise: no carrier, no lumps, a spike</h3>
+    <p>The band as wide as it goes, 0 to $2\nu_0$: white noise.  Its spectrum is flat everywhere
+    and its autocorrelation is a spike half a cycle wide: each moment is independent of the
+    next.  Narrow the band to 20%: the carrier reappears, in lumps 5 cycles long.  A radio
+    source's noise is white over a wide range; the receiver's band-pass filter is what lets two
+    antennas see it as the same wave for a while.</p>
+  </article>
+
+  <article class="exp" data-setup="envelope">
+    <h3>4. Negative frequencies and the complex envelope</h3>
+    <p>The spectrum of a real signal has two halves: the band at $+\nu_0$ and its mirror image
+    at $-\nu_0$, because $\cos 2\pi\nu_0t=\tfrac12(e^{2\pi i\nu_0t}+e^{-2\pi i\nu_0t})$.  The
+    negative half carries nothing new: it is the complex conjugate of the positive half.
+    <em>Complex envelope</em> is on: the receiver mixes the signal down, keeping one side only
+    and shifting it to zero.  What is left is the envelope $s(t)$, two slow curves called I and
+    Q (solid and dashed), with $x(t)=\sqrt2\,\mathrm{Re}[s(t)\,e^{2\pi i\nu_0t}]$.  Its spectrum
+    is one band at 0, and its autocorrelation is the envelope without the oscillation.  The
+    correlator works with $s$: a delay $\tau$ shifts $s$ by $\tau$ and turns it by the phase
+    $e^{-2\pi i\nu_0\tau}$.</p>
+  </article>
+
+  <article class="exp" data-setup="independent">
+    <h3>5. Two independent noises: the average of their product is zero</h3>
+    <p>Now the dashed curve is a second source, with its own noise.  Their product swings
+    positive and negative with no preference, and however you drag $\tau$, its average dies
+    away (the autocorrelation plot's curve flattens towards zero as the averaging goes on).  This
+    is the key to everything after: two sources that have nothing to do with each other add
+    nothing to a correlation but noise that averages away.</p>
+  </article>
+
+  <h3 class="part">2 · Two sources, two antennas</h3>
+
+  <article class="exp" data-setup="fringe">
+    <h3>6. One source, two antennas: the fringe is in the separation</h3>
+    <p>A source 10° from straight up, antennas A and B 20 cm apart, at 915 MHz ($\lambda$ =
+    32.8 cm).  The waves of noise come down at 10° and reach B first: B is nearer the source by
+    $D\sin\theta$ (the thick bar), 0.106 wavelengths, so B hears everything 0.106 cycles before
+    A.  What they hear (<em>Antenna A hears</em> and <em>Antenna B hears</em>, under the hint) is the same
+    noise, shifted.  The correlator multiplies
+    A by the conjugate of B and averages: the dot in the complex plane settles at the source's
+    brightness, 1, at a phase of $-2\pi D\sin\theta/\lambda$ = −38°.  Drag B to the right: the
+    magnitude stays and the phase winds round, once for every $\lambda/\sin\theta$ = 1.89 m.
+    The real part, $\langle x_Ax_B\rangle$, is the handout's $I\cos(2\pi\theta D/\lambda)$:
+    the heavy curve under the live dot on the fringe plot.  That is the interference fringe,
+    not on a screen but in the separation of the antennas.  The orange line is the power B
+    receives: the same wherever B is.  One antenna alone sees no fringe; only the product of
+    two does.  Drag the source: the fringes get finer as $\theta$ grows.</p>
+  </article>
+
+  <article class="exp" data-setup="twosources">
+    <h3>7. Two sources: the correlations add, the cross terms average away</h3>
+    <p>A second source, half as bright, at −25°.  Each antenna hears the sum of two independent
+    noises, and the product of A and B has four parts: source 1 at A times source 1 at B, the
+    same for source 2, and two cross terms, source 1 at one antenna times source 2 at the
+    other.  The complex plane draws them: each source's own term as an arrow in its colour,
+    laid end to end, and the cross terms as the grey diamond, which wanders and dies, as in
+    experiment 5.  What is left is the sum of the two fringes, and the heavy curve beats as
+    you drag B (the slides' "superposition of both sources").  Because the sources are
+    incoherent, the correlation of the sky is a sum of one fringe per source,
+    $V=\sum_k I_k\,e^{-2\pi i\,u\,l_k}$.</p>
+  </article>
+
+  <article class="exp" data-setup="young">
+    <h3>8. Coherent sources: fringes at one antenna, and no longer a sum</h3>
+    <p>The same two sources, but one transmitter feeds both: they send the same noise.  Now the
+    power at one antenna has fringes (the orange curve, from 0.4 to 3.2, a fringe every
+    $\lambda/(\sin\theta_1-\sin\theta_2)$ = 55 cm): this is Young's double slit, the two
+    waves adding in step at some places and out of step at others, a pattern fixed on the
+    ground.  And the correlation is no longer the sum of two fringes: the cross terms stay.
+    Drag A as well: with incoherent sources only the separation matters; here the correlation
+    changes when the pair moves together.  Turn <em>Coherent sources</em> off: the orange line
+    goes flat again.</p>
+  </article>
+
+  <article class="exp" data-setup="delay">
+    <h3>9. A wide band and a long baseline: why the correlator delays one antenna</h3>
+    <p>The source 30° from straight up, a band of 40% (lumps 2.5 cycles long), the antennas 3 m
+    apart, and delay tracking off.  B hears the noise $D\sin\theta/\lambda$ = 4.6 cycles before
+    A: the lumps no longer overlap (look at the two streams) and the correlation is almost
+    gone (0.09), not because anything is incoherent but because A and B are multiplying
+    different stretches of the same noise.  The cross-correlation against lag shows where it
+    went: its peak is at the delay.  The spectrum shows it too: the phase of A·B* winds across
+    the band, so its parts cancel.  Press <em>Delay tracking</em>: the correlator delays B by
+    the geometric delay towards the source (the reference direction), the lumps line up, and
+    the dot comes back to 1.  Real arrays have delays of microseconds, millions of cycles: the
+    electronic delay is what sets the direction the array looks at.</p>
+  </article>
+
+  <h3 class="part">3 · The uv plane</h3>
+
+  <article class="exp" data-setup="stripes">
+    <h3>10. One baseline measures one set of stripes on the sky</h3>
+    <p>One source, off to one side.  The pair's stripes are drawn over the sky: the pattern
+    $e^{-2\pi i(ul+vm)}$, crests a fringe spacing $1/|b|$ apart and across the baseline,
+    coloured by phase.  The source sits on one colour, and the live dot settles on that
+    colour: what the pair measures is the colour of the stripe the source sits on.  Drag the ●
+    on the uv plane: the stripes turn with the baseline and close up as it grows.  For one
+    source $|V|$ is the same everywhere and only the phase winds: the uv plane is a rainbow
+    of straight stripes, $1/l$ apart.  Choose <em>real part</em> in the menu: the handout's
+    $\cos 2\pi(ul+vm)$, red where it is positive and cyan where it is negative.</p>
+  </article>
+
+  <article class="exp" data-setup="uv">
+    <h3>11. The lab's pentagon: five sets of stripes add up to a Fourier transform</h3>
+    <p>Five sources on a pentagon, as in the lab notebook.  Each makes its own stripes in the
+    uv plane, and they add: the uv plane is
+    $V(u,v)=\sum_kI_k\,e^{-2\pi i(ul_k+vm_k)}$, the two-dimensional Fourier transform of the
+    sky.  The thin arrows in the complex plane are the five sources' terms, each in the colour
+    of its stripe, laid end to end; the live dot settles where they end, on the colour under
+    the ●.  Its axes: the separation in metres along the bottom and the left, and $u=\Delta
+    x/\lambda$, $v=\Delta y/\lambda$ in wavelengths along the top.  The ○ is the mirror point:
+    swapping A and B conjugates the correlation, so one pair gives two points.  Drag a source:
+    its stripes turn and change spacing, and the whole pattern changes.</p>
+  </article>
+
+  <article class="exp" data-setup="picture">
+    <h3>12. A disk: the Airy pattern, and where its first dark ring is</h3>
+    <p>A uniform disk in place of the points.  Its transform is the Airy pattern: a bright
+    centre and rings, the first dark ring where the baseline is $1.22/D$ wavelengths for a disk
+    $D$ across.  Here $D$ = 9.2°, so that is at 7.6 wavelengths, 2.5 m.  Drag the ● out along a
+    radius: the dot's size falls to zero there, then comes back with its phase turned half a
+    turn (the colour jumps to the opposite hue).  Michelson measured the diameter of a star
+    this way in 1920: by finding where the fringes vanish.  For a picture the live simulation
+    uses 200 points drawn at random from its brightness, so the dot settles on the × (what
+    those points give), a little off the ring (the picture's exact transform).  Try the ring,
+    the galaxy and Fourier's portrait, or your own picture.</p>
+  </article>
+
+  <article class="exp" data-setup="sketch">
+    <h3>13. The Fourier Etch-a-Sketch</h3>
+    <p><em>Keep what you measure</em> is on: every measurement is painted into the sampled uv
+    plane where the pair is, and at its mirror point, and the image from what you kept is the
+    inverse transform of everything painted so far.  Drag one line through the middle of the uv plane:
+    the image is the sky smeared out across your line.  Draw lines at three angles, then fill
+    in a disk: the three sources come apart.  Press <em>Autopilot</em> to let a spiral fill the
+    plane.  This is the optics lab's Fourier Etch-a-Sketch, done with the phases kept: there,
+    two collectors in pseudo-thermal light correlate intensities and only $|V|^2$ comes out
+    (experiment 16).</p>
+  </article>
+
+  <article class="exp" data-setup="nearfield">
+    <h3>14. The lab bench's near field: where the pair sits matters</h3>
+    <p>The sources 5 m above the antennas and 3 m from the axis, as on the lab bench and in the
+    notebook: the exact distances now, not plane waves.  The plane-wave picture needs sources
+    much farther away than $D^2/\lambda$, 12 m for this 2 m baseline, and these are not: their
+    wavefronts are still curved across the pair.  So the correlation is no longer the far-field
+    transform under the ● (4.13): the × in the complex plane, what the exact distances give,
+    is at 2.72.  And <em>Slide the pair</em>, the correlation as the pair moves sideways with
+    its separation kept, is far from flat: its real part swings between −2.3 and 2.7 as the
+    pair moves a metre either way.  This is the notebook's plot of the correlation against ΔX
+    and the mean X.  Drag on it to move the pair.  Radio sources in the sky are so far away
+    that only the separation matters.</p>
+  </article>
+
+  <article class="exp" data-setup="coherent">
+    <h3>15. Why this needs incoherent sources</h3>
+    <p>The pentagon, but every source sends the <em>same</em> noise, with a quarter turn of phase
+    between neighbours, as if one transmitter fed five antennas.  The cross terms between
+    sources no longer average away, and the dot leaves the colour under the ●: what the pair
+    measures is not the Fourier transform of the brightness any more.  Worse, look at
+    <em>Slide the pair</em>: the correlation now changes as the pair moves with its
+    separation fixed, so there is no uv plane to map at all.  Turn <em>Coherent sources</em>
+    off (under More): the curve goes flat and the dot returns to its colour.  The van
+    Cittert–Zernike theorem, that the correlation of the fields far from an incoherent source is
+    the Fourier transform of its brightness, is exactly the statement that the cross terms
+    vanish.  ("Spatially incoherent sources make coherent fields far away.")</p>
+  </article>
+
+  <article class="exp" data-setup="hbt">
+    <h3>16. Correlate intensities instead: the phase problem</h3>
+    <p><em>HBT</em> is on: the correlator multiplies the intensities $|v_A|^2$ and $|v_B|^2$ (their
+    swings about the mean) instead of the voltages, as Hanbury Brown and Twiss did in 1956 and
+    as the optics lab's Etch-a-Sketch does with photodiodes.  For noise like this
+    $\langle\Delta I_A\,\Delta I_B\rangle=|V|^2$: the dot stays on the real axis, the uv picture
+    shows $|V|^2$ in grey, and the phase is gone.  A triangle and the same triangle turned by
+    180° give the same map (press <em>Triangle, turned</em>): $|V|^2$ cannot tell a sky from its
+    mirror image through the centre.  That is the phase problem of intensity interferometry and
+    of crystallography; radio arrays avoid it by correlating voltages.</p>
+  </article>
+
+  <h3 class="part">4 · Many baselines</h3>
+
+  <article class="exp" data-setup="line">
+    <h3>17. Few antennas, many baselines</h3>
+    <p>The slides' eight antennas on a line, with gaps of 8, 10, 1, 3, 2, 7 and 8 units: their
+    28 pairs measure every spacing from 1 to 24 units.  The second row appears: under the ideal
+    uv plane, the <em>sampled</em> uv plane ($V$ where a pair measures it, black elsewhere);
+    under the sky, the image the samples give, their inverse transform (the <em>dirty
+    image</em>), with the arrow for the flow.  The small panel is the <em>dirty beam</em>, the
+    image one point source would give.  Pairs on a line measure only one direction of the uv
+    plane, east–west, so the image is smeared out north–south, across the line.</p>
+  </article>
+
+  <article class="exp" data-setup="array">
+    <h3>18. A Y of 27 dishes: 351 pairs at once</h3>
+    <p>A Y like the Very Large Array: 27 dishes make $27\cdot26/2$ = 351 pairs, and so 702 points
+    of the uv plane at once, a six-pointed star of them.  The dirty beam has six spokes, and
+    the dirty image is the sky blurred by it.  Drag a dish on the ground: its 26 baselines move
+    together.</p>
+  </article>
+
+  <article class="exp" data-setup="rotation">
+    <h3>19. The Earth turns, and the tracks fill the plane</h3>
+    <p>The same Y, 8 hours of a source at declination 40°.  As the Earth turns, each pair's point
+    in the uv plane sweeps an ellipse of axis ratio $\sin\delta$ (the white tracks); the sampled
+    plane fills in, the beam's spokes fade and the image sharpens.  Press <em>Turn the
+    Earth</em> to watch it fill.  This is Earth-rotation synthesis (Martin Ryle, Nobel prize
+    1974).  Set the declination to 85°: the tracks are nearly circles; to 5°: nearly straight
+    lines, and the beam is a streak that can hardly tell north from south.</p>
+  </article>
+
+  <article class="exp" data-setup="resolution">
+    <h3>20. Long baselines see fine detail, short ones the broad shapes</h3>
+    <p>Two point sources 5″ apart at 5 GHz ($\lambda$ = 6 cm), and a small Y whose longest
+    baseline is 1.8 km: the finest fringe, $\lambda/B$ = 6.8″, is coarser than their
+    separation, and the image shows one blob with a shoulder.  Spread the array out: at a
+    spread of 0.1 (2.8 km, $\lambda/B$ = 4.4″) a dip opens between them, and at 0.2 (5.6 km,
+    2.2″) they stand apart.  The longest baseline sets the resolution, as the
+    diameter of a mirror does: an interferometer is a huge telescope with most of its mirror
+    missing.  The shortest baseline sets the other limit: anything larger than
+    $\lambda/B_\mathrm{min}$ lives at separations no pair measures.</p>
+  </article>
+
+  <article class="exp" data-setup="eht">
+    <h3>21. An Earth-sized telescope sees a black hole's ring</h3>
+    <p>The nine sites of the Event Horizon Telescope (2018), at 1.3 mm, looking at a ring 42 µas
+    across like the one around the black hole in M87, for 12 hours.  Baselines nearly as long
+    as the Earth is wide (12,700 km) give $\lambda/B$ = 21 µas, enough to see the ring; the
+    slides' round numbers are 20 µas for 1 mm and 10,000 km.  With so few stations the
+    sampled plane is sparse and the dirty beam has strong sidelobes, yet the ring shows.  A
+    track stops where the source sets for one of its stations.</p>
+  </article>
+
+  <article class="exp" data-setup="clean">
+    <h3>22. CLEAN takes the dirty beam out, point by point</h3>
+    <p>Högbom's CLEAN (1974) supposes the sky is a few points.  It finds the brightest pixel of
+    the residual (at first the dirty image), adds a tenth of it to a model there (the loop
+    gain), subtracts a tenth of the dirty beam centred there, and repeats.  Two sources, two
+    hours of a Y: press <em>Step</em> a few times and watch, then <em>Run</em>.  The CLEAN image
+    is the model smoothed by a Gaussian fitted to the beam's main lobe, plus what is left.
+    Smooth emission (the galaxy) takes thousands of points, and what no pair measured stays
+    missing.</p>
+  </article>
+
+  <section class="theory">
+  <h3>How it works</h3>
+  <p>Every source $k$ emits its own complex Gaussian noise $s_k(t)$, independent of every
+  other source (incoherent), filtered to a flat band of width $\Delta\nu$ round the carrier
+  $\nu_0$.  The page works with the complex envelope: the real voltage is
+  $x(t)=\sqrt2\,\mathrm{Re}[s(t)\,e^{2\pi i\nu_0t}]$, so that $\langle x^2\rangle=\langle|s|^2\rangle$
+  is the source's brightness $I$ (the handout's $I=V^2/2$ for a sine of amplitude $V$), and a
+  delay $\tau$ shifts the envelope by $\tau$ and turns it by $e^{-2\pi i\nu_0\tau}$.  A
+  receiver at $\vec r_j$ hears a source in the direction $\hat s_k$ (direction cosines $l_k$,
+  $m_k$) at the time $\tau_{jk}=-\hat s_k\cdot\vec r_j/c$, earlier if it is nearer the source:
+  $$v_j(t)=\sum_k s_k(t-\tau_{jk})+n_j(t),$$
+  with its own noise $n_j$.  On the lab bench's near field the exact distances $R_{jk}$ and
+  amplitudes $z/R_{jk}$ are used instead, as in the lab notebook.  The correlator forms, for
+  each chunk of 1024 samples (512 cycles of the carrier), $c=\langle v_A\,v_B^*\rangle$, and a
+  running average $\bar c\leftarrow\bar c+\alpha(c-\bar c)$, as the GNU Radio flowgraph's
+  single-pole filter does.  Its real part is $\langle x_Ax_B\rangle$, the average of the product
+  of the two real voltages; its imaginary part is the same with B a quarter cycle later.
+  With the baseline $(u,v)=(\vec r_B-\vec r_A)/\lambda$ and incoherent sources, the cross
+  terms $\langle s_k s_{k'}^*\rangle$ ($k\ne k'$) average to zero, and
+  $$\bar c\to V(u,v)=\sum_k I_k\,e^{-2\pi i(ul_k+vm_k)}\to\int I(l,m)\,e^{-2\pi i(ul+vm)}\,dl\,dm,$$
+  the van Cittert–Zernike theorem.  (The notebook conjugates A instead and gets
+  $e^{+2\pi i(\dots)}$; nothing physical changes.)  Each source's term is one set of stripes
+  in the uv plane, $1/l_k$ apart; the sum of them is the sky's Fourier transform.  The same
+  sum read the other way: one baseline $(u,v)$ weighs the sky with one set of stripes on it,
+  $e^{-2\pi i(ul+vm)}$, crests $1/|b|$ apart.</p>
+  <p>With a band of width $\Delta\nu$ the envelopes at A and B overlap only if their relative
+  delay is within the coherence time $1/\Delta\nu$, so each source's term carries the band's
+  coherence $\gamma(\Delta\tau)\approx\mathrm{sinc}(\Delta\nu\,\Delta\tau)$, the Fourier
+  transform of the band (Wiener–Khinchin).  The correlator's electronic delay removes the
+  delay towards the reference direction; what is left smears the edges of a wide field
+  (bandwidth smearing).  In the complex plane the ring is the ideal $V$ and the × what this
+  band and these delays give.  The scatter of one chunk's correlation is the radiometer
+  value $\sigma=\sqrt{P_AP_B/2N}$ with $N=\Delta\nu\,T$ independent samples in the chunk.  The
+  simulation makes everything in the frequency domain: a white Gaussian process has white
+  Gaussian Fourier coefficients, so each source is a set of Gaussian bins inside its band, a
+  delay is a phase ramp across them, and the spectra and correlations come from the same
+  bins.  The time streams on the screen are a slowed-down recording of the same kind of
+  noise, composed with the antennas' delays as they are now; the correlator averages 512
+  cycles each frame.  For a picture the simulation uses 200 points drawn at random from its
+  brightness; the ideal $V$ is the picture's exact transform.</p>
+  <p><b>Coherent sources</b> share one noise: then $\langle s_ks_{k'}^*\rangle\ne0$, the power at
+  one antenna has Young's fringes, and the correlation depends on both positions, not only on
+  their difference.  <b>HBT</b>: for circular Gaussian noise
+  $\langle|v_A|^2|v_B|^2\rangle-\langle|v_A|^2\rangle\langle|v_B|^2\rangle=|\langle v_Av_B^*\rangle|^2$.</p>
+  <p><b>Many baselines.</b>  An array of $n$ dishes gives $n(n-1)/2$ pairs.  As the Earth turns, a
+  pair's baseline seen from a source at hour angle $H$ and declination $\delta$ sweeps
+  $u=\sin H\,X+\cos H\,Y$, $v=-\sin\delta\cos H\,X+\sin\delta\sin H\,Y+\cos\delta\,Z$: an ellipse of
+  axis ratio $\sin\delta$ (Thompson, Moran and Swenson).  The samples go onto the grid of the
+  picture's transform (natural weighting counts each sample, uniform each cell once); the
+  dirty beam is the transform of the sampling alone, the dirty image the transform of the
+  sampled $V$, and the dirty image is the sky convolved with the beam.  CLEAN (Högbom, 1974)
+  subtracts the beam point by point and restores with a Gaussian fitted to the beam's main
+  lobe.</p>
+  <p>Conventions: $l$ east (to the right), $m$ north (up), and $u$, $v$ the same way; on the lab
+  bench sky angles are $\sin\theta$, in degrees, elsewhere small angles.  The units presets
+  change the labels (and, for the near field, the geometry).  Astronomers usually draw east on
+  the left, as the sky looks from below.</p>
+  </section>
+
+  <p class="small muted">New in 2026 for BrainFlux, after Jason Gallicchio's radio interferometry lab and his Fourier Etch-a-Sketch.  Source:
+  <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
