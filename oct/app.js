@@ -8,11 +8,13 @@ import { $, segmented, slider, drawer, readHash, writeHash, setGroups } from '..
 import { Source, SOURCES } from './source.js';
 import * as F from './fringes-view.js';
 import * as A from './ascan-view.js';
+import * as B from './scan-view.js';
 
-const VIEWS = { fringes: F, ascan: A };
+const VIEWS = { fringes: F, ascan: A, scan: B };
 const VIEW_LIST = [
   { value: 'fringes', label: '1 · Fringes from a layer', title: 'One reflecting surface in the sample arm: a burst of fringes where the paths match' },
   { value: 'ascan', label: '2 · The A-scan', title: 'A layered sample, scanned in depth: the envelope of the fringes is its reflectivity against depth' },
+  { value: 'scan', label: '3 · B-scan and volume', title: 'Step the beam across: A-scans side by side make a cross-section; step it along y too and they make a volume' },
 ];
 const app = { view: 'fringes' };
 
@@ -100,12 +102,18 @@ const setups = {
   ascan: () => go('ascan', { sample: 'slide', scale: 'lin', noise: -60 }),
   resolution: () => go('ascan', { sample: 'pair', gap: 8, scale: 'lin', noise: -120, whole: true, d: 10 }),
   retina: () => go('ascan', { sample: 'retina', scale: 'db', noise: -60 }),
+  bscan: () => go('scan', { scene: 'retina' }),
+  speckle: () => go('scan', { scene: 'retina', done: true, probe: 128 }),
+  lateral: () => go('scan', { scene: 'beads', NA: 0.1, focus: 300, done: true }),
+  tilt: () => go('scan', { scene: 'plate', tilt: 5, done: true }),
+  volume: () => go('scan', { scene: 'retina', mode: 'volume', ix: 46, iy: 33, m: 83 }),
 };
 
 // --------------------------------------------------------------------- start
 
 F.init(shared);
 A.init(shared);
+B.init(shared);
 drawer($('#help'), $('#help-button'), setups);
 lightReadout();
 
@@ -131,10 +139,12 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => VI
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === ' ' && (app.view === 'fringes' || app.view === 'ascan')) { e.preventDefault(); const V = VIEWS[app.view]; V.setMotor(V.state.motor === 'stop' ? 'sweep' : 'stop'); }
+  if (app.view === 'scan' && e.key === ' ') { e.preventDefault(); $('#s-play').click(); }
+  if (app.view === 'scan' && e.key === 'ArrowRight') { e.preventDefault(); B.stepScan(); }
 });
 
 window.__app = {
-  ready: true, setups, setView, views: VIEWS, F, A, src: shared.src, shared,
+  ready: true, setups, setView, views: VIEWS, F, A, B, src: shared.src, shared,
   get view() { return app.view; },
   /** Hold the clock (the tests move it with step) or let it run again. */
   hold(on = true) { held = on; last = 0; },

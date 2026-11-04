@@ -143,10 +143,13 @@ export const GH = { t: GH_T, w: GH_W0.map((w) => w / GH_SUM) };
  *       c < 0 a bowl, c > 0 a dome).  pit: the standard deviation (μm) of the foveal pit, where
  *       each band's thickness is multiplied by 1 − pit_i e^{−ρ²/2s²}.
  *   bands, from the top down: { name, thick, scatter (the mean amplitude of a scatterer), r (the
- *       reflectivity of the band's top, diffuse), n, pit, cells: { sx, sy, wall, inside } (cell
- *       walls: the scatterers are as strong as `scatter` within wall/2 of a wall, `inside` times
- *       as strong elsewhere) }.
- *   lesion: { x, y, dz (its centre's depth below the top surface), rx, ry, rz, gain (the
+ *       reflectivity of the band's top, diffuse), n, pit, mu (the attenuation of the light's power
+ *       per μm, one way: what comes back from depth z has lost e^{−2∫μ dz} of its power, e^{−∫μ dz}
+ *       of its amplitude, to scattering and absorption above it), cells: { sx, sy, wall, inside, shift,
+ *       shiftY } (cell walls every sx along x and sy along y, offset by those fractions of a cell:
+ *       the scatterers are as strong as `scatter` within wall/2 of a wall, `inside` times as
+ *       strong elsewhere) }.
+ *   lesion: { x, y, dz (its centre's depth below the surface), rx, ry, rz, gain (the
  *       scatterers inside are gain times as strong: 0 for a fluid-filled cyst), rim (the
  *       reflectivity of its wall) }.
  *   beads: { dx, dz, z0, z1, a }: point scatterers of amplitude a on a grid (x and y every dx,
@@ -158,27 +161,27 @@ export const SCENES = {
     label: 'Retina', title: 'The layers of the retina at the back of the eye, with the foveal pit in the middle and a fluid-filled cyst beside it',
     n0: 1.336, nView: 1.38, halfWidth: 1500, depth: 650, base: 120, curvature: -1 / 20000, pit: 300, NA: 0.03, focus: 260,
     bands: [
-      { name: 'nerve fibre layer', thick: 45, scatter: 0.045, r: 0.02, n: 1.38, pit: 1, colour: '#d9b45a' },
-      { name: 'ganglion cells', thick: 55, scatter: 0.022, r: 0, n: 1.38, pit: 1, colour: '#a7a865' },
-      { name: 'inner plexiform', thick: 40, scatter: 0.03, r: 0, n: 1.38, pit: 0.95, colour: '#b9a46e' },
-      { name: 'inner nuclear', thick: 35, scatter: 0.009, r: 0, n: 1.38, pit: 0.85, colour: '#5f7f8f' },
-      { name: 'outer plexiform', thick: 25, scatter: 0.026, r: 0, n: 1.38, pit: 0.5, colour: '#a39a72' },
-      { name: 'outer nuclear', thick: 75, scatter: 0.005, r: 0, n: 1.38, pit: -0.45, colour: '#4a5a73' },
-      { name: 'photoreceptors', thick: 35, scatter: 0.012, r: 0.045, n: 1.38, pit: -0.15, colour: '#c9b878' },
-      { name: 'pigment epithelium', thick: 22, scatter: 0.06, r: 0.03, n: 1.38, pit: 0, colour: '#b0703a' },
-      { name: 'choroid', thick: 260, scatter: 0.02, r: 0, n: 1.38, pit: 0, colour: '#8a4a4a' },
+      { name: 'nerve fibre layer', thick: 45, scatter: 0.045, r: 0.02, n: 1.38, pit: 1, mu: 0.002, colour: '#d9b45a' },
+      { name: 'ganglion cells', thick: 55, scatter: 0.02, r: 0, n: 1.38, pit: 1, mu: 0.0015, colour: '#a7a865' },
+      { name: 'inner plexiform', thick: 40, scatter: 0.03, r: 0, n: 1.38, pit: 0.95, mu: 0.0015, colour: '#b9a46e' },
+      { name: 'inner nuclear', thick: 35, scatter: 0.006, r: 0, n: 1.38, pit: 0.85, mu: 0.001, colour: '#5f7f8f' },
+      { name: 'outer plexiform', thick: 25, scatter: 0.026, r: 0, n: 1.38, pit: 0.5, mu: 0.0015, colour: '#a39a72' },
+      { name: 'outer nuclear', thick: 75, scatter: 0.0035, r: 0, n: 1.38, pit: -0.45, mu: 0.001, colour: '#4a5a73' },
+      { name: 'photoreceptors', thick: 35, scatter: 0.012, r: 0.045, n: 1.38, pit: -0.15, mu: 0.003, colour: '#c9b878' },
+      { name: 'pigment epithelium', thick: 22, scatter: 0.06, r: 0.03, n: 1.38, pit: 0, mu: 0.025, colour: '#b0703a' },
+      { name: 'choroid', thick: 420, scatter: 0.024, r: 0, n: 1.38, pit: 0, mu: 0.005, colour: '#8a4a4a' },
     ],
-    lesion: { x: 450, y: 150, dz: 105, rx: 160, ry: 130, rz: 32, gain: 0, rim: 0.012 },
+    lesion: { x: 680, y: 60, dz: 95, rx: 200, ry: 170, rz: 46, gain: 0, rim: 0.012 },
   },
   onion: {
     label: 'Onion', title: 'An onion\'s skin and the rows of large cells under it: their walls scatter, their insides hardly at all',
     n0: 1.0, nView: 1.35, halfWidth: 1000, depth: 600, base: 70, curvature: 1 / 4000, pit: 0, NA: 0.04, focus: 220,
     bands: [
-      { name: 'skin', thick: 18, scatter: 0.035, r: 0.1, n: 1.35, pit: 0, colour: '#d9c48a' },
-      { name: 'first row of cells', thick: 95, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#b9b07a', cells: { sx: 150, sy: 150, wall: 5, inside: 0.08, shift: 0 } },
-      { name: 'second row', thick: 115, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#a9a06a', cells: { sx: 170, sy: 160, wall: 5, inside: 0.08, shift: 0.5 } },
-      { name: 'third row', thick: 135, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#b9b07a', cells: { sx: 190, sy: 170, wall: 5, inside: 0.08, shift: 0.25 } },
-      { name: 'fourth row', thick: 400, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, colour: '#a9a06a', cells: { sx: 210, sy: 180, wall: 5, inside: 0.08, shift: 0.75 } },
+      { name: 'skin', thick: 18, scatter: 0.035, r: 0.1, n: 1.35, pit: 0, mu: 0.004, colour: '#d9c48a' },
+      { name: 'first row of cells', thick: 95, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, mu: 0.0015, colour: '#b9b07a', cells: { sx: 150, sy: 150, wall: 5, inside: 0.08, shift: 0, shiftY: 0.17 } },
+      { name: 'second row', thick: 115, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, mu: 0.0015, colour: '#a9a06a', cells: { sx: 170, sy: 160, wall: 5, inside: 0.08, shift: 0.5, shiftY: 0.36 } },
+      { name: 'third row', thick: 135, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, mu: 0.0015, colour: '#b9b07a', cells: { sx: 190, sy: 170, wall: 5, inside: 0.08, shift: 0.25, shiftY: 0.62 } },
+      { name: 'fourth row', thick: 400, scatter: 0.05, r: 0.012, n: 1.35, pit: 0, mu: 0.0015, colour: '#a9a06a', cells: { sx: 210, sy: 180, wall: 5, inside: 0.08, shift: 0.75, shiftY: 0.83 } },
     ],
     lesion: null,
   },
@@ -194,7 +197,7 @@ export const SCENES = {
     n0: 1.0, nView: 1.0, halfWidth: 1000, depth: 600, base: 120, curvature: 0, pit: 0, NA: 0.04, focus: 200,
     bands: [
       { name: 'glass', thick: 200, scatter: 0, r: 0.2, n: 1.5, pit: 0, colour: '#7fb3d5' },
-      { name: 'paint', thick: 400, scatter: 0.025, r: -0.06, n: 1.45, pit: 0, colour: '#8f8a6a' },
+      { name: 'paint', thick: 400, scatter: 0.025, r: -0.06, n: 1.45, pit: 0, mu: 0.008, colour: '#8f8a6a' },
     ],
     lesion: null,
   },
@@ -223,15 +226,28 @@ export function makeScene(name, opts = {}) {
     ...p, name, opts: o, nb,
     /** The smooth top surface (no roughness) at (x, y). */
     zSmooth(x, y = 0) { return p.base + 0.5 * p.curvature * (x * x + y * y) + x * tanT; },
+    /** How far the pit lowers the surface at (x, y): the thickness the inner bands lose there. */
+    pitDepth(x, y = 0) {
+      if (!s2) return 0;
+      const g = Math.exp(-(x * x + y * y) / s2);
+      let t = 0;
+      for (let i = 0; i < nb; i++) t += p.bands[i].thick * p.bands[i].pit * g;
+      return t;
+    },
+    /** The surface at (x, y), with its pit but without roughness: what the lesion's depth is measured from. */
+    zSurf(x, y = 0) { return this.zSmooth(x, y) + this.pitDepth(x, y); },
     /** The top surface at (x, y), roughness included. */
     zTop(x, y = 0) {
       let z = this.zSmooth(x, y);
       if (o.rough > 0) { let s = 0; for (const w of waves) s += Math.sin(w.kx * x + w.ky * y + w.ph); z += o.rough * s * 0.41; }
       return z;
     },
-    profile(x, y = 0, out = { tops: new Float64Array(nb + 1), dtops: new Float64Array(nb + 1) }) {
-      const { tops, dtops } = out, zs = this.zSmooth(x, y), g = s2 ? Math.exp(-(x * x + y * y) / s2) : 0;
-      tops[0] = this.zTop(x, y);
+    profile(x, y = 0, out = { tops: new Float64Array(nb + 1), dtops: new Float64Array(nb + 1), atts: new Float64Array(nb + 1) }) {
+      const { tops, dtops } = out, g = s2 ? Math.exp(-(x * x + y * y) / s2) : 0;
+      void g;
+      // The pit thins the inner bands: the surface dips by as much, and the deep bands stay smooth.
+      const thin = this.pitDepth(x, y), zs = this.zSmooth(x, y) + thin;
+      tops[0] = this.zTop(x, y) + thin;
       let cum = zs;
       for (let i = 0; i < nb; i++) {
         cum += p.bands[i].thick * (1 - p.bands[i].pit * g);
@@ -239,7 +255,17 @@ export function makeScene(name, opts = {}) {
       }
       dtops[0] = p.n0 * tops[0];
       for (let i = 0; i < nb; i++) dtops[i + 1] = dtops[i] + p.bands[i].n * (tops[i + 1] - tops[i]);
+      if (!out.atts) out.atts = new Float64Array(nb + 1);
+      out.atts[0] = 0;
+      for (let i = 0; i < nb; i++) out.atts[i + 1] = out.atts[i] + (p.bands[i].mu || 0) * (tops[i + 1] - tops[i]);
       return out;
+    },
+    /** The amplitude that survives the trip down to z and back: e^{−∫μ dz}. */
+    through(prof, z) {
+      const { tops, atts } = prof;
+      if (z <= tops[0]) return 1;
+      for (let i = 0; i < nb; i++) if (z < tops[i + 1]) return Math.exp(-(atts[i] + (p.bands[i].mu || 0) * (z - tops[i])));
+      return Math.exp(-(atts[nb] + (p.bands[nb - 1].mu || 0) * (z - tops[nb])));
     },
     zToD(prof, z) {
       const { tops, dtops } = prof;
@@ -256,7 +282,7 @@ export function makeScene(name, opts = {}) {
     inLesion(x, y, z) {
       const L = p.lesion;
       if (!L || !o.lesion) return false;
-      const a = (x - L.x) / L.rx, b = (y - L.y) / L.ry, c = (z - this.zSmooth(x, y) - L.dz) / L.rz;
+      const a = (x - L.x) / L.rx, b = (y - L.y) / L.ry, c = (z - this.zSurf(x, y) - L.dz) / L.rz;
       return a * a + b * b + c * c < 1;
     },
     /** Where the beam at (x, y) enters and leaves the lesion (geometric depths), or null. */
@@ -265,7 +291,7 @@ export function makeScene(name, opts = {}) {
       if (!L || !o.lesion) return null;
       const a = (x - L.x) / L.rx, b = (y - L.y) / L.ry, s = 1 - a * a - b * b;
       if (s <= 0) return null;
-      const h = L.rz * Math.sqrt(s), zc = this.zSmooth(x, y) + L.dz;
+      const h = L.rz * Math.sqrt(s), zc = this.zSurf(x, y) + L.dz;
       return [zc - h, zc + h];
     },
     /** The mean scatterer amplitude at (x, y, z). */
@@ -275,7 +301,7 @@ export function makeScene(name, opts = {}) {
       const b = p.bands[i];
       let s = b.scatter;
       if (b.cells) {
-        const c = b.cells, u = x / c.sx + c.shift, v = y / c.sy + 0.5 + c.shift;
+        const c = b.cells, u = x / c.sx + c.shift, v = y / c.sy + 0.5 + c.shiftY;
         const du = Math.abs(u - Math.round(u)) * c.sx, dv = Math.abs(v - Math.round(v)) * c.sy;
         if (du > c.wall / 2 && dv > c.wall / 2) s *= c.inside;
       }
@@ -317,7 +343,7 @@ export function interfacesAt(scene, x, y = 0, prof = scene.profile(x, y)) {
   }
   out.sort((p, q) => p.z - q.z);
   let through = 1;
-  for (const f of out) { f.a = f.r * through; through *= 1 - f.r * f.r; }
+  for (const f of out) { f.a = f.r * through * scene.through(prof, f.z); through *= 1 - f.r * f.r; }
   return out;
 }
 
@@ -326,8 +352,8 @@ export const CELL = 10;
 
 /**
  * The scatterers in the lateral cell (i, j) (x in [iC, (i+1)C), y likewise), down to the scene's
- * depth: Float64Array of [x, y, z, amplitude, ...].  count: scatterers per cell per 100 μm of
- * depth.  The amplitudes are Rayleigh-distributed about the local mean `scatter` (scale
+ * depth: Float64Array of [x, y, z, amplitude, ...], the amplitude including what the light loses
+ * on its way there and back.  count: scatterers per cell per 100 μm of depth.  The amplitudes are Rayleigh-distributed about the local mean `scatter` (scale
  * s √(2/π), so their mean is s and their mean square (4/π) s²), with a random sign: a random phase
  * of 0 or π is enough to make speckle.
  */
@@ -342,7 +368,7 @@ export function cellScatterers(scene, i, j, { count = 40 } = {}) {
     const u = rng(), v = rng();
     const s = scene.scatterAt(x, y, z, prof);
     if (s === 0) continue;
-    out[m++] = x; out[m++] = y; out[m++] = z; out[m++] = s * 0.7978845608 * Math.sqrt(-2 * Math.log(1 - u)) * (v < 0.5 ? -1 : 1);
+    out[m++] = x; out[m++] = y; out[m++] = z; out[m++] = s * scene.through(prof, z) * 0.7978845608 * Math.sqrt(-2 * Math.log(1 - u)) * (v < 0.5 ? -1 : 1);
   }
   return out.subarray(0, m);
 }

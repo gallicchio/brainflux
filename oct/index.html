@@ -61,6 +61,50 @@
         <div class="readout" id="a-readout"><div id="a-readout-1"></div><div id="a-readout-2"></div></div>
       </div>
     </div>
+
+    <!-- 3 · B-scan and the volume -->
+    <div class="view" id="v-scan" data-mode="bscan">
+      <div class="row s-mode-row"><span id="s-mode-box"></span></div>
+      <div class="s-bgrid">
+        <div class="cell s-scene-cell">
+          <div class="head"><h2>The sample from the side</h2><span class="note">the beam drawn to scale, stepped across by the galvo mirror</span></div>
+          <div class="box dark-box s-scene-box"><canvas id="s-scene" aria-label="The sample from the side, with the galvo mirror, the scan lens and the beam at the column being measured: point to name what is there, click to move the beam"></canvas></div>
+        </div>
+        <div class="cell s-legend-cell">
+          <div class="head"><h2>Its layers</h2></div>
+          <div id="s-legend" class="legend"></div>
+        </div>
+        <div class="cell s-bscan-cell">
+          <div class="head"><h2>The B-scan: what OCT sees</h2><span class="note">each column one A-scan, in grey (decibels)</span></div>
+          <div class="box dark-box s-bscan-box"><canvas id="s-bscan" aria-label="The B-scan: the A-scans side by side, brighter where the sample reflects more: point to name what is there, click to see that column"></canvas></div>
+          <div class="hint" id="s-hint">Press <b>Step</b> to move the beam one column, <b>Go on</b> to sweep it across; click either picture to see that column's A-scan on the right.</div>
+        </div>
+        <div class="cell s-ascan-cell">
+          <div class="head"><h2>That column</h2></div>
+          <div class="box s-ascan-box"><canvas id="s-ascan" aria-label="The A-scan of the column the beam is at, in decibels, depth down"></canvas></div>
+        </div>
+      </div>
+      <div class="s-vgrid">
+        <div class="cell">
+          <div class="head"><h2>The volume</h2><span class="note">three slices through it, in a cube</span></div>
+          <div class="box dark-box s-cube-box"><canvas id="s-cube" aria-label="The volume as a cube with the three slices in it"></canvas></div>
+          <div class="hint" id="s-vhint">Click or drag on any slice to move the other two through that point (or use the sliders on the right).</div>
+        </div>
+        <div class="cell">
+          <div class="head"><h2><span class="sw xy"></span>En face</h2><span class="note">the plane at one depth, seen from above</span></div>
+          <div class="box dark-box s-xy-box"><canvas id="s-xy" aria-label="The en-face slice: the volume at one depth, seen from above"></canvas></div>
+        </div>
+        <div class="cell">
+          <div class="head"><h2><span class="sw xz"></span>A B-scan, at one y</h2></div>
+          <div class="box dark-box s-sl-box"><canvas id="s-xz" aria-label="The B-scan at the chosen y"></canvas></div>
+        </div>
+        <div class="cell">
+          <div class="head"><h2><span class="sw yz"></span>A cross-section across y, at one x</h2></div>
+          <div class="box dark-box s-sl-box"><canvas id="s-yz" aria-label="The cross-section across y at the chosen x"></canvas></div>
+        </div>
+      </div>
+      <div class="readout" id="s-readout"><div id="s-readout-1"></div><div id="s-readout-2"></div><div id="s-readout-3"></div></div>
+    </div>
   </section>
 
   <aside class="controls">
@@ -101,6 +145,30 @@
       <div id="a-speed-box"></div>
       <div id="a-noise-box"></div>
       <div class="gloss">The noise floor: the reflection that is as strong as the detector's noise.  A real detector's noise is mostly shot noise, the graininess of light itself: with 1 mW on the sample at 840 nm and 400 A-scans a second, its floor is about −100 dB, one part in 10¹⁰ of the light.  Here it is raised so that you can see it.</div>
+    </div>
+
+    <div class="panel for-scan">
+      <div class="label">The scan</div>
+      <div class="row"><button type="button" id="s-play" class="primary" title="Pause, or go on scanning">Pause</button><button type="button" id="s-step" title="One more column (one more B-scan for the volume), then stop">Step</button><button type="button" id="s-finish" title="Measure everything that is left, at once">Finish</button></div>
+      <div id="s-image-box" class="stack"></div>
+    </div>
+    <div class="panel for-scan s-vol-only">
+      <div class="label">The slices</div>
+      <div id="s-slice-box" class="stack"></div>
+    </div>
+    <div class="panel for-scan">
+      <div class="label">The sample</div>
+      <div id="s-scene-box"></div>
+      <div class="row" id="s-toggles"><button type="button" class="small-btn" id="s-reseed" title="The same sample with its scatterers in new places: a new speckle pattern">New speckle</button></div>
+      <details id="s-more">
+        <summary>More: tilt and roughness</summary>
+        <div id="s-shape-box" class="stack"></div>
+      </details>
+    </div>
+    <div class="panel for-scan">
+      <div class="label">The beam</div>
+      <div id="s-beam-box" class="stack"></div>
+      <div class="gloss">NA, the numerical aperture: the sine of the half-angle of the cone of light the lens focuses into the sample.  A wide cone makes a small spot, but only near the focus.</div>
     </div>
   </aside>
 </main>

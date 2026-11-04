@@ -114,13 +114,13 @@ export function column(scene, src, x, y, hd, nz, out, opts = {}) {
           const w = Math.sqrt(w2At(z));
           for (let s = 0; s < 5; s++) for (let t = 0; t < 5; t++) { const v = scene.scatterAt(x + (GH.t[s] * w) / 2, y + (GH.t[t] * w) / 2, z, prof); s2 += GH.w[s] * GH.w[t] * v * v; }
         } else { const v = scene.scatterAt(x, y, z, prof); s2 = v * v; }
-        if (s2) addPower(scene.zToD(prof, z), rho * SCATTER_MS * s2 * (Math.PI / 4) * w2At(z) * dz);
+        if (s2) { const T = scene.through(prof, z); addPower(scene.zToD(prof, z), rho * SCATTER_MS * s2 * T * T * (Math.PI / 4) * w2At(z) * dz); }
       }
     }
     // The beads.
     if (scene.beads) for (const b of scene.beadsNear(x, y, 2.7 * wMax)) {
       const dx = b.x - x, dy = b.y - y, e = (2 * (dx * dx + dy * dy)) / w2At(b.z);
-      if (e < 9) addField(scene.zToD(prof, b.z), b.a * Math.exp(-e));
+      if (e < 9) addField(scene.zToD(prof, b.z), b.a * scene.through(prof, b.z) * Math.exp(-e));
     }
   }
   // Noise: complex, correlated over the coherence length.
@@ -153,7 +153,7 @@ export function depthSamples(scene, src, lo = 256, hi = 1024) {
  * columns are measured.  The optical-depth grid d = m hd covers nView × the scene's depth.
  */
 export class BScan {
-  constructor(scene, src, { nx = 256, nz = depthSamples(scene, src), y = 0 } = {}) {
+  constructor(scene, src, { nx = 512, nz = depthSamples(scene, src), y = 0 } = {}) {
     this.scene = scene; this.src = src; this.y = y;
     this.nx = nx; this.nz = nz;
     this.pitch = (2 * scene.halfWidth) / nx;

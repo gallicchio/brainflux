@@ -70,6 +70,25 @@
 .seg.button-grid > button, .seg.button-grid > button:first-child, .seg.button-grid > button:last-child { border-radius: 6px; margin: 0; }
 .seg.button-grid { gap: 4px; }
 
+/* View 3: the scene over the B-scan on one x axis; or the volume's cube and three slices. */
+.s-bgrid { display: grid; grid-template-columns: minmax(0, 1fr) 128px; grid-template-areas: "scene legend" "bscan ascan"; gap: 6px 10px; }
+.s-scene-cell { grid-area: scene; } .s-legend-cell { grid-area: legend; } .s-bscan-cell { grid-area: bscan; } .s-ascan-cell { grid-area: ascan; }
+.s-scene-box { height: max(220px, calc(36vh - 46px)); }
+.s-bscan-box, .s-ascan-box { height: max(240px, calc(40vh - 40px)); }
+#s-scene, #s-bscan { cursor: crosshair; }
+.legend { display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
+.legend-row { font-size: 11.5px; display: flex; gap: 6px; align-items: center; line-height: 1.25; color: var(--ink-2); }
+.legend-row .swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+.s-vgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; }
+.s-cube-box, .s-xy-box { height: max(250px, calc(44vh - 80px)); }
+.s-sl-box { height: max(180px, calc(30vh - 50px)); }
+#s-xy, #s-xz, #s-yz { cursor: crosshair; }
+h2 .sw { display: inline-block; width: 14px; height: 5px; border-radius: 2px; margin-right: 7px; vertical-align: middle; }
+.sw.xy { background: #e0b43a; } .sw.xz { background: #e65cc4; } .sw.yz { background: #4fb3e8; }
+#v-scan[data-mode="volume"] .s-bgrid, #v-scan[data-mode="bscan"] .s-vgrid { display: none; }
+.oct[data-smode="bscan"] .s-vol-only { display: none; }
+#s-play { min-width: 6.2em; }
+
 .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .controls .panel { display: flex; flex-direction: column; gap: 6px; }
 .controls .slider { grid-template-columns: minmax(7.6em, auto) 1fr 4.8em; }
@@ -85,6 +104,11 @@
   .oct { grid-template-columns: minmax(0, 1fr); padding: 8px; }
   #v-fringes { grid-template-columns: minmax(0, 1fr); grid-template-areas: "schem" "trace" "side"; }
   .trace-box { height: 230px; }
+  .s-bgrid { grid-template-columns: minmax(0, 1fr) 96px; grid-template-areas: "scene scene" "bscan ascan" "legend legend"; }
+  .s-vgrid { grid-template-columns: minmax(0, 1fr); }
+  .s-scene-box { height: 210px; } .s-bscan-box, .s-ascan-box { height: 240px; }
+  .s-cube-box, .s-xy-box { height: 280px; } .s-sl-box { height: 170px; }
+  .legend { flex-direction: row; flex-wrap: wrap; gap: 3px 12px; }
   .zoom-box { height: 170px; flex: none; }
   .bar { flex-wrap: wrap; }
   .bar h1 { font-size: 15px; }

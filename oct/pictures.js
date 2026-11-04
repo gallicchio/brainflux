@@ -175,143 +175,148 @@ function niceStep(W) {
 function fmtUm(d) { return Math.abs(d) >= 1000 ? `${(d / 1000).toFixed(1)} mm` : `${+d.toFixed(2)}`; }
 
 /**
- * The scene from the side: x across (μm), geometric depth z down, the bands coloured, the lesion,
- * the surface; the galvo mirror and lens above, and the beam at the column being measured,
- * drawn with its width w(z) and its focus.
- *   o: { scene, beam, x (the column), xRange: [x0, x1], zRange: [z0, z1] (geometric), air: the
- *       height of the air above the sample in the picture (a fraction), colors, pointer: {x, z} }
- * Returns { X(x), Z(z), left, top, w, h }: the map from scene to pixels.
+ * The scene from the side: x across (μm), geometric depth z down, the bands coloured by how much
+ * they scatter, the reflecting interfaces bright, the lesion and the beads; above it the galvo
+ * mirror and the scan lens, and the beam at the column being measured, drawn to scale (its 1/e²
+ * radius w(z) about its axis) with its focus.
+ *   o: { scene, y (the row, for 3D scenes), beam, x (the beam's column), layout: { left, right,
+ *       top (the tissue's top in px: the galvo and the lens are above), bottom }, pointer: { x, z } }
+ * Returns { X(x), Z(z), invX(px), invZ(py), left, top, w, h }.
  */
 export function drawScene(canvas, o) {
   const { ctx, width, height } = fitCanvas(canvas);
-  const sc = o.scene, [x0, x1] = o.xRange, [z0, z1] = o.zRange;
-  const top = Math.round(height * 0.2), left = 0, w = width, h = height - top;
-  const X = (x) => left + ((x - x0) / (x1 - x0)) * w, Z = (z) => top + ((z - z0) / (z1 - z0)) * h;
+  const sc = o.scene, L = o.layout, y = o.y || 0, hw = sc.halfWidth;
+  const left = L.left, w = width - L.left - L.right, top = L.top, h = height - L.top - L.bottom;
+  const X = (x) => left + ((x + hw) / (2 * hw)) * w, Z = (z) => top + (z / sc.depth) * h;
   ctx.fillStyle = '#0d0f14'; ctx.fillRect(0, 0, width, height);
-  // The bands, column by column of pixels (the interfaces are curves).
-  const nb = sc.bands.length, cols = Math.ceil(w), tops = new Float64Array(nb + 1);
-  for (let px = 0; px < cols; px++) {
-    const x = x0 + ((px + 0.5) / w) * (x1 - x0);
-    for (let i = 0; i <= nb; i++) tops[i] = Z(sc.top(i, x, o.y || 0));
+  ctx.fillStyle = '#12151c'; ctx.fillRect(left, top, w, h);
+  // The bands, pixel column by pixel column (their tops are curves).
+  const nb = sc.nb, prof = { tops: new Float64Array(nb + 1), dtops: new Float64Array(nb + 1) };
+  ctx.save(); ctx.beginPath(); ctx.rect(left, top, w, h); ctx.clip();
+  for (let px = 0; px < Math.ceil(w); px++) {
+    const x = -hw + ((px + 0.5) / w) * 2 * hw;
+    sc.profile(x, y, prof);
     for (let i = 0; i < nb; i++) {
-      ctx.fillStyle = sc.bands[i].colour;
-      ctx.globalAlpha = 0.25 + 0.75 * Math.min(1, sc.bands[i].scatter / 0.04);
-      ctx.fillRect(left + px, tops[i], 1, Math.max(0, Math.min(height, tops[i + 1]) - tops[i]));
+      const b = sc.bands[i], y0 = Z(prof.tops[i]), y1 = i + 1 < nb ? Z(prof.tops[i + 1]) : top + h;
+      if (y1 <= y0) continue;
+      ctx.fillStyle = b.colour; ctx.globalAlpha = 0.3 + 0.7 * Math.min(1, b.scatter / 0.04 + (b.cells ? 0.2 : 0));
+      ctx.fillRect(left + px, y0, 1, y1 - y0);
+      // Cell walls (an onion's): drawn where the column crosses one.
+      if (b.cells) {
+        const c = b.cells, u = x / c.sx + c.shift, v = y / c.sy + 0.5 + c.shiftY, du = Math.abs(u - Math.round(u)) * c.sx, dv = Math.abs(v - Math.round(v)) * c.sy;
+        if (du < Math.max(c.wall / 2, (hw / w) * 0.75) || dv < c.wall / 2) { ctx.globalAlpha = 0.9; ctx.fillStyle = '#f0e6c0'; ctx.fillRect(left + px, y0, 1, y1 - y0); }
+      }
     }
     ctx.globalAlpha = 1;
-    // Interfaces that reflect: a bright line.
-    for (let i = 0; i < nb; i++) if (sc.bands[i].r) { ctx.fillStyle = `rgba(255,255,255,${Math.min(0.9, 0.3 + 12 * Math.abs(sc.bands[i].r))})`; ctx.fillRect(left + px, tops[i] - 0.5, 1, 1.5); }
-  }
-  // The lesion: the outline of its cross-section at this y.
-  const L = sc.lesion;
-  if (L && sc.opts.lesion) {
-    const b = (o.y || 0) - L.y, s = 1 - (b * b) / (L.ry * L.ry);
-    if (s > 0) {
-      const rx = L.rx * Math.sqrt(s), rz = L.rz * Math.sqrt(s), zc = L.z - sc.base;
-      ctx.save(); ctx.beginPath();
-      for (let i = 0; i <= 60; i++) { const a = (i / 60) * 2 * Math.PI, x = L.x + rx * Math.cos(a); const z = sc.zTop(x, o.y || 0) + zc + rz * Math.sin(a); if (i) ctx.lineTo(X(x), Z(z)); else ctx.moveTo(X(x), Z(z)); }
-      ctx.closePath();
-      ctx.fillStyle = L.gain === 0 ? 'rgba(20,30,50,0.85)' : 'rgba(255,230,160,0.55)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
+    for (let i = 0; i < nb; i++) if (sc.bands[i].r) {
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(0.95, 0.35 + 10 * Math.abs(sc.bands[i].r))})`;
+      ctx.fillRect(left + px, Z(prof.tops[i]) - 0.75, 1, 1.5);
     }
   }
-  // The galvo and the lens above; the beam.
-  const gx = X(x0 + 0.08 * (x1 - x0)), gy = top * 0.22, lensY = top * 0.62;
-  ctx.strokeStyle = BEAM; ctx.lineWidth = 2; ctx.globalAlpha = 0.9;
-  ctx.beginPath(); ctx.moveTo(X(x0 - 0.0 * (x1 - x0)), gy + 1); ctx.lineTo(gx, gy); ctx.stroke();   // light in
-  // The galvo mirror, tilted to send the beam to x.
-  const ang = Math.atan2(h * 0.6, X(o.x) - gx) / 2 + Math.PI / 4;
-  ctx.save(); ctx.translate(gx, gy); ctx.rotate(-ang); ctx.fillStyle = '#e6e9f0'; ctx.fillRect(-9, -1.5, 18, 3); ctx.restore();
-  ctx.fillStyle = TEXT; ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText('galvo mirror: steps the beam', gx + 12, gy - 6);
-  // The scan lens: a lens across the width.
-  ctx.strokeStyle = 'rgba(180,200,255,0.8)'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(X(x0 + 0.03 * (x1 - x0)), lensY); ctx.quadraticCurveTo(X(0.5 * (x0 + x1)), lensY - 7, X(x1 - 0.03 * (x1 - x0)), lensY); ctx.quadraticCurveTo(X(0.5 * (x0 + x1)), lensY + 7, X(x0 + 0.03 * (x1 - x0)), lensY); ctx.stroke();
-  ctx.fillStyle = DIM; ctx.fillText('lens', X(x1) - 30, lensY - 9);
-  // The beam from the galvo to the lens, then focused into the sample: its 1/e² edges.
-  const bx = X(o.x), bm = o.beam;
-  ctx.strokeStyle = BEAM; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.9;
-  ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(bx, lensY); ctx.stroke();
-  if (bm) {
-    const scale = w / (x1 - x0);
-    ctx.fillStyle = `rgba(${BEAM_RGB},0.28)`; ctx.beginPath();
-    const zs = [], NZ = 40;
-    for (let i = 0; i <= NZ; i++) zs.push(z0 + ((z1 - z0) * i) / NZ);
-    // Above the sample the beam converges from the lens's aperture (NA × distance).
-    const dLens = (top - lensY) / (h / (z1 - z0));
-    const wl = Math.max(bm.width(0), bm.NA * dLens);
-    ctx.moveTo(bx - wl * scale * Math.max(1, 3 * o.exaggerate), lensY);
-    for (const z of zs) ctx.lineTo(bx + bm.width(z) * scale * Math.max(1, 3 * o.exaggerate), Z(z));
-    for (let i = NZ; i >= 0; i--) ctx.lineTo(bx - bm.width(zs[i]) * scale * Math.max(1, 3 * o.exaggerate), Z(zs[i]));
-    ctx.lineTo(bx + wl * scale * Math.max(1, 3 * o.exaggerate), lensY);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(bx, lensY); ctx.lineTo(bx, Z(z1)); ctx.strokeStyle = `rgba(${BEAM_RGB},0.9)`; ctx.lineWidth = 1; ctx.stroke();
-    // The focus.
-    const fy = Z(bm.zFocus);
-    ctx.strokeStyle = GATE; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(bx - 14, fy); ctx.lineTo(bx + 14, fy); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = GATE; ctx.textAlign = bx < width / 2 ? 'left' : 'right'; ctx.fillText('focus', bx + (bx < width / 2 ? 17 : -17), fy);
+  // The lesion: its cross-section at this y.
+  const Ls = sc.lesion;
+  if (Ls && sc.opts.lesion) {
+    const b = y - Ls.y, s = 1 - (b * b) / (Ls.ry * Ls.ry);
+    if (s > 0) {
+      const rx = Ls.rx * Math.sqrt(s), rz = Ls.rz * Math.sqrt(s);
+      ctx.beginPath();
+      for (let i = 0; i <= 72; i++) { const a = (i / 72) * 2 * Math.PI, x = Ls.x + rx * Math.cos(a), z = sc.zSurf(x, y) + Ls.dz + rz * Math.sin(a); if (i) ctx.lineTo(X(x), Z(z)); else ctx.moveTo(X(x), Z(z)); }
+      ctx.closePath();
+      ctx.fillStyle = Ls.gain === 0 ? 'rgba(12,18,30,0.92)' : 'rgba(255,230,160,0.55)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1; ctx.stroke();
+    }
   }
+  // Beads.
+  if (sc.beads) {
+    ctx.fillStyle = '#ffffff';
+    for (const bd of sc.beadsNear(0, y, hw)) if (Math.abs(bd.y - y) < 1) { ctx.beginPath(); ctx.arc(X(bd.x), Z(bd.z), 1.6, 0, 2 * Math.PI); ctx.fill(); }
+  }
+  ctx.restore();
+  // The galvo mirror and the scan lens above the sample; the beam.
+  const bx = X(o.x), bm = o.beam, gy = Math.max(10, top * 0.25), lensY = top * 0.68, gx = left + 0.06 * w;
+  ctx.strokeStyle = BEAM; ctx.lineWidth = 1.6; ctx.globalAlpha = 0.9;
+  ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(gx, gy); ctx.lineTo(bx, lensY); ctx.stroke();
+  ctx.save(); ctx.translate(gx, gy); ctx.rotate(Math.atan2(lensY - gy, bx - gx) / 2); ctx.fillStyle = '#e6e9f0'; ctx.fillRect(-8, -1.5, 16, 3); ctx.restore();
   ctx.globalAlpha = 1;
-  // Axes: x across the bottom, z down the left.
-  ctx.fillStyle = DIM; ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText(`x: ${fmtUm(x0)} to ${fmtUm(x1)} μm across`, 4, top + 2);
-  ctx.textBaseline = 'bottom'; ctx.fillText(`depth z down to ${fmtUm(z1)} μm (geometric; n = ${sc.n})`, 4, height - 3);
-  // A scale bar: 200 μm.
-  const sb = X(x0 + 200) - X(x0);
-  ctx.fillStyle = TEXT; ctx.fillRect(width - sb - 8, height - 10, sb, 2); ctx.textAlign = 'right'; ctx.fillText('200 μm', width - 8, height - 12);
-  if (o.pointer) {
-    const { x, z } = o.pointer;
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(X(x), Z(z), 5, 0, 2 * Math.PI); ctx.stroke();
+  ctx.fillStyle = TEXT; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(w > 560 ? 'galvo mirror: turns to step the beam across' : 'galvo mirror', gx + 12, gy + 11);
+  ctx.strokeStyle = 'rgba(180,200,255,0.85)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(left + 4, lensY); ctx.quadraticCurveTo(left + w / 2, lensY - 6, left + w - 4, lensY); ctx.quadraticCurveTo(left + w / 2, lensY + 6, left + 4, lensY); ctx.stroke();
+  ctx.fillStyle = DIM; ctx.textAlign = 'right'; ctx.fillText('scan lens', left + w - 6, lensY - 10);
+  if (bm) {
+    // The beam's 1/e² edges, to scale (and at least a pixel and a half wide, to be seen).
+    const kx = w / (2 * hw), NZ = 60;
+    const half = (z) => Math.max(0.75, bm.width(z) * kx);
+    ctx.fillStyle = `rgba(${BEAM_RGB},0.35)`; ctx.beginPath();
+    ctx.moveTo(bx - Math.max(2, bm.NA * (top - lensY) * 0.6), lensY);
+    for (let i = 0; i <= NZ; i++) { const z = (sc.depth * i) / NZ; ctx.lineTo(bx + half(z), Z(z)); }
+    for (let i = NZ; i >= 0; i--) { const z = (sc.depth * i) / NZ; ctx.lineTo(bx - half(z), Z(z)); }
+    ctx.lineTo(bx + Math.max(2, bm.NA * (top - lensY) * 0.6), lensY);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = `rgba(${BEAM_RGB},0.95)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(bx, lensY); ctx.lineTo(bx, top + h); ctx.stroke();
+    const fy = Z(bm.zFocus);
+    ctx.strokeStyle = GATE; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(bx - 12, fy); ctx.lineTo(bx + 12, fy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = GATE; ctx.textAlign = bx < left + w / 2 ? 'left' : 'right'; ctx.fillText('focus', bx + (bx < left + w / 2 ? 15 : -15), fy);
   }
-  return { X, Z, left, top, w, h };
+  // A scale bar.
+  const bar = hw >= 1000 ? 500 : 100, sb = (bar / (2 * hw)) * w;
+  ctx.fillStyle = TEXT; ctx.fillRect(left + w - sb - 8, top + h - 9, sb, 2);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.font = '11px system-ui, sans-serif'; ctx.fillText(`${bar} μm`, left + w - 8, top + h - 11);
+  if (o.pointer) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(X(o.pointer.x), Z(o.pointer.z), 5, 0, 2 * Math.PI); ctx.stroke();
+  }
+  return { X, Z, invX: (px) => -hw + ((px - left) / w) * 2 * hw, invZ: (py) => ((py - top) / h) * sc.depth, left, top, w, h };
 }
 
 /**
  * Three slices of a volume drawn as planes inside a cube, in cabinet projection: x to the right,
- * z down, y receding up and to the right at half scale.  o: { nx, ny, nz, ix, iy, m (the slices),
- * xz, yz, xy (canvases of the slices), done (how many B-scans are measured), ny }.
- * Returns the projection { px(x, y, z) } with x, y, z in 0..1 fractions.
+ * depth down, y receding up and to the right at half scale.
+ *   o: { nx, ny, nz, ix, iy, m (where the slices are), xz, yz, xy (canvases holding the slices'
+ *       images: x across and depth down; y across and depth down; x across and y down), done (which
+ *       B-scans are measured) }
  */
 export function drawCube(canvas, o) {
   const { ctx, width, height } = fitCanvas(canvas);
+  const dpr = window.devicePixelRatio || 1;
   ctx.fillStyle = '#0d0f14'; ctx.fillRect(0, 0, width, height);
-  const ca = Math.cos(Math.PI / 6), sa = Math.sin(Math.PI / 6), r = 0.5;
-  // The cube's extent in pixels: width = W + r W ca, height = H + r W sa.
-  const margin = 14, aspect = 0.62;   // depth: width of the cube's front face
+  const ca = Math.cos(Math.PI / 6), sa = Math.sin(Math.PI / 6), r = 0.55, aspect = 0.5;
+  const margin = 26;
   let W = (width - 2 * margin) / (1 + r * ca), H = W * aspect;
-  if (H + r * W * sa > height - 2 * margin) { H = (height - 2 * margin) / (aspect + r * sa) * aspect; W = H / aspect; }
-  const x0 = margin + (width - 2 * margin - W - r * W * ca) / 2, y0 = margin + r * W * sa + (height - 2 * margin - H - r * W * sa) / 2;
+  if (H + r * W * sa > height - 2 * margin) { W = (height - 2 * margin) / (aspect + r * sa); H = W * aspect; }
+  const x0 = (width - W - r * W * ca) / 2, y0 = (height - H - r * W * sa) / 2 + r * W * sa;
   const px = (x, y, z) => [x0 + x * W + y * r * W * ca, y0 + z * H - y * r * W * sa];
-  const quad = (pts, img, alpha = 1) => {
-    // Draw img (a canvas) onto the parallelogram pts = [p00, p10, p01] (origin, +u, +v).
-    const [a, b, c] = pts, iw = img.width, ih = img.height;
+  const quad = (a, b, c, img, alpha) => {
+    if (!img || !img.width) return;
+    const iw = img.width, ih = img.height;
     ctx.save(); ctx.globalAlpha = alpha;
-    ctx.setTransform((b[0] - a[0]) / iw, (b[1] - a[1]) / iw, (c[0] - a[0]) / ih, (c[1] - a[1]) / ih, a[0], a[1]);
+    ctx.setTransform(dpr * (b[0] - a[0]) / iw, dpr * (b[1] - a[1]) / iw, dpr * (c[0] - a[0]) / ih, dpr * (c[1] - a[1]) / ih, dpr * a[0], dpr * a[1]);
+    ctx.imageSmoothingEnabled = true;
     ctx.drawImage(img, 0, 0); ctx.restore();
-    ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
   };
-  const edge = (p, q, style = 'rgba(255,255,255,0.35)', dash) => { ctx.strokeStyle = style; ctx.lineWidth = 1; ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(...p); ctx.lineTo(...q); ctx.stroke(); ctx.setLineDash([]); };
+  const edge = (p, q, style = 'rgba(255,255,255,0.35)') => { ctx.strokeStyle = style; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(...p); ctx.lineTo(...q); ctx.stroke(); };
+  const outline = (pts, style) => { ctx.strokeStyle = style; ctx.lineWidth = 1.5; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.stroke(); };
   const fx = (o.ix + 0.5) / o.nx, fy = (o.iy + 0.5) / o.ny, fz = (o.m + 0.5) / o.nz;
-  // The measured B-scans, as faint lines on the top face (the scan's progress).
-  for (let iy = 0; iy < o.ny; iy++) if (o.done[iy]) { const t = (iy + 0.5) / o.ny; edge(px(0, t, 0), px(1, t, 0), 'rgba(255,90,60,0.25)'); }
   // The back edges of the cube.
   edge(px(0, 1, 0), px(1, 1, 0)); edge(px(0, 1, 0), px(0, 1, 1)); edge(px(0, 1, 1), px(1, 1, 1)); edge(px(1, 1, 0), px(1, 1, 1));
-  edge(px(0, 0, 0), px(0, 1, 0)); edge(px(0, 0, 1), px(0, 1, 1)); edge(px(1, 0, 0), px(1, 1, 0));
-  // The slices, far to near: the y–z plane at x = fx, the en-face plane at z = fz, the B-scan at y = fy.
-  if (o.yz) quad([px(fx, 1, 0), px(fx, 0, 0), px(fx, 1, 1)], o.yz, 0.92);
-  if (o.xy) quad([px(0, 1, fz), px(1, 1, fz), px(0, 0, fz)], o.xy, 0.92);
-  if (o.xz) quad([px(0, fy, 0), px(1, fy, 0), px(0, fy, 1)], o.xz, 0.95);
-  // The slices' outlines in their colours, and the front edges.
-  const outline = (pts, style) => { ctx.strokeStyle = style; ctx.lineWidth = 1.5; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.stroke(); };
-  outline([px(fx, 0, 0), px(fx, 1, 0), px(fx, 1, 1), px(fx, 0, 1)], 'rgba(127,211,255,0.9)');
-  outline([px(0, 0, fz), px(1, 0, fz), px(1, 1, fz), px(0, 1, fz)], 'rgba(255,224,138,0.9)');
-  outline([px(0, fy, 0), px(1, fy, 0), px(1, fy, 1), px(0, fy, 1)], 'rgba(255,120,220,0.9)');
+  edge(px(0, 0, 0), px(0, 1, 0)); edge(px(0, 0, 1), px(0, 1, 1));
+  // The measured B-scans, as faint lines on the top face: the scan's progress along y.
+  for (let iy = 0; iy < o.ny; iy++) if (o.done[iy]) { const t = (iy + 0.5) / o.ny; edge(px(0, t, 0), px(1, t, 0), 'rgba(255,90,60,0.3)'); }
+  // The slices: the cross-section at x, the en-face plane at depth, the B-scan at y.
+  quad(px(fx, 0, 0), px(fx, 1, 0), px(fx, 0, 1), o.yz, 0.9);
+  quad(px(0, 0, fz), px(1, 0, fz), px(0, 1, fz), o.xy, 0.9);
+  quad(px(0, fy, 0), px(1, fy, 0), px(0, fy, 1), o.xz, 0.92);
+  outline([px(fx, 0, 0), px(fx, 1, 0), px(fx, 1, 1), px(fx, 0, 1)], SLICE.yz);
+  outline([px(0, 0, fz), px(1, 0, fz), px(1, 1, fz), px(0, 1, fz)], SLICE.xy);
+  outline([px(0, fy, 0), px(1, fy, 0), px(1, fy, 1), px(0, fy, 1)], SLICE.xz);
+  // The front edges.
   edge(px(0, 0, 0), px(1, 0, 0)); edge(px(0, 0, 0), px(0, 0, 1)); edge(px(0, 0, 1), px(1, 0, 1)); edge(px(1, 0, 0), px(1, 0, 1));
-  edge(px(1, 0, 1), px(1, 1, 1)); edge(px(0, 0, 1), px(0, 1, 1));
-  // Labels.
-  ctx.fillStyle = TEXT; ctx.font = '10px system-ui, sans-serif'; ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center'; ctx.fillText('x →', ...[(px(0, 0, 1)[0] + px(1, 0, 1)[0]) / 2, px(0, 0, 1)[1] + 9]);
-  ctx.textAlign = 'left'; ctx.fillText('y ↗', px(1, 0.5, 1)[0] + 6, px(1, 0.5, 1)[1]);
-  ctx.save(); ctx.translate(px(0, 0, 0.5)[0] - 8, px(0, 0, 0.5)[1]); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('depth ↓', 0, 0); ctx.restore();
-  return { px, W, H, x0, y0, r, ca, sa };
+  edge(px(1, 0, 1), px(1, 1, 1)); edge(px(1, 0, 0), px(1, 1, 0));
+  ctx.fillStyle = TEXT; ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+  const bx = px(0.5, 0, 1); ctx.textAlign = 'center'; ctx.fillText('x →', bx[0], bx[1] + 11);
+  const by = px(1, 0.5, 1); ctx.textAlign = 'left'; ctx.fillText('y ↗', by[0] + 7, by[1] + 4);
+  const bz = px(0, 0, 0.5); ctx.save(); ctx.translate(bz[0] - 10, bz[1]); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('depth ↓', 0, 0); ctx.restore();
+  return { px };
 }
+
+/** The colours of the three slices, the same in the cube and in each slice's own picture. */
+export const SLICE = { xz: '#ff78dc', yz: '#7fd3ff', xy: '#ffe08a' };
