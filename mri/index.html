@@ -180,7 +180,7 @@
     where the signal is tiny.  And how MRI began, in 1973, without phase encoding.</p>
   </section>
 
-  <article class="exp" data-setup="axis">
+  <article class="exp" data-setup="axis" data-frame="720x462">
     <h3>1. A field that rises along x turns position into frequency</h3>
     <p>Two tubes of water, 12 mm and 6 mm wide, in a field that rises by $G=2$ mT/m along $x$.
     A π/2 pulse tips every spin into the plane (the <a href="../nmr/#setup=pulse90">NMR demo</a> shows how), and
@@ -196,7 +196,7 @@
     $f_0$, the arrows stay together, and the spectrum is one line.</p>
   </article>
 
-  <article class="exp" data-setup="drag">
+  <article class="exp" data-setup="drag" data-frame="720x372">
     <h3>2. Move a tube, and its frequencies move with it</h3>
     <p>One tube, 20 mm wide, 10 mm left of the centre.  Drag it about by its middle, or widen it by
     its sides: its band in the spectrum follows, through the lines that join each edge to its
@@ -207,7 +207,7 @@
     since the spectrum counts the spins at each frequency.</p>
   </article>
 
-  <article class="exp" data-setup="stronger">
+  <article class="exp" data-setup="stronger" data-frame="720x462">
     <h3>3. A stronger gradient spreads the same tubes over more frequencies</h3>
     <p>The same two tubes at $G=5$ mT/m: 212.9 Hz per mm, so the spectrum is 2.5 times as wide and
     1 kHz is now 4.70 mm, not 11.74 mm.  The lines from the tubes to the spectrum fan out further.
@@ -218,7 +218,7 @@
     itself; that is enough.</p>
   </article>
 
-  <article class="exp" data-setup="winding">
+  <article class="exp" data-setup="winding" data-frame="720x372">
     <h3>4. The phase winds across the sample, and the signal is how much of it is left</h3>
     <p>One tube, 20 mm wide, slowed down.  Under the gradient the phase winds along $x$ (the
     colours in the strip): after a time $t$ it has wound once every $1/k$ mm, with
@@ -233,7 +233,7 @@
     the profile: the record is the profile's Fourier transform, written down one $k$ at a time.</p>
   </article>
 
-  <article class="exp" data-setup="resolution">
+  <article class="exp" data-setup="resolution" data-frame="720x372">
     <h3>5. The longer you listen, the finer the detail</h3>
     <p>Three tubes 3 mm wide and 7 mm apart.  The spectrum so far starts as one blob, and only
     later splits into three: a record that has reached $k$ can show detail down to $1/2k$ (the
@@ -246,7 +246,7 @@
     at this gradient.)</p>
   </article>
 
-  <article class="exp" data-setup="slice">
+  <article class="exp" data-setup="slice" data-frame="720x462">
     <h3>6. A pulse with a band of frequencies tips one slice</h3>
     <p>Now a gradient along the body, $G_z=4$ mT/m: the Larmor frequency rises 170.3 Hz for every
     millimetre up the head (the line on the left).  The pulse is a sinc in time, 3 ms long, so its
@@ -261,7 +261,7 @@
     pulse only makes it wobble.</p>
   </article>
 
-  <article class="exp" data-setup="moveslice">
+  <article class="exp" data-setup="moveslice" data-frame="720x601">
     <h3>7. Tune the pulse, and the slice moves</h3>
     <p>The slice is wherever the spins' frequency matches the pulse's, at
     $z=f_c/\bar\gamma G_z$.  The pulse is tuned to $f_c=-6.47$ kHz below $f_0$, which puts the
@@ -271,7 +271,7 @@
     pulse, not by moving the patient.</p>
   </article>
 
-  <article class="exp" data-setup="thin">
+  <article class="exp" data-setup="thin" data-frame="720x462">
     <h3>8. Two ways to a thinner slice</h3>
     <p>The band at half its width, $\Delta f=0.75$ kHz: the rule says 4.40 mm, but the spins show
     5.60 mm.  A sinc 3 ms long that holds so few frequencies has hardly any lobes beside its
@@ -283,7 +283,7 @@
     slices quickly.</p>
   </article>
 
-  <article class="exp" data-setup="rephase">
+  <article class="exp" data-setup="rephase" data-frame="522x416">
     <h3>9. The gradient twists the slab; the reversed lobe untwists it</h3>
     <p>The rephasing lobe is off.  While the pulse plays, the gradient is on, so the spins across
     the slab keep turning at their different frequencies: the slab ends twisted, its phase
@@ -296,7 +296,7 @@
     wherever the slice is.</p>
   </article>
 
-  <article class="exp" data-setup="encode">
+  <article class="exp" data-setup="encode" data-frame="720x462">
     <h3>10. One step of phase encoding winds one plane wave across the slice</h3>
     <p>One line in slow motion, row +10 of k-space.  Watch the spins as the $G_y$ lobe plays
     (the third row of the sequence): for 2 ms the field rises along $y$ by $G_y=0.459$ mT/m, the
@@ -315,7 +315,7 @@
     same.</p>
   </article>
 
-  <article class="exp" data-setup="fill">
+  <article class="exp" data-setup="fill" data-frame="682x361">
     <h3>11. Line by line, the picture forms</h3>
     <p>The scan from the start, as the view opens: the first lines slowly, then faster.  Each line
     fills one row of k-space (in the FFT demo's colours: hue for the phase, brightness for the
@@ -327,7 +327,7 @@
     lines, so this 64-line picture takes 32 s; the page skips the waiting.</p>
   </article>
 
-  <article class="exp" data-setup="centre">
+  <article class="exp" data-setup="centre" data-frame="682x361">
     <h3>12. The middle of k-space holds the picture; the edges hold its edges</h3>
     <p>Only the middle 16 rows of 64.  They hold 86.7% of the signal's energy, and with them alone
     the picture has its brightness right (its mean is 1.06 of the true one) but no sharp edges:
@@ -338,7 +338,7 @@
     and the edges once.)</p>
   </article>
 
-  <article class="exp" data-setup="spinecho">
+  <article class="exp" data-setup="spinecho" data-frame="720x462">
     <h3>13. The π pulse: why a spin echo sits in the middle of k-space</h3>
     <p>A poor magnet: every spin is a little off its frequency (a spread of width
     $1/\pi T_2'$ with $T_2'=8$ ms), so after the π/2 pulse the spins drift out of step, speckling
@@ -354,7 +354,7 @@
     between $T_2$ and $T_2^*$ weighting (experiment 15), and the reason the π pulse is there.</p>
   </article>
 
-  <article class="exp" data-setup="motion">
+  <article class="exp" data-setup="motion" data-frame="720x249">
     <h3>14. Move during the scan</h3>
     <p>Three disks, scanned at 5 lines a second from the bottom row of k-space to the top, as most
     scanners go.  Half-way through, drag a disk (the bright one, fat) to another place on the left
@@ -367,7 +367,7 @@
     once.)</p>
   </article>
 
-  <article class="exp" data-setup="contrast">
+  <article class="exp" data-setup="contrast" data-frame="720x415">
     <h3>15. TR and TE choose what is bright</h3>
     <p>The same slice; only two times change, and as the view opens they glide by themselves
     from T₁- to T₂-weighting and back (drag either line to take over; <em>Sweep</em> restarts it).  After each π/2 pulse the spins recover along $z$
@@ -387,7 +387,7 @@
     Drag the lines; the picture follows at once.</p>
   </article>
 
-  <article class="exp" data-setup="wrap">
+  <article class="exp" data-setup="wrap" data-frame="499x527">
     <h3>16. A field of view smaller than the head wraps it round</h3>
     <p>The field of view is 180 mm, and the head is 220 mm from front to back.  K-space is sampled
     every $1/\mathrm{FOV}$ along $k_y$, and a signal sampled that often cannot tell $y$ from
@@ -400,7 +400,7 @@
     phase-encoding direction along the shorter side of the body to keep it short.</p>
   </article>
 
-  <article class="exp" data-setup="lines">
+  <article class="exp" data-setup="lines" data-frame="720x548">
     <h3>17. Fewer phase-encoding lines: blur and ringing along y</h3>
     <p>Only the middle 32 rows of 128.  Along $x$ the readout still gives 2 mm pixels, but along
     $y$ the highest spatial frequency measured is 16 rows from the centre, so detail along $y$ is
@@ -411,7 +411,7 @@
     middle ones most (experiment 12).</p>
   </article>
 
-  <article class="exp" data-setup="noise">
+  <article class="exp" data-setup="noise" data-frame="499x527">
     <h3>18. Noise, and averaging it away</h3>
     <p>The receiver adds noise to every sample, here 5% of the brightest pixel's signal; since the
     inverse FFT is unitary, the picture's pixels get the same 5%, the grain in the dark around
@@ -421,7 +421,7 @@
     which is why scanners went from 0.15 T to 3 T and more.</p>
   </article>
 
-  <article class="exp" data-setup="fat">
+  <article class="exp" data-setup="fat" data-frame="499x527">
     <h3>19. Fat's chemical shift moves it along the readout</h3>
     <p>Fat's protons sit in molecules whose electrons shield them a little more than water's, so
     they turn 3.4 parts per million slower: 217 Hz at 1.5 T.  The readout reads frequency as
@@ -434,31 +434,31 @@
     and water.  At 3 T the shift doubles.</p>
   </article>
 
-  <article class="exp" data-setup="blur">
+  <article class="exp" data-setup="blur" data-frame="720x548">
     <h3>20. The echo fades while it is read, and the picture smears along x</h3>
     <p>So far each line was read as if all of it came at the echo.  But a readout takes time, and
     the echo goes on changing while it is read.  Here the readout gradient is weak (0.3 mT/m) and
     the pixels 1 mm, so the readout lasts 78.3 ms (the band on the echo's curves), and the magnet
-    is a poor one, $T_2'=8$ ms as in experiment 13; <em>Decay during the readout</em> is on.  The
-    π pulse brings the spins of each pixel back in step only at the echo; before and after, they
-    drift apart again, as $e^{-|t-TE|/T_2'}$.  The early and late samples are the edges of k-space
-    along $k_x$, and a spread of frequencies in a pixel is a spread of positions along the
-    readout: each pixel is smeared along $x$, into a Lorentzian as wide as
-    $$\Delta x=\frac{1}{\pi T_2'\,\bar\gamma G_x}=\frac{T_{ro}}{\pi T_2'}\ \text{pixels}=3.12\ \text{mm}.$$
+    is a poor one, $T_2'=4$ ms (half experiment 13's); <em>Decay during the readout</em> is on.
+    The π pulse brings the spins of each pixel back in step only at the echo; before and after,
+    they drift apart again, as $e^{-|t-TE|/T_2'}$.  The early and late samples are the edges of
+    k-space along $k_x$, and a spread of frequencies in a pixel is a spread of positions along
+    the readout: each pixel is smeared along $x$, into a Lorentzian as wide as
+    $$\Delta x=\frac{1}{\pi T_2'\,\bar\gamma G_x}=\frac{T_{ro}}{\pi T_2'}\ \text{pixels}=6.23\ \text{mm}.$$
     The scalp, 7 mm thick, keeps its 7.0 mm at the front and back (along $y$), but at the sides
-    it spreads to 8.0 mm and falls to 78% of its brightness at the front.  Along $y$ nothing
-    smears: each line's phase is wound before its readout begins.  Give the magnet back its
-    60 ms (under <em>More</em>): 0.42 pixels; or the readout gradient 4 mT/m, a readout of
-    5.9 ms: 0.23 pixels.  T₂ goes on fading during the readout too, but it dims as it smears: a
-    T₂ short enough to smear a tissue by a pixel has faded it below $e^{-\pi/2}=21\%$ by the
-    echo, so in a readout centred on the echo its smear hardly shows.  Choose <em>Gradient
-    echo</em>: $T_2^*$ is under 8 ms and the echo comes at 81 ms, by when nothing is left (the
-    bars); the picture, scaled up some 2500 times, is what the start of the readout caught before
-    the signal faded, the edges of k-space: outlines.  (View 1 shows the same smear in one
+    it spreads to 11.1 mm and its brightness falls from 0.26 to 0.16; the pocket of fat is
+    drawn out sideways.  Along $y$ nothing smears: each line's phase is wound before its readout
+    begins.  Give the magnet back its 60 ms (under <em>More</em>): 0.42 pixels; or the readout
+    gradient 4 mT/m, a readout of 5.9 ms: 0.47 pixels.  T₂ goes on fading during the readout
+    too, but it dims as it smears: a T₂ short enough to smear a tissue by a pixel has faded it
+    below $e^{-\pi/2}=21\%$ by the echo, so in a readout centred on the echo its smear hardly
+    shows.  Choose <em>Gradient echo</em>: $T_2^*$ is under 4 ms and the echo comes at 81 ms, by
+    when nothing is left (the bars); the picture, scaled up some 700 000 times, is what the start
+    of the readout caught before the signal faded, the edges of k-space: outlines.  (View 1 shows the same smear in one
     dimension, experiment 5.)</p>
   </article>
 
-  <article class="exp" data-setup="lowfield">
+  <article class="exp" data-setup="lowfield" data-frame="720x415">
     <h3>21. At 0.117 T, T₁ is shorter and grey and white matter look alike</h3>
     <p>The TeachSpin's magnet of the <a href="../nmr/#setup=larmor">NMR demo</a>, 0.117 T, protons
     at 5.000 MHz; low-field scanners image heads at about this field.  Three things change from
@@ -479,7 +479,7 @@
     low-field scanners lean on T₂.</p>
   </article>
 
-  <article class="exp" data-setup="earth">
+  <article class="exp" data-setup="earth" data-frame="720x415">
     <h3>22. The same picture at 46 µT: what changes and why</h3>
     <p>No magnet at all: the Earth's field, 46.0 µT where the NMR demo's
     <a href="../nmr/#setup=board">board</a> is, protons at 1959.8 Hz.  The sample is the honest
@@ -508,7 +508,7 @@
     the one-dimensional picture in µT/m and Hz.)</p>
   </article>
 
-  <article class="exp" data-setup="lauterbur">
+  <article class="exp" data-setup="lauterbur" data-frame="720x415">
     <h3>23. How it began: Lauterbur's projections (1973)</h3>
     <p>The first MR image, of two tubes of water, was made without phase encoding.  Paul
     Lauterbur put the sample in a gradient, which by view 1 makes the FID's spectrum the sample's

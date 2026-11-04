@@ -95,10 +95,10 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
         return { first: first.className + ':' + (first.querySelector('h3') || {}).textContent, math: first.querySelectorAll('math').length,
           text: first.textContent, theoryLast: kids.findIndex((e) => e.classList.contains('theory')) > kids.findLastIndex((e) => e.classList.contains('exp')),
           theoryHead: d.querySelector('.theory h3')?.textContent, exps: d.querySelectorAll('.exp').length, buttons: d.querySelectorAll('.exp .setup').length,
-          errors: d.querySelectorAll('merror').length }; })()""")
+          errors: d.querySelectorAll('merror').length, frames: d.querySelectorAll('.exp figure.frame img').length }; })()""")
     check(dr['first'] == 'start:Start here' and dr['math'] == 0 and all(f'{i} ·' in dr['text'] for i in (1, 2, 3, 4)) and dr['theoryLast'] and dr['theoryHead'] == 'How it works',
           f"the drawer starts with Start here (no equations, a word on each of the four views) and ends with How it works")
-    check(dr['exps'] == len(SETUPS) and dr['buttons'] == len(SETUPS) and dr['errors'] == 0, f"{dr['exps']} experiments, each with a Set it up button; the equations all render ({dr['errors']} errors)")
+    check(dr['exps'] == len(SETUPS) and dr['buttons'] == len(SETUPS) and dr['frames'] == len(SETUPS) and dr['errors'] == 0, f"{dr['exps']} experiments, each with a Set it up button and a still picture ({dr['frames']}); the equations all render ({dr['errors']} errors)")
     nums = b.eval("[...document.querySelectorAll('#help .exp h3')].map((h) => parseInt(h.textContent))")
     order = b.eval("[...document.querySelectorAll('#help .exp')].map((a) => a.dataset.setup)")
     check(nums == list(range(1, len(SETUPS) + 1)) and order == SETUPS, f'the experiments are numbered 1 to {len(SETUPS)} in the order of the set-ups')
@@ -377,16 +377,16 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     setup(b, 'blur')
     v = b.eval('(() => { const v = __app.views.contrast; return [v.seq.Tro, v.blurs().white, v.TE, v.s.decay, document.querySelector("#v4-more").open]; })()')
     (fw, fp), (sw, sp) = scalp(); ro = readout(b, 'contrast')
-    check(quoted(v[0], '78.3') and quoted(v[1], '3.12') and v[3] and v[4] and quoted(fw, '7.0') and quoted(sw, '8.0') and quoted(100 * sp / fp, '78') and '3.12' in ro,
-          f'decay during the readout: {v[0]:.1f} ms, T₂′ 8 ms smears {v[1]:.2f} px (1 mm); the scalp {fw:.2f} mm at the front, {sw:.2f} mm at the side and {100 * sp / fp:.0f}% as bright (help: 7.0, 8.0, 78%)')
+    check(quoted(v[0], '78.3') and quoted(v[1], '6.23') and v[3] and v[4] and quoted(fw, '7.0') and quoted(sw, '11.1') and quoted(fp, '0.26') and quoted(sp, '0.16') and '6.23' in ro,
+          f'decay during the readout: {v[0]:.1f} ms, T₂′ 4 ms smears {v[1]:.2f} px (1 mm); the scalp {fw:.2f} mm and {fp:.3f} bright at the front, {sw:.2f} mm and {sp:.3f} at the side (help: 7.0, 0.26; 11.1, 0.16)')
     b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, decay: false })'); (fw0, fp0), (sw0, sp0) = scalp()
     check(near(fw0, 7.0, 0.05) and near(sw0, 7.0, 0.05) and near(sp0, fp0, 1e-6) and near(fw0, fw, 0.05), f'off, the scalp is {fw0:.2f} mm at the front and {sw0:.2f} at the side; along y the decay changed nothing ({fw:.2f})')
     b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, decay: true, T2p: 60 })'); a = b.eval('__app.views.contrast.blurs().white')
-    b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, T2p: 8, Gx: 4 })'); g4 = b.eval('[__app.views.contrast.seq.Tro, __app.views.contrast.blurs().white]')
+    b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, T2p: 4, Gx: 4 })'); g4 = b.eval('[__app.views.contrast.seq.Tro, __app.views.contrast.blurs().white]')
     b.eval('__app.views.contrast.set({ ...__app.views.contrast.s, Gx: 0.3 })'); top_se = b.eval('__app.views.contrast.vmax')
     b.eval("__app.views.contrast.set({ ...__app.views.contrast.s, type: 'gre' })"); ge = b.eval('[__app.views.contrast.TE, Math.max(...Object.values(__app.views.contrast.weights)), __app.views.contrast.vmax]')
-    t2s = max(1 / (1 / t2 + 1 / 8) for t2 in (2000, 80, 100, 90, 200))
-    check(quoted(a, '0.42') and quoted(g4[0], '5.9') and quoted(g4[1], '0.23') and quoted(ge[0], '81') and ge[1] < 1e-4 and t2s < 8 and quoted(math.exp(-math.pi / 2) * 100, '21') and 2000 < top_se / ge[2] < 3000,
+    t2s = max(1 / (1 / t2 + 1 / 4) for t2 in (2000, 80, 100, 90, 200))
+    check(quoted(a, '0.42') and quoted(g4[0], '5.9') and quoted(g4[1], '0.47') and quoted(ge[0], '81') and ge[1] < 1e-6 and t2s < 4 and quoted(math.exp(-math.pi / 2) * 100, '21') and 5e5 < top_se / ge[2] < 1e6,
           f'T₂′ 60 ms: {a:.2f} px; 4 mT/m: {g4[0]:.2f} ms, {g4[1]:.2f} px; a gradient echo at {ge[0]:.0f} ms keeps {ge[1]:.0e} (T₂* at most {t2s:.2f} ms), its picture {top_se / ge[2]:.0f} times fainter')
     b.screenshot('build/mri-exp-blur.png')
 

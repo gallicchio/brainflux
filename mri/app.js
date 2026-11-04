@@ -120,7 +120,7 @@ const setups = {
   lines: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, lines: 32 }); },
   noise: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, sigma: 0.05 }); },
   fat: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, fat: true, Gx: 0.5 }); },
-  blur: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, decay: true, T2p: 8, Gx: 0.3, N: 256, lines: 256, more: true }); },
+  blur: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, decay: true, T2p: 4, Gx: 0.3, N: 256, lines: 256, more: true }); },
   lowfield: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, B0: MAGNETS.ts.B0, T2p: MAGNETS.ts.T2p }); },
   earth: () => { setView('contrast'); app.views.contrast.set({ ...CON, obj: 'tubes', B0: MAGNETS.earth.B0, Gx: MAGNETS.earth.Gx, T2p: MAGNETS.earth.T2p, N: 32, lines: 32, fov: 128, TR: 3000, TE: 15, nsa: 8, fat: true }); },
   lauterbur: () => { setView('contrast'); slice0(); app.views.contrast.set({ ...CON, obj: 'disks', mode: 'lauterbur', nA: 4, rate: 1.5 }); },
@@ -146,4 +146,17 @@ window.__app = {
   /** Move the clock on by dt seconds, n times, and draw. */
   step(dt = 1 / 60, n = 1) { const v = current(); for (let i = 0; i < n; i++) v.advance(dt); v.draw(); return v.probe(); },
   draw() { const v = current(); v.draw(); return v.probe(); },
+  /** For the still pictures (tools/frames.py, frames.json selects .frame-crop): mark parts of
+   *  the view's picture, each [x0, y0, x1, y1] in its canvas (x1, y1 past the canvas are its
+   *  edges), with an empty div over each, after drawing the view as it is now. */
+  crop(...boxes) {
+    const v = current(); v.draw();
+    document.querySelectorAll('.frame-crop').forEach((e) => e.remove());
+    const r = v.canvas.getBoundingClientRect();
+    for (const [a, b, c, d] of boxes.length ? boxes : [[0, 0, Infinity, Infinity]]) {
+      const x0 = Math.max(0, a), y0 = Math.max(0, b), x1 = Math.min(r.width, c), y1 = Math.min(r.height, d);
+      document.body.append(Object.assign(document.createElement('div'), { className: 'frame-crop', style: `position: absolute; pointer-events: none; left: ${r.left + scrollX + x0}px; top: ${r.top + scrollY + y0}px; width: ${x1 - x0}px; height: ${y1 - y0}px` }));
+    }
+    return v.probe();
+  },
 };

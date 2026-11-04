@@ -1,0 +1,30 @@
+{
+  "select": [".frame-crop"],
+  "wait": 0.6,
+  "js": "__app.hold(true); __app.crop()",
+  "setups": {
+    "axis": {"js": "__app.hold(true); __app.setups.axis(); const v = __app.views.axis; Object.assign(v.clock, { stage: 'hold', t: v.T, hold: 1e9 }); __app.crop()"},
+    "drag": {"js": "__app.hold(true); __app.setups.drag(); const v = __app.views.axis; Object.assign(v.clock, { stage: 'hold', t: v.T, hold: 1e9 }); __app.crop([0, 130, 1e4, 1e4])"},
+    "stronger": {"js": "__app.hold(true); __app.setups.stronger(); const v = __app.views.axis; Object.assign(v.clock, { stage: 'hold', t: v.T, hold: 1e9 }); __app.crop()"},
+    "winding": {"js": "__app.hold(true); __app.setups.winding(); const v = __app.views.axis; Object.assign(v.clock, { stage: 'record', t: 1 / (0.042577 * 2 * 20), u: 1 }); __app.crop([0, 130, 1e4, 1e4])"},
+    "resolution": {"js": "__app.hold(true); __app.setups.resolution(); const v = __app.views.axis; Object.assign(v.clock, { stage: 'hold', t: v.T, hold: 1e9 }); __app.crop([0, 130, 1e4, 1e4])"},
+    "slice": {"js": "__app.hold(true); __app.setups.slice(); const v = __app.views.slice; Object.assign(v.clock, { stage: 'hold', t: v.Tend, wait: 1e9 }); __app.crop()"},
+    "moveslice": {"js": "__app.hold(true); __app.setups.moveslice(); const v = __app.views.slice; Object.assign(v.clock, { stage: 'hold', t: v.Tend, wait: 1e9 }); __app.crop([0, 0, 800, 1e4])"},
+    "thin": {"js": "__app.hold(true); __app.setups.thin(); const v = __app.views.slice; Object.assign(v.clock, { stage: 'hold', t: v.Tend, wait: 1e9 }); __app.crop()"},
+    "rephase": {"js": "__app.hold(true); __app.setups.rephase(); const v = __app.views.slice; Object.assign(v.clock, { stage: 'hold', t: v.Tend, wait: 1e9 }); __app.crop([520, 252, 1e4, 1e4])"},
+    "encode": {"js": "__app.hold(true); __app.setups.encode(); const v = __app.views.kspace; v.cue(22, v.seq.preStart - 1e-6); __app.crop()"},
+    "fill": {"js": "__app.hold(true); __app.setups.fill(); const v = __app.views.kspace; for (let n = 0; v.acq.measuredCount < 20 && n < 50000; n++) v.advance(1 / 60); const L = __app.draw().lay; __app.crop([L.sq[1].x0 - 10, 0, 1e4, L.sq[1].y0 + L.sq[1].s + 34])"},
+    "centre": {"js": "__app.hold(true); __app.setups.centre(); const L = __app.draw().lay; __app.crop([L.sq[1].x0 - 10, 0, 1e4, L.sq[1].y0 + L.sq[1].s + 34])"},
+    "spinecho": {"js": "__app.hold(true); __app.setups.spinecho(); const v = __app.views.kspace; v.cue(32, v.seq.tEcho); __app.crop()"},
+    "motion": {"js": "__app.hold(true); __app.setups.motion(); const v = __app.views.kspace; for (let n = 0; v.acq.measuredCount < 32 && n < 50000; n++) v.advance(1 / 60); v.s.disks[1].x += 42; v.rebuild(); v.finish(); const L = __app.draw().lay; __app.crop([0, 0, 1e4, L.sq[0].y0 + L.sq[0].s + 34])"},
+    "contrast": {"js": "__app.hold(true); __app.setups.contrast(); __app.crop([0, 0, 1e4, 600])"},
+    "wrap": {"js": "__app.hold(true); __app.setups.wrap(); const b = __app.draw().lay.img; __app.crop([0, 0, b.x0 + b.s + 10, b.y0 + b.s + 24])"},
+    "lines": {"js": "__app.hold(true); __app.setups.lines(); const b = __app.draw().lay; __app.crop([0, 0, b.p1.x1 + 8, b.k.y0 + b.k.s + 22])"},
+    "noise": {"js": "__app.hold(true); __app.setups.noise(); const b = __app.draw().lay.img; __app.crop([0, 0, b.x0 + b.s + 10, b.y0 + b.s + 24])"},
+    "fat": {"js": "__app.hold(true); __app.setups.fat(); const b = __app.draw().lay.img; __app.crop([0, 0, b.x0 + b.s + 10, b.y0 + b.s + 24])"},
+    "blur": {"js": "__app.hold(true); __app.setups.blur(); const b = __app.draw().lay; __app.crop([0, 0, b.p1.x1 + 8, b.k.y0 + b.k.s + 22])"},
+    "lowfield": {"js": "__app.hold(true); __app.setups.lowfield(); __app.crop([0, 0, 1e4, 600])"},
+    "earth": {"js": "__app.hold(true); __app.setups.earth(); __app.crop([0, 0, 1e4, 600])"},
+    "lauterbur": {"js": "__app.hold(true); __app.setups.lauterbur(); const v = __app.views.contrast; v.lb.j = v.s.nA; v.lb.u = 0; v.bp = null; v.setPlaying(false); __app.crop([0, 0, 1e4, 600])"}
+  }
+}
