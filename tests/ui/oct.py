@@ -71,7 +71,7 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
           f'the drawer opens with Start here (plain words, no equations), and ends with How it works ({len(order)} parts)')
     names = b.eval('Object.keys(__app.setups)')
     arts = b.eval("[...document.querySelectorAll('#help .exp')].map((e) => e.dataset.setup)")
-    check(arts == names and len(names) == 16, f'every experiment has a set-up and every set-up an experiment ({len(names)})')
+    check(arts == names and len(names) == 18, f'every experiment has a set-up and every set-up an experiment ({len(names)})')
     check(b.eval("document.querySelectorAll('#help merror').length") == 0, 'every equation in the help renders (no unknown TeX)')
     labels = b.eval("[...document.querySelectorAll('.controls .slider label')].map((e) => e.textContent.trim())")
     bare = [l for l in labels if not re.search(r'[a-z]{3,}', l)]
@@ -211,10 +211,52 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
           if (sc.inLesion(bs.x(ix), 0, d / 1.38)) continue; const r = (speck[ix * nz + m] / mean[ix * nz + m]) ** 2; s += r; s2 += r * r; n++; } }
       const mu = s / n; document.querySelector('#s-toggles button:nth-child(2)').click(); __app.B.finishNow(); return [mu, Math.sqrt(s2 / n - mu * mu) / mu, n]; })()""")
     check(abs(contrast[0] - 1) < 0.08 and 1.1 < contrast[1] < 1.45, f'exp 9: speckle averages to the speckle-free picture ({contrast[0]:.3f}) with a contrast of {contrast[1]:.2f} (help: about 1.3)')
+    run(b, 'speckle')
+    c1, said = b.eval("[__app.B.peek().chist[0], document.querySelector('#s-readout-4').textContent]")
+    check(abs(c1 - 1.31) < 0.005 and '1.31' in said and 'fully developed speckle: 1' in said, f'exp 9: the readout measures the speckle contrast, {c1:.3f} ({said}) (help: 1.31)')
     before = b.eval('Array.from(__app.B.peek().bs.img.subarray(300 * 384, 300 * 384 + 200))')
     b.click('#s-reseed'); b.eval('__app.B.finishNow()')
     after = b.eval('Array.from(__app.B.peek().bs.img.subarray(300 * 384, 300 * 384 + 200))')
     check(sum(abs(x - y) for x, y in zip(before, after)) > 0.01, 'New speckle moves the grains')
+
+    # ---------------------------------------------------------------- 10. averaging B-scans
+    run(b, 'average')
+    hints = visible_hints(b)
+    st = b.eval('[__app.B.state.avg, __app.B.state.rate, __app.B.peek().bs.N, __app.B.state.how]')
+    check(st == [16, 1024, 16, 'tissue'] and len(hints) == 1, f'exp 10: sixteen B-scans of the tissue at 1024 A-scans a second, one hint ({st})')
+    b.eval('__app.step(0.05, 12)')
+    n1 = b.eval('__app.B.peek().next')
+    check(n1 > 0 and b.eval('__app.B.state.playing'), f'exp 10 opens scanning ({n1} columns of the repeats measured in 0.6 s of the page\'s clock)')
+    b.eval('__app.B.finishNow(); __app.step(0, 1)')
+    ch = b.eval('__app.B.peek().chist')
+    exp = b.eval('(() => { const p = __app.B.peek(); return [2, 4, 8, 16].map((k) => p.chist[0] * p.expectedFactor(k)); })()')
+    want = {1: 1.31, 2: 0.93, 4: 0.66, 8: 0.47, 16: 0.33}
+    check(len(ch) == 16 and all(abs(ch[k - 1] - v) < 0.0051 for k, v in want.items()) and all(abs(e - v) < 0.0051 for e, v in zip(exp, (0.92, 0.65, 0.46, 0.33))),
+          'exp 10: the contrast after 1, 2, 4, 8, 16 B-scans: ' + ', '.join(f'{ch[k - 1]:.3f}' for k in want) + '; C₁/√N: ' + ', '.join(f'{e:.3f}' for e in exp) + ' (help: 1.31, 0.93, 0.66, 0.47, 0.33; 0.92, 0.65, 0.46, 0.33)')
+    check(all(ch[k] < ch[k - 1] for k in range(1, 16)), 'exp 10: every B-scan averaged in lowers the contrast')
+    said = b.eval("document.querySelector('#s-readout-4').textContent")
+    check('one B-scan 1.31' in said and 'average of 16: 0.33' in said and '√16 = 0.33' in said, f'exp 10: the readout says it ({said})')
+    # The layers stay: the averaged picture's brightness against the speckle-free one's, and the layers' order unchanged.
+    mean = b.eval("""(() => { const p = __app.B.peek(), bs = p.bs, nz = bs.nz; let s = 0, n = 0;
+      for (const ix of p.refCols) for (let m = 0; m < nz; m++) { const r = p.ref[ix * nz + m]; if (r > 1e-3) { s += (bs.img[ix * nz + m] / r) ** 2; n++; } } return s / n; })()""")
+    check(abs(mean - 1) < 0.05, f'exp 10: the averaged picture is as bright as the speckle-free one ({mean:.3f})')
+    plot = b.box('#s-cplot')
+    check(plot[2] > 200 and plot[3] > 80 and b.eval("document.querySelector('#s-foot').classList.contains('with-plot')"), f'exp 10: the contrast against N is drawn beside the readout ({plot[2]:.0f} × {plot[3]:.0f} px)')
+    b.screenshot('build/oct-average.png')
+    # The beam moves instead: by 0, half the waist, the waist, twice it.
+    b.eval("document.querySelector('#s-avg-more').open = true")
+    press_button(b, '#s-how-box', 'The beam')
+    got = {}
+    for step in (0, 4.5, 9, 18):
+        set_num(b, '#s-how-box', 'beam step', step); b.eval('__app.B.finishNow(); __app.step(0, 1)')
+        got[step] = b.eval('(() => { const p = __app.B.peek(); return [p.chist[15], p.chist[0] * p.expectedFactor(16), p.bs.how, p.bs.step]; })()')
+    check(all(g[2] == 'beam' and g[3] == s for s, g in got.items()) and abs(got[0][0] - 1.30) < 0.0051 and abs(got[4.5][0] - 0.53) < 0.0051 and abs(got[9][0] - 0.38) < 0.0051 and abs(got[18][0] - 0.33) < 0.0051
+          and all(abs(g[0] - g[1]) < 0.012 for g in got.values()),
+          'exp 10: the beam stepped by 0, 4.5, 9, 18 μm: ' + ', '.join(f'{g[0]:.3f} (expected {g[1]:.3f})' for g in got.values()) + ' after 16 (help: 1.30, 0.53, 0.38, 0.33)')
+    w0 = b.eval('__app.B.peek().beam.w0')
+    check(abs(w0 - 8.9) < 0.05, f'exp 10: the waist w₀ = {w0:.2f} μm (help: 8.9)')
+    press_button(b, '#s-avg-box', '1')
+    check(b.eval('__app.B.peek().bs.N') == 1 and not b.eval("document.querySelector('#s-foot').classList.contains('with-plot')"), 'one B-scan again: no averaging, no plot')
 
     run(b, 'lateral')
     def beads(NA):
@@ -230,11 +272,11 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     r1 = beads(0.1)
     wz = {z: (a, d) for z, a, d in r1['beads']}
     check(abs(r1['w0'] - 2.67) < 0.01 and abs(2 * r1['zR'] - 71) < 0.5 and abs(wz[300][0] - 3.3) < 0.15 and abs(wz[200][0] - 9.5) < 0.15 and abs(wz[600][0] - 26.8) < 0.2,
-          f"exp 10: NA 0.1: w₀ = {r1['w0']:.2f} μm, 2z_R = {2 * r1['zR']:.0f} μm; a bead {wz[300][0]:.1f} μm wide at the focus, {wz[200][0]:.1f} at 100 μm from it, {wz[600][0]:.1f} at 300 μm (help: 2.7, 71, 3.3, 9.5, 26.8)")
-    check(all(abs(d - 4.7) < 0.06 for a, d in wz.values()), 'exp 10: every bead ' + ', '.join(f'{d:.2f}' for a, d in wz.values()) + ' μm deep, ℓ_c/n = 4.68 (help: 4.7)')
+          f"exp 11: NA 0.1: w₀ = {r1['w0']:.2f} μm, 2z_R = {2 * r1['zR']:.0f} μm; a bead {wz[300][0]:.1f} μm wide at the focus, {wz[200][0]:.1f} at 100 μm from it, {wz[600][0]:.1f} at 300 μm (help: 2.7, 71, 3.3, 9.5, 26.8)")
+    check(all(abs(d - 4.7) < 0.06 for a, d in wz.values()), 'exp 11: every bead ' + ', '.join(f'{d:.2f}' for a, d in wz.values()) + ' μm deep, ℓ_c/n = 4.68 (help: 4.7)')
     r2 = beads(0.02)
     check(abs(r2['w0'] - 13.4) < 0.05 and abs(2 * r2['zR'] - 1778) < 2 and all(15.5 < a < 17 and abs(d - 4.7) < 0.06 for z, a, d in r2['beads']),
-          f"exp 10: NA 0.02: w₀ = {r2['w0']:.1f} μm, depth of focus {2 * r2['zR'] / 1000:.2f} mm, beads " + ', '.join(f'{a:.1f}' for z, a, d in r2['beads']) + ' μm wide (help: 13.4, 1.78 mm, 16)')
+          f"exp 11: NA 0.02: w₀ = {r2['w0']:.1f} μm, depth of focus {2 * r2['zR'] / 1000:.2f} mm, beads " + ', '.join(f'{a:.1f}' for z, a, d in r2['beads']) + ' μm wide (help: 13.4, 1.78 mm, 16)')
     b.screenshot('build/oct-beads.png')
 
     run(b, 'tilt')
@@ -242,7 +284,7 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
       for (let ix = 0; ix < bs.nx; ix++) { let best = 0, bm = 0; const z0 = sc.zTop(bs.x(ix), 0); for (let m = 0; m < bs.nz; m++) { const d = m * bs.hd; if (Math.abs(d - z0) > 20) continue; const v = bs.img[ix * bs.nz + m]; if (v > best) { best = v; bm = m; } } pts.push([bs.x(ix), bm * bs.hd]); }
       let sx = 0, sd = 0, sxx = 0, sxd = 0; for (const [x, d] of pts) { sx += x; sd += d; sxx += x * x; sxd += x * d; } const n = pts.length, sl = (n * sxd - sx * sd) / (n * sxx - sx * sx);
       const prof = sc.profile(0, 0); return [Math.atan(sl) * 180 / Math.PI, prof.dtops[1] - prof.dtops[0], prof.tops[1] - prof.tops[0]]; })()""")
-    check(abs(t[0] - 5) < 0.01 and abs(t[1] - 300) < 1e-6 and abs(t[2] - 200) < 1e-6, f'exp 11: the front face comes out at {t[0]:.3f}°; the paint {t[1]:.0f} μm below it in the image, {t[2]:.0f} μm in the glass (help: 5.00°, 300, 200)')
+    check(abs(t[0] - 5) < 0.01 and abs(t[1] - 300) < 1e-6 and abs(t[2] - 200) < 1e-6, f'exp 12: the front face comes out at {t[0]:.3f}°; the paint {t[1]:.0f} μm below it in the image, {t[2]:.0f} μm in the glass (help: 5.00°, 300, 200)')
 
     run(b, 'volume')
     hints = visible_hints(b)
@@ -251,16 +293,57 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     v = b.eval("""(() => { const p = __app.B.peek(), v = p.vol, s = __app.B.state; return { nx: v.nx, ny: v.ny, nz: v.nz, count: v.count, depth: (s.m + 0.5) * v.hd / p.scene.nView,
       x: v.x(s.ix), y: v.y(s.iy), inCyst: p.scene.inLesion(v.x(s.ix), v.y(s.iy), p.scene.zSurf(v.x(s.ix), v.y(s.iy)) + p.scene.lesion.dz) }; })()""")
     check(v['nx'] * v['ny'] * v['nz'] == 1048576 and v['count'] == 64 and abs(v['depth'] - 212) < 1 and v['inCyst'],
-          f"exp 12: 64 B-scans of 64 A-scans of 256 depths; the en-face plane at {v['depth']:.0f} μm, the slices crossing in the cyst (help: 212 μm)")
+          f"exp 13: 64 B-scans of 64 A-scans of 256 depths; the en-face plane at {v['depth']:.0f} μm, the slices crossing in the cyst (help: 212 μm)")
     # The cyst is dark in the en-face plane, the tissue around it bright; the pit's centre dark too.
     en = b.eval("""(() => { const p = __app.B.peek(), v = p.vol, s = __app.B.state, xy = v.sliceXY(s.m - 2, s.m + 2), at = (x, y) => { const ix = Math.round((x + 1500) / v.pitch - 0.5), iy = Math.round((y + 1500) / v.pitchY - 0.5); return xy[iy * v.nx + ix]; };
       const ring = []; for (let a = 0; a < 6.28; a += 0.5) ring.push(at(680 + 330 * Math.cos(a), 60 + 330 * Math.sin(a)));
       ring.sort((p, q) => p - q); return [at(680, 60), ring[Math.floor(ring.length / 2)], at(0, 0)]; })()""")
-    check(en[0] < 0.2 * en[1] and en[2] < 0.2 * en[1], f'exp 12: in the en-face plane the cyst ({en[0]:.4f}) and the pit\'s centre ({en[2]:.4f}) are dark against the tissue around ({en[1]:.4f})')
+    check(en[0] < 0.2 * en[1] and en[2] < 0.2 * en[1], f'exp 13: in the en-face plane the cyst ({en[0]:.4f}) and the pit\'s centre ({en[2]:.4f}) are dark against the tissue around ({en[1]:.4f})')
+    layers = lambda: b.eval('(() => { const st = __app.B.peek().slabLayers(); return { layers: st.layers, counts: Object.fromEntries([...st.counts].map(([k, v]) => [k, 100 * v / st.total])) }; })()')
+    L13 = layers()
+    check(L13['layers'] == 6 and abs(L13['counts']['inner plexiform'] - 50) < 0.5, f"exp 13: the flat plane lies in {L13['layers']} layers, the inner plexiform under {L13['counts']['inner plexiform']:.1f}% of the A-scans (help: six, half)")
     b.click('#s-xy', (0.25, 0.75)); b.eval('__app.step(0, 1)')
     s2 = b.eval('[__app.B.state.ix, __app.B.state.iy]')
     check(s2[0] < 32 and s2[1] > 32, f'a click on the en-face plane moves the other two slices there (ix, iy = {s2})')
     b.screenshot('build/oct-volume.png')
+
+    # ---------------------------------------------------------------- 14. a flattened slab
+    run(b, 'flatten')
+    b.eval('__app.B.finishNow(); __app.step(0, 1)')
+    st = b.eval('[__app.B.state.mode, __app.B.state.follow, __app.B.state.layer, __app.B.state.below, __app.B.state.slab]')
+    note = b.eval("document.querySelector('#s-xy-note').textContent")
+    L = layers()
+    check(st == ['volume', True, 7, 11, 12] and L['counts'] == {'pigment epithelium': 100} and 'following the pigment epithelium' in note,
+          f'exp 14: the slab follows the pigment epithelium 11 μm below its top, 12 μm thick, and lies in it under all 4096 A-scans ({L}; "{note}")')
+    rows = b.eval('(() => { const p = __app.B.peek(), v = p.vol, out = []; for (let ix = 0; ix < 64; ix++) out.push(v.followRow(p.layerD[32 * 64 + ix], 11)); return out; })()')
+    rise = b.eval('(() => { const p = __app.B.peek(), v = p.vol, sc = p.scene, d = (ix, iy) => sc.profile(v.x(ix), v.y(iy)).dtops[7] / sc.nView; return [d(32, 32) - d(0, 32), d(32, 32) - d(0, 0)]; })()')
+    check(max(rows) - min(rows) > 10 and abs(rise[0] - 48) < 0.5 and abs(rise[1] - 101) < 0.5,
+          f'exp 14: the slab curves with the layer ({max(rows) - min(rows):.1f} samples across the B-scan); in the picture the layer rises {rise[0]:.1f} μm from the middle to an edge, {rise[1]:.1f} to a corner (help: 48, 101)')
+    xs = b.eval('(() => { const r = document.querySelector("#s-xy").getBoundingClientRect(); return [r.width, r.height]; })()')
+    press_button(b, '#s-follow-box', 'Flat plane')
+    st = b.eval('(() => { const s = __app.B.state, p = __app.B.peek(); return [s.follow, (s.m + 0.5) * p.vol.hd / p.scene.nView]; })()')
+    L = layers()
+    c = L['counts']
+    check(not st[0] and abs(st[1] - 400) < 1 and L['layers'] == 3 and abs(c['photoreceptors'] - 38) < 0.5 and abs(c['pigment epithelium'] - 32) < 0.5 and abs(c['choroid'] - 30) < 0.6,
+          f"exp 14: Flat plane goes to the slab's mean depth, {st[1]:.0f} μm, in {L['layers']} layers: photoreceptors {c['photoreceptors']:.1f}%, pigment epithelium {c['pigment epithelium']:.1f}%, choroid {c['choroid']:.1f}% (help: 400, three, 38, 32, the rest)")
+    said = b.eval("document.querySelector('#s-readout-4').textContent")
+    check('a flat plane' in said and re.search(r'\b3 layers', said) and re.search(r'photoreceptors, under\s*38%', said), f'exp 14: the readout names them ({said})')
+    press_button(b, '#s-follow-box', 'Follow a layer'); set_num(b, '#s-follow-box', 'below the layer', -18)
+    L18 = layers()
+    press_button(b, '#s-follow-box', 'Flat plane')
+    L18f = layers()
+    check(L18['counts'] == {'photoreceptors': 100} and L18f['layers'] == 4, f"exp 14: 18 μm above the pigment epithelium: {L18['counts']}; the flat plane at the same mean depth: {L18f['layers']} layers (help: every A-scan, four)")
+    press_button(b, '#s-follow-box', 'Follow a layer'); press_button(b, '#s-follow-box', 'the surface'); set_num(b, '#s-follow-box', 'below the layer', 95)
+    L95 = layers()
+    oval = b.eval("""(() => { const p = __app.B.peek(), v = p.vol, sc = p.scene, L = sc.lesion; let n = 0;
+      for (let iy = 0; iy < 64; iy++) for (let ix = 0; ix < 64; ix++) { const x = v.x(ix), y = v.y(iy); if (((x - L.x) / L.rx) ** 2 + ((y - L.y) / L.ry) ** 2 < 1) n++; } return [n, L.rx, L.ry]; })()""")
+    check(abs(L95['counts'].get('the cyst', 0) * 40.96 - oval[0]) <= 2 and L95['counts']['ganglion cells'] > 75 and oval[1:] == [200, 170],
+          f"exp 14: 95 μm below the surface the slab crosses the cyst under all {oval[0]} A-scans of its 0.40 × 0.34 mm oval, and is mostly the ganglion cells ({L95['counts']['ganglion cells']:.0f}%)")
+    # A click on a cross-section, following a layer, sets the depth below it.
+    b.click('#s-xz', (0.5, 0.5)); b.eval('__app.step(0, 1)')
+    below = b.eval('__app.B.state.below')
+    check(below != 95 and b.eval('__app.B.state.follow'), f'a click on the B-scan slice moves the following slab to that depth below the layer ({below} μm)')
+    b.screenshot('build/oct-flatten.png')
 
     # ---------------------------------------------------------------- 4 · Fourier domain
     run(b, 'fourier')
@@ -275,10 +358,10 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
         fr.append((off, p[1], p[0]))
     p50 = fr[1][2][0]
     check([round(f, 1) for _, f, _ in fr] == [10.6, 21.2, 42.5] and abs(p50['d'] - 50) < 0.01 and abs(p50['a'] - 0.1995) < 0.0005,
-          f"exp 13: fringes across the camera at 25, 50, 100 μm: {[round(f, 1) for _, f, _ in fr]}; the peak at {p50['d']:.2f} μm, {p50['a']:.4f} high (help: 10.6, 21.2, 42.5; 50.00, 0.1995)")
+          f"exp 15: fringes across the camera at 25, 50, 100 μm: {[round(f, 1) for _, f, _ in fr]}; the peak at {p50['d']:.2f} μm, {p50['a']:.4f} high (help: 10.6, 21.2, 42.5; 50.00, 0.1995)")
     b.eval('__app.Q.configure({ ...__app.Q.state, sample: "slide", offset: 60, motor: false, pick: 1 }); __app.step(0, 1)')
     pk = b.eval('__app.Q.foundPeaks().map((p) => p.d)')
-    check(len(pk) == 3 and abs(pk[1] - 258.4) < 0.05, f'exp 13: the cover slip shows its faces and their light interfering, at {pk[1]:.2f} μm (help: 258.4)')
+    check(len(pk) == 3 and abs(pk[1] - 258.4) < 0.05, f'exp 15: the cover slip shows its faces and their light interfering, at {pk[1]:.2f} μm (help: 258.4)')
     picked = b.eval('__app.Q.state.pick')
     f = b.eval('(() => { const r = document.querySelector("#q-scan").getBoundingClientRect(); return [r.width, r.height]; })()')
     b.click('#q-scan', ((52 + (60 / 1204.2) * (f[0] - 66)) / f[0], 0.5)); b.eval('__app.step(0, 1)')
@@ -288,7 +371,7 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     run(b, 'conjugate')
     pk = b.eval('__app.Q.foundPeaks().map((p) => +p.d.toFixed(2))')
     lay = b.eval('__app.Q.peek().bursts.map((q) => q.D / 2)')
-    check(lay == [-60, -15, 75, 142.5] and all(any(abs(p - want) < 0.05 for p in pk) for want in (15, 60, 75, 142.5)), f'exp 14: layers at {lay} μm appear at 15, 60, 75 and 142.5 μm (peaks {pk})')
+    check(lay == [-60, -15, 75, 142.5] and all(any(abs(p - want) < 0.05 for p in pk) for want in (15, 60, 75, 142.5)), f'exp 16: layers at {lay} μm appear at 15, 60, 75 and 142.5 μm (peaks {pk})')
     b.screenshot('build/oct-conjugate.png')
 
     run(b, 'range')
@@ -299,15 +382,15 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     dm, p256 = res[256]
     back256 = max(p256, key=lambda q: q[0]); back512 = max(res[512][1], key=lambda q: q[0]); back1024 = max(res[1024][1], key=lambda q: q[0])
     check(abs(dm - 301.1) < 0.1 and abs(back256[0] - 283.7) < 0.1 and abs(20 * math.log10(back256[1]) + 27.3) < 0.2,
-          f'exp 15: 256 pixels: range {dm:.1f} μm, the back face folded to {back256[0]:.1f} μm at {20 * math.log10(back256[1]):.1f} dB (help: 301, 283.7, −27)')
+          f'exp 17: 256 pixels: range {dm:.1f} μm, the back face folded to {back256[0]:.1f} μm at {20 * math.log10(back256[1]):.1f} dB (help: 301, 283.7, −27)')
     check(abs(res[512][0] - 602.1) < 0.1 and abs(back512[0] - 318.4) < 0.05 and abs(back512[1] / 0.1976 - 0.69) < 0.01 and abs(back1024[1] / 0.1976 - 0.91) < 0.01,
-          f'exp 15: 512 pixels: range {res[512][0]:.0f} μm, the face at {back512[0]:.1f} μm, {back512[1] / 0.1976:.2f} of its height ({20 * math.log10(back512[1]):.1f} dB); 1024: {back1024[1] / 0.1976:.2f} (help: 602, 318.4, 69%, −17 dB, 91%)')
+          f'exp 17: 512 pixels: range {res[512][0]:.0f} μm, the face at {back512[0]:.1f} μm, {back512[1] / 0.1976:.2f} of its height ({20 * math.log10(back512[1]):.1f} dB); 1024: {back1024[1] / 0.1976:.2f} (help: 602, 318.4, 69%, −17 dB, 91%)')
 
     run(b, 'fdbscan')
     hints = visible_hints(b)
     check(len(hints) == 1 and 'zero path' in hints[0], f'the Fourier-domain B-scan has its own hint ({hints[0][:40]}...)')
     q = b.eval('(() => { const p = __app.Q.peek(); return [p.bscan.nx, p.dMax]; })()')
-    check(q[0] == 256 and abs(q[0] / 70000 * 1000 - 3.7) < 0.05 and abs(70000 / q[0] - 273) < 1 and abs(q[1] - 1204.2) < 0.1, f'exp 16: {q[0]} A-scans: {q[0] / 70:.1f} ms a B-scan at 70,000 a second, {70000 / q[0]:.0f} a second; range {q[1]:.0f} μm (help: 3.7 ms, 270, 1204)')
+    check(q[0] == 256 and abs(q[0] / 70000 * 1000 - 3.7) < 0.05 and abs(70000 / q[0] - 273) < 1 and abs(q[1] - 1204.2) < 0.1, f'exp 18: {q[0]} A-scans: {q[0] / 70:.1f} ms a B-scan at 70,000 a second, {70000 / q[0]:.0f} a second; range {q[1]:.0f} μm (help: 3.7 ms, 270, 1204)')
     s0 = b.eval('__app.Q.state.shift'); b.eval('__app.step(0.05, 400)'); lo = b.eval('__app.Q.state.shift'); b.eval('__app.step(0.05, 400)')
     seen = b.eval('__app.Q.state.shift')
     b.eval('__app.Q.configure({ ...__app.Q.state, mode: "bscan", shift: -380, motor: false }); __app.step(0, 1)')
@@ -341,10 +424,38 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60); b.eval('__app.hold(true)')
     check(b.eval('__app.view') == 'scan' and b.eval('__app.B.state.scene') == 'onion' and abs(b.eval('__app.B.state.NA') - 0.06) < 1e-9, 'the address keeps view 3, the onion and NA 0.06 through a reload')
     b.eval("location.hash = '#setup=range'"); b.wait("__app.view === 'fourier' && __app.Q.state.N === 256", timeout=20)
-    check(True, '#setup=range in the address opens experiment 15')
+    check(True, '#setup=range in the address opens experiment 17')
     b.eval("location.hash = '#view=fringes&lam=1300&bw=80&z=70&two=1&t=50&n=1.4'"); b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
     st = b.eval('[__app.view, __app.src.lamNm, __app.src.fwhmNm, __app.F.state.z, __app.F.state.two, __app.F.state.t, __app.F.state.n]')
     check(st == ['fringes', 1300, 80, 70, True, 50, 1.4], f'an address with the light and a plate opens them ({st})')
+    # Averaging and the flattened slab are kept in the address too.
+    b.eval('__app.hold(true)'); run(b, 'average'); b.eval("document.querySelector('#s-avg-more').open = true"); press_button(b, '#s-how-box', 'The beam'); set_num(b, '#s-how-box', 'beam step', 4.5)
+    b.wait("location.hash.includes('avg=16') && location.hash.includes('how=beam') && location.hash.includes('step=4.5')", timeout=20)
+    b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60); b.eval('__app.hold(true)')
+    st = b.eval('[__app.view, __app.B.state.avg, __app.B.state.how, __app.B.state.step, __app.B.peek().bs.N]')
+    check(st == ['scan', 16, 'beam', 4.5, 16], f'the address keeps sixteen B-scans with the beam stepped 4.5 μm through a reload ({st})')
+    run(b, 'flatten'); press_button(b, '#s-follow-box', 'the surface'); set_num(b, '#s-follow-box', 'below the layer', 95)
+    b.wait("location.hash.includes('follow=1') && location.hash.includes('layer=0') && location.hash.includes('below=95')", timeout=20)
+    b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60); b.eval('__app.hold(true)')
+    st = b.eval('[__app.B.state.mode, __app.B.state.follow, __app.B.state.layer, __app.B.state.below]')
+    check(st == ['volume', True, 0, 95], f'the address keeps the slab following the surface 95 μm down through a reload ({st})')
+
+    # ---------------------------------------------------------------- the worker
+    # With the clock running, view 3's A-scans come from its worker; they must be the very numbers
+    # the page computes itself with the clock held.  (Waits for the worker to finish, however long
+    # that takes on a busy machine; nothing here depends on how fast it is.)
+    sums = """(() => { const p = __app.B.peek(), a = __app.B.state.mode === 'bscan' ? p.bs.img : p.vol.data; let s = 0, s2 = 0;
+      for (let i = 0; i < a.length; i++) { s += a[i]; s2 += a[i] * a[i] * ((i % 7) + 1); } return [s, s2, p.chist]; })()"""
+    got = {}
+    for name, extra in (('average', "__app.B.setAverage(2)"), ('volume', '')):
+        b.eval(f'__app.setups.{name}(); {extra}; __app.hold(false); document.querySelector("#s-finish").click()')
+        b.wait("__app.B.state.mode === 'bscan' ? __app.B.peek().next >= __app.B.peek().bs.tasks : __app.B.peek().vnext >= 4096", timeout=300)
+        live = b.eval(sums)
+        b.eval(f'__app.hold(true); __app.setups.{name}(); {extra}; __app.B.finishNow()')
+        held = b.eval(sums)
+        got[name] = (live, held)
+    check(all(abs(l[0] - h[0]) <= 1e-9 * abs(h[0]) and abs(l[1] - h[1]) <= 1e-9 * abs(h[1]) and l[2] == h[2] for l, h in got.values()),
+          'the worker computes the same A-scans as the page: ' + '; '.join(f'{n}: Σ {l[0]:.6g} and {h[0]:.6g}' for n, (l, h) in got.items()) + f"; contrasts {got['average'][0][2]} and {got['average'][1][2]}")
 
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))

@@ -106,9 +106,11 @@ const setups = {
   retina: () => go('ascan', { sample: 'retina', scale: 'db', noise: -60 }),
   bscan: () => go('scan', { scene: 'retina' }),
   speckle: () => go('scan', { scene: 'retina', done: true, probe: 128 }),
+  average: () => go('scan', { scene: 'retina', avg: 16, rate: 1024 }),
   lateral: () => go('scan', { scene: 'beads', NA: 0.1, focus: 300, done: true }),
   tilt: () => go('scan', { scene: 'plate', tilt: 5, done: true }),
   volume: () => go('scan', { scene: 'retina', mode: 'volume', ix: 46, iy: 33, m: 83 }),
+  flatten: () => go('scan', { scene: 'retina', mode: 'volume', follow: true, layer: 7, below: 11, ix: 32, iy: 32 }),
   fourier: () => go('fourier', { sample: 'one', offset: 40, motor: true, pick: 0 }),
   conjugate: () => go('fourier', { sample: 'film', offset: -60, both: true, motor: false, pick: 0, scale: 'lin' }),
   range: () => go('fourier', { sample: 'slide', N: 256, offset: 60, motor: false, pick: 1 }),
@@ -158,8 +160,9 @@ document.addEventListener('keydown', (e) => {
 window.__app = {
   ready: true, setups, setView, views: VIEWS, F, A, B, Q, src: shared.src, shared,
   get view() { return app.view; },
-  /** Hold the clock (the tests move it with step) or let it run again. */
-  hold(on = true) { held = on; last = 0; },
+  /** Hold the clock (the tests move it with step) or let it run again.  Held, view 3 computes its
+   *  A-scans itself as the clock is stepped, rather than in its worker. */
+  hold(on = true) { held = on; shared.held = on; last = 0; },
   /** Move the clock on by dt seconds, n times, and draw. */
   step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) VIEWS[app.view].tick(dt); VIEWS[app.view].draw(true); },
 };

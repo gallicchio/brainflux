@@ -3,7 +3,7 @@ import { Source, glassAt, glassBeta, TWO_PI } from '../oct/source.js';
 import { makeStack, plateStack, bursts, makeScene, mulberry32, fresnel } from '../oct/sample.js';
 import { detectorTrace, demodulate, peaks, peakWidth, dcLevel } from '../oct/tdoct.js';
 import { makeSpectrometer, cameraSpectrum, fdAScan, positiveHalf, fold } from '../oct/fdoct.js';
-import { BScan, Volume, column, sceneBeam, ridge, fitLine } from '../oct/scan.js';
+import { BScan, Volume, column, sceneBeam, ridge, fitLine, repeatPlan, averagedContrast, speckleRegion, speckleContrast, regionWidths } from '../oct/scan.js';
 
 /** The A-scan of a set of bursts by the time-domain route: trace, then demodulation. */
 function tdAScan(B, src, Dmax, opts = {}) {
@@ -250,4 +250,133 @@ test('scenes: attenuation e^{−∫μ dz}, optical depth n₀z₀ + Σ nᵢtᵢ,
     if (ix === 5) assert(a === yz[iy * 64 + 20], 'xz against yz');
   }
   return `optical depth of the retina's bottom at (0.8, 0.1) mm: ${p.dtops[sc.nb].toFixed(1)} μm, amplitude left ${sc.through(p, p.tops[sc.nb]).toFixed(3)}`;
+});
+
+// ------------------------------------------------------------------------- averaging B-scans
+
+/** A retina's B-scan (no cyst) measured on every eighth column, and its speckle-free picture there. */
+function speckleBench(noise = 0) {
+  const src = new Source(840, 50), sc = makeScene('retina', { lesion: false }), beam = sceneBeam(sc, src, 0.03, 260), bs = new BScan(sc, src);
+  const cols = [];
+  for (let ix = 3; ix < bs.nx; ix += 8) cols.push(ix);
+  const ref = new Float32Array(bs.nx * bs.nz);
+  for (const ix of cols) column(sc, src, bs.x(ix), 0, bs.hd, bs.nz, ref.subarray(ix * bs.nz, (ix + 1) * bs.nz), { beam, speckle: false, quick: true });
+  const o = { beam, speckle: true, noise };
+  const measure = (N, how, step = 0) => {
+    bs.setAverage(N, how, step);
+    for (let k = 0; k < N; k++) for (const ix of cols) bs.measure(ix, o, k);
+    return speckleContrast(bs, ref, cols, { noisePower: 2 * noise * noise });
+  };
+  return { src, sc, beam, bs, cols, ref, measure };
+}
+
+test('averaging N B-scans of moving tissue: the speckle contrast falls as C₁/√N, the mean brightness stays', () => {
+  const { measure } = speckleBench(10 ** (-72 / 20) / Math.SQRT2), out = [];
+  const one = measure(1, 'tissue');
+  assert(one.C > 1.1 && one.C < 1.45 && one.n > 5000, `one B-scan: contrast ${one.C} over ${one.n} samples`);
+  for (const N of [2, 4, 16]) {
+    const r = measure(N, 'tissue');
+    close(r.C * Math.sqrt(N) / one.C, 1, 0.04, `N = ${N}: C_N √N / C₁`);
+    close(r.mean, 1, 0.03, `N = ${N}: the mean of I/I₀`);
+    out.push(`${N}: ${r.C.toFixed(3)} (C₁/√N = ${(one.C / Math.sqrt(N)).toFixed(3)}), mean ${r.mean.toFixed(3)}`);
+  }
+  return `C₁ = ${one.C.toFixed(3)} over ${one.n} samples; ${out.join('; ')}`;
+});
+
+test('averaging with nothing moved: the same speckle every time, so the contrast stays (only the noise is new)', () => {
+  const { bs, cols, measure } = speckleBench(0), one = measure(1, 'beam', 0), img1 = bs.img.slice();
+  const r = measure(8, 'beam', 0);
+  let worst = 0;
+  for (const ix of cols) for (let m = 0; m < bs.nz; m++) { const a = img1[ix * bs.nz + m]; if (a > 1e-6) worst = Math.max(worst, Math.abs(bs.img[ix * bs.nz + m] / a - 1)); }
+  assert(worst < 1e-5, `eight repeats of the same speckle differ from one by ${worst}`);
+  close(r.C, one.C, 1e-4, 'contrast');
+  // With noise, each repeat's noise is its own, and the contrast still stays.
+  const noisy = speckleBench(10 ** (-72 / 20) / Math.SQRT2), n1 = noisy.measure(1, 'beam', 0), n8 = noisy.measure(8, 'beam', 0);
+  close(n8.C, n1.C, 0.01 * n1.C, 'with noise');
+  return `without noise the average of 8 equals one B-scan to ${worst.toExponential(1)}, contrast ${r.C.toFixed(3)}; with the noise floor at −72 dB: ${n1.C.toFixed(3)} → ${n8.C.toFixed(3)}`;
+});
+
+test('the speckle grain is a beam wide: two A-scans δ apart are correlated e^{−2δ²/w²} in intensity', () => {
+  const src = new Source(840, 50), sc = makeScene('retina', { lesion: false }), beam = sceneBeam(sc, src, 0.03, 260), bs = new BScan(sc, src);
+  const cols = [];
+  for (let ix = 3; ix < bs.nx; ix += 8) cols.push(ix);
+  const nz = bs.nz, a = new Float64Array(nz), b = new Float64Array(nz), m0 = new Float64Array(nz), ws = regionWidths(bs, beam, cols, 1), out = [];
+  for (const f of [0.5, 1, 1.5]) {
+    const d = f * beam.w0;
+    let su = 0, sv = 0, suu = 0, svv = 0, suv = 0, n = 0;
+    for (const ix of cols) {
+      const x = bs.x(ix);
+      column(sc, src, x, 0, bs.hd, nz, a, { beam, speckle: true });
+      column(sc, src, x, d, bs.hd, nz, b, { beam, speckle: true });
+      column(sc, src, x, 0, bs.hd, nz, m0, { beam, speckle: false, quick: true });
+      for (const [p, q] of speckleRegion(sc, x, 0, bs.hd, nz)) for (let m = p; m < q; m++) {
+        const u = (a[m] / m0[m]) ** 2, v = (b[m] / m0[m]) ** 2;
+        su += u; sv += v; suu += u * u; svv += v * v; suv += u * v; n++;
+      }
+    }
+    assert(n === ws.length, `${n} samples, ${ws.length} widths`);
+    const mu = su / n, mv = sv / n, corr = (suv / n - mu * mv) / Math.sqrt((suu / n - mu * mu) * (svv / n - mv * mv));
+    const want = ws.reduce((s, w) => s + Math.exp((-2 * d * d) / (w * w)), 0) / n;
+    assert(Math.abs(corr - want) < 0.03, `δ = ${d.toFixed(2)} μm: correlation ${corr}, want ${want}`);
+    out.push(`δ = ${f} w₀: ${corr.toFixed(3)} (${want.toFixed(3)})`);
+  }
+  return `${out.join('; ')}; w₀ = ${beam.w0.toFixed(2)} μm, the beam's width averaged over the samples`;
+});
+
+test('averaging beams a step apart: C_N = C₁ √(Σ_jk e^{−2δ_jk²/w²})/N', () => {
+  const { beam, bs, cols, measure } = speckleBench(0), one = measure(1, 'beam', 0), ws = regionWidths(bs, beam, cols, 3), out = [];
+  close(averagedContrast(repeatPlan(16, 'tissue'), 9), 0.25, 1e-12, 'independent repeats: 1/√16');
+  close(averagedContrast(repeatPlan(16, 'beam', 0), 9), 1, 1e-12, 'the same repeat sixteen times');
+  for (const [step, N] of [[4.5, 16], [9, 4], [9, 16], [18, 16]]) {
+    const r = measure(N, 'beam', step), want = averagedContrast(repeatPlan(N, 'beam', step), ws);
+    close(r.C / one.C, want, 0.03 * want, `step ${step} μm, N = ${N}`);
+    out.push(`${step} μm × ${N}: ${(r.C / one.C).toFixed(3)} of C₁ (${want.toFixed(3)})`);
+  }
+  return out.join('; ');
+});
+
+// ------------------------------------------------------------------------- flattening
+
+test('a flattened en-face slab follows its layer: one layer under every A-scan, where a flat plane crosses several', () => {
+  const src = new Source(840, 50), sc = makeScene('retina', { lesion: false }), beam = sceneBeam(sc, src, 0.03, 260);
+  const v = new Volume(sc, src, { nx: 16, ny: 16, nz: 256 }), n = v.nx * v.ny;
+  v.measureAll({ beam, speckle: false });
+  const bandUnder = (ix, iy, row) => {
+    const prof = sc.profile(v.x(ix), v.y(iy)), d = (row + 0.5) * v.hd;
+    let lo = 0, hi = sc.depth;
+    for (let it = 0; it < 40; it++) { const z = 0.5 * (lo + hi); if (sc.zToD(prof, z) < d) lo = z; else hi = z; }
+    return sc.bandAt(prof, 0.5 * (lo + hi));
+  };
+  const cv = (a) => { let s = 0, s2 = 0; for (const x of a) { s += x; s2 += x * x; } const m = s / a.length; return Math.sqrt(s2 / a.length - m * m) / m; };
+  const out = [];
+  // (Not the surface: over the pit the inner layers thin to nothing, so no depth below the surface
+  // stays in one of them.)  In the pigment epithelium, and in the photoreceptors above it:
+  for (const [band, below, inside] of [[7, 11, 7], [7, -18, 6]]) {
+    const L = v.layerDepths(band);
+    let mean = 0, worst = 0;
+    const seen = new Map(), flatSeen = new Map();
+    for (let iy = 0; iy < v.ny; iy++) for (let ix = 0; ix < v.nx; ix++) {
+      const row = v.followRow(L[iy * v.nx + ix], below);
+      mean += row / n;
+      // The slab's middle is `below` μm under the layer, to within half a sample.
+      worst = Math.max(worst, Math.abs(((Math.round(row) + 0.5) * v.hd - L[iy * v.nx + ix]) / sc.nView - below));
+      const b = bandUnder(ix, iy, Math.round(row));
+      seen.set(b, (seen.get(b) || 0) + 1);
+    }
+    for (let iy = 0; iy < v.ny; iy++) for (let ix = 0; ix < v.nx; ix++) { const b = bandUnder(ix, iy, Math.round(mean)); flatSeen.set(b, (flatSeen.get(b) || 0) + 1); }
+    assert(worst <= v.hd / (2 * sc.nView) + 1e-9, `the slab ${worst} μm off`);
+    assert(seen.size === 1 && seen.get(inside) === n, `following band ${band} at ${below} μm: bands ${[...seen]}`);
+    assert(flatSeen.size >= 2 && Math.max(...flatSeen.values()) < 0.9 * n, `flat plane: bands ${[...flatSeen]}`);
+    const fol = v.sliceFollow(L, below, 1), flat = v.sliceXY(Math.round(mean));
+    // sliceFollow takes the samples it says it does.
+    const ix = 5, iy = 9, m = Math.round(v.followRow(L[iy * v.nx + ix], below));
+    close(fol[iy * v.nx + ix], v.data[(iy * v.nx + ix) * v.nz + m], 1e-12, 'one sample');
+    const thick = v.sliceFollow(L, below, 5)[iy * v.nx + ix];
+    let s5 = 0;
+    for (let q = m - 2; q <= m + 2; q++) s5 += v.data[(iy * v.nx + ix) * v.nz + q];
+    close(thick, s5 / 5, 1e-6, 'five samples');
+    assert(cv(fol) < 0.25 && cv(flat) > 0.4, `brightness across the slab: following ${cv(fol)}, flat ${cv(flat)}`);
+    out.push(`${sc.bands[band].name} ${below > 0 ? '+' : ''}${below} μm: one layer (${sc.bands[inside].name}), spread ${cv(fol).toFixed(2)}; flat at ${((Math.round(mean) + 0.5) * v.hd / sc.nView).toFixed(0)} μm: ${flatSeen.size} layers, spread ${cv(flat).toFixed(2)}`);
+  }
+  return out.join('; ');
 });

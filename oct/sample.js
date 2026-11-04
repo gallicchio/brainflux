@@ -360,10 +360,12 @@ export const CELL = 10;
  * depth: Float64Array of [x, y, z, amplitude, ...], the amplitude including what the light loses
  * on its way there and back.  count: scatterers per cell per 100 μm of depth.  The amplitudes are
  * Rayleigh-distributed about the local mean `scatter` (scale s √(2/π), so their mean is s and
- * their mean square (4/π) s²); their phases come from their depths (scan.js).
+ * their mean square (4/π) s²); their phases come from their depths (scan.js).  real: which
+ * realisation (0, the scene's own; 1, 2, ...: the same tissue with its scatterers in other places,
+ * as when it has moved between two measurements).
  */
-export function cellScatterers(scene, i, j, { count = 40 } = {}) {
-  const rng = mulberry32(hashCell(i, j, 0, scene.opts.seed));
+export function cellScatterers(scene, i, j, { count = 40, real = 0 } = {}) {
+  const rng = mulberry32(hashCell(i, j, 2 * real, scene.opts.seed));
   const n = Math.round((count * scene.depth) / 100);
   const out = new Float64Array(4 * n);
   const prof = scene.profile((i + 0.5) * CELL, (j + 0.5) * CELL);

@@ -183,11 +183,28 @@ function fmtUm(d) { return `${+d.toFixed(2)}`; }
  *       top (the tissue's top in px: the galvo and the lens are above), bottom }, pointer: { x, z } }
  * Returns { X(x), Z(z), invX(px), invZ(py), left, top, w, h }.
  */
+// The scene's still part (its bands, painted a pixel column at a time, the lesion, the beads),
+// kept on a canvas of its own while nothing about it changes, so that a frame only copies it.
+const sceneCache = { key: null, canvas: null };
 export function drawScene(canvas, o) {
-  const { ctx, width, height } = fitCanvas(canvas);
+  const { ctx, width, height, dpr } = fitCanvas(canvas);
   const sc = o.scene, L = o.layout, y = o.y || 0, hw = sc.halfWidth;
   const left = L.left, w = width - L.left - L.right, top = L.top, h = height - L.top - L.bottom;
   const X = (x) => left + ((x + hw) / (2 * hw)) * w, Z = (z) => top + (z / sc.depth) * h;
+  const key = [sc, y, canvas.width, canvas.height, left, top, w, h];
+  if (!sceneCache.key || key.some((v, i) => v !== sceneCache.key[i])) {
+    const c = sceneCache.canvas || (sceneCache.canvas = document.createElement('canvas'));
+    c.width = canvas.width; c.height = canvas.height;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawSceneStill(g, { sc, y, hw, width, height, left, top, w, h, X, Z });
+    sceneCache.key = key;
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(sceneCache.canvas, 0, 0); ctx.restore();
+  return drawSceneMoving(ctx, o, { sc, hw, left, top, w, h, X, Z });
+}
+
+function drawSceneStill(ctx, { sc, y, hw, width, height, left, top, w, h, X, Z }) {
   ctx.fillStyle = '#0d0f14'; ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = '#12151c'; ctx.fillRect(left, top, w, h);
   // The bands, pixel column by pixel column (their tops are curves).
@@ -232,6 +249,9 @@ export function drawScene(canvas, o) {
     for (const bd of sc.beadsNear(0, y, hw)) if (Math.abs(bd.y - y) < 1) { ctx.beginPath(); ctx.arc(X(bd.x), Z(bd.z), 1.6, 0, 2 * Math.PI); ctx.fill(); }
   }
   ctx.restore();
+}
+
+function drawSceneMoving(ctx, o, { sc, hw, left, top, w, h, X, Z }) {
   // The galvo mirror and the scan lens above the sample; the beam.
   const bx = X(o.x), bm = o.beam, gy = Math.max(16, top * 0.36), lensY = top * 0.72, gx = left + 0.06 * w;
   ctx.strokeStyle = BEAM; ctx.lineWidth = 1.6; ctx.globalAlpha = 0.9;
@@ -273,8 +293,11 @@ export function drawScene(canvas, o) {
  * depth down, y receding up and to the right at half scale.
  *   o: { nx, ny, nz, ix, iy, m (where the slices are), xz, yz, xy (canvases holding the slices'
  *       images: x across and depth down; y across and depth down; x across and y down), done (which
- *       B-scans are measured) }
+ *       B-scans are measured), surface (optional: Float32Array nx × ny, the en-face slab's depth
+ *       under each A-scan as a fraction of the cube's, when it follows a layer rather than lying
+ *       flat at m: drawn curved, in small tiles each tilted to its corners' depths) }
  */
+let slabCanvas = null;
 export function drawCube(canvas, o) {
   const { ctx, width, height } = fitCanvas(canvas);
   const dpr = window.devicePixelRatio || 1;
@@ -303,10 +326,30 @@ export function drawCube(canvas, o) {
   for (let iy = 0; iy < o.ny; iy++) if (o.done[iy]) { const t = (iy + 0.5) / o.ny; edge(px(0, t, 0), px(1, t, 0), 'rgba(255,90,60,0.3)'); }
   // The slices: the cross-section at x, the en-face plane at depth, the B-scan at y.
   quad(px(fx, 0, 0), px(fx, 1, 0), px(fx, 0, 1), o.yz, 0.9);
-  quad(px(0, 0, fz), px(1, 0, fz), px(0, 1, fz), o.xy, 0.9);
+  if (o.surface && o.xy && o.xy.width) {
+    // The slab following a layer: tiles of T × T pixels of its image, each mapped to the depths
+    // of its corners (the mean of the A-scans around each corner), drawn back to front onto a
+    // canvas of their own (opaque, overlapping by a little so no seams show), then laid in the
+    // cube like the other slices.
+    const nx = o.nx, ny = o.ny, S = o.surface, T = 2;
+    const zc = (i, j) => { let s = 0, n = 0; for (const a of [i - 1, i]) for (const b of [j - 1, j]) if (a >= 0 && a < nx && b >= 0 && b < ny) { s += S[b * nx + a]; n++; } return s / n; };
+    if (!slabCanvas || slabCanvas.width !== canvas.width || slabCanvas.height !== canvas.height) { slabCanvas = document.createElement('canvas'); slabCanvas.width = canvas.width; slabCanvas.height = canvas.height; }
+    const g = slabCanvas.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, slabCanvas.width, slabCanvas.height); g.imageSmoothingEnabled = true;
+    const e = 0.35;   // the overlap, in image pixels
+    for (let ty = ny - T; ty >= 0; ty -= T) for (let tx = 0; tx < nx; tx += T) {
+      const a = px(tx / nx, ty / ny, zc(tx, ty)), b = px((tx + T) / nx, ty / ny, zc(tx + T, ty)), c = px(tx / nx, (ty + T) / ny, zc(tx, ty + T));
+      g.setTransform(dpr * (b[0] - a[0]) / T, dpr * (b[1] - a[1]) / T, dpr * (c[0] - a[0]) / T, dpr * (c[1] - a[1]) / T, dpr * a[0], dpr * a[1]);
+      g.drawImage(o.xy, tx, ty, T, T, -e, -e, T + 2 * e, T + 2 * e);
+    }
+    ctx.save(); ctx.globalAlpha = 0.9; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(slabCanvas, 0, 0); ctx.restore();
+    const curve = (pts) => { ctx.strokeStyle = SLICE.xy; ctx.lineWidth = 1.5; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.stroke(); };
+    curve(Array.from({ length: nx + 1 }, (_, i) => px(i / nx, 0, zc(i, 0)))); curve(Array.from({ length: nx + 1 }, (_, i) => px(i / nx, 1, zc(i, ny))));
+    curve(Array.from({ length: ny + 1 }, (_, j) => px(0, j / ny, zc(0, j)))); curve(Array.from({ length: ny + 1 }, (_, j) => px(1, j / ny, zc(nx, j))));
+  } else quad(px(0, 0, fz), px(1, 0, fz), px(0, 1, fz), o.xy, 0.9);
   quad(px(0, fy, 0), px(1, fy, 0), px(0, fy, 1), o.xz, 0.92);
   outline([px(fx, 0, 0), px(fx, 1, 0), px(fx, 1, 1), px(fx, 0, 1)], SLICE.yz);
-  outline([px(0, 0, fz), px(1, 0, fz), px(1, 1, fz), px(0, 1, fz)], SLICE.xy);
+  if (!o.surface) outline([px(0, 0, fz), px(1, 0, fz), px(1, 1, fz), px(0, 1, fz)], SLICE.xy);
   outline([px(0, fy, 0), px(1, fy, 0), px(1, fy, 1), px(0, fy, 1)], SLICE.xz);
   // The front edges.
   edge(px(0, 0, 0), px(1, 0, 0)); edge(px(0, 0, 0), px(0, 0, 1)); edge(px(0, 0, 1), px(1, 0, 1)); edge(px(1, 0, 0), px(1, 0, 1));
