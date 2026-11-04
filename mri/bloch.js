@@ -290,3 +290,59 @@ export function lorentzOffsets(n, T2prime, seed = 3) {
   for (let i = 0; i < n; i++) out[i] = Number.isFinite(T2prime) ? hw * Math.tan(Math.PI * (rand() - 0.5) * 0.98) : 0;
   return out;
 }
+
+/**
+ * A column of spins along z taken through slice selection, with snapshots for an animation:
+ * the sinc pulse (bandwidth bw kHz, length T ms, flip angle, at the offset fc kHz from f0)
+ * under the gradient Gz from t = 0 to T, then from T to 1.5 T the rephasing lobe -Gz (or no
+ * gradient, if not rephase).  It is seen from a frame that turns with the centre of the slab,
+ * z0 = fc / (GB Gz): the pulse's own frame while it plays, and after it the frame in which the
+ * spins at z0 stand still, so that the slab's centre ends along x' wherever the slice is (a
+ * scanner sets the pulse's phase to the same effect).  zs: the spins' heights (mm).
+ * Returns {zs, times, mx, my, mz}
+ * with one Float32Array of the column per snapshot, `frames` of them evenly spaced from 0 to
+ * 1.5 T, and the pulse.
+ */
+export function sliceMovie({ Gz, bw, T = 3, flip = Math.PI / 2, fc = 0, rephase = true, zs, frames = 90, n = 240 }) {
+  const spins = Spins.column(zs), p = sincPulse(bw, T, flip, n), Tend = 1.5 * T;
+  const times = Float64Array.from({ length: frames }, (_, i) => (i * Tend) / (frames - 1));
+  const mx = [], my = [], mz = [];
+  const snap = () => { mx.push(Float32Array.from(spins.mx)); my.push(Float32Array.from(spins.my)); mz.push(Float32Array.from(spins.mz)); };
+  let t = 0, k = 0;
+  snap();
+  for (let f = 1; f < frames; f++) {
+    const target = times[f];
+    while (t < target - 1e-12) {
+      if (t < T - 1e-12 && k < n) {
+        // One step of the pulse (B1 along -y), or the part of it up to the snapshot.
+        const step = Math.min(p.dt * (k + 1) - t, target - t), b1 = p.b1[k];
+        spins.rfStep(0, -b1, step, 0, 0, Gz, fc);
+        t += step;
+        if (t >= p.dt * (k + 1) - 1e-12) k++;
+      } else {
+        // (Seen from a frame that turns with the slab's centre, as during the pulse: there the
+        // field is G(t) (z - z0), so an off-centre slice behaves as a centred one would.)
+        const step = target - t;
+        spins.df.fill(rephase ? fc : 0);
+        spins.precess(step, 0, 0, rephase ? -Gz : 0);
+        t = target;
+      }
+    }
+    snap();
+  }
+  return { zs, times, mx, my, mz, pulse: p, T, Tend, thickness: Math.abs(bw / (GB * Gz)), centre: fc / (GB * Gz) };
+}
+
+/** The spectrum of a pulse's envelope b1(t) (from sincPulse), |integral of b1 e^{2 pi i f t} dt|,
+ *  at the frequency offsets fs (kHz) from the pulse's own frequency; 2 pi times it is the tip
+ *  angle a spin that far off resonance gets, for small tips. */
+export function pulseSpectrum(p, fs) {
+  const out = new Float64Array(fs.length), tc = p.T / 2;
+  for (let q = 0; q < fs.length; q++) {
+    let re = 0, im = 0;
+    const w = TWO_PI * fs[q];
+    for (let i = 0; i < p.b1.length; i++) { const a = w * (p.t[i] - tc); re += p.b1[i] * Math.cos(a) * p.dt; im += p.b1[i] * Math.sin(a) * p.dt; }
+    out[q] = Math.hypot(re, im);
+  }
+  return out;
+}

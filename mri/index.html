@@ -27,6 +27,13 @@
       <div class="hint" id="v1-hint">Drag a piece of the sample (its sides to widen it); drag the ● at the end of the field line to tilt it, and watch the spectrum</div>
       <div class="readout small" id="v1-readout" aria-live="off"></div>
     </div>
+
+    <!-- 2 · A slice: slice selection -->
+    <div class="view" id="view-slice">
+      <div class="plot-wrap v2-main"><canvas id="v2-main" tabindex="0" aria-label="Slice selection: the pulse and the gradient against time; the frequencies in the pulse; the field's line, height against frequency, where the pulse's band picks a slab; the head from the side with the slab lit; the spins across the slab, magnified; and the slice seen from above. Drag the band of frequencies (its middle to move it, its edges to widen it), the handle on the field's line to tilt it, or click the head to put the slice there."></canvas></div>
+      <div class="hint" id="v2-hint">Drag the pulse's band of frequencies (its middle, or an edge) or the ● on the field line; or click the head where you want the slice</div>
+      <div class="readout small" id="v2-readout" aria-live="off"></div>
+    </div>
   </section>
 
   <aside class="controls" id="controls">
@@ -51,6 +58,22 @@
         <div class="stack" id="v1-more-box"></div>
       </details>
     </div>
+    <!-- view 2 -->
+    <div class="panel only-slice">
+      <div class="label">The slice</div>
+      <div id="v2-slice-box" class="stack"></div>
+      <div class="small muted">The pulse is a sinc in time, so its frequencies are a band, f₀ + f_c ± Δf/2.  Only the spins whose Larmor frequency falls in the band are tipped.</div>
+      <div class="row" id="v2-rephase-row"></div>
+    </div>
+    <div class="panel only-slice">
+      <div class="label">Playing it</div>
+      <div class="row" id="v2-play-row"></div>
+      <div id="v2-speed-box"></div>
+      <details id="v2-more">
+        <summary class="small">More: the pulse's length and tip angle</summary>
+        <div class="stack" id="v2-more-box"></div>
+      </details>
+    </div>
   </aside>
 </main>
 
@@ -65,6 +88,9 @@
     The field rises along the sample (the tilted line), so each spin turns at a rate that tells
     where it is, and the signal's spectrum is a picture of the sample along that line.  Drag the
     pieces of the sample and watch the spectrum follow; tilt the field line and watch it widen.</p>
+    <p><b>2 · A slice.</b>  A head, and a gradient along the body.  A pulse that holds only a
+    narrow band of frequencies tips only the spins whose frequency is in the band: one slice.
+    Drag the band, or click the head where you want the slice; watch the spins tip over.</p>
   </section>
 
   <article class="exp" data-setup="axis">
@@ -129,6 +155,56 @@
     closer together than the arrows.  (Under <em>More</em>, a magnet's unevenness, $T_2^*$,
     blurs each edge too: with $T_2^*=2$ ms every line of the spectrum is $1/\pi T_2^*=159$ Hz
     wide, 1.87 mm at this gradient.)</p>
+  </article>
+
+  <article class="exp" data-setup="slice">
+    <h3>6. A pulse with a band of frequencies tips one slice</h3>
+    <p>Now a gradient along the body, $G_z=4$ mT/m: the Larmor frequency rises 170.3 Hz for every
+    millimetre up the head (the line on the left).  The pulse is a sinc in time, 3 ms long, so its
+    frequencies are a band, nearly a box (the close-up): it holds $f_0\pm0.75$ kHz and almost
+    nothing else.  A spin is tipped only if the pulse holds its frequency, so only the spins
+    where the band meets the line are tipped (the arrows on the right fall over; the rest stay
+    up along $B_0$), a slab
+    $$\Delta z=\frac{\Delta f}{\bar\gamma G_z}=\frac{1.5\ \mathrm{kHz}}{170.3\ \mathrm{Hz/mm}}=8.81\ \mathrm{mm}$$
+    thick.  The slab the spins show is 9.45 mm wide at half height: the rule holds for small
+    tips (8.86 mm at 30°, under <em>More</em>), and a 90° pulse tips a little wider.  This is a
+    resonance doing the work: a spin out of the band is driven at the wrong frequency, and the
+    pulse only makes it wobble.</p>
+  </article>
+
+  <article class="exp" data-setup="moveslice">
+    <h3>7. Tune the pulse, and the slice moves</h3>
+    <p>The slice is wherever the spins' frequency matches the pulse's, at
+    $z=f_c/\bar\gamma G_z$.  The pulse is tuned to $f_c=-6.47$ kHz below $f_0$, which puts the
+    slice 38 mm down, through the eyes (the picture from above, top right).  Drag the band, or
+    click the head: up at $z=+40$ mm ($f_c=+6.81$ kHz) the ventricles have gone, and above the top
+    of the head there is nothing to tip.  A scanner moves its slices this way, by retuning the
+    pulse, not by moving the patient.</p>
+  </article>
+
+  <article class="exp" data-setup="thin">
+    <h3>8. Two ways to a thinner slice</h3>
+    <p>The band at half its width, $\Delta f=0.75$ kHz: the rule says 4.40 mm, but the spins show
+    5.60 mm.  A sinc 3 ms long that holds so few frequencies has hardly any lobes beside its
+    middle (look at the pulse), and its band is rounded rather than a box.  Instead put the band
+    back to 1.5 kHz and double the gradient to 8 mT/m: the slice is again 4.40 mm by the rule,
+    and 4.72 mm as tipped, because the pulse is the same.  A sharp band needs a pulse that lasts
+    many times $1/\Delta f$: under <em>More</em>, a 0.5 kHz band takes an 8 ms pulse to tip
+    3.22 mm (2.94 by the rule; 4.75 with 3 ms).  Strong gradients are how scanners make thin
+    slices quickly.</p>
+  </article>
+
+  <article class="exp" data-setup="rephase">
+    <h3>9. The gradient twists the slab; the reversed lobe untwists it</h3>
+    <p>The rephasing lobe is off.  While the pulse plays, the gradient is on, so the spins across
+    the slab keep turning at their different frequencies: the slab ends twisted, its phase
+    changing from one face to the other (the colours across it).  Twisted, its spins add up to
+    only 3.0% of what they would in step, and the slice would give almost no signal.  Turn the
+    lobe on: after the pulse the gradient is reversed for half the pulse's length, and every
+    spin turns back by the twist it gained since the middle of the pulse (where, for a sinc,
+    the tipping happens).  The slab ends in step, 95.5% (a 90° tip leaves a little twist).  The
+    page watches from a frame that turns with the slab's centre, so its spins end along $x'$
+    wherever the slice is.</p>
   </article>
 
   <section class="theory">

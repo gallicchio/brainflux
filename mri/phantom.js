@@ -34,21 +34,56 @@ export function tissueAt(name, B0 = 1.5) {
 export const ellipse = (x, y, a, b, phiDeg, tissue) => ({ x, y, a, b, phi: (phiDeg * Math.PI) / 180, tissue });
 export const disk = (x, y, R, tissue) => ellipse(x, y, R, R, 0, tissue);
 
-/** A head seen from above, in the spirit of the Shepp-Logan phantom: scalp fat, skull, CSF,
- *  cortex, white matter, two ventricles, a lesion.  About 190 x 220 mm. */
-export function headPhantom() {
+// Ellipsoids: {x, y, z, a, b, c, phi, tissue}, an ellipse (x, y, a, b, phi) in every plane of
+// constant z, shrinking as sqrt(1 - ((z - z0)/c)^2) away from its centre z0.  z runs along the
+// body (and along B0), up through the top of the head.
+export const ellipsoid = (x, y, z, a, b, c, phiDeg, tissue) => ({ x, y, z, a, b, c, phi: (phiDeg * Math.PI) / 180, tissue });
+
+/** A head, in the spirit of the Shepp-Logan phantom, in three dimensions: scalp fat, skull,
+ *  cerebrospinal fluid, cortex, white matter, two ventricles, a lesion, a pocket of fat, and
+ *  the eyes, low in the front.  About 190 x 220 mm across and 236 mm tall. */
+export function head3D() {
   return [
-    ellipse(0, 0, 95, 110, 0, 'fat'),       // scalp
-    ellipse(0, 0, 88, 103, 0, 'bone'),      // skull
-    ellipse(0, 0, 82, 97, 0, 'water'),      // cerebrospinal fluid
-    ellipse(0, -2, 78, 92, 0, 'grey'),      // cortex
-    ellipse(0, -4, 66, 80, 0, 'white'),     // white matter
-    ellipse(-22, 8, 11, 32, 15, 'water'),   // left ventricle
-    ellipse(22, 8, 11, 32, -15, 'water'),   // right ventricle
-    ellipse(38, -38, 12, 9, 20, 'lesion'),  // a lesion
-    ellipse(-40, 52, 7, 7, 0, 'fat'),       // a pocket of fat
+    ellipsoid(0, 0, 0, 95, 110, 118, 0, 'fat'),        // scalp
+    ellipsoid(0, 0, 0, 88, 103, 111, 0, 'bone'),       // skull
+    ellipsoid(0, 0, 0, 82, 97, 105, 0, 'water'),       // cerebrospinal fluid
+    ellipsoid(0, -2, 0, 78, 92, 100, 0, 'grey'),       // cortex
+    ellipsoid(0, -4, 0, 66, 80, 82, 0, 'white'),       // white matter
+    ellipsoid(-22, 8, 6, 11, 32, 30, 15, 'water'),     // left ventricle
+    ellipsoid(22, 8, 6, 11, 32, 30, -15, 'water'),     // right ventricle
+    ellipsoid(38, -38, 0, 12, 9, 14, 20, 'lesion'),    // a lesion
+    ellipsoid(-40, 52, 0, 7, 7, 7, 0, 'fat'),          // a pocket of fat
+    ellipsoid(-30, 74, -38, 12, 12, 12, 0, 'water'),   // the eyes
+    ellipsoid(30, 74, -38, 12, 12, 12, 0, 'water'),
   ];
 }
+
+/** The ellipses that ellipsoids make in the plane z (a slice seen from above). */
+export function sliceOf(shapes3d, z) {
+  const out = [];
+  for (const e of shapes3d) {
+    const u = (z - e.z) / e.c;
+    if (Math.abs(u) >= 1) continue;
+    const s = Math.sqrt(1 - u * u);
+    out.push({ x: e.x, y: e.y, a: e.a * s, b: e.b * s, phi: e.phi, tissue: e.tissue });
+  }
+  return out;
+}
+
+/** The tissue at the point (x, y, z): the last ellipsoid that contains it, or null. */
+export function tissueAt3D(shapes3d, x, y, z) {
+  let t = null;
+  for (const e of shapes3d) {
+    const dx = x - e.x, dy = y - e.y, c = Math.cos(e.phi), sn = Math.sin(e.phi);
+    const u = (dx * c + dy * sn) / e.a, w = (-dx * sn + dy * c) / e.b, v = (z - e.z) / e.c;
+    if (u * u + w * w + v * v <= 1) t = e.tissue;
+  }
+  return t;
+}
+
+/** The head seen from above at the height z = 0: scalp fat, skull, CSF, cortex, white matter,
+ *  two ventricles, a lesion, a pocket of fat.  About 190 x 220 mm. */
+export function headPhantom(z = 0) { return sliceOf(head3D(), z); }
 
 /** Three disks: water, fat and white matter (drag them). */
 export function disksPhantom() {

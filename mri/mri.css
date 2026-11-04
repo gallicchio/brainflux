@@ -38,12 +38,15 @@
 
 /* One view at a time, and only its controls. */
 .view { display: none; flex-direction: column; gap: 6px; }
-.mri[data-view="axis"] #view-axis { display: flex; }
-.mri:not([data-view="axis"]) .only-axis { display: none; }
+.mri[data-view="axis"] #view-axis, .mri[data-view="slice"] #view-slice { display: flex; }
+.mri:not([data-view="axis"]) .only-axis, .mri:not([data-view="slice"]) .only-slice { display: none; }
 
 /* 1 · One axis: one canvas, the field, the sample and its spins, the spectrum and the signal */
 .v1-main { height: max(540px, calc(100vh - 230px)); max-height: 720px; }
 #v1-main { cursor: default; }
+
+/* 2 · A slice */
+.v2-main { height: max(560px, calc(100vh - 230px)); max-height: 760px; }
 
 .readout { color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 3em; line-height: 1.5; }
 .readout b, .readout .fixnum.b { color: var(--ink); font-weight: 600; }
@@ -60,4 +63,5 @@ details[open] summary { margin-bottom: 6px; }
 @media (max-width: 900px) {
   .mri { grid-template-columns: minmax(0, 1fr); padding: 8px; }
   .v1-main { height: 860px; max-height: none; }
+  .v2-main { height: 1060px; max-height: none; }
 }

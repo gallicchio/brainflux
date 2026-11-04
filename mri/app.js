@@ -5,10 +5,12 @@
 // the clock, the address and the experiments.
 
 import { AxisView } from './view-axis.js';
+import { SliceView } from './view-slice.js';
 import { $, segmented, drawer, readHash, writeHash } from '../lib/ui.js';
 
 const VIEWS = [
   { id: 'axis', label: '1 · One axis', make: (app) => new AxisView(app) },
+  { id: 'slice', label: '2 · A slice', make: (app) => new SliceView(app) },
 ];
 
 // (Declared before the views are made: they schedule the address and the clock as they start.)
@@ -17,6 +19,7 @@ let raf = 0, lastT = 0, testHold = false, hashTimer = 0;
 const app = {
   view: 'axis',
   views: {},
+  slice: { z: 0, thickness: 5 },   // the slice picked in view 2, which views 3 and 4 make a picture of
   colors: {},
   scheduleHash, kick,
 };
@@ -75,6 +78,7 @@ function saveHash() { writeHash({ v: app.view, ...current().toHash() }); }
 // ----------------------------------------------------------------------- set-ups
 
 const AXIS = { G: 2, slow: 2, T2s: 20, B0: 1.5 };
+const SLICE = { Gz: 4, bw: 1.5, fc: 0, T: 3, flip: 90, rephase: true, slow: 1.5 };
 const setups = {
   // 1 · One axis
   axis: () => { setView('axis'); app.views.axis.set({ ...AXIS, sample: 'two', t: 0.35 }); },
@@ -82,6 +86,11 @@ const setups = {
   stronger: () => { setView('axis'); app.views.axis.set({ ...AXIS, sample: 'two', G: 5 }); },
   winding: () => { setView('axis'); app.views.axis.set({ ...AXIS, sample: 'one', slow: 6 }); },
   resolution: () => { setView('axis'); app.views.axis.set({ ...AXIS, sample: 'lines', slow: 3 }); },
+  // 2 · A slice
+  slice: () => { setView('slice'); app.views.slice.set({ ...SLICE }); },
+  moveslice: () => { setView('slice'); app.views.slice.set({ ...SLICE, fc: -6.47 }); },
+  thin: () => { setView('slice'); app.views.slice.set({ ...SLICE, bw: 0.75 }); },
+  rephase: () => { setView('slice'); app.views.slice.set({ ...SLICE, rephase: false, fc: 3 }); },
 };
 drawer($('#help'), $('#help-button'), setups);
 
