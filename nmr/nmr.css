@@ -102,6 +102,7 @@
 .nmr[data-view="seq"] .sphere-wrap, .nmr[data-view="earth"] .sphere-wrap { height: max(270px, calc(36vh - 20px)); }
 .nmr .side .curve-wrap { height: max(270px, calc(36vh - 20px)); }
 .nmr[data-view="earth"] .v-earth, .nmr[data-view="earth"] .spec-wrap, .nmr[data-view="earth"] .zoom-wrap, .nmr[data-view="earth"] .curve-wrap { display: block; }
+.board-wrap { height: 104px; }
 .nmr[data-view="one"] .plots2 { grid-template-columns: minmax(0, 1fr); }
 .nmr[data-view="earth"] .raw-wrap { display: none; }
 .nmr .hint.v-seq, .nmr .hint.v-earth { display: none; }
@@ -128,7 +129,9 @@ details[open] summary { margin-bottom: 6px; }
 
 @media (max-width: 900px) {
   .nmr { grid-template-columns: minmax(0, 1fr); padding: 8px; }
-  .sphere-area { grid-template-columns: minmax(0, 1fr); }
+  .sphere-area, .nmr[data-view] .sphere-area { grid-template-columns: minmax(0, 1fr); }
+  .nmr[data-view] .sphere-wrap { height: min(92vw, 380px); }
+  .sphere-note .more { display: none; }
   .sphere-wrap { height: min(92vw, 380px); }
   .plots2 { grid-template-columns: minmax(0, 1fr); }
   .signal-wrap { height: 170px; }

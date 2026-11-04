@@ -22,6 +22,9 @@ export class SphereView {
     this.d = [ce * ca, ce * sa, se];
   }
 
+  /** Look from another direction. */
+  look(az, el) { this.az = az; this.el = el; this.basis(); }
+
   /** Turn the view by a drag of (dx, dy) pixels. */
   turn(dx, dy) {
     this.az -= dx * 0.008;
@@ -68,6 +71,8 @@ export class SphereView {
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
+    // The coil round the sample, along x: its far halves behind the sphere.
+    if (scene.coil) this.coil(ctx, c, 'back');
     // The sphere: a disc with a soft shading, the far half of the equator and of one meridian dashed.
     const g = ctx.createRadialGradient(this.cx - 0.35 * R, this.cy - 0.4 * R, 0.1 * R, this.cx, this.cy, R);
     g.addColorStop(0, c.sphereHi); g.addColorStop(1, c.sphereLo);
@@ -112,7 +117,9 @@ export class SphereView {
     }
 
     // The cone swept by a spin precessing too fast to draw one arrow.
-    if (scene.cone) this.drawCone(ctx, scene.cone, c);
+    if (scene.cone && !this.narrow(scene.cone)) this.drawCone(ctx, scene.cone, c);
+
+    if (scene.coil) this.coil(ctx, c, 'front');
 
     // The main arrow and its projections.
     const m = scene.sum;
@@ -131,12 +138,29 @@ export class SphereView {
         ctx.beginPath(); ctx.moveTo(o[0], o[1]); ctx.lineTo(Z[0], Z[1]); ctx.stroke();
         ctx.globalAlpha = 1;
       }
-      if (!scene.cone || scene.cone.showArrow) this.arrow(ctx, m, c.m, scene.sumWidth ?? 4, 12, 1);
+      if (!scene.cone || this.narrow(scene.cone)) this.arrow(ctx, m, c.m, scene.sumWidth ?? 4, 12, 1);
       if (scene.tipHover && len > 0.05) {
         const T = this.P(m);
         ctx.strokeStyle = c.m; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.6;
         ctx.beginPath(); ctx.arc(T[0], T[1], 11, 0, 2 * Math.PI); ctx.stroke(); ctx.globalAlpha = 1;
       }
+    }
+    ctx.restore();
+  }
+
+  /** Six turns of a coil round the x axis, outside the sphere: the near or the far halves. */
+  coil(ctx, c, half) {
+    ctx.save();
+    ctx.globalAlpha = half === 'front' ? 0.55 : 0.35;
+    for (const x of [-1.05, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1.05]) {
+      ctx.strokeStyle = c.coil; ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      let on = false;
+      for (let k = 0; k <= 72; k++) {
+        const t = (2 * Math.PI * k) / 72, p = this.P([x, 1.08 * Math.cos(t), 1.08 * Math.sin(t)]), vis = half === 'front' ? p[2] >= 0 : p[2] < 0;
+        if (vis) { if (on) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); on = true; } else on = false;
+      }
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -201,6 +225,12 @@ export class SphereView {
       ctx.fillText(f.label, p[0] + (f.dx || 0), p[1] + (f.dy || 0));
     }
     ctx.restore();
+  }
+
+  /** A cone too narrow to see: the arrow lies along its axis, and is drawn as it is. */
+  narrow(cone) {
+    const { axis: n, v } = cone, l = Math.hypot(...v) || 1, a = (v[0] * n[0] + v[1] * n[1] + v[2] * n[2]) / l;
+    return a > Math.cos(0.12);
   }
 
   /** The cone a vector v sweeps precessing about the unit axis n. */

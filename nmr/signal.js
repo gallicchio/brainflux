@@ -86,6 +86,15 @@ export class Record {
     return { max: Math.max(0, best), t: tb };
   }
 
+  /** The time-average of the envelope |M_xy| (noise included) between t0 and t1, the record
+   *  interpolated at n evenly spaced times. */
+  meanEnvelope(t0, t1, sigma = 0, n = 33) {
+    const tmp = [0, 0, 0];
+    let s = 0;
+    for (let k = 0; k < n; k++) { const m = this.at(t0 + ((t1 - t0) * k) / (n - 1), sigma, tmp); s += Math.hypot(m[0], m[1]) * (k === 0 || k === n - 1 ? 0.5 : 1); }
+    return s / (n - 1);
+  }
+
   /** The time-average of M_y′ (noise included) between t0 and t1, a signed amplitude: the
    *  record interpolated at n evenly spaced times (its samples need not be evenly spaced). */
   meanY(t0, t1, sigma = 0, n = 33) {
