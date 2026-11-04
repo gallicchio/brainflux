@@ -21,6 +21,7 @@
   --coil: #b87333;        /* copper */
   --slow: #5b3fc0;        /* spins below the mean frequency … */
   --fast: #d07a00;        /* … and above it */
+  --perp: #1d6fd1;        /* each spin's own part across the field, mean |M⊥ᵢ| */
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -43,6 +44,7 @@
     --coil: #e0a060;
     --slow: #a08cff;
     --fast: #ffb347;
+    --perp: #4f95f0;
   }
 }
 
@@ -99,10 +101,15 @@
 
 /* The plots take no drag, so a finger can scroll the page over them; the timeline's drags are
    sideways.  (The sphere keeps lib's touch-action: none: its tip is dragged every way.) */
-#signal, #raw, #spec, #curve, #zoom, #board, #timeline { touch-action: pan-y; }
+#signal, #raw, #spec, #curve, #zoom, #board, #timeline, #clocks { touch-action: pan-y; }
 /* In view 1 the coil's voltage comes first: it is what the spinning arrow makes. */
 .nmr[data-view="one"] .plots2 { order: 1; }
 .nmr[data-view="one"] .signal-wrap { order: 2; }
+
+/* The three clocks (an experiment of view 2): their plot under the sphere, in place of the signal's. */
+.nmr .clocks-wrap { display: none; height: max(270px, calc(31vh - 10px)); }
+.nmr.clocks .clocks-wrap { display: block; }
+.nmr.clocks .signal-wrap, .nmr.clocks .plots2 { display: none; }
 
 /* Which pictures each view has. */
 .nmr .plot-wrap.v-seq, .nmr .plot-wrap.v-earth, .nmr .spec-wrap, .nmr .curve-wrap, .nmr .zoom-wrap { display: none; }
@@ -165,6 +172,7 @@ details[open] summary { margin-bottom: 6px; }
   .sphere-wrap { height: min(92vw, 380px); }
   .plots2 { grid-template-columns: minmax(0, 1fr); }
   .signal-wrap { height: 170px; }
+  .nmr .clocks-wrap { height: 340px; }
   .raw-wrap, .spec-wrap, .zoom-wrap { height: 140px; }
   .nmr .side .curve-wrap { height: 220px; }
   .nmr[data-view="earth"] .side { grid-template-columns: minmax(0, 1fr); }

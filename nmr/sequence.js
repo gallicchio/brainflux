@@ -58,13 +58,7 @@ export function buildSequence(name, tau, n, T2s) {
  * in a few places).  Returns the engine; its record holds the signal with its unit noise.
  */
 export function runSequence(params, pulses, span, dt, seed = 11, windows = null) {
-  const e = new Engine(params);
-  e.noiseSeed = seed >>> 0;
-  e.setSampling(windows ? Infinity : dt);
-  const B1 = params.B1 ?? e.p.B1, starts = pulses.map((q) => q.t - pulseDuration(q.angle * DEG, B1) / 2);
-  e.reset([0, 0, 1], Math.min(0, ...starts));
-  e.tEnd = span;
-  pulses.forEach((q, i) => e.schedule(starts[i], q.angle, q.phase, B1));
+  const e = startSequence(params, pulses, span, windows ? Infinity : dt, seed);
   if (!windows) { e.advance(span); return e; }
   for (const [a, b] of windows) {
     if (a > e.t) e.advance(a - e.t);
@@ -75,8 +69,93 @@ export function runSequence(params, pulses, span, dt, seed = 11, windows = null)
   return e;
 }
 
+/**
+ * A sequence ready to run, for a caller that moves its clock on bit by bit (the page runs one
+ * alongside its own): a fresh engine with these parameters, every spin along ẑ at the first
+ * pulse's start, the pulses at their times, the record sampled every dt (Infinity: only at the
+ * ends of advances and pulses), the end at span.
+ */
+export function startSequence(params, pulses, span, dt, seed = 11) {
+  const e = new Engine(params);
+  e.noiseSeed = seed >>> 0;
+  e.setSampling(dt);
+  const B1 = params.B1 ?? e.p.B1, starts = pulses.map((q) => q.t - pulseDuration(q.angle * DEG, B1) / 2);
+  e.reset([0, 0, 1], Math.min(0, ...starts));
+  e.tEnd = span;
+  pulses.forEach((q, i) => e.schedule(starts[i], q.angle, q.phase, B1));
+  return e;
+}
+
 /** The time a pulse ends (q.t is its centre). */
 export function pulseEnd(q, B1) { return q.t + pulseDuration(q.angle * DEG, B1) / 2; }
+
+// ------------------------------------------------------------------- the three clocks
+//
+// After one π/2 pulse three things happen at three rates.  The coil sees the sum of the spins,
+// |ΣM⊥ᵢ|/N, which dies as they fan out, with T2* (1/T2* = 1/T2 + 1/T2′; for a Lorentzian spread
+// exactly as e^{−t/T2*}).  Each spin's own part across the field, |M⊥ᵢ|, is not shortened by the
+// fan at all: between pulses the field is along ẑ, the spin turns about it, and the Bloch
+// equations give d|M⊥ᵢ|/dt = −|M⊥ᵢ|/T2 whatever T1 is, so their mean falls exactly as e^{−t/T2}.
+// And M_z climbs back exactly as 1 − (1 − M_z(0)) e^{−t/T1}.  The sum's part can never be longer
+// than the mean of the spins' own (the triangle inequality): an echo can bring it back up to
+// the mean, never above, so T2* ≤ T2.
+
+/** Add the engine's three clocks now to a trace {t, sig, perp, mz}: the length of the sum's
+ *  part across the field, the mean of each spin's own, and M_z. */
+export function clockSample(e, trace) {
+  const m = e.sum('rot');
+  trace.t.push(e.t); trace.sig.push(Math.hypot(m[0], m[1])); trace.perp.push(e.meanTransverse()); trace.mz.push(m[2]);
+  return trace;
+}
+
+/** One π/2 pulse about x′ centred at t = 0, then nothing: the three clocks at each of the times
+ *  (in increasing order). */
+export function threeClocks(params, times) {
+  const e = startSequence(params, [{ t: 0, angle: 90, phase: 0 }], Infinity, Infinity);
+  const trace = { t: [], sig: [], perp: [], mz: [] };
+  for (const t of times) { if (t > e.t) e.advance(t - e.t); clockSample(e, trace); }
+  return trace;
+}
+
+/**
+ * The three clocks' time constants from a trace of them: A e^{−t/τ} fitted by least squares to the
+ * sum's part (T2*), to the spins' own mean part (T2) and to 1 − M_z (T1), over the samples from
+ * `from` to `until` and each only down to `floor` of its start (past that, all that is left of
+ * the sum is the residue of a finite ensemble).  A clock is read once it has run: each is null
+ * until its curve has fallen to 1/e of its start.  At most maxPoints samples, evenly chosen, go
+ * into a fit.  Returns {T2s, T2, T1}, each {A, tau} or null.
+ */
+export function clockFits(trace, { from = 0, until = Infinity, floor = 0.03, maxPoints = 160 } = {}) {
+  const out = {};
+  const curves = { T2s: (i) => trace.sig[i], T2: (i) => trace.perp[i], T1: (i) => 1 - trace.mz[i] };
+  for (const [key, get] of Object.entries(curves)) {
+    const t = [], y = [];
+    let y0 = null;
+    for (let i = 0; i < trace.t.length; i++) {
+      if (trace.t[i] < from) continue;
+      if (trace.t[i] > until) break;
+      const v = get(i);
+      if (y0 === null) y0 = v;
+      if (v < floor * y0) break;
+      t.push(trace.t[i]); y.push(v);
+    }
+    if (!(y0 > 0) || t.length < 3 || y[y.length - 1] > y0 / Math.E) { out[key] = null; continue; }
+    const k = Math.max(1, Math.ceil(t.length / maxPoints)), tt = [], yy = [];
+    for (let i = 0; i < t.length; i += k) { tt.push(t[i]); yy.push(y[i]); }
+    if (tt[tt.length - 1] !== t[t.length - 1]) { tt.push(t[t.length - 1]); yy.push(y[y.length - 1]); }
+    const f = fitShape(tt, yy, 'decay');
+    out[key] = { A: f.A, tau: f.tau };
+  }
+  return out;
+}
+
+/** A CPMG train to show beside the three clocks: its echoes clear of the FID (2τ ≥ 5 T2*), a few
+ *  of them within T2 (2τ ≤ T2/2 when it can be), and none past `until` or 6 T2.  {tau, n}. */
+export function clockTrain(T2s, T2, until) {
+  const tau = Math.max(2.5 * T2s, (Number.isFinite(T2) ? T2 : until) / 4);
+  const last = Math.min(until, Number.isFinite(T2) ? 6 * T2 : Infinity);
+  return { tau, n: Math.max(1, Math.min(40, Math.floor(last / (2 * tau)))) };
+}
 
 /**
  * Inversion recovery for each delay: the signed amplitude just after the π/2 pulse (the mean of
