@@ -1,5 +1,6 @@
 // Small drawing helpers shared by the views: the page's colours, the field of a set of bursts,
-// the detector's trace drawn column by column, grey-scale images in decibels.
+// how lib/scope.js should draw a trace of fringes, the stretches of mirror travel recorded,
+// grey-scale images in decibels.
 
 import { themeColors } from '../lib/plot.js';
 
@@ -27,27 +28,18 @@ export function fieldAt(bursts, src, D, out = [0, 0]) {
 }
 
 /**
- * The lowest and highest detector signal I = dc + 2 Re E over round-trip paths [Da, Db]: the
- * envelope dc ± 2|E| when the interval holds a whole fringe (λ₀/2 of Δ), else sampled.
+ * Device pixels to the finest fringe of a trace against mirror position that shows `span` μm over
+ * devW device pixels: a fringe is π/k of mirror travel, at the spectrum's short-wavelength side
+ * (k₀ + 2σ_k) for the finest.
  */
-export function signalRange(bursts, src, dc, Da, Db, out = [0, 0]) {
-  const g = [0, 0];
-  let lo = Infinity, hi = -Infinity;
-  if (Db - Da >= src.lam0 / 2) {
-    let e = 0;
-    for (let i = 0; i <= 4; i++) { fieldAt(bursts, src, Da + ((Db - Da) * i) / 4, g); e = Math.max(e, Math.hypot(g[0], g[1])); }
-    out[0] = dc - 2 * e; out[1] = dc + 2 * e;
-    return out;
-  }
-  const n = Math.max(2, Math.ceil((Db - Da) / (src.lam0 / 24)) + 1);
-  for (let i = 0; i < n; i++) {
-    const I = dc + 2 * fieldAt(bursts, src, Da + ((Db - Da) * i) / (n - 1), g)[0];
-    if (I < lo) lo = I;
-    if (I > hi) hi = I;
-  }
-  out[0] = lo; out[1] = hi;
-  return out;
-}
+export const fringePixels = (src, span, devW) => (Math.PI / (src.k0 + 2 * src.sigk)) * (devW / span);
+
+/**
+ * Whether lib/scope.js should smooth a trace across columns, given the device pixels to its finest
+ * fringe: yes for a band (fewer than three, where smoothing keeps it from beating against the
+ * pixel grid), no where the fringes stand apart (smoothing would run neighbouring fringes together).
+ */
+export const smoothFor = (px) => !(px >= 3);
 
 /** Merge [a, b] into a sorted list of disjoint intervals. */
 export function addInterval(list, a, b) {

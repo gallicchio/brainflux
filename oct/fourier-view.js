@@ -9,11 +9,12 @@
 import { $, slider, segmented, toggle, setGroups } from '../lib/ui.js';
 import { fitCanvas, Frame } from '../lib/plot.js';
 import { STACKS, makeStack, bursts, mulberry32, SCENES, makeScene } from './sample.js';
-import { makeSpectrometer, cameraSpectrum, fdAScan, fold } from './fdoct.js';
+import { makeSpectrometer, cameraSpectrum, fdAScan, fold, noiseSigma } from './fdoct.js';
 import { peaks } from './tdoct.js';
 import { BScan, sceneBeam } from './scan.js';
 import { drawMichelson } from './pictures.js';
-import { octColors, fieldAt, paintImage, um } from './plots.js';
+import { octColors, fieldAt, paintImage, um, smoothFor } from './plots.js';
+import { scopeTrace } from '../lib/scope.js';
 
 export const state = {
   mode: 'ascan', sample: 'one', offset: 40, N: 1024, subtract: true, both: false, td: true, scale: 'db', noise: -80,
@@ -110,30 +111,24 @@ function drawSpectrum(c) {
   ctx.strokeStyle = c.ink3; ctx.lineWidth = 1; ctx.setLineDash([4, 3]); ctx.beginPath();
   for (let j = 0; j < spec.N; j++) { const x = f.X(spec.k(j)), y = f.Y((cam.dc * S.src.spectrum(spec.k(j))) / S.src.spectrum(S.src.k0)); if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
   ctx.stroke(); ctx.setLineDash([]);
-  // The picked layer's own fringe, S(k)[1 + 2a cos(kΔ)] (times the fall-off).
-  const pk = B[state.pick];
+  // The picked layer's own fringe, S(k)[1 + 2a cos(kΔ)] (times the fall-off), and over it the
+  // camera's pixels: both at the pixels' wavenumbers, drawn as a digital phosphor scope draws a
+  // trace (lib/scope.js).  Where the finest fringe the pixels make has fewer than 8 of them (the
+  // finer the deeper the layer; visible noise: 2), with the band-limited interpolation of the
+  // scope's sin(x)/x display, so a fringe too fine for the camera shows as the coarser one its
+  // samples make: folded back.  Smoothed across columns only where that fringe has fewer than
+  // three device pixels.
+  const pk = B[state.pick], s0 = S.src.spectrum(S.src.k0), x0 = f.X(spec.k(0)), x1 = f.X(spec.k(spec.N - 1)), dpr = ctx.getTransform().a;
+  const perPixel = ((x1 - x0) * dpr) / (spec.N - 1);
+  const pixelsPerFringe = (D) => { const q = Math.abs((D * spec.dk) / (2 * Math.PI)) % 1; return 1 / Math.min(q, 1 - q); };
+  const look = (px) => ({ bandlimited: px < 8, smooth: smoothFor(px * perPixel) });
+  const noisy = sigmaR() > 0 && (noiseSigma(S.src, spec, sigmaR()) / s0) * (f.h / (f.y1 - f.y0)) * dpr > 0.5;
   if (pk) {
     const r = spec.rolloff(pk.D);
-    ctx.strokeStyle = c.layer; ctx.lineWidth = 1.2; ctx.beginPath();
-    for (let j = 0; j < spec.N; j++) { const k = spec.k(j), v = S.src.spectrum(k) * (cam.dc + 2 * pk.a * r * Math.cos(k * pk.D)) / S.src.spectrum(S.src.k0); const x = f.X(k), y = f.Y(v); if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
-    ctx.stroke();
+    scopeTrace(ctx, f, { n: spec.N, y: (j) => { const k = spec.k(j); return f.Y((S.src.spectrum(k) * (cam.dc + 2 * pk.a * r * Math.cos(k * pk.D))) / s0); }, x0, x1,
+      color: c.layer, width: 1.2, ...look(pixelsPerFringe(pk.D)) });
   }
-  // The camera's pixels.
-  ctx.strokeStyle = c.sig; ctx.lineWidth = 1.2;
-  const per = spec.N / f.w;
-  if (per <= 1.5) {
-    ctx.beginPath();
-    for (let j = 0; j < spec.N; j++) { const x = f.X(spec.k(j)), y = f.Y(cam.I[j] / S.src.spectrum(S.src.k0)); if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
-    ctx.stroke();
-  } else {
-    ctx.fillStyle = c.sig;
-    for (let i = 0; i < Math.floor(f.w); i++) {
-      let lo = Infinity, hi = -Infinity;
-      for (let j = Math.floor(i * per); j < Math.min(spec.N, Math.floor((i + 1) * per)); j++) { const v = cam.I[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
-      const y0 = f.Y(hi / S.src.spectrum(S.src.k0)), y1 = f.Y(lo / S.src.spectrum(S.src.k0));
-      ctx.fillRect(f.left + i, y0, 1, Math.max(1, y1 - y0));
-    }
-  }
+  scopeTrace(ctx, f, { n: spec.N, y: (j) => f.Y(cam.I[j] / s0), x0, x1, color: c.sig, width: 1.2, ...look(Math.min(noisy ? 2 : Infinity, ...B.map((b) => pixelsPerFringe(b.D)))) });
   ctx.restore();
   // Wavelengths at the ends.
   ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'top';
