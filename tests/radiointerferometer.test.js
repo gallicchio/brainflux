@@ -6,6 +6,7 @@ import { idealGrid, idealAt, idealWindow, samplePoints, pointSources, galaxy, no
 import {
   stationXYZ, tracks, gridSamples, dirtyBeam, skyTransform, dirtyImage, cleanStart, cleanSteps, fitBeam, restore, layout,
 } from '../radiointerferometer/synthesis.js';
+import { memStart, memSteps, windowIndices, rmsError, beamKernel, convolve } from '../radiointerferometer/imaging.js';
 
 const DEG = Math.PI / 180;
 // A tiny deterministic random generator, so the tests are repeatable.
@@ -391,4 +392,189 @@ test('layouts: the ring, the random array and the Y give n(n−1)/2 baselines', 
   for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) spacings.add(Math.round(Math.abs(line[j] - line[i])));
   for (let s = 1; s <= 24; s++) assert(spacings.has(s), `the line misses a spacing of ${s}`);
   return `the line of eight measures ${spacings.size} different spacings, every one from 1 to 24`;
+});
+
+// ------------------------------------------------------------------ making the image: three ways
+
+/** A sparse sampling of an n x n grid: a random array, an hour or so of Earth rotation, uniform weights. */
+function sparse(n, pix, { dishes = 6, hours = 1, seed = 1 } = {}) {
+  const pos = layout('random', { arm: 400, n: dishes, seed }).dishes.map(([e, no]) => stationXYZ(e, no, 34 * DEG));
+  const tr = tracks(pos, { dec: 50 * DEG, hours, steps: 13 });
+  return gridSamples(tr, 0.21, n, 1 / (n * pix), { weighting: 'uniform' }).S;
+}
+/** A smooth positive sky on an n x n grid: two Gaussian blobs in the middle. */
+function blobs(n) {
+  const sky = new Float64Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = i - n / 2, y = j - n / 2;
+    sky[j * n + i] = Math.exp(-(x * x + y * y) / (2 * 3 * 3)) + 0.5 * Math.exp(-((x - 6) ** 2 + (y + 4) ** 2) / (2 * 2 * 2));
+  }
+  return sky;
+}
+
+test('the dirty image is the inverse transform of what was measured, every missing sample a zero: with every spacing measured it is the sky itself', () => {
+  const n = 64, sky = blobs(n), V = skyTransform(sky, n);
+  const all = dirtyImage(new Float64Array(n * n).fill(1), V, n);
+  let worst = 0;
+  for (let i = 0; i < sky.length; i++) worst = Math.max(worst, Math.abs(all[i] - sky[i]));
+  assert(worst < 1e-12, `every spacing measured: the dirty image differs from the sky by ${worst.toExponential(2)}`);
+  // Some spacings: the dirty image's own transform is (n²/W) S V, and exactly zero where S is.
+  const S = sparse(n, 2e-5), D = dirtyImage(S, V, n), T = skyTransform(D, n);
+  let W = 0, zero = 0, scale = 0, cells = 0, top = 0;
+  for (let k = 0; k < S.length; k++) { W += S[k]; top = Math.max(top, Math.hypot(V.re[k], V.im[k])); }
+  for (let k = 0; k < S.length; k++) {
+    if (S[k] === 0) zero = Math.max(zero, Math.hypot(T.re[k], T.im[k]));
+    else { scale = Math.max(scale, Math.hypot(T.re[k] - ((n * n) / W) * V.re[k], T.im[k] - ((n * n) / W) * V.im[k])); cells++; }
+  }
+  zero /= top; scale /= (n * n / W) * top;
+  assert(zero < 1e-12 && scale < 1e-12, `the dirty image's transform: ${zero.toExponential(1)} of V(0) off the samples, ${scale.toExponential(1)} from (n²/W)V on them`);
+  return `${cells} of ${n * n} cells measured; off them the dirty image's transform is ${zero.toExponential(0)} of V(0)`;
+});
+
+test('one CLEAN step takes gain × the peak out as a copy of the dirty beam centred on the peak; the window keeps the search in the field', () => {
+  const n = 64, S = sparse(n, 2e-5, { dishes: 7 }), B = dirtyBeam(S, n), sky = new Float64Array(n * n);
+  sky[30 * n + 34] = 1; sky[36 * n + 25] = 0.6; sky[3 * n + 60] = 3;      // the last one outside the field
+  const D = dirtyImage(S, skyTransform(sky, n), n), box = [16, 16, 48, 48];
+  const cs = cleanStart(D, box);
+  let peak = -1;
+  for (let j = 16; j < 48; j++) for (let i = 16; i < 48; i++) if (peak < 0 || Math.abs(D[j * n + i]) > Math.abs(D[peak])) peak = j * n + i;
+  cleanSteps(cs, B, n, { gain: 0.25, steps: 1 });
+  const g = 0.25 * D[peak], i0 = peak % n, j0 = (peak - i0) / n;
+  let worst = 0;
+  for (let j = 16; j < 48; j++) for (let i = 16; i < 48; i++) {
+    const b = B[((j - j0 + n / 2 + n) % n) * n + ((i - i0 + n / 2 + n) % n)];
+    worst = Math.max(worst, Math.abs(cs.residual[j * n + i] - (D[j * n + i] - g * b)));
+  }
+  assert(worst < 1e-14 && cs.log[0] === peak && cs.log[1] === g && cs.model[peak] === g, `one step: residual off by ${worst.toExponential(1)}; log ${cs.log}`);
+  cleanSteps(cs, B, n, { gain: 0.1, steps: 500 });
+  for (let k = 0; k < cs.log.length; k += 2) {
+    const i = cs.log[k] % n, j = Math.floor(cs.log[k] / n);
+    assert(i >= 16 && i < 48 && j >= 16 && j < 48, `step ${k / 2} took from (${i}, ${j}), outside the window`);
+  }
+  // Two points alone, with a Y for four hours: their fluxes come back, and restored with the
+  // clean beam each becomes a Gaussian of its flux.
+  const pos = layout('y', { arm: 600 }).dishes.map(([e, no]) => stationXYZ(e, no, 34 * DEG));
+  const S2 = gridSamples(tracks(pos, { dec: 40 * DEG, hours: 4, steps: 41 }), 0.21, n, 1 / (n * 4e-5), { weighting: 'uniform' }).S, B2 = dirtyBeam(S2, n);
+  sky[3 * n + 60] = 0;
+  const c2 = cleanStart(dirtyImage(S2, skyTransform(sky, n), n), box);
+  cleanSteps(c2, B2, n, { gain: 0.1, steps: 3000, threshold: 1e-4 });
+  close(c2.model[30 * n + 34], 1, 0.02, 'the brighter point');
+  close(c2.model[36 * n + 25], 0.6, 0.02, 'the fainter point');
+  const R = restore(c2, fitBeam(B2, n), n);
+  close(R[30 * n + 34], 1, 0.05, 'the restored image peaks at the brighter point with its flux');
+  return `none of 500 steps outside the window; ${c2.iterations} steps, ${c2.components} components, fluxes ${c2.model[30 * n + 34].toFixed(3)} and ${c2.model[36 * n + 25].toFixed(3)}`;
+});
+
+/** Lambert's W: the w > 0 with w + ln w = L (that is, w e^w = e^L), by Newton's method. */
+function lambertFromLog(L) {
+  let w = L > 1 ? L - Math.log(L) : Math.exp(L);
+  for (let k = 0; k < 60; k++) {
+    const f = w + Math.log(w) - L, next = w - f / (1 + 1 / w);
+    w = next > 0 ? next : w / 2;
+    if (Math.abs(f) < 1e-15 * Math.max(1, Math.abs(L))) break;
+  }
+  return w;
+}
+
+test('maximum entropy with every spacing measured: each pixel solves α ln(I/M) = D − I, so I = α W((M/α) e^{D/α}) (Lambert’s W)', () => {
+  const n = 64, sky = blobs(n), ones = new Float64Array(n * n).fill(1), B = dirtyBeam(ones, n), D = dirtyImage(ones, skyTransform(sky, n), n);
+  const box = [16, 16, 48, 48], idx = windowIndices(n, box);
+  let flux = 0;
+  for (const o of idx) flux += sky[o];
+  const notes = [];
+  for (const a of [0.1, 0.01, 0.001]) {
+    const ms = memStart(D, B, n, { alpha: a, flux, box }), M = flux / idx.length;
+    memSteps(ms, { steps: 200, tol: 1e-9 });
+    let worst = 0, outside = 0, fit = 0;
+    for (let o = 0; o < n * n; o++) {
+      const i = o % n, j = Math.floor(o / n), inside = i >= 16 && i < 48 && j >= 16 && j < 48;
+      if (!inside) { outside = Math.max(outside, Math.abs(ms.model[o])); continue; }
+      const exact = a * lambertFromLog(D[o] / a + Math.log(M / a));
+      worst = Math.max(worst, Math.abs(ms.model[o] - exact) / exact);
+      fit = Math.max(fit, Math.abs(ms.model[o] - D[o]));
+    }
+    assert(ms.done && worst < 1e-6 && outside === 0, `α = ${a}: ${ms.iterations} iterations, worst relative error ${worst.toExponential(2)}, ${outside} outside`);
+    notes.push(`α ${a}: ${ms.iterations} its, to ${worst.toExponential(0)}, |I − D| ≤ ${fit.toFixed(4)}`);
+    // As α shrinks the image approaches the data: |I − D| ~ α ln(D/M) where the sky is bright.
+    if (a === 0.001) assert(fit < 0.02, `α = 0.001: the image is ${fit} from the dirty image`);
+  }
+  return notes.join('; ');
+});
+
+test('maximum entropy from a sparse uv plane: J only falls, no pixel goes negative, and the answer is I = M e^{R/α} at every pixel', () => {
+  const n = 64, S = sparse(n, 2e-5, { dishes: 8, hours: 3 }), B = dirtyBeam(S, n), sky = blobs(n), D = dirtyImage(S, skyTransform(sky, n), n);
+  const box = [16, 16, 48, 48], idx = windowIndices(n, box);
+  let flux = 0, peak = 0;
+  for (const o of idx) flux += sky[o];
+  for (const v of D) peak = Math.max(peak, Math.abs(v));
+  const alpha = 0.01 * peak, ms = memStart(D, B, n, { alpha, flux, box });
+  memSteps(ms, { steps: 400, tol: 1e-7 });
+  for (let k = 1; k < ms.objective.length; k++) assert(ms.objective[k] <= ms.objective[k - 1] + 1e-12 * Math.abs(ms.objective[0]), `J rose at iteration ${k}`);
+  // The residual kept by the iterations is the true one.
+  const kernel = beamKernel(B, n), BI = convolve(kernel, ms.model, null, new Float64Array(n * n));
+  let rdrift = 0, worst = 0, low = Infinity;
+  for (let o = 0; o < n * n; o++) rdrift = Math.max(rdrift, Math.abs(ms.residual[o] - (D[o] - BI[o])));
+  for (const o of idx) {
+    low = Math.min(low, ms.model[o]);
+    const target = ms.default[o] * Math.exp(ms.residual[o] / alpha);
+    if (ms.model[o] > 1e-6 * ms.default[o]) worst = Math.max(worst, Math.abs(ms.model[o] - target) / target);
+  }
+  assert(ms.done && worst < 1e-5 && low > 0 && rdrift < 1e-12, `${ms.iterations} iterations: I vs M e^{R/α} off by ${worst.toExponential(2)}, lowest pixel ${low}, residual drift ${rdrift.toExponential(1)}`);
+  // And it is the minimum: a small change either way raises J.
+  const J0 = ms.objective.at(-1), I = Float64Array.from(ms.model), dI = new Float64Array(n * n), rand = rng(5);
+  for (const o of idx) dI[o] = (rand() - 0.5) * 0.01 * I[o];
+  for (const s of [1, -1]) {
+    const J = Float64Array.from(I, (v, o) => v + s * dI[o]), BJ = convolve(kernel, J, null, new Float64Array(n * n));
+    let obj = 0;
+    for (const o of idx) obj += -0.5 * J[o] * (D[o] + (D[o] - BJ[o])) + alpha * (J[o] * Math.log(J[o] / ms.default[o]) - J[o] + ms.default[o]);
+    assert(obj > J0, `a nudge (${s > 0 ? '+' : '−'}) lowered J`);
+  }
+  return `${ms.iterations} iterations; I = M e^{R/α} to ${worst.toExponential(1)}; J fell from ${ms.objective[0].toExponential(3)} to ${J0.toExponential(3)}`;
+});
+
+test('CLEAN suits points, maximum entropy a smooth sky: a Y of 27 dishes for 8 hours at 5 GHz', () => {
+  const lambda = 299792458 / 5e9, pix = ((20 / 3600) * DEG) / NS, du = 1 / (N * pix);
+  const pos = layout('y', { arm: 16.2e3 }).dishes.map(([e, no]) => stationXYZ(e, no, 34 * DEG));
+  const tr = tracks(pos, { dec: 40 * DEG, hours: 8, steps: 121 }), { S } = gridSamples(tr, lambda, N, du, { weighting: 'uniform' });
+  const B = dirtyBeam(S, N), fit = fitBeam(B, N), box = [(N - NS) / 2, (N - NS) / 2, (N + NS) / 2, (N + NS) / 2], idx = windowIndices(N, box);
+  const ones = new Float64Array(N * N).fill(1), out = {};
+  for (const [name, model] of [['binary', { kind: 'points', sources: pointSources('binary', { scale: (5 / 3600) * DEG }) }], ['galaxy', { kind: 'picture', sky: normalise(galaxy(NS)) }]]) {
+    const V = idealGrid(model, pix, (k) => [model.sources[k].l, model.sources[k].m]), D = dirtyImage(S, V, N), sky = dirtyImage(ones, V, N);
+    const ref = restore({ model: sky, residual: new Float64Array(N * N) }, fit, N);
+    let flux = 0, peak = 0;
+    for (const o of idx) flux += sky[o];
+    for (const v of D) peak = Math.max(peak, Math.abs(v));
+    const cs = cleanStart(D, box);
+    cleanSteps(cs, B, N, { gain: 0.1, steps: 1000, threshold: 0.01 * peak });
+    const ms = memStart(D, B, N, { alpha: 0.01 * peak, flux, box });
+    memSteps(ms, { steps: 200, tol: 1e-4 });
+    out[name] = { dirty: rmsError(D, ref, idx), clean: rmsError(restore(cs, fit, N), ref, idx), mem: rmsError(restore(ms, fit, N), ref, idx), comps: cs.components, steps: cs.iterations, its: ms.iterations };
+  }
+  const { binary: b, galaxy: g } = out;
+  assert(b.comps === 2 && b.clean < 1e-3 && b.clean < b.mem, `binary: CLEAN ${b.comps} components, error ${b.clean}; MEM ${b.mem}`);
+  assert(g.mem < 0.5 * g.clean && g.clean < g.dirty, `galaxy: MEM ${g.mem}, CLEAN ${g.clean}, dirty ${g.dirty}`);
+  const pc = (x) => `${(100 * x).toFixed(2)}%`;
+  return `binary: dirty ${pc(b.dirty)}, CLEAN ${pc(b.clean)} (${b.comps} points, ${b.steps} steps), MEM ${pc(b.mem)} (${b.its} its); galaxy: dirty ${pc(g.dirty)}, CLEAN ${pc(g.clean)} (${g.steps} steps), MEM ${pc(g.mem)} (${g.its} its)`;
+});
+
+test('intensity correlations paint |V|², whose transform is the sky’s autocorrelation: a binary gives three points, a triangle a hexagon round a centre', () => {
+  const pix = 1 / NS, ones = new Float64Array(N * N).fill(1), notes = [];
+  // Points on pixels: a binary of 1 and 0.6, 12 pixels apart; a triangle (as near equilateral as pixels go).
+  const cases = { binary: [[-6, 0, 1], [6, 0, 0.6]], triangle: [[0, 10, 1], [-9, -5, 1], [9, -5, 1]] };
+  for (const [name, pts] of Object.entries(cases)) {
+    const model = { kind: 'points', sources: pts.map(([x, y, I]) => ({ l: x * pix, m: y * pix, I })) };
+    const V = idealGrid(model, pix, (k) => [model.sources[k].l, model.sources[k].m]);
+    const V2 = { re: Float64Array.from(V.re, (r, k) => r * r + V.im[k] * V.im[k]), im: new Float64Array(N * N) };
+    const A = dirtyImage(ones, V2, N), at = (dx, dy) => A[(N / 2 - dy) * N + N / 2 + dx];
+    // The autocorrelation: Σ_jk I_j I_k δ(r − (r_j − r_k)).
+    const expect = new Map();
+    for (const [xj, yj, Ij] of pts) for (const [xk, yk, Ik] of pts) { const key = `${xj - xk},${yj - yk}`; expect.set(key, (expect.get(key) || 0) + Ij * Ik); }
+    let worst = 0, total = 0, sum = 0;
+    for (const [key, val] of expect) { const [dx, dy] = key.split(',').map(Number); worst = Math.max(worst, Math.abs(at(dx, dy) - val)); total += val; }
+    for (const v of A) sum += v;
+    assert(worst < 1e-9 && Math.abs(sum - total) < 1e-9, `${name}: the transform of |V|² differs from the autocorrelation by ${worst}`);
+    const others = [...expect].filter(([k]) => k !== '0,0').map(([, v]) => v);
+    notes.push(`${name}: ${expect.size} points, the centre ${at(0, 0).toFixed(2)} and ${others.length} of ${others[0].toFixed(2)}`);
+  }
+  return notes.join('; ');
 });

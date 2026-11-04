@@ -1,0 +1,32 @@
+{
+  "select": ["#block-one"],
+  "wait": 0.8,
+  "setups": {
+    "noise": {"select": ["#fig-stream1"], "js": "__app.hold(true); __app.runSetup('noise').then(() => __app.step(120))"},
+    "lag": {"select": ["#block-one"], "js": "__app.hold(true); __app.runSetup('lag').then(() => __app.step(400))"},
+    "white": {"select": ["#fig-spec1", "#fig-lag1"], "js": "__app.hold(true); __app.runSetup('white').then(() => __app.step(200))"},
+    "envelope": {"select": ["#block-one"], "js": "__app.hold(true); __app.runSetup('envelope').then(() => __app.step(200))"},
+    "independent": {"select": ["#fig-product1", "#fig-lag1"], "js": "__app.hold(true); __app.runSetup('independent').then(() => __app.step(600))"},
+    "fringe": {"select": ["#fig-scene", "#fig-plane2", "#fig-fringe"], "js": "__app.hold(true); __app.runSetup('fringe').then(() => __app.step(300))"},
+    "twosources": {"select": ["#fig-scene", "#fig-plane2", "#fig-fringe"], "js": "__app.hold(true); __app.runSetup('twosources').then(() => __app.step(500))"},
+    "young": {"select": ["#fig-scene", "#fig-plane2", "#fig-fringe"], "js": "__app.hold(true); __app.runSetup('young').then(() => __app.step(300))"},
+    "delay": {"select": ["#live2"], "js": "__app.hold(true); __app.runSetup('delay').then(() => __app.step(300))"},
+    "stripes": {"select": ["#sky-cell", "#uv-cell", "#plane-cell"], "js": "__app.hold(true); __app.runSetup('stripes').then(() => __app.step(400))"},
+    "uv": {"select": ["#sky-cell", "#uv-cell", "#plane-cell"], "js": "__app.hold(true); __app.runSetup('uv').then(() => __app.step(400))"},
+    "picture": {"select": ["#sky-cell", "#uv-cell", "#plane-cell"], "js": "__app.hold(true); __app.runSetup('picture').then(() => { __app.state.pair.bx = 2.5; __app.movePair(); __app.step(400); })"},
+    "sketch": {"select": ["#recon-cell", "#sampled-cell"], "js": "__app.hold(true); __app.runSetup('sketch').then(() => { [...document.querySelectorAll('#sketch-row button')].find((e) => e.textContent === 'Autopilot').click(); for (let k = 0; k < 31; k++) __app.step(100); })"},
+    "nearfield": {"select": ["#fig-streams3", "#fig-spec3", "#fig-slide3", "#ground-cell"], "js": "__app.hold(true); __app.runSetup('nearfield').then(() => __app.step(200))"},
+    "coherent": {"select": ["#sky-cell", "#fig-slide3", "#ground-cell"], "js": "__app.hold(true); __app.runSetup('coherent').then(() => __app.step(300))"},
+    "hbt": {"select": ["#sky-cell", "#uv-cell", "#plane-cell"], "js": "__app.hold(true); __app.runSetup('hbt').then(() => __app.step(600))"},
+    "hbtsketch": {"select": ["#recon-cell", "#sampled-cell"], "js": "__app.hold(true); __app.runSetup('hbtsketch').then(() => { for (let k = 0; k < 31; k++) __app.step(100); })"},
+    "line": {"select": ["#recon-cell", "#sampled-cell", "#beam-cell"], "js": "__app.hold(true); __app.runSetup('line').then(() => __app.step(1))"},
+    "array": {"select": ["#recon-cell", "#sampled-cell", "#beam-cell"], "js": "__app.hold(true); __app.runSetup('array').then(() => __app.step(1))"},
+    "rotation": {"select": ["#uv-cell", "#recon-cell", "#beam-cell"], "js": "__app.hold(true); __app.runSetup('rotation').then(() => __app.step(1))"},
+    "resolution": {"select": ["#recon-cell", "#sampled-cell", "#beam-cell"], "js": "__app.hold(true); __app.runSetup('resolution').then(() => { __app.state.arm = 0.2; return __app.setView('array'); }).then(() => __app.step(1))"},
+    "eht": {"select": ["#recon-cell", "#sampled-cell", "#beam-cell"], "js": "__app.hold(true); __app.runSetup('eht').then(() => __app.step(1))"},
+    "dirty": {"select": ["#method-title", "#t-a1", "#t-a4"], "js": "__app.hold(true); __app.runSetup('dirty').then(() => __app.step(1))"},
+    "clean": {"select": ["#method-title", "#t-a1", "#t-a4", "#t-b4", "#comp-list"], "js": "__app.hold(true); __app.runSetup('clean').then(() => { __app.step(1); __app.runClean(12); __app.draw(); })"},
+    "mem": {"select": ["#method-title", "#t-a1", "#t-a4", "#t-b4"], "js": "__app.hold(true); __app.runSetup('mem').then(() => __app.step(60))"},
+    "compare": {"select": ["#method-title", "#t-a1", "#t-a4", "#t-b4", "#comp-list"], "js": "__app.hold(true); __app.runSetup('compare').then(() => __app.loadPicture('galaxy')).then(() => __app.step(2))"}
+  }
+}
