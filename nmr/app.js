@@ -1264,7 +1264,7 @@ function drawBoardPlots() {
     drawCurve(ctx, width, height, {
       x: P.map((p) => p.tp), y: P.map((p) => p.amp * V), fit: fit ? (x) => fit.A * V * (1 - Math.exp(-x / fit.T1)) : null,
       xmax: 5, ymin: 0, ymax: 1.1 * V, colors: C, xunit: { s: 1, u: 's' },
-      title: 'The FID\'s start in the coil (μV)', xlabel: 'polarizing time (s)', current: board.tp,
+      title: 'FID\'s start (μV)', xlabel: 'polarizing time (s)', current: board.tp,
       note: fit ? ['fit: T₁ = ', { v: fit.T1, dec: 2, w: 5 }, ' s'] : ['each cycle adds a point'],
     });
   }

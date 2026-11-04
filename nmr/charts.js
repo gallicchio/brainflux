@@ -2,7 +2,7 @@
 // detector's envelope), the coil's EMF as a scope shows it, the spectrum, and a curve of
 // amplitudes with its fit.  Each takes a canvas context, its size, and plain data.
 
-import { Frame, fillSlots } from '../lib/plot.js';
+import { Frame, fillSlots, niceTicks } from '../lib/plot.js';
 import { rawColumns } from './signal.js';
 
 /** A time unit for a span of seconds: {s: scale, u: name}. */
@@ -367,7 +367,21 @@ export function drawSpectrum(ctx, width, height, o) {
   ctx.save();
   const g = new Frame(ctx, width, height, { left: 48, right: 12, top: 22, bottom: 34 });
   g.x0 = (o.fmin + (o.f0 || 0)) * u.s; g.x1 = (o.fmax + (o.f0 || 0)) * u.s; g.y0 = 0; g.y1 = 1;
-  g.axes({ xlabel: o.xlabel || `frequency (${u.u})`, colors: c, yTicks: false });
+  if (!o.f0) g.axes({ xlabel: o.xlabel || `frequency (${u.u})`, colors: c, yTicks: false });
+  else {
+    // Absolute frequencies a few hertz apart need the decimals their step has (1959.5, 1960):
+    // the ticks drawn here, as the frame's would round them to four figures.
+    g.axes({ xlabel: o.xlabel || `frequency (${u.u})`, colors: c, yTicks: false, xTicks: false });
+    const ticks = niceTicks(g.x0, g.x1, Math.max(2, Math.round(g.w / 80))), step = ticks.length > 1 ? ticks[1] - ticks[0] : 1;
+    const dec = Math.max(0, Math.min(4, Math.ceil(-Math.log10(step) - 1e-9)));
+    ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = c.ink2; ctx.strokeStyle = c.ink3; ctx.lineWidth = 1;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const v of ticks) {
+      const px = Math.round(g.X(v)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(px, g.bottom); ctx.lineTo(px, g.bottom + 4); ctx.stroke();
+      ctx.fillText(v.toFixed(dec), px, g.bottom + 6);
+    }
+  }
   ctx.restore();
   legend(ctx, f.left + 6, 4, [{ text: o.title, color: c.ink, bold: true }, ...(o.note ? [{ parts: o.note, color: c.fit }] : [])], c, width - f.left - 12);
   return f;
