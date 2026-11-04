@@ -1,0 +1,16 @@
+{
+  "select": ["#wave"],
+  "wait": 0.5,
+  "setups": {
+    "direction": {"js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(1); })()"},
+    "phasor": {"js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(1); })()"},
+    "real": {"js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(1); })()"},
+    "standing": {"js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(0.3); })()"},
+    "crossed": {"js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(0.2); })()"},
+    "beats": {"js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(0); })()"},
+    "schrodinger": {"select": ["#packet", "#dispersion"], "js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(20); })()"},
+    "water": {"select": ["#packet", "#dispersion"], "js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(20); })()"},
+    "light": {"select": ["#packet", "#dispersion"], "js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(20); })()"},
+    "relativistic": {"select": ["#packet", "#dispersion"], "js": "(async () => { __app.state.running = false; await new Promise((r) => setTimeout(r, 150)); __app.draw(20); })()"}
+  }
+}
