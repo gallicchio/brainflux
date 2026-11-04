@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Radio interferometry · BrainFlux</title>
-<meta name="description" content="Why two antennas listening to incoherent noise measure the Fourier transform of the sky: band-limited noise and its coherence time, the same noise reaching two antennas a little apart in time, the fringe in their correlation, the uv plane you map by dragging the pair, a Fourier Etch-a-Sketch, why coherent sources break it, whole arrays and the turning Earth, the dirty image and CLEAN.">
+<meta name="description" content="Why two antennas listening to incoherent noise measure the Fourier transform of the sky: band-limited noise and its coherence time, the same noise reaching two antennas a little apart in time, the fringe in their correlation, the uv plane you map by dragging the pair, a Fourier Etch-a-Sketch, why coherent sources break it, whole arrays and the turning Earth, the dirty image, CLEAN and maximum entropy, each shown at work.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../lib/style.css">
 <link rel="stylesheet" href="radiointerferometer.css">
@@ -236,7 +236,7 @@
 
   <h3 class="part">1 · One source</h3>
 
-  <article class="exp" data-setup="noise">
+  <article class="exp" data-setup="noise" data-frame="720x161">
     <h3>1. Band-limited noise: lumps that last about 1/Δν</h3>
     <p>One source of noise, through a band 5% as wide as the carrier ν₀ (Δν = 45 MHz at
     915 MHz).  The top plot is the voltage it sends: a sine at $\nu_0$ whose size and phase
@@ -247,7 +247,7 @@
     (quasi-monochromatic) for that long.</p>
   </article>
 
-  <article class="exp" data-setup="lag">
+  <article class="exp" data-setup="lag" data-frame="720x490">
     <h3>2. Multiply and average: the autocorrelation, one lag at a time</h3>
     <p>The dashed curve is the same signal a lag $\tau$ later.  The middle plot is their
     product $x(t)\,x(t+\tau)$, blue above zero and red below, and its average is
@@ -263,7 +263,7 @@
     band of width $\Delta\nu$ gives $\mathrm{sinc}(\Delta\nu\,\tau)$.</p>
   </article>
 
-  <article class="exp" data-setup="white">
+  <article class="exp" data-setup="white" data-frame="720x187">
     <h3>3. White noise: no carrier, no lumps, a spike</h3>
     <p>The band as wide as it goes, 0 to $2\nu_0$: white noise.  Its spectrum is flat everywhere
     and its autocorrelation is a spike half a cycle wide: each moment is independent of the
@@ -272,7 +272,7 @@
     antennas see it as the same wave for a while.</p>
   </article>
 
-  <article class="exp" data-setup="envelope">
+  <article class="exp" data-setup="envelope" data-frame="720x490">
     <h3>4. Negative frequencies and the complex envelope</h3>
     <p>The spectrum of a real signal has two halves: the band at $+\nu_0$ and its mirror image
     at $-\nu_0$, because $\cos 2\pi\nu_0t=\tfrac12(e^{2\pi i\nu_0t}+e^{-2\pi i\nu_0t})$.  The
@@ -285,7 +285,7 @@
     $e^{-2\pi i\nu_0\tau}$.</p>
   </article>
 
-  <article class="exp" data-setup="independent">
+  <article class="exp" data-setup="independent" data-frame="720x306">
     <h3>5. Two independent noises: the average of their product is zero</h3>
     <p>Now the dashed curve is a second source, with its own noise.  Their product swings
     positive and negative with no preference, and however you drag $\tau$, its average dies
@@ -296,7 +296,7 @@
 
   <h3 class="part">2 · Two sources, two antennas</h3>
 
-  <article class="exp" data-setup="fringe">
+  <article class="exp" data-setup="fringe" data-frame="720x323">
     <h3>6. One source, two antennas: the fringe is in the separation</h3>
     <p>A source 10° from straight up, antennas A and B 20 cm apart, at 915 MHz ($\lambda$ =
     32.8 cm).  The waves of noise come down at 10° and reach B first: B is nearer the source by
@@ -313,7 +313,7 @@
     two does.  Drag the source: the fringes get finer as $\theta$ grows.</p>
   </article>
 
-  <article class="exp" data-setup="twosources">
+  <article class="exp" data-setup="twosources" data-frame="720x323">
     <h3>7. Two sources: the correlations add, the cross terms average away</h3>
     <p>A second source, half as bright, at −25°.  Each antenna hears the sum of two independent
     noises, and the product of A and B has four parts: source 1 at A times source 1 at B, the
@@ -326,7 +326,7 @@
     $V=\sum_k I_k\,e^{-2\pi i\,u\,l_k}$.</p>
   </article>
 
-  <article class="exp" data-setup="young">
+  <article class="exp" data-setup="young" data-frame="720x323">
     <h3>8. Coherent sources: fringes at one antenna, and no longer a sum</h3>
     <p>The same two sources, but one transmitter feeds both: they send the same noise.  Now the
     power at one antenna has fringes (the orange curve, from 0.4 to 3.2, a fringe every
@@ -338,7 +338,7 @@
     goes flat again.</p>
   </article>
 
-  <article class="exp" data-setup="delay">
+  <article class="exp" data-setup="delay" data-frame="720x196">
     <h3>9. A wide band and a long baseline: why the correlator delays one antenna</h3>
     <p>The source 30° from straight up, a band of 40% (lumps 2.5 cycles long), the antennas 3 m
     apart, and delay tracking off.  B hears the noise $D\sin\theta/\lambda$ = 4.6 cycles before
@@ -354,7 +354,7 @@
 
   <h3 class="part">3 · The uv plane</h3>
 
-  <article class="exp" data-setup="stripes">
+  <article class="exp" data-setup="stripes" data-frame="720x332">
     <h3>10. One baseline measures one set of stripes on the sky</h3>
     <p>One source, off to one side.  The pair's stripes are drawn over the sky: the pattern
     $e^{-2\pi i(ul+vm)}$, crests a fringe spacing $1/|b|$ apart and across the baseline,
@@ -366,7 +366,7 @@
     $\cos 2\pi(ul+vm)$, red where it is positive and cyan where it is negative.</p>
   </article>
 
-  <article class="exp" data-setup="uv">
+  <article class="exp" data-setup="uv" data-frame="720x332">
     <h3>11. The lab's pentagon: five sets of stripes add up to a Fourier transform</h3>
     <p>Five sources on a pentagon, as in the lab notebook.  Each makes its own stripes in the
     uv plane, and they add: the uv plane is
@@ -379,7 +379,7 @@
     its stripes turn and change spacing, and the whole pattern changes.</p>
   </article>
 
-  <article class="exp" data-setup="picture">
+  <article class="exp" data-setup="picture" data-frame="720x320">
     <h3>12. A disk: the Airy pattern, and where its first dark ring is</h3>
     <p>A uniform disk in place of the points.  Its transform is the Airy pattern: a bright
     centre and rings, the first dark ring where the baseline is $1.22/D$ wavelengths for a disk
@@ -392,7 +392,7 @@
     the galaxy and Fourier's portrait, or your own picture.</p>
   </article>
 
-  <article class="exp" data-setup="sketch">
+  <article class="exp" data-setup="sketch" data-frame="692x427">
     <h3>13. The Fourier Etch-a-Sketch</h3>
     <p><em>Keep what you measure</em> is on: every measurement is painted into the sampled uv
     plane where the pair is, and at its mirror point, and the image from what you kept is the
@@ -404,7 +404,7 @@
     (experiments 16 and 17).</p>
   </article>
 
-  <article class="exp" data-setup="nearfield">
+  <article class="exp" data-setup="nearfield" data-frame="720x208">
     <h3>14. The lab bench's near field: where the pair sits matters</h3>
     <p>The sources 5 m above the antennas and 3 m from the axis, as on the lab bench and in the
     notebook: the exact distances now, not plane waves.  The plane-wave picture needs sources
@@ -418,7 +418,7 @@
     that only the separation matters.</p>
   </article>
 
-  <article class="exp" data-setup="coherent">
+  <article class="exp" data-setup="coherent" data-frame="720x570">
     <h3>15. Why this needs incoherent sources</h3>
     <p>The pentagon, but every source sends the <em>same</em> noise, with a quarter turn of phase
     between neighbours, as if one transmitter fed five antennas.  The cross terms between
@@ -432,7 +432,7 @@
     vanish.  ("Spatially incoherent sources make coherent fields far away.")</p>
   </article>
 
-  <article class="exp" data-setup="hbt">
+  <article class="exp" data-setup="hbt" data-frame="720x295">
     <h3>16. Correlate intensities instead: the phase problem</h3>
     <p><em>HBT</em> is on: the correlator multiplies the intensities $|v_A|^2$ and $|v_B|^2$ (their
     swings about the mean) instead of the voltages, as Hanbury Brown and Twiss did in 1956 and
@@ -447,7 +447,7 @@
     map and looks at the image it makes.</p>
   </article>
 
-  <article class="exp" data-setup="hbtsketch">
+  <article class="exp" data-setup="hbtsketch" data-frame="692x427">
     <h3>17. The Etch-a-Sketch with intensities: the sky’s autocorrelation</h3>
     <p>HBT and <em>Keep what you measure</em> are both on, and the autopilot is painting a
     spiral, as the optics lab's <a href="https://github.com/gallicchio/fourier-etch-a-sketch">Fourier
@@ -485,7 +485,7 @@
 
   <h3 class="part">4 · Many baselines</h3>
 
-  <article class="exp" data-setup="line">
+  <article class="exp" data-setup="line" data-frame="720x294">
     <h3>18. Few antennas, many baselines</h3>
     <p>The slides' eight antennas on a line, with gaps of 8, 10, 1, 3, 2, 7 and 8 units: their
     28 pairs measure every spacing from 1 to 24 units.  The second row appears: under the ideal
@@ -496,7 +496,7 @@
     plane, east–west, so the image is smeared out north–south, across the line.</p>
   </article>
 
-  <article class="exp" data-setup="array">
+  <article class="exp" data-setup="array" data-frame="720x294">
     <h3>19. A Y of 27 dishes: 351 pairs at once</h3>
     <p>A Y like the Very Large Array: 27 dishes make $27\cdot26/2$ = 351 pairs, and so 702 points
     of the uv plane at once, a six-pointed star of them.  The dirty beam has six spokes, and
@@ -511,7 +511,7 @@
     own map to fill the hole in the middle.</p>
   </article>
 
-  <article class="exp" data-setup="rotation">
+  <article class="exp" data-setup="rotation" data-frame="720x612">
     <h3>20. The Earth turns, and the tracks fill the plane</h3>
     <p>The same Y, 8 hours of a source at declination 40°.  As the Earth turns, each pair's point
     in the uv plane sweeps an ellipse of axis ratio $\sin\delta$ (the white tracks); the sampled
@@ -521,7 +521,7 @@
     lines, and the beam is a streak that can hardly tell north from south.</p>
   </article>
 
-  <article class="exp" data-setup="resolution">
+  <article class="exp" data-setup="resolution" data-frame="720x294">
     <h3>21. Long baselines see fine detail, short ones the broad shapes</h3>
     <p>Two point sources 5″ apart at 5 GHz ($\lambda$ = 6 cm), and a small Y whose longest
     baseline is 1.8 km: the finest fringe, $\lambda/B$ = 6.8″, is coarser than their
@@ -533,7 +533,7 @@
     $\lambda/B_\mathrm{min}$ lives at separations no pair measures.</p>
   </article>
 
-  <article class="exp" data-setup="eht">
+  <article class="exp" data-setup="eht" data-frame="720x294">
     <h3>22. An Earth-sized telescope sees a black hole's ring</h3>
     <p>The nine sites of the Event Horizon Telescope (2018), at 1.3 mm, looking at a ring 42 µas
     across like the one around the black hole in M87, for 12 hours.  Baselines nearly as long
@@ -545,7 +545,7 @@
 
   <h3 class="part">4 · Many baselines: making the image</h3>
 
-  <article class="exp" data-setup="dirty">
+  <article class="exp" data-setup="dirty" data-frame="720x214">
     <h3>23. The dirty image: every spacing no pair measured counts as zero</h3>
     <p>The galaxy, watched by the Y for 8 hours.  Under <em>Making the image</em>,
     <em>Dirty image</em> is chosen: the inverse transform of the sampled uv plane, with a zero
@@ -559,7 +559,7 @@
     (root-mean-square, as a fraction of its peak): 4.4%, the number to beat.</p>
   </article>
 
-  <article class="exp" data-setup="clean">
+  <article class="exp" data-setup="clean" data-frame="720x324">
     <h3>24. CLEAN takes the dirty beam out, point by point</h3>
     <p>Högbom's CLEAN (1974) supposes the sky is a few points.  The strip's first row is one
     step: it finds the brightest pixel of the residual (at first the dirty image), the ✚, takes
@@ -577,7 +577,7 @@
     costs little.</p>
   </article>
 
-  <article class="exp" data-setup="mem">
+  <article class="exp" data-setup="mem" data-frame="720x416">
     <h3>25. Maximum entropy: the smoothest sky that fits</h3>
     <p>The galaxy and the Y again, with <em>Maximum entropy</em> (Gull and Daniell, 1978).  It
     looks for the positive sky that agrees with the measurements and is otherwise as smooth and
@@ -594,7 +594,7 @@
     iterations, 0.57% off, closer to the data.</p>
   </article>
 
-  <article class="exp" data-setup="compare">
+  <article class="exp" data-setup="compare" data-frame="720x324">
     <h3>26. Points or a smooth sky: CLEAN against maximum entropy</h3>
     <p>The binary and the Y for 8 hours, with CLEAN allowed 1000 steps.  It finds the two points
     in 83 steps and its image is 0.01% off the true sky: points are what it looks for.  Choose
