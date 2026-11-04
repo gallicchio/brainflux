@@ -343,8 +343,29 @@ alone and forwards its old synthesis links.  The `wip/` branches are superseded 
 
 Left for later, besides the lists above:
 
-- From the new demos' reports: the board's tank tuning and the coil's angle to the Earth's
-  field (NMR); the Earth's-field and 5 MHz presets, T₂ during the readout, partial volume
-  and a shaped field map (MRI); averaging B-scans against speckle, a flattened en-face slab,
-  a Web Worker for the volume scan on slow machines (OCT); more imaging algorithms than
-  Högbom's CLEAN, and the help for the Etch-a-Sketch with HBT on (radio).
+## Status, 2026-11-04 (evening)
+
+The 2004 rule "Every Animation has Key Frames saved as Pictures" is met: every guided
+experiment in every demo (more than 330 of them) shows a still picture of itself working, under
+its "Set it up" button, made by `tools/frames.py` from each demo's `frames.json` and checked by
+`tools/frames.py --check` in `tools/test_all.sh`.  The natural follow-ups of the new demos are
+done (Response 22 in the chat log): the chirp buried in noise and its matched filter (quantum
+optics); the board's tank tuning and the coil's angle (NMR); Born on the momentum circle and
+the classical cross section (2D scattering); B-scan averaging, a flattened en-face slab and a
+scan worker (OCT); the dirty image, CLEAN and maximum entropy shown at work, and HBT's
+autocorrelation (radio); the Earth's field and 5 MHz magnets and the decay during the readout
+(MRI).
+
+Left for later:
+
+- NMR: the receiver's noise shaped by the tank across the record's band; GAIN LOW/HIGH and the
+  CAL IN sweep; the bank tunes down only to 1061 Hz (24.9 µT).
+- MRI: the gradient's sideways field drawn, not only stated, at 46 µT; noise scaling with field
+  at the scanner fields; partial volume across the slice.
+- OCT: finding the layer in the image (segmentation); OCT angiography (speckle changing between
+  repeats where blood flows).
+- Radio: a tapered default for maximum entropy (its uv tile shows a faint cross); multiscale
+  CLEAN and compressed sensing (named only).
+- Quantum optics: the matched filter over both phases (LIGO's); the template's wrap-around.
+- `lib/plot.js`: a log axis; `tickLabel`'s four significant figures can repeat labels near a
+  large value.
