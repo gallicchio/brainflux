@@ -225,7 +225,7 @@
 <aside class="drawer" id="help" aria-label="Experiments and help">
   <header><h2>Experiments</h2></header>
   <section class="start"><h3>Start here</h3>
-  <p>In the interferometer demo, white light made fringes only within a few micrometres of equal
+  <p>In the <a href="../interferometer/#setup=white">interferometer demo</a>, white light made fringes only within a few micrometres of equal
   paths.  That is the whole idea of optical coherence tomography: put a sample where the second
   mirror was, and every layer in it that reflects a little light makes its own burst of fringes
   when the reference mirror is at the same distance.</p>
@@ -289,7 +289,7 @@
     <h3>4. Glass in one arm only: the burst spreads</h3>
     <p>Light 150 nm wide ($\ell_c=2.08$ μm) and 2 mm of BK7 glass in the sample arm, with no twin
     in the reference arm.  Glass delays each colour differently (its dispersion, in the
-    dispersion demo); the mirror can be set to make up the average delay, but not the
+    <a href="../dispersion/">dispersion demo</a>); the mirror can be set to make up the average delay, but not the
     differences.  The colours' fringes no longer line up all at one place, and the burst spreads
     to 10.06 μm, 4.84 times wider, its fringes closer together at one end than the other (see the
     magnified view).  The spread is $\sqrt{1+4\beta^2\sigma_k^4}$, with $\beta=L\,d^2(nk)/dk^2$
@@ -355,7 +355,10 @@
     dimmer with depth (the pigment absorbs), and the dark cyst of fluid beside the fovea.  Click
     either picture for that column's A-scan.  The depth axis is the optical depth divided by
     $n=1.38$, as the instrument shows it.  Each column is what view 2 measured; this one is the
-    whole point of OCT: a cross-section of living tissue, without cutting it.</p>
+    whole point of OCT: a cross-section of living tissue, without cutting it.  Unlike the CT
+    scanner of the <a href="../tomography/">tomography demo</a>, which measures sums along lines
+    and must back-project them, OCT measures each line of the picture directly: there is nothing
+    to reconstruct.</p>
   </article>
 
   <article class="exp" data-setup="speckle">
@@ -511,7 +514,7 @@
   spectrometer's own blur (taken here as one pixel) by $e^{-(\Delta\,\delta k)^2/16\ln 2}$: the
   fall-off, 26% at the end of the range.</p>
   <p><em>Across.</em>  The lens focuses the beam to a waist $w_0=\lambda_0/(\pi\,\mathrm{NA})$, the
-  Gaussian-beam demo's $w_0=\lambda f/(\pi w)$, with Rayleigh range $z_R=\pi n w_0^2/\lambda_0$
+  <a href="../beams/">Gaussian-beam demo</a>'s $w_0=\lambda f/(\pi w)$, with Rayleigh range $z_R=\pi n w_0^2/\lambda_0$
   and width $w(z)=w_0\sqrt{1+((z-z_f)/z_R)^2}$.  The fibre that sends the light also collects it,
   so a point $\rho$ off the axis is seen with amplitude $e^{-2\rho^2/w^2}$, and a point's image is
   $1.18\,w$ wide at half height.  Depth and lateral resolution are set by different things:
