@@ -1,8 +1,9 @@
 import { test, assert, close } from './harness.js';
 import { fftCentered } from '../lib/fft.js';
 import { GB, larmorMHz, Spins, sincPulse, sliceProfile, fwhm, blocksFID, blocksProfile, spectrumOf, rotate, TWO_PI, partialSpectrum, lorentzOffsets, sliceMovie, pulseSpectrum } from '../mri/bloch.js';
-import { TISSUES, tissueAt, headPhantom, disksPhantom, disk, rasterize, weighting, steadyMz, weightedImage, projection, tissueAtPoint, head3D, sliceOf, tissueAt3D } from '../mri/phantom.js';
-import { sequence, lineOrder, pictureOf, kspaceOf, reconstruct, Acquisition, projections, backprojection, rmsDiff, noiseField, spinsOf, phaseMap, echoTrace, traceTimes } from '../mri/scan.js';
+import { TISSUES, tissueAt, headPhantom, disksPhantom, tubesPhantom, disk, rasterize, weighting, steadyMz, weightedImage, projection, tissueAtPoint, head3D, sliceOf, tissueAt3D } from '../mri/phantom.js';
+import { sequence, lineOrder, pictureOf, kspaceOf, kspaceOfParts, readoutDecay, readoutBlurPixels, reconstruct, Acquisition, projections, backprojection, rmsDiff, noiseField, spinsOf, phaseMap, echoTrace, traceTimes } from '../mri/scan.js';
+import { MAGNETS, BOARD, BOARD_NOISE, GAMMA, HBAR, KB, magnetOf, larmorHz, polarization, signalPerProton, chemicalShiftHz, gradientSpan, concomitantShift, boardPixelSNR, readoutTime } from '../mri/magnets.js';
 
 const deg = Math.PI / 180;
 
@@ -462,4 +463,108 @@ test('the head in three dimensions: its middle slice is the picture of before; t
   for (let j = 0; j < 128; j++) if (pic.total[j * 128 + col] > 0.5) bright.push((128 / 2 - j) * dx);
   assert(bright.some((y) => y > 69 && y < 77) && bright.some((y) => y < -69 && y > -77), `bright rows at ${bright.map((y) => y.toFixed(1))}`);
   return `fat at x = 0 with a 180 mm field of view: ${bright.map((y) => y.toFixed(1)).join(', ')} mm`;
+});
+
+// ------------------------------------------------------------------------ four magnets
+
+test('four magnets: f0 from 1959.8 Hz to 127.7 MHz; the polarization and the signal per proton go as the fields', () => {
+  close(larmorHz(MAGNETS.earth.B0), 1959.8, 0.05, 'f0 in the Earth\'s field (the board: 1959.8 Hz)');
+  close(larmorHz(MAGNETS.ts.B0), 5e6, 1e-6, 'f0 in the TeachSpin\'s 0.117 T');
+  close(MAGNETS.ts.B0, 0.11743, 1e-5, 'the TeachSpin\'s field');
+  close(larmorHz(1.5) / 1e6, 63.87, 0.01, '1.5 T'); close(larmorHz(3) / 1e6, 127.73, 0.01, '3 T');
+  // Curie's law: tanh(gamma hbar B / 2kT) is gamma hbar B / 2kT to a part in 10^11 at these fields.
+  const P = polarization(1.5), lin = (GAMMA * HBAR * 1.5) / (2 * KB * 293.15);
+  close(P, lin, 1e-15, 'linear in B'); close(P * 1e6, 5.23, 0.01, 'ppm at 1.5 T, 20 °C');
+  close(polarization(BOARD.Bp) / polarization(BOARD.BE), BOARD.Bp / BOARD.BE, 1e-6, 'the polarizing coil gains Bp/BE');
+  close(BOARD.Bp / BOARD.BE, 170.3, 0.1, 'Bp / BE');
+  // The voltage a proton induces: its magnetization (B_pol) times its rate (B0).
+  close(signalPerProton(MAGNETS['1.5']), 1, 1e-12, '1.5 T'); close(signalPerProton(MAGNETS['3']), 4, 1e-12, '3 T');
+  close(signalPerProton(MAGNETS.ts), (5 / 42.577 / 1.5) ** 2, 1e-12, '0.117 T: (B0/1.5 T)^2');
+  close(1 / signalPerProton(MAGNETS.ts), 163.2, 0.1, '1/163 of 1.5 T\'s');
+  close(signalPerProton(MAGNETS.earth) * 1e7, 1.604, 0.001, 'polarized at 7.84 mT, listened to in 46 µT');
+  close(signalPerProton(MAGNETS.earth, false) * 1e10, 9.42, 0.01, 'polarized by the Earth\'s field alone');
+  // The chemical shift, 3.4 ppm of f0.
+  close(chemicalShiftHz(1.5), 217.2, 0.1, '1.5 T'); close(chemicalShiftHz(MAGNETS.ts.B0), 17.0, 0.01, '0.117 T');
+  close(chemicalShiftHz(MAGNETS.earth.B0) * 1e3, 6.66, 0.01, 'mHz in the Earth\'s field');
+  // A gradient of 100 µT/m across 128 mm is 28% of the Earth's field; 4 mT/m across 256 mm, 0.07% of 1.5 T.
+  close(gradientSpan(0.1, 128, BOARD.BE), 0.278, 0.001, 'the Earth\'s field'); close(gradientSpan(4, 256, 1.5), 6.83e-4, 1e-6, '1.5 T');
+  // Its sideways field misplaces spins 50 mm up by G z^2 / 2 B0: against |B| computed directly.
+  // (At x = 0: off the centre the shift is G z^2 / 2(B0 + G x), a few percent different here.)
+  const G = 0.1e-3, z = 0.05, B0 = BOARD.BE, B = Math.hypot(B0, G * z);
+  close(concomitantShift(0.1, 50, B0), ((B - B0) / G) * 1e3, 0.01, 'the shift is G z^2 / 2B0 (mm)');
+  close(concomitantShift(0.1, 50, B0), 2.716, 0.001, '100 µT/m, 50 mm up, in 46 µT'); close(concomitantShift(2, 50, 1.5), 1.67e-3, 1e-5, '2 mT/m in 1.5 T');
+  assert(magnetOf(46e-6).id === 'earth' && magnetOf(0.117).id === 'ts' && magnetOf(1.5).id === '1.5' && magnetOf(3).id === '3', 'magnetOf');
+  return `f0 = ${larmorHz(MAGNETS.earth.B0).toFixed(1)} Hz, ${(larmorHz(MAGNETS.ts.B0) / 1e6).toFixed(3)} MHz, 63.87, 127.73 MHz; polarization ${(P * 1e6).toFixed(2)} ppm at 1.5 T; signal per proton ${signalPerProton(MAGNETS.earth).toExponential(2)} of 1.5 T's at 46 µT polarized (${signalPerProton(MAGNETS.earth, false).toExponential(2)} without); fat's shift ${(chemicalShiftHz(MAGNETS.earth.B0) * 1e3).toFixed(2)} mHz`;
+});
+
+test('the Earth\'s field: the board\'s noise at the coil, a pixel\'s SNR, and the picture\'s noise is that', () => {
+  close(BOARD_NOISE * 1e9, 0.463, 0.001, 'nV per root hertz at the coil');
+  // A 4 mm pixel through 100 mm of water: 1.6 mL; 32 lines of 32 samples at 100 µT/m over 128 mm.
+  const Tro = readoutTime(32, 128, 0.1);
+  close(Tro, 58.71, 0.01, 'the readout lasts 32 / (GB G fov)');
+  const snr = boardPixelSNR({ dx: 4, h: 100, Ny: 32, Tro });
+  close(snr, (1.199e-6 * 1.6e-3) * Math.sqrt((32 * Tro) / 1000) / BOARD_NOISE, 1e-9, 'emf V sqrt(time) / noise');
+  close(snr, 5.69, 0.01, 'one average');
+  close(boardPixelSNR({ dx: 4, h: 100, Ny: 32, Tro, nsa: 16 }), 4 * snr, 1e-9, '16 averages: 4 times');
+  close(boardPixelSNR({ dx: 2, h: 100, Ny: 64, Tro: readoutTime(64, 128, 0.1) }), snr / 2, 1e-9, 'half the pixel: a quarter of the water, twice the listening');
+  // The picture's noise is 1/SNR of a pixel of water, divided by sqrt(averages).
+  const seq = sequence({ type: 'se', TE: 150, TR: 3000, N: 32, fov: 128, Gx: 0.1, Tpe: 30, Trf: 5, T2prime: 1500 });
+  const stdOf = (nsa) => { const a = new Acquisition().set({ shapes: tubesPhantom(), seq, B0: BOARD.BE, noiseAbs: 1 / snr, nsa, seed: 5 }); a.measureAll(); const img = a.image(); let s = 0, n = 0; for (let i = 0; i < 32 * 32; i++) if (a.picture.total[i] === 0) { s += img.re[i] ** 2 + img.im[i] ** 2; n += 2; } return Math.sqrt(s / n); };
+  const s1 = stdOf(1), s8 = stdOf(8);
+  close(s1 * snr, 1, 0.12, 'one average'); close(s8 * snr * Math.sqrt(8), 1, 0.12, 'eight');
+  return `noise ${(BOARD_NOISE * 1e9).toFixed(3)} nV/√Hz; a 4 mm pixel of water: SNR ${snr.toFixed(2)} per average (readout ${Tro.toFixed(1)} ms); the picture's noise ${s1.toFixed(3)} (1/SNR = ${(1 / snr).toFixed(3)}), with 8 averages ${s8.toFixed(4)}`;
+});
+
+test('relaxation at low field: tissue T1 shortens as a power of the field through 50 mT and 1.5 T; water does not change', () => {
+  for (const [n, lo, hi] of [['grey', 327, 950], ['white', 275, 650], ['water', 3695, 4000], ['fat', 130, 260]]) {
+    close(tissueAt(n, 0.05).T1, lo, 1e-9, `${n} at 50 mT`); close(tissueAt(n, 1.5).T1, hi, 1e-9, `${n} at 1.5 T`);
+    const mid = tissueAt(n, 0.3).T1;
+    close(mid, lo * (0.3 / 0.05) ** (Math.log(hi / lo) / Math.log(30)), 1e-9, `${n}: a power of B`);
+    assert(mid > lo && mid < hi, `${n} between`);
+    assert(tissueAt(n, 0.117).T2 === TISSUES[n].T2, 'T2 kept');
+  }
+  const g = tissueAt('grey', MAGNETS.ts.B0).T1, w = tissueAt('white', MAGNETS.ts.B0).T1;
+  close(g, 427.4, 0.1, 'grey at 0.117 T'); close(w, 341.3, 0.1, 'white at 0.117 T');
+  assert(tissueAt('white', 3).T1 === 830, '3 T as before');
+  for (const B of [46e-6, 0.117, 1.5, 3]) assert(tissueAt('tap', B).T1 === 2500 && tissueAt('cuso4', B).T1 === 300, 'water fixed');
+  close(tissueAt('oil', 46e-6).T1, 100, 1e-9, 'oil while the board polarizes'); close(tissueAt('oil', 1.5).T1, 260, 1e-9, 'oil at 1.5 T');
+  // T1-weighting at 0.117 T (TR 500, TE 15) no longer tells white from grey as 1.5 T does.
+  const sig = (n, B) => { const t = tissueAt(n, B); return t.rho * weighting(t, { TR: 500, TE: 15 }); };
+  const r15 = sig('white', 1.5) / sig('grey', 1.5), r01 = sig('white', MAGNETS.ts.B0) / sig('grey', MAGNETS.ts.B0);
+  assert(r15 > 1.1 && Math.abs(r01 - 1) < 0.05, `white/grey ${r15} at 1.5 T, ${r01} at 0.117 T`);
+  return `T1 at 0.117 T: grey ${g.toFixed(0)} ms, white ${w.toFixed(0)} (950 and 650 at 1.5 T); T1-weighted white/grey ${r15.toFixed(3)} at 1.5 T, ${r01.toFixed(3)} at 0.117 T`;
+});
+
+test('decay during the readout: a point smears along x into a Lorentzian Tro/(pi T) pixels wide, not along y', () => {
+  const N = 64, fov = 128, Gx = 1;
+  // A spin echo in an uneven field (T2' = T) and nothing else fading: e^{-|tau|/T} about the echo.
+  const Tro = sequence({ type: 'se', TE: 40, TR: 2000, N, fov, Gx }).Tro, T = Tro / (4 * Math.PI);   // a smear 4 pixels wide
+  const seq = sequence({ type: 'se', TE: 40, TR: 2000, N, fov, Gx, T2prime: T });
+  close(readoutBlurPixels(Tro, T), 4, 1e-12, 'Tro / (pi T)');
+  const img = new Float64Array(N * N); img[(N / 2) * N + N / 2] = 1;
+  const k = kspaceOfParts([{ img, shift: false, T2: Infinity }], N, seq.dk, 0, () => readoutDecay(seq, Infinity));
+  const r = reconstruct(k.re, k.im, N, new Uint8Array(N).fill(1));
+  const row = Array.from({ length: N }, (_, i) => r.mag[(N / 2) * N + i]), col = Array.from({ length: N }, (_, j) => r.mag[j * N + N / 2]);
+  const wx = fwhm(Float64Array.from({ length: N }, (_, i) => i), row);
+  close(wx, 4, 0.25, 'its width along x, in pixels');
+  // Along y nothing: the column through it is the point.
+  let off = 0;
+  for (let j = 0; j < N; j++) if (j !== N / 2) off = Math.max(off, col[j]);
+  assert(off < 1e-12, `along y ${off}`);
+  // At the echo (kx = 0) a spin echo has lost nothing: the smear keeps the point's total.
+  let sum = 0;
+  for (let i = 0; i < N; i++) sum += r.re[(N / 2) * N + i];
+  close(sum, 1, 1e-9, 'the row sums to the point');
+  // With nothing fading the parts' k-space is kspaceOf's, fat shift and all.
+  const seq2 = sequence({ type: 'se', TE: 20, TR: 2000, N, fov, Gx: 2 });
+  const shapes = [disk(-30, 0, 12, 'water'), disk(30, 0, 12, 'fat')];
+  const pic = pictureOf(shapes, seq2, 1.5, N, fov, 4, true), shift = -(3.4e-6 * 63.87e3) / (GB * 2);
+  const a = kspaceOf(pic.total, pic.fat, N, seq2.dk, shift), b = kspaceOfParts(pic.parts, N, seq2.dk, shift);
+  let d = 0;
+  for (let i = 0; i < N * N; i++) d = Math.max(d, Math.abs(a.re[i] - b.re[i]), Math.abs(a.im[i] - b.im[i]));
+  assert(d < 1e-12, `parts differ by ${d}`);
+  // T2 alone fades the echo from the pi/2 pulse on: more is left before the echo than after.
+  const D = readoutDecay(sequence({ type: 'gre', TE: 20, TR: 2000, N, fov, Gx, T2prime: Infinity }), 50);
+  assert(D[0] > 1 && D[N - 1] < 1 && Math.abs(D[N / 2] - 1) < 1e-12, 'monotonic');
+  return `T2' = ${T.toFixed(3)} ms over a ${Tro.toFixed(2)} ms readout: the point is ${wx.toFixed(2)} pixels wide along x (Tro/πT2' = 4), a single pixel along y`;
 });

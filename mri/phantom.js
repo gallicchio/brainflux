@@ -8,24 +8,52 @@
 // points up and the centre of the field of view is pixel (N/2, N/2), the origin of the centred
 // FFT in lib/fft.js.
 
-// Tissues at 1.5 T (typical textbook values; T1 lengthens at 3 T, T2 hardly changes).
-// rho: the proton density relative to water.  colour: how the tissue is drawn in sketches.
+// Tissues at 1.5 T (typical textbook values; T1 lengthens at 3 T, T2 hardly changes), and at
+// 50 mT, measured in heads (O'Reilly and Webb, Magn. Reson. Med. 87, 884, 2022: grey matter
+// 327 ms, white 275, CSF 3695, fat 130; their T2s are within a few percent of these).  The
+// lesion's low-field T1 is a guess: grey matter's ratio.  rho: the proton density relative to
+// water.  colour: how the tissue is drawn in sketches.
+// The tubes of a low-field phantom, as the NMR demo has them at 46 µT: tap water, water with a
+// little copper sulphate (whose ions shorten T1 and T2), and cooking oil.  Water's relaxation
+// hardly depends on the field (its molecules tumble in picoseconds, faster than any Larmor
+// period here): `fixed`.  Oil's T1 shortens at low field, as fat's does (T1earth: in the board's
+// polarizing field of 7.84 mT, the NMR demo's 0.1 s).  `shift`: the tissue turns 3.4 ppm slower
+// than water (fat, oil), which the readout reads as a shift along x.
 export const TISSUES = {
-  water: { label: 'water (CSF)', rho: 1.0, T1: 4000, T2: 2000, T1at3T: 4300, colour: '#5aa9ff' },
-  fat: { label: 'fat', rho: 0.95, T1: 260, T2: 80, T1at3T: 370, colour: '#ffcf5a' },
-  grey: { label: 'grey matter', rho: 0.8, T1: 950, T2: 100, T1at3T: 1330, colour: '#9c9c9c' },
-  white: { label: 'white matter', rho: 0.7, T1: 650, T2: 90, T1at3T: 830, colour: '#e0e0e0' },
-  lesion: { label: 'lesion (oedema)', rho: 0.9, T1: 1500, T2: 200, T1at3T: 2000, colour: '#ff7a9a' },
-  bone: { label: 'bone (no signal)', rho: 0, T1: 1, T2: 1, T1at3T: 1, colour: '#303030' },
+  water: { label: 'water (CSF)', rho: 1.0, T1: 4000, T2: 2000, T1at3T: 4300, T1lo: 3695, colour: '#5aa9ff' },
+  fat: { label: 'fat', rho: 0.95, T1: 260, T2: 80, T1at3T: 370, T1lo: 130, colour: '#ffcf5a', shift: true },
+  grey: { label: 'grey matter', rho: 0.8, T1: 950, T2: 100, T1at3T: 1330, T1lo: 327, colour: '#9c9c9c' },
+  white: { label: 'white matter', rho: 0.7, T1: 650, T2: 90, T1at3T: 830, T1lo: 275, colour: '#e0e0e0' },
+  lesion: { label: 'lesion (oedema)', rho: 0.9, T1: 1500, T2: 200, T1at3T: 2000, T1lo: (1500 * 327) / 950, colour: '#ff7a9a' },
+  bone: { label: 'bone (no signal)', rho: 0, T1: 1, T2: 1, T1at3T: 1, T1lo: 1, colour: '#303030' },
+  tap: { label: 'tap water', rho: 1.0, T1: 2500, T2: 2000, fixed: true, colour: '#5aa9ff' },
+  cuso4: { label: 'water + CuSO₄', rho: 1.0, T1: 300, T2: 250, fixed: true, colour: '#3fd0c8' },
+  oil: { label: 'oil', rho: 0.95, T1: 260, T2: 80, T1at3T: 370, T1lo: 130, T1earth: 100, colour: '#ffcf5a', shift: true },
 };
 export const TISSUE_NAMES = Object.keys(TISSUES);
 /** The tissues with their signal; bone (no protons that the scanner sees) left out. */
 export const SIGNAL_TISSUES = TISSUE_NAMES.filter((t) => TISSUES[t].rho > 0);
 
-/** A tissue's T1 and T2 at the field B0 (T): 1.5 T values, or the 3 T ones above 2.2 T. */
+/** The field (T) of the low-field values T1lo. */
+export const B_LO = 0.05;
+
+/**
+ * A tissue's T1 and T2 at the field B0 (T).  At 1.5 T and 3 T the values above; between 50 mT
+ * and 1.5 T a power of the field through the 50 mT and 1.5 T values, T1 = T1lo (B0 / 50 mT)^b
+ * (tissue T1 grows roughly as a power of the frequency: the dispersion of relaxation); in the
+ * Earth's field, what matters is T1 while the board's coil polarizes (7.84 mT): T1earth, or the
+ * 50 mT value.  Water and copper sulphate (fixed) are the same at every field.  T2 is kept.
+ */
 export function tissueAt(name, B0 = 1.5) {
   const t = TISSUES[name];
-  return { ...t, name, T1: B0 > 2.2 ? t.T1at3T : t.T1 };
+  let T1 = t.T1;
+  if (!t.fixed) {
+    if (B0 > 2.2) T1 = t.T1at3T;
+    else if (B0 >= 1) T1 = t.T1;
+    else if (B0 >= 0.01) T1 = t.T1lo * (B0 / B_LO) ** (Math.log(t.T1 / t.T1lo) / Math.log(1.5 / B_LO));
+    else T1 = t.T1earth ?? t.T1lo;
+  }
+  return { ...t, name, T1 };
 }
 
 // Shapes: {x, y, a, b, phi, tissue}: an ellipse centred on (x, y), semi-axis a along the
@@ -88,6 +116,15 @@ export function headPhantom(z = 0) { return sliceOf(head3D(), z); }
 /** Three disks: water, fat and white matter (drag them). */
 export function disksPhantom() {
   return [disk(-45, 22, 32, 'water'), disk(42, 36, 24, 'fat'), disk(8, -42, 36, 'white')];
+}
+
+/** Tubes standing along z in the board's coil (85 mm across inside), seen from above: tap
+ *  water, water with copper sulphate, oil, and two thin tubes of tap water, 10 mm across and
+ *  8 mm apart.  At low field the honest sample: a head would take hours, and its tissues' T1
+ *  there is not known. */
+export const TUBE_HEIGHT = 100;   // mm: with no slice, each pixel sees the whole height
+export function tubesPhantom() {
+  return [disk(-18, 18, 14, 'tap'), disk(18, 18, 14, 'cuso4'), disk(-18, -18, 14, 'oil'), disk(9, -18, 5, 'tap'), disk(27, -18, 5, 'tap')];
 }
 
 /** The extent of a list of shapes: [xmin, xmax, ymin, ymax] in mm. */
@@ -190,8 +227,8 @@ export function steadyMz(tissue, seq) {
 
 /**
  * The weighted picture m(x, y) = sum over tissues of (fraction) rho w, as Float64Array, and the
- * part of it that is fat (for the chemical shift), from a rasterization and the sequence; B0
- * picks the T1 values.  weights: the weight of each tissue, for readouts.
+ * part of it that is fat or oil (for the chemical shift), from a rasterization and the
+ * sequence; B0 picks the T1 values.  weights: the weight of each tissue, for readouts.
  */
 export function weightedImage(raster, seq, B0 = 1.5) {
   const { nx, ny, fills } = raster, n = nx * ny;
@@ -201,7 +238,7 @@ export function weightedImage(raster, seq, B0 = 1.5) {
     if (!(t.rho > 0)) continue;
     const w = t.rho * weighting(t, seq);
     weights[name] = w;
-    const into = name === 'fat' ? fat : total;
+    const into = t.shift ? fat : total;
     for (let i = 0; i < n; i++) into[i] += w * f[i];
   }
   for (let i = 0; i < n; i++) total[i] += fat[i];

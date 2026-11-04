@@ -17,6 +17,7 @@
   --t-grey: #6f6f6f;
   --t-white: #a3a3a3;
   --t-lesion: #e0507a;
+  --t-cuso4: #0f9a94;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -35,6 +36,7 @@
     --t-grey: #9a9a9a;
     --t-white: #e6e6e6;
     --t-lesion: #ff8aa8;
+    --t-cuso4: #4fd6cf;
   }
 }
 
