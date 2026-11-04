@@ -108,7 +108,7 @@
           <div class="canvas-wrap"><canvas id="sampled" aria-label="The uv plane where it has been sampled, black elsewhere"></canvas></div>
           <div class="foot" id="sampled-foot"></div>
         </figure>
-        <div class="flow-arrow" id="flow-arrow" aria-hidden="true"><b>⟵</b><span>inverse<br>transform</span></div>
+        <div class="flow-arrow" id="flow-arrow" aria-hidden="true"><b>⟵</b><span>inverse <br>transform</span></div>
         <figure class="cell" id="beam-cell">
           <div class="cell-head"><h2>Dirty beam</h2><span class="note">the image of one point</span></div>
           <div class="canvas-wrap"><canvas id="beam" aria-label="The dirty beam: the image one point source would give with this sampling"></canvas></div>
@@ -202,8 +202,8 @@
     <p>The page tells it in four steps, the numbered buttons at the top.  <b>1 · One source</b>:
     the noise itself, and what multiplying and averaging do to it.  <b>2 · Two sources, two
     antennas</b>: drag antenna B along the ground and watch the dot in the complex plane wind
-    round.  <b>3 · The uv plane</b>: on the right, the correlation a pair would measure at every
-    separation, in colour; drag the ● and the live dot settles on the colour under it.  <b>4 ·
+    round.  <b>3 · The uv plane</b>: the correlation a pair would measure at every separation, in
+    colour; drag the ● and the live dot settles on the colour under it.  <b>4 ·
     Many baselines</b>: a whole array, the turning Earth, and the image that comes out.</p>
     <p>Look for this: one antenna alone sees no pattern at all, but the average of the product
     of two antennas makes fringes as their separation grows; the fringes of different sources
@@ -227,7 +227,7 @@
     <h3>2. Multiply and average: the autocorrelation, one lag at a time</h3>
     <p>The dashed curve is the same signal a lag $\tau$ later.  The middle plot is their
     product $x(t)\,x(t+\tau)$, blue above zero and red below, and its average is
-    $R(\tau)$, the <em>autocorrelation</em>, the dot on the bottom right curve.  At $\tau=0$ the
+    $R(\tau)$, the <em>autocorrelation</em>, the dot on the autocorrelation plot.  At $\tau=0$ the
     product is $x^2$, never negative, and its average is the power.  Here $\tau$ is half a
     cycle: the copy is upside down, the product is mostly negative, and $R=-0.99$.  Drag
     $\tau$ along: $R$ oscillates at $\nu_0$, a cycle per cycle of lag, under an envelope that
@@ -262,7 +262,7 @@
     <h3>5. Two independent noises: the average of their product is zero</h3>
     <p>Now the dashed curve is a second source, with its own noise.  Their product swings
     positive and negative with no preference, and however you drag $\tau$, its average dies
-    away (the curve at the bottom right flattens towards zero as the averaging goes on).  This
+    away (the autocorrelation plot's curve flattens towards zero as the averaging goes on).  This
     is the key to everything after: two sources that have nothing to do with each other add
     nothing to a correlation but noise that averages away.</p>
   </article>
@@ -273,13 +273,14 @@
     <h3>6. One source, two antennas: the fringe is in the separation</h3>
     <p>A source 10° from straight up, antennas A and B 20 cm apart, at 915 MHz ($\lambda$ =
     32.8 cm).  The waves of noise come down at 10° and reach B first: B is nearer the source by
-    $D\sin\theta$ (the black bar), 0.106 wavelengths, so B hears everything 0.106 cycles before
-    A.  Their voltages (the second row) are the same noise, shifted.  The correlator multiplies
+    $D\sin\theta$ (the thick bar), 0.106 wavelengths, so B hears everything 0.106 cycles before
+    A.  What they hear (<em>Antenna A hears</em> and <em>Antenna B hears</em>, under the hint) is the same
+    noise, shifted.  The correlator multiplies
     A by the conjugate of B and averages: the dot in the complex plane settles at the source's
     brightness, 1, at a phase of $-2\pi D\sin\theta/\lambda$ = −38°.  Drag B to the right: the
     magnitude stays and the phase winds round, once for every $\lambda/\sin\theta$ = 1.89 m.
     The real part, $\langle x_Ax_B\rangle$, is the handout's $I\cos(2\pi\theta D/\lambda)$:
-    the black curve under the live dot on the fringe plot.  That is the interference fringe,
+    the heavy curve under the live dot on the fringe plot.  That is the interference fringe,
     not on a screen but in the separation of the antennas.  The orange line is the power B
     receives: the same wherever B is.  One antenna alone sees no fringe; only the product of
     two does.  Drag the source: the fringes get finer as $\theta$ grows.</p>
@@ -291,8 +292,8 @@
     noises, and the product of A and B has four parts: source 1 at A times source 1 at B, the
     same for source 2, and two cross terms, source 1 at one antenna times source 2 at the
     other.  The complex plane draws them: each source's own term as an arrow in its colour,
-    laid end to end, and the cross terms as the grey dot, which wanders and dies, as in
-    experiment 5.  What is left is the sum of the two fringes, and the black curve beats as
+    laid end to end, and the cross terms as the grey diamond, which wanders and dies, as in
+    experiment 5.  What is left is the sum of the two fringes, and the heavy curve beats as
     you drag B (the slides' "superposition of both sources").  Because the sources are
     incoherent, the correlation of the sky is a sum of one fringe per source,
     $V=\sum_k I_k\,e^{-2\pi i\,u\,l_k}$.</p>
@@ -306,8 +307,8 @@
     waves adding in step at some places and out of step at others, a pattern fixed on the
     ground.  And the correlation is no longer the sum of two fringes: the cross terms stay.
     Drag A as well: with incoherent sources only the separation matters; here the correlation
-    changes when the pair moves together.  Turn <em>Coherent</em> off: the orange line goes
-    flat again.</p>
+    changes when the pair moves together.  Turn <em>Coherent sources</em> off: the orange line
+    goes flat again.</p>
   </article>
 
   <article class="exp" data-setup="delay">
@@ -334,14 +335,14 @@
     colour: what the pair measures is the colour of the stripe the source sits on.  Drag the ●
     on the uv plane: the stripes turn with the baseline and close up as it grows.  For one
     source $|V|$ is the same everywhere and only the phase winds: the uv plane is a rainbow
-    of straight stripes, $1/l$ apart.  Choose <em>real part</em> in the menu to see the
-    lecture's grey stripes.</p>
+    of straight stripes, $1/l$ apart.  Choose <em>real part</em> in the menu: the handout's
+    $\cos 2\pi(ul+vm)$, red where it is positive and cyan where it is negative.</p>
   </article>
 
   <article class="exp" data-setup="uv">
     <h3>11. The lab's pentagon: five sets of stripes add up to a Fourier transform</h3>
     <p>Five sources on a pentagon, as in the lab notebook.  Each makes its own stripes in the
-    uv plane, and they add: the picture on the right is
+    uv plane, and they add: the uv plane is
     $V(u,v)=\sum_kI_k\,e^{-2\pi i(ul_k+vm_k)}$, the two-dimensional Fourier transform of the
     sky.  The thin arrows in the complex plane are the five sources' terms, each in the colour
     of its stripe, laid end to end; the live dot settles where they end, on the colour under
@@ -367,8 +368,8 @@
   <article class="exp" data-setup="sketch">
     <h3>13. The Fourier Etch-a-Sketch</h3>
     <p><em>Keep what you measure</em> is on: every measurement is painted into the sampled uv
-    plane where the pair is, and at its mirror point, and the image on the left is the inverse
-    transform of everything painted so far.  Drag one line through the middle of the uv plane:
+    plane where the pair is, and at its mirror point, and the image from what you kept is the
+    inverse transform of everything painted so far.  Drag one line through the middle of the uv plane:
     the image is the sky smeared out across your line.  Draw lines at three angles, then fill
     in a disk: the three sources come apart.  Press <em>Autopilot</em> to let a spiral fill the
     plane.  This is the optics lab's Fourier Etch-a-Sketch, done with the phases kept: there,
@@ -426,7 +427,7 @@
     under the sky, the image the samples give, their inverse transform (the <em>dirty
     image</em>), with the arrow for the flow.  The small panel is the <em>dirty beam</em>, the
     image one point source would give.  Pairs on a line measure only one direction of the uv
-    plane, so the image is smeared into streaks across it.</p>
+    plane, east–west, so the image is smeared out north–south, across the line.</p>
   </article>
 
   <article class="exp" data-setup="array">

@@ -475,8 +475,14 @@ function drawSpectrum1(canvas) {
   // Words for the two halves of the real spectrum.
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = C.ink2; ctx.textBaseline = 'top';
   if (real) {
-    ctx.textAlign = 'left'; ctx.fillText('the band at +ν₀', Math.min(f.X(1) + 8, f.right - 90), f.top + 4);
-    ctx.textAlign = 'right'; ctx.fillText('its mirror image at −ν₀', Math.max(f.X(-1) - 8, f.left + 130), f.top + 4);
+    // Each label outside its band if there is room there, else inside; never across a band.
+    const put = (text, x, outward) => {
+      const w = ctx.measureText(text).width, room = outward > 0 ? f.right - (x + 8) : x - 8 - f.left;
+      const side = room >= w + 2 ? outward : -outward;
+      ctx.textAlign = side > 0 ? 'left' : 'right'; ctx.fillText(text, x + 8 * side, f.top + 4);
+    };
+    put('the band at +ν₀', f.X(1 + half), 1);
+    put('its mirror image', f.X(-1 - half), -1);
     ctx.textAlign = 'center'; ctx.fillText('nothing at 0', f.X(0), f.top + 4);
   }
   // The band magnified, when it is too narrow to see its shape.
@@ -1508,7 +1514,7 @@ function syncPanels() {
 
 function legends() {
   const items = (list) => list.map(([sw, text]) => `<span class="key"><span class="sw ${sw}"></span>${text}</span>`).join(' ');
-  $('#legend2').innerHTML = items([['dot', 'one chunk'], ['ring', 'the exact V'], ['', '× with this band, ● the running average']]) + (state.scene.sources.length > 1 && !state.coherent ? '<br>' + items([['s1', 'source 1’s share'], ['s2', 'source 2’s'], ['dot', 'grey: the cross terms']]) : '');
+  $('#legend2').innerHTML = items([['dot', 'one chunk'], ['ring', 'the exact V'], ['', '× with this band, ● the running average']]) + (state.scene.sources.length > 1 && !state.coherent ? '<br>' + items([['s1', 'source 1’s share'], ['s2', 'source 2’s'], ['diamond', 'the cross terms']]) : '');
   $('#legend3').innerHTML = items([['dot', 'one chunk'], ['ring', 'V under the ●'], ['', '× what the correlator’s points give']]) + (skyModel.kind === 'points' && !state.coherent && !state.hbt ? '<br>arrows: each source’s share, in its stripe’s colour' : '')
     + (state.hbt ? '' : '<br>The colours are the uv plane’s: the hue is the phase, the lightness the size');
 }
