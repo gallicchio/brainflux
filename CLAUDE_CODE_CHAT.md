@@ -1463,3 +1463,123 @@ simulated noise, the visual twin of the SNR number.
 **Tests.**  15 unit tests and an 86-check UI test (desktop, dark, phone), both passing on the
 merged `main` with the whole unit-test page at 410 passed; one wait in the UI test could throw
 if it ran while the page was still loading, and is guarded now.
+
+## Prompt 22
+
+> Do the natural followups.
+
+### Response 22 (2026-11-04)
+
+**Still pictures of every experiment.**  The 2004 rule "Every Animation has Key Frames saved as
+Pictures" had never been met.  Now each experiment in a drawer shows a picture of what it looks
+like when it is working, under its "Set it up" button (clicking the picture sets it up too).
+`tools/frames.py <demo>` makes them: it opens each `#setup=`, runs the JavaScript the demo's
+`frames.json` gives (stepping the simulation through `window.__app` to the moment the text
+describes), crops the panels that carry the idea, and writes `<demo>/frames/<name>.webp` and
+`data-frame="WxH"` on the experiment.  `tools/frames.py --check`, now part of
+`tools/test_all.sh`, keeps pictures and experiments in step.  Two things about headless
+Chromium had to be found the hard way: `captureBeyondViewport` resizes the viewport for an
+instant, which clears every canvas that follows its size, so the plots came out blank; and a
+scroll may not be painted before the capture, so crops came out shifted.  The tool now stays
+at the top of the page and makes the window taller only for a region that reaches below it.
+Thin films went first (13 pictures, 7 to 25 kB each).
+
+Then three agents made the pictures of the 17 demos with no other follow-up, one commit per
+demo, looking at every picture and at the drawer: 225 more, each moment reached through the
+demo's own `__app` hooks (the revival at T_rev, the tunnelling split at t = 40, the beam
+through the prism after 30 periods, the kink running out, a scan finished, a sweep stopped at
+the line); where a demo had no step hook (radiation, the 1D carpet), the capture stands in a
+`requestAnimationFrame` whose clock moves exactly 1/60 s a frame, so the pictures come out the
+same on any machine.  The six feature agents made their own demos' pictures last.  Two bugs
+came to light making them, both fixed: radiation's experiment 1 set itself up without the
+colour map its text describes ("the ring of orange and blue"); and tomography's
+`#setup=picture` and `#obj=portrait` links threw while the portrait loaded (the scan measured
+a scanner with no object yet), which the UI test had missed by setting up on a page already
+running.
+
+**Quantum optics**: the chirp buried in the noise.  Under the sensitivity curve, 8 s of
+simulated detector output at 4096 Hz: seeded noise drawn from the current noise curve, the
+chirp added at the chosen distance, whitened (or raw), with the template drawn over it, and
+under that the matched filter's output z(t), unit-variance noise with a peak of height ρ where
+the template lines up.  Squeezing rescales the same noise realisation, so the chirp's peak
+grows from 72 to 104 with nothing else changing; drag the distance out to 361 Mpc and the peak
+(ρ = 8) stands just above the noise's largest excursion (4.0); at 1000 Mpc the tallest peak is
+the noise's.  Checked: the noise's periodogram against S_h within 2%, the whitened variance
+0.999, the filter's peak height σ to 1e-9 at the merger sample, 24 realisations giving the
+filter noise a variance of 0.994.  Also the homodyne view's Pause button, moved up from below
+the fold.
+
+**Radio interferometry**: making the image as a menu that teaches, as the author asked
+("a checkbox to turn CLEAN on and off or a menu of different such algorithms; I've thought
+less about how to demonstrate this").  A strip under view 4, laid out as equations, shows the
+chosen method at work: the *dirty image* as the sky ⊛ the dirty beam beside its uv plane,
+black wherever no pair measured; *CLEAN* one step at a time (the residual with a cross on its
+brightest pixel, minus gain × peak × the beam there, equals what is left; then the points ⊛
+the clean beam + the residual = the image), with Step, Watch and Run; and *maximum entropy*
+(new, `imaging.js`), the smoothest positive sky that fits the data, I = M e^{R/α} at every
+pixel, solved by preconditioned conjugate gradients, with its own strip.  Each method's uv
+tile shows its guess at the spacings no pair measured, and the image's error against the
+true sky is a number.  On a Y of 27 dishes for 8 hours, CLEAN finds the binary in 2 components
+(0.01% off, MEM 0.11%) and MEM wins on the galaxy (0.61% in 40 iterations, CLEAN 2.9% after
+1000 steps).  With intensity correlations (HBT) the Etch-a-Sketch's image is captioned as the
+sky's autocorrelation (a binary becomes three points, a triangle a hexagon), with a link to the
+optics lab's phase-problem part.  A sampled-plane display bug that could skip a row of samples
+was fixed on the way.
+
+**Scattering in 2D**, the two pieces the plan had promised and the demo never drew.  Outside
+the momentum circle, Born's dσ/dθ (grey dashes) and the measured one (blue) on one scale, and
+a pink arrow q = k − k₀ from k₀'s tip to the circle that follows the pointer, with
+q = 2k₀ sin(θ/2) and both cross sections there in the readout; at the crystal's Bragg angle
+the arrow ends on the reflected beam at q = 2π/c.  For the disk, the classical cross section
+(r/2)|sin(θ/2)|, σ = 2r (tested against 200 000 rays), so the wave's forward peak and its
+total, 2.2 to 2.3 times the classical, stand out; a new experiment, "Twice the classical cross
+section".
+
+**MRI**: four magnets, 46 µT (the Earth's field), 0.117 T (the TeachSpin's 5 MHz), 1.5 and
+3 T, in a DOM-free `magnets.js`: the Larmor frequency, the polarization tanh(γħB/2kT), the
+signal per proton ∝ B_pol·B₀ (1.6 × 10⁻⁷ of 1.5 T's at 46 µT with the board's 7.84 mT coil,
+9.4 × 10⁻¹⁰ without it), the chemical shift (217 Hz at 1.5 T, 6.7 mHz at 46 µT), the gradient's
+sideways field misplacing spins by Gz²/2B₀ (2.7 mm at 46 µT, said but not drawn), and the
+pixel SNR from the board's own measured noise, 0.463 nV/√Hz.  A new phantom of tubes (tap
+water, copper sulphate, oil), the only honest sample at 46 µT: a pixel of water has an SNR of
+5.7 per average; with the polarizing coil off making that up would take 258 days.  The brief
+was wrong in one place and the agent corrected it: tissue T₁ is *shorter* at low field, not
+longer (T₂ hardly changes, T₂* lengthens, pure water doesn't change); the low-field values are
+fitted through head measurements at 50 mT (O'Reilly and Webb 2022), and at 0.117 T grey and
+white matter look alike on T₁-weighting.  And the decay during the readout as a toggle: the
+uneven field smears each pixel along x by T_ro/(πT₂′) pixels (4.02 measured against 4), with
+an experiment on why T₂ itself barely smears (a T₂ short enough to blur a pixel has already
+faded the tissue to 21%).
+
+**Bloch sphere and NMR**, the board as built.  The tank (`receiver.js`): H(f) for the coil's
+26.8 mH and 8.86 Ω with the eight DIP switches' capacitance, drawn as a Bode plot with the
+protons' frequency on it, its gain curve also the coil's own thermal noise; drag the peak to
+retune, or press "Tune to the protons" for the handbook's recipe at the field set.  The FID is
+now shown at OUT on a fixed scale, the noise is the receiver's own (12.6 mV r.m.s. at OUT),
+and "Hear it" plays what comes out of the receiver.  Every number checked against the board's
+`sim/design.json`: switches 1 2 4 7 give 247.29 nF and 1955.56 Hz, Q = 37.25, 0.8806 V at OUT,
+17.21 nV/√Hz.  At 50 µT the protons sit 173 Hz up the tank's tail (×5.34 instead of ×36.6);
+the tank also sets how much of the coil's noise gets through.  The coil's angle α to the
+Earth's field, with the sin²α law derived (one sin α for the part of M left precessing, one
+for what the coil picks up) and confirmed to 3e-3; north–south gives 0.68 of east–west here,
+a little under sin²α because the real 0.4 ms switch-off lets M follow the field by a few
+degrees.  The spin-½ box folds away on phones; and a bug fixed on the way: the T₁ plot had
+only ever recorded the first cycle's point.
+
+**Optical coherence tomography**: averaging B-scans against speckle (the help had mentioned it,
+the page didn't offer it): 1 to 16 repeats, each with a fresh speckle pattern (the tissue
+moving a fraction of a wavelength, or the beam stepped), the contrast falling 1.31, 0.93,
+0.66, 0.47, 0.33 against C₁/√N, the layers staying.  An en-face slab that follows a layer:
+11 µm under the pigment epithelium it lies in that one layer under all 4096 A-scans, where a
+flat plane at the same mean depth cuts three (38%, 32%, 30%).  The scans moved into a Web
+Worker: 16 averaged B-scans at 1024 A-scans a second went from 9% of frames over 33 ms to
+none.
+
+**Tests.**  `tools/test_all.sh` on the merged `main`: the unit tests (421 and more, each
+follow-up adding its own), the picture check (354 pictures, no problems) and 23 of the 24
+demos' UI runs passed.  The quantum-optics run failed on a race in the test, not the page:
+right after `location.reload()` the old page's `__app` was still there for a moment, so the
+wait for the new page could pass at once and the next call land mid-navigation.  It is fixed
+by clearing `__app` before the reload (the dispersion test had the same race, fixed too; the
+OCT test already did it), and both tests pass on their own after the fix.  Firefox isn't
+installed here.
