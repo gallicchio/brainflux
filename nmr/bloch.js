@@ -114,9 +114,9 @@ export function pulse(M, angle, phase, B1, offsetHz = 0) {
 
 /** The lab-frame vector of a rotating-frame one at time t: the frame turns clockwise at ω_ref. */
 export function toLab(Mrot, omegaRef, t, out = [0, 0, 0]) {
-  const a = -omegaRef * t, c = Math.cos(a), s = Math.sin(a);
-  out[0] = Mrot[0] * c - Mrot[1] * s;
-  out[1] = Mrot[0] * s + Mrot[1] * c;
+  const a = -omegaRef * t, c = Math.cos(a), s = Math.sin(a), x = Mrot[0], y = Mrot[1];
+  out[0] = x * c - y * s;
+  out[1] = x * s + y * c;
   out[2] = Mrot[2];
   return out;
 }

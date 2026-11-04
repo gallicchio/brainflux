@@ -82,12 +82,13 @@ export class Record {
     return { max: Math.max(0, best), t: tb };
   }
 
-  /** The mean of M_y′ (noise included) between t0 and t1: a signed amplitude. */
-  meanY(t0, t1, sigma = 0) {
-    let s = 0, n = 0;
-    const i0 = Math.max(0, this.index(t0)), i1 = Math.max(i0, this.index(t1));
-    for (let i = i0; i <= i1; i++) if (this.t[i] >= t0 && this.t[i] <= t1) { s += this.y[i] + sigma * this.ny[i]; n++; }
-    return n ? s / n : 0;
+  /** The time-average of M_y′ (noise included) between t0 and t1, a signed amplitude: the
+   *  record interpolated at n evenly spaced times (its samples need not be evenly spaced). */
+  meanY(t0, t1, sigma = 0, n = 33) {
+    const tmp = [0, 0, 0];
+    let s = 0;
+    for (let k = 0; k < n; k++) s += this.at(t0 + ((t1 - t0) * k) / (n - 1), sigma, tmp)[1] * (k === 0 || k === n - 1 ? 0.5 : 1);
+    return s / (n - 1);
   }
 }
 
@@ -182,13 +183,18 @@ export function noiseRms(record, t0, t1, sigma) {
 // ----------------------------------------------------------------------------- spectrum
 
 /**
- * The spectrum of the demodulated signal s(t) = M_x′ − i M_y′ (noise included) between t0 and
- * t1: resampled uniformly to n points, zero-padded `pad` times and transformed.  A spin that
- * precesses faster than the frame shows at a positive frequency.  Returns {f, mag} (frequencies
- * in Hz relative to the frame's, in increasing order; magnitudes normalised so that a steady
- * signal of amplitude 1 gives 1 at its frequency), the frequency step df, and the line found:
- * peak {f, mag} (the highest point, refined by a parabola through its neighbours) and its full
- * width at half maximum.
+ * The power spectrum of the demodulated signal s(t) = M_x′ − i M_y′ (noise included) between t0
+ * and t1: resampled uniformly to n points, zero-padded `pad` times and transformed.  A spin that
+ * precesses faster than the frame shows at a positive frequency.  Returns {f, power}
+ * (frequencies in Hz relative to the frame's, in increasing order; |S(f)|², normalised so that a
+ * steady signal of amplitude 1 gives 1 at its frequency), the frequency step df, and the line:
+ * peak {f, power} (the highest point, refined by a parabola through its neighbours) and its full
+ * width at half power.
+ *
+ * Why the power: an FID A e^{−t/T2*} that starts at t = 0 has the transform A/(1/T2* + 2πi f),
+ * whose magnitude falls to half at f = ±√3/(2πT2*), but whose square falls to half at
+ * f = ±1/(2πT2*): the line is 1/(πT2*) wide at half power (and so is the absorption, the real
+ * part once the phase is corrected).
  */
 export function spectrum(record, t0, t1, sigma = 0, n = 2048, pad = 4) {
   const N = n * pad, dt = (t1 - t0) / n;
@@ -198,14 +204,16 @@ export function spectrum(record, t0, t1, sigma = 0, n = 2048, pad = 4) {
     re[j] = tmp[0]; im[j] = -tmp[1];
   }
   fft(re, im);
-  const df = 1 / (N * dt), f = new Float64Array(N), mag = new Float64Array(N);
-  // Reorder to increasing frequency: k = N/2 … N−1 are the negative frequencies.
+  const df = 1 / (N * dt), f = new Float64Array(N), power = new Float64Array(N);
+  // Reorder to increasing frequency: k = N/2 … N−1 are the negative frequencies.  The spins
+  // turn clockwise in the frame (M_x′ + i M_y′ ∝ e^{−iδω t} for a spin δω ahead of it), so
+  // s = M_x′ − i M_y′ ∝ e^{+iδω t} and the transform, with e^{−2πi k j/N}, puts it at +δω.
   for (let k = 0; k < N; k++) {
     const src = (k + N / 2) % N;
     f[k] = (k - N / 2) * df;
-    mag[k] = Math.hypot(re[src], im[src]) / n;
+    power[k] = (re[src] ** 2 + im[src] ** 2) / (n * n);
   }
-  return { f, mag, df, ...line(f, mag) };
+  return { f, power, df, ...line(f, power) };
 }
 
 /** The peak of a spectrum, refined by a parabola, and its full width at half maximum. */
@@ -223,7 +231,7 @@ export function line(f, mag) {
   while (r < mag.length - 1 && mag[r] > half) r++;
   const cross = (i, j) => (mag[i] === mag[j] ? f[i] : f[i] + ((half - mag[i]) * (f[j] - f[i])) / (mag[j] - mag[i]));
   const fl = l < k ? cross(l, l + 1) : f[0], fr = r > k ? cross(r, r - 1) : f[f.length - 1];
-  return { peak: { f: fp, mag: mp }, fwhm: fr - fl };
+  return { peak: { f: fp, power: mp }, fwhm: fr - fl };
 }
 
 // --------------------------------------------------------------------------------- fits

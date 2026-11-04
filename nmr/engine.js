@@ -32,7 +32,7 @@ export class Engine {
     this.record = new Record();
     this.rng = new Rng(7);
     this.dtSample = 1e-6;
-    this.nextSample = 0;
+    this.nextSample = 0; this.kSample = 0;
     this.pulse = null;        // the pulse on now
     this.queue = [];          // pulses to come, sorted by time
     this.sent = [];           // pulses sent so far (for the charts), {t0, t1, angle, phase}
@@ -69,7 +69,15 @@ export class Engine {
   setSampling(dt) {
     if (dt === this.dtSample) return;
     this.dtSample = dt;
-    this.nextSample = this.t + dt;
+    this._grid();
+  }
+
+  /** The next sample on the grid k dt (anchored at t = 0, so a sample falls on every multiple of
+   *  dt: an echo at 2τ is sampled at its peak), after the clock. */
+  _grid() {
+    const dt = this.dtSample;
+    this.kSample = Number.isFinite(dt) ? Math.floor(this.t / dt + 1e-9) + 1 : 1;
+    this.nextSample = Number.isFinite(dt) ? this.kSample * dt : Infinity;
   }
 
   /** Start afresh: every spin along M (rotating frame), the clock at t, nothing sent, no record. */
@@ -78,9 +86,9 @@ export class Engine {
     this.t = t; this.tEnd = Infinity; this.done = false;
     this.ens.set(M);
     this.record.clear();
-    this.nextSample = t;
     this.pulse = null; this.queue = []; this.sent = [];
     this.sample();
+    this._grid();
     return this;
   }
 
@@ -131,17 +139,16 @@ export class Engine {
    */
   startEarth({ Bp, BE, tp, ramp, tl, tOpen = 0.019 }, M = null) {
     const B = Math.hypot(Bp, BE);
-    const prev = this.earth;
     const M0E = BE / B;                      // the equilibrium in the Earth's field alone
-    const Mlab = M ? [...M] : prev ? this.sum('lab') : [0, 0, M0E];
+    const Mlab = M ? [...M] : [0, 0, M0E];   // (each cycle starts from the Earth's field's equilibrium)
     this.mode = 'earth';
     this.earth = { Bp, BE, tp, ramp, tl, tOpen, M0E, M: Mlab, Bpol: [Bp, 0, BE], npol: [Bp / B, 0, BE / B], phase: 'polarize' };
     this.t = 0; this.tEnd = tp + ramp + tl; this.done = false;
     this.record.clear();
-    this.nextSample = 0;
     this.pulse = null; this.queue = []; this.sent = [];
     this.ens.set(toRotating(Mlab, this.omegaRef, 0));
     this.sample();
+    this._grid();
     return this;
   }
 
@@ -161,17 +168,14 @@ export class Engine {
    * it is used up the clock stops short, and the amount done is returned.
    */
   advance(dt, budget = Infinity) {
-    const tStart = this.t, tEnd = Math.min(this.t + dt, this.tEnd);
-    let work = 0, guard = 0;
-    while (this.t < tEnd && guard++ < 1e6) {
-      let next = tEnd;
-      const p = this.pulse;
-      if (p) next = Math.min(next, p.t1, this.t + p.dur / 16);
-      else if (this.queue.length && this.queue[0].t > this.t) next = Math.min(next, this.queue[0].t);
-      if (this.earth) next = Math.min(next, this._earthPhase()[1], this.earth.tp + this.earth.ramp + this.earth.tOpen);
-      next = Math.min(next, this.nextSample);
-      if (next > this.t) { work += this._stepTo(next); this.t = next; }
-      if (p && this.t >= p.t1) this.pulse = null;
+    const tStart = this.t;
+    // (A step that reaches the end to within rounding ends there.)
+    const tEnd = this.t + dt >= this.tEnd * (1 - 1e-12) ? this.tEnd : this.t + dt;
+    let work = 0;
+    for (let guard = 0; guard < 1e7; guard++) {
+      // First what is due now: the end of a pulse, the next pulse, a new part of the board's
+      // cycle, a sample.
+      if (this.pulse && this.t >= this.pulse.t1) this.pulse = null;
       while (!this.pulse && this.queue.length && this.queue[0].t <= this.t) this._start(this.queue.shift());
       if (this.earth) {
         const [ph] = this._earthPhase();
@@ -180,8 +184,17 @@ export class Engine {
           this.earth.phase = ph;
         }
       }
-      if (this.t >= this.nextSample) { this.sample(); this.nextSample += this.dtSample; }
-      if (work >= budget) break;
+      if (this.t >= this.nextSample) { this.sample(); this._grid(); }
+      if (this.t >= tEnd || work >= budget) break;
+      // Then on to the next of those that lies ahead.
+      let next = tEnd;
+      const ahead = (x) => { if (x > this.t && x < next) next = x; };
+      if (this.pulse) { ahead(this.pulse.t1); ahead(this.t + this.pulse.dur / 16); }
+      else if (this.queue.length) ahead(this.queue[0].t);
+      if (this.earth) { const e = this.earth; ahead(e.tp); ahead(e.tp + e.ramp); ahead(e.tp + e.ramp + e.tOpen); }
+      ahead(this.nextSample);
+      work += this._stepTo(next);
+      this.t = next;
     }
     if (this.t >= this.tEnd) this.done = true;
     const R = this.record;
@@ -198,7 +211,7 @@ export class Engine {
     if (ph === 'ramp') {
       let n = 0;
       integrate(e.M, (t) => rampField(e.Bp, e.BE, e.ramp, t - e.tp), this.t, next,
-        { T1, T2, M0: e.M0E, axis: 'field', Bref: e.BE, perPeriod: 24, dtMax: e.ramp / 200, onStep: () => n++ });
+        { T1, T2, M0: e.M0E, axis: 'field', Bref: e.BE, perPeriod: 16, dtMax: e.ramp / 200, onStep: () => n++ });
       return n;
     }
     this.ens.step(dt, this.fieldNow(), T1, T2, e.M0E);
@@ -226,16 +239,27 @@ export class Engine {
     return frame === 'lab' ? toLab(out, this.omegaRef, this.t, out) : out;
   }
 
-  /** Every spin now, in the frame asked for (N copies of one vector while the board polarizes). */
-  vectors(frame = 'rot') {
-    const N = this.ens.N, out = [];
-    if (this.earth && this.earth.phase !== 'listen') { const m = this.sum(frame); for (let i = 0; i < N; i++) out.push(m); return out; }
+  /**
+   * `count` of the spins now (evenly spaced through the spread, so they are themselves its
+   * quantiles), in the frame asked for; all of them when count is not given.  While the board
+   * polarizes, every spin is the one vector.
+   */
+  vectors(frame = 'rot', count = this.ens.N) {
+    const N = this.ens.N, n = Math.max(1, Math.min(N, count)), out = [];
+    if (this.earth && this.earth.phase !== 'listen') { const m = this.sum(frame); for (let i = 0; i < n; i++) out.push([...m]); return out; }
     const c = Math.cos(-this.omegaRef * this.t), s = Math.sin(-this.omegaRef * this.t);
-    for (let i = 0; i < N; i++) {
-      const v = this.ens.get(i);
+    for (let k = 0; k < n; k++) {
+      const v = this.ens.get(Math.floor(((k + 0.5) * N) / n));
       if (frame === 'lab') { const x = v[0] * c - v[1] * s, y = v[0] * s + v[1] * c; v[0] = x; v[1] = y; }
       out.push(v);
     }
+    return out;
+  }
+
+  /** The offset (Hz) of each of `count` spins chosen as vectors() chooses them. */
+  offsetsHz(count = this.ens.N) {
+    const N = this.ens.N, n = Math.max(1, Math.min(N, count)), out = new Float64Array(n);
+    for (let k = 0; k < n; k++) out[k] = this.ens.offsets[Math.floor(((k + 0.5) * N) / n)] / (2 * Math.PI);
     return out;
   }
 

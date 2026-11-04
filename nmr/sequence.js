@@ -9,7 +9,11 @@ import { fitShape } from './signal.js';
 
 const DEG = Math.PI / 180;
 
-/** The presets.  Pulses are {t, angle, phase} in seconds and degrees; τ and n are the sliders. */
+/**
+ * The presets.  Pulses are {t, angle, phase}: t the time of the pulse's centre in seconds (a hard
+ * pulse acts as if all at once at its centre, so a π pulse centred at τ makes the echo at 2τ),
+ * angle and phase in degrees.  τ and n are the sliders.
+ */
 export const PRESETS = {
   fid: {
     label: 'FID', title: 'One π/2 pulse, then listen: the free induction decay',
@@ -43,22 +47,30 @@ export function buildSequence(name, tau, n, T2s) {
 
 /**
  * Run a sequence silently (no page): a fresh engine with these parameters, every spin along ẑ
- * at t = 0, the pulses at their times, sampled every dt until `span`.  Returns the engine (its
- * record holds the signal; p.averages decides the noise's size through sigma at reading time).
+ * at t = 0, the pulses at their times.  The record is sampled every dt, from 0 to span, or only
+ * inside the windows [[t0, t1], ...] if they are given (much cheaper for a long sequence read
+ * in a few places).  Returns the engine; its record holds the signal with its unit noise.
  */
-export function runSequence(params, pulses, span, dt, seed = 11) {
+export function runSequence(params, pulses, span, dt, seed = 11, windows = null) {
   const e = new Engine(params);
   e.rng.s = seed >>> 0;
-  e.setSampling(dt);
-  e.reset([0, 0, 1], 0);
+  e.setSampling(windows ? Infinity : dt);
+  const B1 = params.B1 ?? e.p.B1, starts = pulses.map((q) => q.t - pulseDuration(q.angle * DEG, B1) / 2);
+  e.reset([0, 0, 1], Math.min(0, ...starts));
   e.tEnd = span;
-  for (const q of pulses) e.schedule(q.t, q.angle, q.phase, params.B1 ?? e.p.B1);
-  e.advance(span);
+  pulses.forEach((q, i) => e.schedule(starts[i], q.angle, q.phase, B1));
+  if (!windows) { e.advance(span); return e; }
+  for (const [a, b] of windows) {
+    if (a > e.t) e.advance(a - e.t);
+    e.setSampling(dt);
+    e.advance(b - e.t);
+    e.setSampling(Infinity);
+  }
   return e;
 }
 
-/** The time a pulse ends. */
-export function pulseEnd(q, B1) { return q.t + pulseDuration(q.angle * DEG, B1); }
+/** The time a pulse ends (q.t is its centre). */
+export function pulseEnd(q, B1) { return q.t + pulseDuration(q.angle * DEG, B1) / 2; }
 
 /**
  * Inversion recovery for each delay: the signed amplitude just after the π/2 pulse (the mean of
@@ -69,11 +81,11 @@ export function recoveryCurve(params, taus, sigma = 0, { window = null, seed = 1
   const amp = taus.map((tau, i) => {
     const seq = buildSequence('ir', tau, 1, T2s);
     const q = seq.pulses[1], t0 = pulseEnd(q, params.B1), t1 = t0 + win;
-    const e = runSequence(params, seq.pulses, t1 + win, win / 20, seed + i);
+    const e = runSequence(params, seq.pulses, t1, win / 20, seed + i, [[t0, t1]]);
     return e.record.meanY(t0, t1, sigma);
   });
   const fit = fitShape(taus, amp, 'recovery');
-  return { tau: taus, amp, fit: { M0: fit.A, T1: fit.tau, nullAt: fit.tau * Math.LN2, rms: fit.rms } };
+  return { tau: taus, amp, window: win, fit: { M0: fit.A, T1: fit.tau, nullAt: fit.tau * Math.LN2, rms: fit.rms } };
 }
 
 /** The echoes of a record: the largest envelope within ±w of each expected time, and the fit A e^{−t/T2}. */
@@ -92,9 +104,9 @@ export function echoCurve(params, taus, sigma = 0, { seed = 11 } = {}) {
   const T2s = T2star(params.T2, params.spreadHz);
   const t = [], amp = [];
   taus.forEach((tau, i) => {
-    const seq = buildSequence('echo', tau, 1, T2s);
-    const e = runSequence(params, seq.pulses, 2 * tau + 3 * T2s, Math.min(T2s / 40, tau / 200), seed + i);
-    const m = e.record.envelopeMax(2 * tau - T2s, 2 * tau + T2s, sigma);
+    const seq = buildSequence('echo', tau, 1, T2s), w = Math.min(T2s, tau / 2);
+    const e = runSequence(params, seq.pulses, 2 * tau + w, w / 40, seed + i, [[2 * tau - w, 2 * tau + w]]);
+    const m = e.record.envelopeMax(2 * tau - w, 2 * tau + w, sigma);
     t.push(2 * tau); amp.push(m.max);
   });
   const fit = fitShape(t, amp, 'decay');
@@ -111,10 +123,12 @@ export function polarizeCurve(params, earth, tps, sigma = 0, { win = 0.05, seed 
   const amp = tps.map((tp, i) => {
     const e = new Engine(params);
     e.rng.s = (seed + i) >>> 0;
-    e.setSampling(win / 25);
-    e.startEarth({ ...earth, tp, tl: earth.tOpen + win + 2 * win / 25 });
-    e.advance(e.tEnd);
+    e.setSampling(Infinity);
+    e.startEarth({ ...earth, tp, tl: earth.tOpen + win });
     const t0 = tp + earth.ramp + earth.tOpen;
+    e.advance(t0 - e.t);
+    e.setSampling(win / 25);
+    e.advance(e.tEnd - e.t);
     return e.record.envelopeMax(t0, t0 + win, sigma).max;
   });
   const fit = fitShape(tps, amp, 'rise');

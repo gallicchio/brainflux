@@ -55,24 +55,32 @@ test('a π/2 pulse about x takes ẑ to +ŷ′, a π pulse to −ẑ; the lab-fr
   close(pulseDuration(Math.PI / 2, B1), 2.5e-6, 1e-18, 'duration');
   // The same pulse as a field rotating at γB0 in the lab frame, stepped 128 times a period.
   const w = GAMMA * B0, tau = pulseDuration(Math.PI / 2, B1);
-  const lab = integrate([0, 0, 1], (t) => [B0, 0, 0].map((_, i) => [B1 * Math.cos(w * t), -B1 * Math.sin(w * t), B0][i]), 0, tau, { perPeriod: 128 });
+  const lab = integrate([0, 0, 1], (t) => [B1 * Math.cos(w * t), -B1 * Math.sin(w * t), B0], 0, tau, { perPeriod: 512 });
   const back = toRotating(lab, w, tau);
   close(back[1], 1, 1e-4, 'lab frame, My′'); close(back[2], 0, 1e-4, 'lab frame, Mz');
   close(Math.acos(Math.max(-1, Math.min(1, lab[2]))), Math.PI / 2, 1e-4, 'the flip angle from the lab frame');
   return `θ = γB1τ: ${(B1 * 1e3).toFixed(4)} mT for 2.5 μs; the lab-frame integration gives θ = ${(Math.acos(lab[2]) * 180 / Math.PI).toFixed(4)}°`;
 });
 
-test('off resonance a pulse turns M about the tilted effective field, as the lab-frame integration shows', () => {
-  const df = 100e3;                         // 100 kHz off, as large as γB1/2π: the field tilts 45°
-  const Beff = effectiveField(B1, 0, df);
-  close(Math.atan2(Beff[0], -Beff[2]), Math.PI / 4, 1e-9, 'the tilt of B_eff');
-  const m = pulse([0, 0, 1], Math.PI / 2, 0, B1, df);
-  assert(m[2] > 0.4, `a nominal π/2 leaves Mz = ${m[2].toFixed(3)} (not 0)`);
+test('off resonance a pulse turns M about the tilted effective field: the closed form, and the lab-frame integration', () => {
+  // On resonance B1 turns M at ω1 = γB1; δf off, the frame leaves ΔB = −2πδf/γ along z, and M
+  // turns about B_eff, tilted β from z with tan β = ω1/(−2πδf), at √(ω1² + (2πδf)²).  From ẑ:
+  // Mz = cos²β + sin²β cos(√(1 + (2πδf/ω1)²) θ).
+  const w1 = GAMMA * B1, rows = [];
+  for (const df of [0, 10e3, 50e3, 100e3, 300e3]) {
+    const Beff = effectiveField(B1, 0, df), beta = Math.atan2(Beff[0], Beff[2]);
+    const m = pulse([0, 0, 1], Math.PI / 2, 0, B1, df);
+    const k = Math.hypot(1, (2 * Math.PI * df) / w1), exact = Math.cos(beta) ** 2 + Math.sin(beta) ** 2 * Math.cos(k * Math.PI / 2);
+    close(m[2], exact, 1e-12, `Mz at ${df / 1e3} kHz off`);
+    rows.push(`${df / 1e3} kHz: Mz = ${m[2].toFixed(3)}`);
+  }
+  const df = 100e3, m = pulse([0, 0, 1], Math.PI / 2, 0, B1, df);
+  close(Math.atan2(B1, (2 * Math.PI * df) / GAMMA), Math.PI / 4, 1e-12, '100 kHz off B_eff is tilted 45°');
   const w = GAMMA * B0 + 2 * Math.PI * df, tau = pulseDuration(Math.PI / 2, B1);
-  const lab = integrate([0, 0, 1], (t) => [B1 * Math.cos(w * t), -B1 * Math.sin(w * t), B0], 0, tau, { perPeriod: 128 });
+  const lab = integrate([0, 0, 1], (t) => [B1 * Math.cos(w * t), -B1 * Math.sin(w * t), B0], 0, tau, { perPeriod: 512 });
   const back = toRotating(lab, w, tau);
-  for (let i = 0; i < 3; i++) close(back[i], m[i], 2e-4, `component ${i}`);
-  return `100 kHz off: B_eff tilted 45°, Mz after the "π/2" = ${m[2].toFixed(4)} (lab frame ${back[2].toFixed(4)})`;
+  for (let i = 0; i < 3; i++) close(back[i], m[i], 1e-4, `lab frame, component ${i}`);
+  return `a nominal π/2 (ω1/2π = 100 kHz): ${rows.join(', ')}; the lab frame agrees to 1e-4`;
 });
 
 // ------------------------------------------------------------------------- relaxation
@@ -99,7 +107,7 @@ test('T1 and T2 exponentials: after a π/2, Mxy = e^{−t/T2} and Mz = 1 − e^{
 // --------------------------------------------------------------------------- ensembles
 
 test('a Lorentzian spread of width Δf makes the FID decay as e^{−t/T2*}, T2* = 1/(πΔf), with no spin losing anything', () => {
-  const N = 400, df = 500, T2s = spreadT2(df);
+  const N = 4096, df = 500, T2s = spreadT2(df);
   close(T2s, 1 / (Math.PI * 500), 1e-18, 'T2′');
   const e = new Engine({ B0, N, spreadHz: df });
   e.reset([0, 1, 0], 0); e.setSampling(2e-5);
@@ -109,48 +117,63 @@ test('a Lorentzian spread of width Δf makes the FID decay as e^{−t/T2*}, T2* 
     const m = e.sum('rot');
     worst = Math.max(worst, Math.abs(Math.hypot(m[0], m[1]) - Math.exp(-t / T2s)));
   }
-  assert(worst < 0.012, `largest error of the FID against e^{−t/T2*}: ${worst}`);
-  for (let i = 0; i < N; i += 37) close(norm(e.ens.get(i)), 1, 1e-12, `spin ${i} keeps its length`);
+  assert(worst < 0.01, `largest error of the FID against e^{−t/T2*}: ${worst}`);
+  for (let i = 0; i < N; i += 371) close(norm(e.ens.get(i)), 1, 1e-12, `spin ${i} keeps its length`);
   close(T2star(0.02, 500), 1 / (1 / 0.02 + Math.PI * 500), 1e-18, '1/T2* = 1/T2 + πΔf');
   return `N = ${N}: |M| follows e^{−t/T2*} to ${worst.toFixed(4)} over 2.4 T2* (T2* = ${(T2s * 1e3).toFixed(3)} ms); every spin still has length 1`;
 });
 
+const B1hard = pulseField(Math.PI / 2, 0.25e-6);   // pulses 10 times shorter: hard for the whole line
+
 test('a π pulse at τ refocuses the spread into an echo at 2τ of height e^{−2τ/T2}', () => {
-  const N = 400, df = 500, T2 = 0.02, tau = 5e-3;
+  const N = 4096, df = 500, T2 = 0.02, tau = 5e-3, T2p = spreadT2(df);
   const seq = buildSequence('echo', tau, 1, T2star(T2, df));
-  const e = runSequence({ B0, B1, N, spreadHz: df, T1: 0.03, T2 }, seq.pulses, 2 * tau + 2e-3, 1e-5);
+  const e = runSequence({ B0, B1: B1hard, N, spreadHz: df, T1: 0.03, T2 }, seq.pulses, 2 * tau + 2e-3, 1e-5);
   const peak = e.record.envelopeMax(2 * tau - 1e-3, 2 * tau + 1e-3);
   close(peak.t, 2 * tau, 2e-5, 'the echo is at 2τ');
-  close(peak.max, Math.exp(-2 * tau / T2), 0.01, 'the echo\'s height');
-  const before = e.record.envelopeMax(tau + 1e-3, 2 * tau - 1e-3).max;
+  close(peak.max, Math.exp(-2 * tau / T2), 1e-3, 'the echo\'s height');
+  // The TeachSpin's 2.5 μs π/2 (ω1/2π = 100 kHz) misses the far tail of a Lorentzian line, and a
+  // 25 μs one (10 kHz) misses more: their echoes are 0.4% and 2.8% lower.
+  const soft = [B1, pulseField(Math.PI / 2, 25e-6)].map((b) => runSequence({ B0, B1: b, N, spreadHz: df, T1: 0.03, T2 }, seq.pulses, 2 * tau + 1e-4, 1e-5, 11, [[2 * tau - 1e-4, 2 * tau + 1e-4]]).record.envelopeMax(2 * tau - 1e-4, 2 * tau + 1e-4).max / Math.exp(-2 * tau / T2));
+  assert(soft[0] > 0.993 && soft[0] < 0.999 && soft[1] > 0.96 && soft[1] < 0.98, `soft pulses refocus ${soft}`);
+  // Its two sides are the FID's envelope, e^{−|t − 2τ|/T2′} (times the T2 loss).
+  const side = e.record.envelopeMax(2 * tau + 0.5e-3 - 2e-5, 2 * tau + 0.5e-3 + 2e-5).max;
+  close(side, Math.exp(-(2 * tau + 0.5e-3) / T2) * Math.exp(-0.5e-3 / T2p), 0.01, 'the echo\'s side 0.5 ms after it');
+  // More than 4.7 T2′ from the echo, only the finite ensemble's floor is left.
+  const before = e.record.envelopeMax(tau + 2e-4, 2 * tau - 3e-3).max;
   assert(before < 0.03, `between the π pulse and the echo the signal is gone: ${before}`);
   // Without the π pulse nothing comes back.
-  const f = runSequence({ B0, B1, N, spreadHz: df, T1: 0.03, T2 }, [seq.pulses[0]], 2 * tau + 1e-3, 1e-5);
-  assert(f.record.envelopeMax(2 * tau - 1e-3, 2 * tau + 1e-3).max < 0.02, 'no echo without the π pulse');
+  const f = runSequence({ B0, B1: B1hard, N, spreadHz: df, T1: 0.03, T2 }, [seq.pulses[0]], 2 * tau + 1e-3, 1e-5);
+  const none = f.record.envelopeMax(2 * tau - 1e-3, 2 * tau + 1e-3).max;
+  assert(none < 0.03, `no echo without the π pulse: ${none}`);
   // The same from the echo-against-τ run and its fit.
-  const c = echoCurve({ B0, B1, N: 200, spreadHz: df, T1: 0.03, T2 }, [2e-3, 4e-3, 6e-3, 8e-3, 12e-3]);
-  close(c.fit.T2, T2, 0.03 * T2, 'T2 fitted from echoes at five τ');
-  return `echo at t = ${(peak.t * 1e3).toFixed(3)} ms, height ${peak.max.toFixed(4)} (e^{−2τ/T2} = ${Math.exp(-2 * tau / T2).toFixed(4)}); T2 from five echoes ${(c.fit.T2 * 1e3).toFixed(2)} ms`;
+  const c = echoCurve({ B0, B1, N, spreadHz: df, T1: 0.03, T2 }, [2e-3, 4e-3, 6e-3, 8e-3, 12e-3]);
+  close(c.fit.T2, T2, 0.01 * T2, 'T2 fitted from echoes at five τ');
+  return `echo at t = ${(peak.t * 1e3).toFixed(3)} ms, height ${peak.max.toFixed(4)} (e^{−2τ/T2} = ${Math.exp(-2 * tau / T2).toFixed(4)}); floor ${before.toFixed(3)} between; with 2.5 and 25 μs π/2 pulses ${soft.map((x) => x.toFixed(4)).join(' and ')} of it; T2 from five echoes ${(c.fit.T2 * 1e3).toFixed(2)} ms`;
 });
 
 test('a CPMG train of π pulses about y gives echoes decaying with T2, and the fit finds it', () => {
   const T2 = 0.02, tau = 2e-3, n = 10;
   const seq = buildSequence('cpmg', tau, n, T2star(T2, 500));
-  const e = runSequence({ B0, B1, N: 200, spreadHz: 500, T1: 0.03, T2 }, seq.pulses, seq.span, 1e-5);
+  const e = runSequence({ B0, B1: B1hard, N: 4096, spreadHz: 500, T1: 0.03, T2 }, seq.pulses, seq.span, 1e-5);
   const ec = echoAmplitudes(e.record, seq.echoes, 5e-4);
+  for (let k = 0; k < n; k++) close(ec.amp[k], Math.exp(-seq.echoes[k] / T2), 2e-3, `echo ${k + 1}'s height`);
   close(ec.fit.T2, T2, 0.03 * T2, 'T2 from the train');
   for (let k = 0; k < n; k++) close(ec.t[k], seq.echoes[k], 2e-5, `echo ${k + 1} at 2(k+1)τ`);
   return `${n} echoes, 4 to 40 ms: T2 = ${(ec.fit.T2 * 1e3).toFixed(2)} ms (set 20)`;
 });
 
 test('inversion recovery: M_z(τ) = 1 − 2e^{−τ/T1}, the null at T1 ln 2, and the fit finds T1', () => {
-  const T1 = 0.03, taus = [2, 5, 10, 15, 20, 25, 30, 40, 50, 70, 90].map((ms) => ms * 1e-3);
-  const c = recoveryCurve({ B0, B1, N: 1, T1, T2: 0.02 }, taus);
+  const T1 = 0.03, T2 = 0.02, taus = [2, 5, 10, 15, 20, 25, 30, 40, 50, 70, 90].map((ms) => ms * 1e-3);
+  const c = recoveryCurve({ B0, B1, N: 1, T1, T2 }, taus);
+  // The reading is the mean of M_y′ over a window w just after the π/2, which the FID's T2 decay
+  // lowers by (T2/w)(1 − e^{−w/T2}).
+  const k = (T2 / c.window) * (1 - Math.exp(-c.window / T2));
   let worst = 0;
-  taus.forEach((tau, i) => { worst = Math.max(worst, Math.abs(c.amp[i] - (1 - 2 * Math.exp(-tau / T1)))); });
-  assert(worst < 2e-3, `signed amplitude against 1 − 2e^{−τ/T1}: worst ${worst}`);
-  close(c.fit.T1, T1, 0.01 * T1, 'T1 fitted'); close(c.fit.nullAt, T1 * Math.LN2, 1e-4, 'the null');
-  return `T1 = ${(c.fit.T1 * 1e3).toFixed(2)} ms from eleven delays; the null at ${(c.fit.nullAt * 1e3).toFixed(2)} ms = T1 ln 2`;
+  taus.forEach((tau, i) => { worst = Math.max(worst, Math.abs(c.amp[i] - k * (1 - 2 * Math.exp(-tau / T1)))); });
+  assert(worst < 3e-4, `signed amplitude against 1 − 2e^{−τ/T1}: worst ${worst}`);
+  close(c.fit.T1, T1, 1e-3 * T1, 'T1 fitted'); close(c.fit.nullAt, T1 * Math.LN2, 1e-4, 'the null');
+  return `T1 = ${(c.fit.T1 * 1e3).toFixed(3)} ms from eleven delays (set 30); the null at ${(c.fit.nullAt * 1e3).toFixed(2)} ms = T1 ln 2; readings within ${worst.toExponential(1)} of the closed form`;
 });
 
 // ---------------------------------------------------------------------------- spectrum
@@ -163,11 +186,12 @@ test('the FID\'s spectrum: a line at the Larmor frequency of width 1/(πT2*)', (
   close(s.peak.f, -2000, s.df, 'the line is 2 kHz below the reference');
   close(s.fwhm, 1 / (Math.PI * T2), 0.02 / (Math.PI * T2), 'FWHM = 1/(πT2)');
   // An ensemble's spread: width 1/(πT2*) too.
-  const f = new Engine({ B0, N: 400, spreadHz: 500 });
+  const f = new Engine({ B0, N: 4096, spreadHz: 500 });
   f.reset([0, 1, 0], 0); f.setSampling(5e-6); f.advance(8e-3);
   const sf = spectrum(f.record, 0, 8e-3, 0, 2048, 4);
   close(sf.peak.f, 0, sf.df, 'on resonance'); close(sf.fwhm, 500, 15, 'FWHM = Δf');
-  return `one spin, T2 = 1 ms: peak at ${s.peak.f.toFixed(1)} Hz, width ${s.fwhm.toFixed(1)} Hz (1/πT2 = ${(1 / (Math.PI * T2)).toFixed(1)}); 400 spins spread 500 Hz: width ${sf.fwhm.toFixed(1)} Hz`;
+  close(s.peak.power, (T2 / 12e-3) ** 2, 0.02 * (T2 / 12e-3) ** 2, 'the height of the line: (T2/T_record)²');
+  return `one spin, T2 = 1 ms: peak at ${s.peak.f.toFixed(1)} Hz, width at half power ${s.fwhm.toFixed(1)} Hz (1/πT2 = ${(1 / (Math.PI * T2)).toFixed(1)}); 4096 spins spread 500 Hz: width ${sf.fwhm.toFixed(1)} Hz`;
 });
 
 // ------------------------------------------------------------------------- the raw trace
@@ -186,19 +210,27 @@ test('the raw trace is the EMF: Vpk (Mx′ sin ωt − My′ cos ωt), drawn as 
 
 // ---------------------------------------------------------------------------- the board
 
-test('the switch-off: sudden when γBE²τ/Bp ≪ 1 (M left across the Earth\'s field), adiabatic when ≫ 1 (M follows down to ẑ)', () => {
+test('the switch-off: sudden when A = γBE²τ/Bp ≪ 1 (M left across the Earth\'s field), adiabatic when ≫ 1 (M follows down to ẑ)', () => {
   const Bp = 5.2249e-3 * 1.5, BE = 46.03e-6;
   const A = adiabaticity(Bp, BE, 0.4e-3);
   close(A, 0.0289, 5e-4, 'the board\'s 0.4 ms');
+  // The spins follow the field while it turns slower than they precess about it, until the
+  // ramp is nearly over: they are left about A^{1/3} behind.  At the board's 0.4 ms: 98.8%.
   const sudden = leftAcross(Bp, BE, 0.4e-3);
-  assert(sudden.across > 0.995 && Math.abs(sudden.along) < 0.1, `0.4 ms: across ${sudden.across}, along ${sudden.along}`);
-  const tauAd = 30 / (GAMMA * BE * BE / Bp);
+  assert(sudden.across > 0.985 && sudden.along > 0.1 && sudden.along < 0.2, `0.4 ms: across ${sudden.across}, along ${sudden.along}`);
+  const fine = switchOff([1, 0, 0], Bp, BE, 0.4e-3, { perPeriod: 96 });
+  close(fine[2], sudden.along, 1e-3, 'converged in the step');
+  const instant = leftAcross(Bp, BE, 4e-6);
+  assert(instant.across > 0.9995, `A = 3e-4: across ${instant.across}`);
+  const tauAd = (30 * Bp) / (GAMMA * BE * BE);
   const adiabatic = leftAcross(Bp, BE, tauAd);
-  assert(adiabatic.along > 0.99 && adiabatic.across < 0.15, `A = 30: across ${adiabatic.across}, along ${adiabatic.along}`);
-  const mid = leftAcross(Bp, BE, 1 / (GAMMA * BE * BE / Bp));
-  assert(mid.across > 0.3 && mid.across < 0.95, `A = 1: across ${mid.across}`);
+  assert(adiabatic.along > 0.999 && adiabatic.across < 0.05, `A = 30: across ${adiabatic.across}, along ${adiabatic.along}`);
+  const mid = leftAcross(Bp, BE, Bp / (GAMMA * BE * BE));
+  assert(mid.across > 0.6 && mid.across < 0.75, `A = 1: across ${mid.across}`);
+  // The naive γBE τ says nothing: it is 4.9 at the board's 0.4 ms, which is sudden.
+  close(GAMMA * BE * 0.4e-3, 4.93, 0.01, 'γ BE τ');
   close(polarized(3, 2.5, Bp, BE), 1 - Math.exp(-1.2), 1e-4, 'polarized in 3 s with T1 = 2.5 s');
-  return `A = ${A.toFixed(4)} at 0.4 ms: ${(sudden.across * 100).toFixed(1)}% left across; A = 30 (τ = ${(tauAd * 1e3).toFixed(0)} ms): ${(adiabatic.along * 100).toFixed(1)}% along ẑ; A = 1: ${(mid.across * 100).toFixed(0)}% across`;
+  return `A = ${A.toFixed(4)} at 0.4 ms: ${(sudden.across * 100).toFixed(1)}% left across; A = 1 (τ = ${(Bp / (GAMMA * BE * BE) * 1e3).toFixed(1)} ms): ${(mid.across * 100).toFixed(0)}%; A = 30 (τ = ${(tauAd * 1e3).toFixed(0)} ms): ${(adiabatic.along * 100).toFixed(2)}% along ẑ`;
 });
 
 test('the board\'s cycle in the engine: nothing while polarizing, then the FID at 1959.8 Hz fading with T2*, growing with the polarizing time as 1 − e^{−tp/T1}', () => {
@@ -215,11 +247,13 @@ test('the board\'s cycle in the engine: nothing while polarizing, then the FID a
   const t0 = 3 + 0.4e-3 + 0.019, s = spectrum(e.record, t0, 5, 0, 2048, 4);
   close(s.peak.f, 0, s.df, 'the line at the Larmor frequency (the frame\'s)');
   close(e.f0, 1959.8, 0.1, 'f0');
-  const amp0 = e.record.envelopeMax(t0, t0 + 0.05).max, amp1 = e.record.envelopeMax(t0 + 1, t0 + 1.05).max;
+  const amp0 = e.record.envelopeMax(t0, t0 + 0.002).max, amp1 = e.record.envelopeMax(t0 + 1, t0 + 1.002).max;
   const T2s = T2star(T2, spread);
   close(amp1 / amp0, Math.exp(-1 / T2s), 0.03, 'the FID fades with T2*');
+  const across = leftAcross(Bp, BE, 0.4e-3).across * polarized(3, T1, Bp, BE);
+  close(amp0, across * Math.exp(-0.019 / T2s), 0.01, 'its start: what the switch-off left across, 19 ms on');
   const c = polarizeCurve({ T1, T2, N: 1 }, { Bp, BE, ramp: 0.4e-3, tOpen: 0.019 }, [0.2, 0.5, 1, 1.5, 2, 3, 4, 4.7]);
-  close(c.fit.T1, T1, 0.02 * T1, 'T1 from the polarizing time');
+  close(c.fit.T1, T1, 0.01 * T1, 'T1 from the polarizing time');
   return `after 3 s: ${(amp0).toFixed(3)} of full polarization (1 − e^{−3/2.5} = ${(1 - Math.exp(-1.2)).toFixed(3)}); T2* = ${T2s.toFixed(3)} s; T1 fitted ${c.fit.T1.toFixed(3)} s`;
 });
 
