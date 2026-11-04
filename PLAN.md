@@ -173,6 +173,7 @@ page.
 | `expr.js` | expression parser: numbers, x, i, pi, e, functions, comparisons as 0/1, implicit multiplication; evaluated over whole arrays at once (fast without `eval`); free symbols for sliders; MathML of the parsed expression as a live preview |
 | `mathml.js` | a small TeX-subset to MathML converter for the explanations |
 | `plot.js` | HiDPI canvas helpers, axes and ticks |
+| `scope.js` | dense traces drawn as a digital phosphor oscilloscope draws them: each piece's time deposited over the pixels it crosses, brightness by relative density with a floor, smoothing across columns only for bands, band-limited (Lanczos) interpolation, keyed picture cache; `?scope=fast` (or localStorage `brainflux.scope`) brings back per-column min/max |
 | `ui.js` | sliders with typed values, toggle groups, the experiments drawer, state in the URL so an instructor can link a set-up |
 | `style.css` | the common look, light and dark |
 
@@ -185,6 +186,9 @@ page.
   true paths against closed forms, the Born amplitude for a weak Gaussian against the numerical
   one, the hard-disk phase shifts.
 - Screenshots of every demo by headless Chromium, looked at, kept in `docs/` for the log.
+- `tools/perf.py`: every experiment of every demo timed with the CPU slowed (DevTools throttling,
+  4x by default): frame intervals while it runs, slider steps to the end of the frame that shows
+  them; `--profile demo setup` for self time per function.  Results in `build/perf/`.
 
 ## Status, 2026-10-27
 
