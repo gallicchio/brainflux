@@ -254,7 +254,8 @@ export class Acquisition {
  * Returns {profiles: [Float64Array(N)], ds, fOfS}.
  */
 export function projections(img, N, dx, angles, G = 1) {
-  const profiles = angles.map((th) => projection(img, N, N, dx, th, N, dx));
+  // (Array.from: a typed array's own map would turn each profile into a number.)
+  const profiles = Array.from(angles, (th) => projection(img, N, N, dx, th, N, dx));
   return { profiles, ds: dx, fOfS: (s) => GB * G * s };
 }
 

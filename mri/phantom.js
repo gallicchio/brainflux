@@ -109,9 +109,9 @@ export function rasterize(shapes, nx, ny, dx, ss = 4) {
   };
   const names = TISSUE_NAMES, inv = 1 / (ss * ss);
   for (let j = 0; j < ny; j++) {
-    const y = (ny / 2 - j - 0.5) * dx;
+    const y = (ny / 2 - j) * dx;
     for (let i = 0; i < nx; i++) {
-      const x = (i - nx / 2 + 0.5) * dx, o = j * nx + i;
+      const x = (i - nx / 2) * dx, o = j * nx + i;
       if (!near(x, y)) {
         const t = classAt(x, y);
         if (t >= 0) fills[names[t]][o] = 1;
@@ -190,10 +190,11 @@ export function projection(img, nx, ny, dx, theta, M, ds, ss = 4) {
       const v = img[j * nx + i];
       if (v === 0) continue;
       for (let q = 0; q < ss; q++) {
-        const y = (ny / 2 - j - 0.5 + ((q + 0.5) / ss - 0.5)) * dx;
+        const y = (ny / 2 - j + ((q + 0.5) / ss - 0.5)) * dx;
         for (let p = 0; p < ss; p++) {
-          const x = (i - nx / 2 + 0.5 + ((p + 0.5) / ss - 0.5)) * dx;
-          const k = Math.floor((x * c + y * sn) / ds + M / 2);
+          const x = (i - nx / 2 + ((p + 0.5) / ss - 0.5)) * dx;
+          // (Bin k is centred on s = (k - M/2) ds, as the tomography demo's detector is.)
+          const k = Math.floor((x * c + y * sn) / ds + M / 2 + 0.5);
           if (k >= 0 && k < M) out[k] += v * w;
         }
       }

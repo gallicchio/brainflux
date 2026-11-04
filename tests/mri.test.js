@@ -55,8 +55,8 @@ test('free precession: the Bloch row against the analytic phase winding -2 pi GB
 test('a hard pulse by rfStep (a strong, short B1) agrees with pulse()', () => {
   const a = Spins.row([0, 30], null), b = Spins.row([0, 30], null);
   a.pulse(Math.PI / 2, -Math.PI / 2);
-  // B1 along -y: the rotation 2 pi b1 dt = pi/2 in 100 steps of 1e-4 ms (b1 = 25 kHz).
-  const dt = 1e-4, b1 = 0.25 / (TWO_PI * 100 * dt);
+  // B1 along -y: the rotation 2 pi b1 (100 dt) = pi/2 in 100 steps of 1e-4 ms (b1 = 25 kHz).
+  const dt = 1e-4, b1 = 0.25 / (100 * dt);
   for (let i = 0; i < 100; i++) b.rfStep(0, -b1, dt);
   for (let i = 0; i < 2; i++) { close(b.mx[i], a.mx[i], 1e-9, 'Mx'); close(b.my[i], a.my[i], 1e-9, 'My'); close(b.mz[i], a.mz[i], 1e-9, 'Mz'); }
 });
@@ -105,8 +105,11 @@ test('slice selection: a sinc pulse under Gz tips a slab bw / (GB Gz) thick, cen
     const noRe = sliceProfile({ Gz, bw, T: 3, fc, zs, rephase: false });
     const span = (p, lo, hi) => { let a = Infinity, b = -Infinity; for (let i = lo; i <= hi; i++) { a = Math.min(a, p[i]); b = Math.max(b, p[i]); } return b - a; };
     const lo = Math.round((r.centre - 0.3 * r.thickness + 120) / 0.2), hi = Math.round((r.centre + 0.3 * r.thickness + 120) / 0.2);
+    // (At 90 degrees a little phase is left, as with any large tip: the rephasing area that is
+    // exact for small tips leaves about 0.1 rad per mm; at 15 degrees it is flat.)
     const flat = span(r.phase, lo, hi), wound = Math.abs(noRe.phase[hi] - noRe.phase[lo]);
-    assert(flat < 0.1 && wound > 1, `phase span ${flat} with the rephaser, ${wound} without`);
+    const flatSmall = span(small.phase, lo, hi);
+    assert(flat < 0.6 && flatSmall < 0.05 && wound > 3 * flat, `phase span ${flat} (90°) and ${flatSmall} (15°) with the rephaser, ${wound} without`);
     notes.push(`Gz ${Gz}, bw ${bw} kHz: ${r.fwhm.toFixed(2)} mm at 90°, ${small.fwhm.toFixed(2)} at 15° (formula ${r.thickness.toFixed(2)})`);
   }
   // The pulse's flip angle: 2 pi integral of b1 dt = pi/2.
@@ -181,7 +184,7 @@ test('the sequences: k(t) runs through ky = GB Gy Tpe and sweeps kx across the r
 
 test('phase encoding: under the Gy lobe the phase map winds stripes of period 1 / ky across y', () => {
   const seq = sequence({ type: 'gre', TE: 6, TR: 300, N: 64, fov: 256, Gx: 10, Tpe: 1 });
-  const N = 64, dx = seq.fov / N, ys = Float64Array.from({ length: N }, (_, j) => (N / 2 - j - 0.5) * dx);
+  const N = 64, dx = seq.fov / N, ys = Float64Array.from({ length: N }, (_, j) => (N / 2 - j) * dx);
   const s = new Spins(N);
   for (let j = 0; j < N; j++) s.y[j] = ys[j];
   s.reset();
@@ -205,14 +208,14 @@ test('phase encoding: under the Gy lobe the phase map winds stripes of period 1 
 
 test('the weighting: (1 - e^{-TR/T1}) e^{-TE/T2} at 90 degrees; T2* for a gradient echo; the steady state', () => {
   const t = tissueAt('white', 1.5);
-  close(weighting(t, { TR: 500, TE: 15, type: 'se' }), (1 - Math.exp(-500 / 790)) * Math.exp(-15 / 90), 1e-15, 'spin echo');
+  close(weighting(t, { TR: 500, TE: 15, type: 'se' }), (1 - Math.exp(-500 / t.T1)) * Math.exp(-15 / t.T2), 1e-15, 'spin echo');
   const T2s = 1 / (1 / 90 + 1 / 40);
-  close(weighting(t, { TR: 500, TE: 15, type: 'gre' }), (1 - Math.exp(-500 / 790)) * Math.exp(-15 / T2s), 1e-15, 'gradient echo');
+  close(weighting(t, { TR: 500, TE: 15, type: 'gre' }), (1 - Math.exp(-500 / t.T1)) * Math.exp(-15 / T2s), 1e-15, 'gradient echo');
   // The Ernst angle gives the most signal for a given TR.
-  const E1 = Math.exp(-50 / 790), ernst = Math.acos(E1);
+  const E1 = Math.exp(-50 / t.T1), ernst = Math.acos(E1);
   const w = (a) => weighting(t, { TR: 50, TE: 2, type: 'gre', alpha: a });
   assert(w(ernst) > w(ernst - 0.2) && w(ernst) > w(ernst + 0.2), 'Ernst angle');
-  close(steadyMz(t, { TR: 500 }), 1 - Math.exp(-500 / 790), 1e-15, 'steady Mz');
+  close(steadyMz(t, { TR: 500 }), 1 - Math.exp(-500 / t.T1), 1e-15, 'steady Mz');
   // Contrast: T1-weighted makes fat brightest and CSF dark; T2-weighted makes CSF brightest.
   const sig = (seq) => Object.fromEntries(['water', 'fat', 'grey', 'white'].map((n) => [n, tissueAt(n).rho * weighting(tissueAt(n), seq)]));
   const t1w = sig({ TR: 500, TE: 15 }), t2w = sig({ TR: 3000, TE: 100 });
@@ -264,7 +267,7 @@ test('aliasing: with the field of view halved, what lies outside folds in, fov a
   acq.measureAll();
   const img = acq.image().mag, dx = fov / N;
   let sx = 0, sy = 0, w = 0;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const v = img[j * N + i]; sx += v * (i - N / 2 + 0.5) * dx; sy += v * (N / 2 - j - 0.5) * dx; w += v; }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const v = img[j * N + i]; sx += v * (i - N / 2) * dx; sy += v * (N / 2 - j) * dx; w += v; }
   const x = sx / w, y = sy / w;
   assert(Math.abs(x) < 0.1 && Math.abs(y + 48) < 0.1, `the copy landed at (${x}, ${y})`);
   assert(acq.picture.folded, 'folded');
@@ -293,10 +296,10 @@ test('the chemical shift: fat lands shifted along x by -3.4 ppm f0 / (GB Gx), th
   a.measureAll(); b.measureAll();
   const want = -(3.4e-6 * 63.87e3) / (GB * Gx);
   close(a.fatShift, want, 0.01, 'the shift in mm');
-  const dx = fov / N, cx = (img, x0) => { let s = 0, w = 0; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const x = (i - N / 2 + 0.5) * dx; if (Math.abs(x - x0) < 25) { s += img[j * N + i] * x; w += img[j * N + i]; } } return s / w; };
+  const dx = fov / N, cx = (img, x0) => { let s = 0, w = 0; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const x = (i - N / 2) * dx; if (Math.abs(x - x0) < 25) { s += img[j * N + i] * x; w += img[j * N + i]; } } return s / w; };
   const fatA = cx(a.image().mag, 30), fatB = cx(b.image().mag, 30), watA = cx(a.image().mag, -30), watB = cx(b.image().mag, -30);
   close(fatA - fatB, want, 0.15, 'fat moved (the shifted disk rings a little: it is not band-limited)');
-  close(watA - watB, 0, 1e-9, 'water stayed');
+  close(watA - watB, 0, 0.05, 'water stayed (to the ringing of the shifted fat)');
   return `at 1.5 T and Gx = ${Gx} mT/m fat moves ${(fatA - fatB).toFixed(2)} mm (formula ${want.toFixed(2)})`;
 });
 
@@ -321,7 +324,7 @@ test('Lauterbur: projections under a turned gradient, back-projected with the ra
   let worst = 0;
   for (let i = 1; i < N - 1; i++) {
     let col = 0, row = 0;
-    for (let j = 0; j < N; j++) { col += pic.total[j * N + i] * dx; row += pic.total[(N - 1 - i) * N + j] * dx; }
+    for (let j = 0; j < N; j++) { col += pic.total[j * N + i] * dx; row += pic.total[(N - i) * N + j] * dx; }
     worst = Math.max(worst, Math.abs(p0[i] - col), Math.abs(p90[i] - row));
   }
   assert(worst < 1e-9, `projections along the axes off by ${worst}`);

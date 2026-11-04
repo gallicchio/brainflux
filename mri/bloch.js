@@ -166,7 +166,8 @@ export function sliceProfile({ Gz, bw, T = 3, flip = Math.PI / 2, fc = 0, rephas
   const z = zs || Float64Array.from({ length: 241 }, (_, i) => -120 + i);
   const spins = Spins.column(z);
   const p = sincPulse(bw, T, flip, n);
-  for (let i = 0; i < n; i++) spins.rfStep(p.b1[i], 0, p.dt, 0, 0, Gz, fc);
+  // (B1 along -y, as for the hard pi/2 pulse: a spin at the centre of the slab ends along +x'.)
+  for (let i = 0; i < n; i++) spins.rfStep(0, -p.b1[i], p.dt, 0, 0, Gz, fc);
   if (rephase) spins.precess(T / 2, 0, 0, -Gz);
   const mxy = Float64Array.from(spins.mx, (v, i) => Math.hypot(v, spins.my[i]));
   const phase = Float64Array.from(spins.mx, (v, i) => Math.atan2(spins.my[i], v));
