@@ -104,3 +104,19 @@ test('scope: the mode is graded unless asked for fast', () => {
   setScopeMode('anything'); assert(scopeMode() === 'graded', 'anything else: graded');
   setScopeMode(was);
 });
+
+test('scope: smoothing across columns only where the trace turns about once a column or more', () => {
+  const W = 40, H = 60;
+  const run = (pxPerCycle, smooth) => {
+    const n = 40 * 40 + 1, X = [], Y = [];
+    for (let i = 0; i < n; i++) { const x = (W * i) / (n - 1); X.push(x); Y.push(30 + 20 * Math.sin((2 * Math.PI * x) / pxPerCycle)); }
+    const D = new Float32Array(W * H), T = new Float32Array(W * H), ext = new Float64Array(2 * W), rev = new Float32Array(W), out = new Uint32Array(W * H);
+    depositTrace(D, W, H, X, Y, n, 0, ext, T, null, rev);
+    shadeTrace(D, T, W, H, ext, out, 0xffffff, { smooth, rev });
+    return out;
+  };
+  const same = (a, b) => a.every((v, i) => v === b[i]);
+  assert(same(run(8, 'auto'), run(8, false)), 'eight pixels a cycle: drawn sharp, as without smoothing');
+  assert(!same(run(8, 'auto'), run(8, true)), '(and smoothing would have changed it)');
+  assert(same(run(1.5, 'auto'), run(1.5, true)), 'one and a half pixels a cycle: a band, smoothed in full');
+});
