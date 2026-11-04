@@ -160,7 +160,7 @@
   point at.  A place you point at in the object or in a reconstruction is yellow, with the path
   of its shadow in the sinogram.  Click to pin a ray or a place; Esc lets go.</p>
 
-  <article class="exp" data-setup="shadows">
+  <article class="exp" data-setup="shadows" data-frame="720x266">
     <h3>1. Each row of the sinogram is a shadow</h3>
     <p>Three disks, as the page opens.  At each angle the detector records how much every ray was
     absorbed: three bumps, drawn in cyan on the detector, which become one row of the sinogram.
@@ -173,7 +173,7 @@
     angles and clean after all 180: press <em>Scan again</em> and watch it build.</p>
   </article>
 
-  <article class="exp" data-setup="sinusoid">
+  <article class="exp" data-setup="sinusoid" data-frame="696x388">
     <h3>2. One point, one sinusoid</h3>
     <p>A single small spot, off centre (a Gaussian one pixel wide: the ring shows where).  As the
     scanner turns, its shadow on the detector moves to and fro: at angle $\theta$ it falls at
@@ -185,7 +185,7 @@
     points, so every sinogram is a sum of sinusoids, which is what experiment 1's bands were.</p>
   </article>
 
-  <article class="exp" data-setup="smear">
+  <article class="exp" data-setup="smear" data-frame="342x416">
     <h3>3. One angle at a time: back-projection</h3>
     <p>Three disks, twelve angles, and the scan waits before the first.  Press <em>Step</em>: one
     projection, smeared back along its rays (cyan, in the <em>Back-projection</em> panel, now
@@ -197,7 +197,7 @@
     of the sinogram along that point's sinusoid.</p>
   </article>
 
-  <article class="exp" data-setup="blur">
+  <article class="exp" data-setup="blur" data-frame="697x416">
     <h3>4. Back-projection blurs a point into 1/r</h3>
     <p>One spot, 360 angles.  Every smear passes through the spot, so the back-projection is a
     star of lines that merge into a halo.  How bright is the halo at a distance $r$ from the spot?
@@ -211,7 +211,7 @@
     head looks foggy.</p>
   </article>
 
-  <article class="exp" data-setup="ramp">
+  <article class="exp" data-setup="ramp" data-frame="697x416">
     <h3>5. The ramp filter sharpens</h3>
     <p>The head phantom.  Before smearing, each projection is convolved with the ramp filter.  The
     last panel shows a projection (grey) and its filtered version $Q$ (blue, right-hand axis):
@@ -223,7 +223,7 @@
     to compare the reconstruction with the object along a line.</p>
   </article>
 
-  <article class="exp" data-setup="slice">
+  <article class="exp" data-setup="slice" data-frame="342x416">
     <h3>6. Each projection is one line of Fourier space</h3>
     <p>The <em>projection-slice theorem</em>: the 1D Fourier transform of a projection,
     $P(\theta,k)=\int p(\theta,s)\,e^{-iks}\,ds$, is a slice through the 2D Fourier transform of
@@ -241,7 +241,7 @@
     enough angles and you have $F$, and so the object.</p>
   </article>
 
-  <article class="exp" data-setup="density">
+  <article class="exp" data-setup="density" data-frame="720x285">
     <h3>7. Why the filter is |k|</h3>
     <p>Twelve angles, so the slices are easy to count.  Each slice has the same number of
     samples, so near the centre of Fourier space they crowd together and far out they spread
@@ -258,7 +258,7 @@
     hard, and an error at one $\vec k$ spreads over the whole picture.</p>
   </article>
 
-  <article class="exp" data-setup="streaks">
+  <article class="exp" data-setup="streaks" data-frame="697x412">
     <h3>8. Too few angles: streaks</h3>
     <p>The head with 24 angles: see the gaps between the rows of the sinogram.  Close to each
     sharp edge the smears still cancel, but further away they separate into streaks.  Fourier
@@ -275,7 +275,7 @@
     little more is gained (0.008 at $\tfrac{\pi}{2}\times256\approx402$).</p>
   </article>
 
-  <article class="exp" data-setup="wedge">
+  <article class="exp" data-setup="wedge" data-frame="697x416">
     <h3>9. A limited range of angles: the missing wedge</h3>
     <p>The scanner turns through only 110° instead of 180°.  The slices leave a wedge of Fourier
     space empty, 70° wide on each side of the centre, and with it every detail that varies in
@@ -286,7 +286,7 @@
     turned through 180°, every reconstruction is a limited-angle one.</p>
   </article>
 
-  <article class="exp" data-setup="noise">
+  <article class="exp" data-setup="noise" data-frame="342x412">
     <h3>10. Noise: the ramp amplifies it</h3>
     <p>Each ray now counts photons: $n$ arrive out of $I_0=10^5$ sent, Poisson distributed, so $n$
     is uncertain by $\sqrt n$, and the projection $-\ln(n/I_0)$ by $1/\sqrt n$.  Along the longest
@@ -302,7 +302,7 @@
     there without noise (turn the noise off to see).</p>
   </article>
 
-  <article class="exp" data-setup="aliasing">
+  <article class="exp" data-setup="aliasing" data-frame="720x266">
     <h3>11. Detector sampling and aliasing</h3>
     <p>A zone plate, $\cos(kr^2)$, whose rings get finer outwards (the local wavenumber is
     $d(kr^2)/dr=2kr$), scanned by only 64 detector bins, each a fifth of the spacing wide.  64 bins
@@ -314,7 +314,7 @@
     256: every ring is there.</p>
   </article>
 
-  <article class="exp" data-setup="metal">
+  <article class="exp" data-setup="metal" data-frame="342x412">
     <h3>12. Metal makes streaks</h3>
     <p>Two metal pins, twenty times as absorbing as water, in the 1974 head, reconstructed with
     the Hann filter as soft tissue is.  Turn off the noise and choose one energy: an ideal scanner
@@ -329,7 +329,7 @@
     about 0.87 instead of 1.02.  Turn each effect on and off.</p>
   </article>
 
-  <article class="exp" data-setup="faint">
+  <article class="exp" data-setup="faint" data-frame="342x412">
     <h3>13. The faint features of a real head</h3>
     <p>Shepp and Logan's head phantom of 1974 has a skull of attenuation 2 and a brain of 1.02,
     and its small ellipses differ from the brain by 0.01, 1%.  In the Hounsfield units of CT,
@@ -342,7 +342,7 @@
     photons (grain 0.004).</p>
   </article>
 
-  <article class="exp" data-setup="picture">
+  <article class="exp" data-setup="picture" data-frame="720x266">
     <h3>14. Your own picture, or the camera</h3>
     <p>Fourier's portrait, scanned at 360 angles.  Paint on it with the brush (the reconstruction
     follows), or choose <em>Your picture…</em> or <em>Camera</em>.  With the camera the scanner
