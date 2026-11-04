@@ -1,0 +1,24 @@
+{
+  "select": [".stage"],
+  "wait": 0.6,
+  "setups": {
+    "start": {"select": [".trace-cell"], "js": "__app.hold(true); __app.setups.start(); __app.hold(true); __app.step(0.05, 66); __app.F.setMirror(50.1, false); __app.F.setMotor('stop'); __app.step(0, 1)"},
+    "bandwidth": {"select": [".trace-cell"], "js": "__app.hold(true); __app.setups.bandwidth(); __app.hold(true); __app.step(0.05, 82); __app.F.setMotor('stop'); __app.step(0, 1)"},
+    "two": {"select": [".trace-cell"], "js": "__app.hold(true); __app.setups.two(); __app.hold(true); __app.step(0.05, 112); __app.F.setMotor('stop'); __app.step(0, 1)"},
+    "dispersion": {"select": ["#v-fringes"], "js": "__app.hold(true); __app.setups.dispersion(); __app.hold(true); __app.step(0.05, 140); __app.F.setMirror(51.3, false); __app.F.setMotor('stop'); __app.step(0, 1)"},
+    "ascan": {"select": ["#v-ascan > .cell:nth-child(2)", "#v-ascan > .cell:nth-child(3)"], "js": "__app.hold(true); __app.setups.ascan(); __app.hold(true); __app.A.wholeScan(); __app.A.setMirror(278.4, false); __app.step(0, 1)"},
+    "resolution": {"select": ["#v-ascan > .cell:nth-child(2)", "#v-ascan > .cell:nth-child(3)"], "js": "__app.hold(true); __app.setups.resolution(); __app.hold(true); __app.A.configure({ ...__app.A.state, gap: 5, whole: true, d: 10 }); __app.step(0, 1)"},
+    "retina": {"select": ["#v-ascan > .cell:nth-child(3)"], "js": "__app.hold(true); __app.setups.retina(); __app.hold(true); __app.A.wholeScan(); __app.step(0, 1)"},
+    "bscan": {"select": [".s-scene-cell", ".s-bscan-cell"], "js": "__app.hold(true); __app.setups.bscan(); __app.hold(true); for (let i = 0; i < 360; i++) __app.B.stepScan(); __app.step(0, 1)"},
+    "speckle": {"select": [".s-bscan-cell", ".s-ascan-cell"], "js": "__app.hold(true); __app.setups.speckle(); __app.hold(true); __app.B.finishNow(); const c = document.querySelector('#s-bscan'), r = c.getBoundingClientRect(); c.dispatchEvent(new PointerEvent('pointermove', { clientX: r.left + 0.3 * r.width, clientY: r.top + 0.77 * r.height, bubbles: true })); __app.step(0, 1)"},
+    "average": {"select": [".s-bscan-cell", "#s-foot"], "js": "__app.hold(true); __app.setups.average(); __app.hold(true); __app.B.finishNow(); for (const s of ['.s-scene-cell', '.s-legend-cell']) document.querySelector(s).style.display = 'none'; __app.B.invalidate(); __app.step(0, 1)"},
+    "lateral": {"select": [".s-scene-cell", ".s-bscan-cell"], "js": "__app.hold(true); __app.setups.lateral(); __app.hold(true); __app.B.finishNow(); __app.B.state.probe = 256; __app.B.invalidate(); __app.step(0, 1)"},
+    "tilt": {"select": [".s-scene-cell", ".s-bscan-cell"], "js": "__app.hold(true); __app.setups.tilt(); __app.hold(true); __app.B.finishNow(); __app.B.state.probe = 256; __app.B.invalidate(); __app.step(0, 1)"},
+    "volume": {"select": [".s-vgrid"], "js": "__app.hold(true); __app.setups.volume(); __app.hold(true); __app.B.finishNow(); __app.step(0, 1)"},
+    "flatten": {"select": [".s-vgrid"], "js": "__app.hold(true); __app.setups.flatten(); __app.hold(true); __app.B.finishNow(); __app.step(0, 1)"},
+    "fourier": {"select": [".q-a"], "address": "#view=fourier&smp=one&off=50&motor=0&pick=0", "js": "__app.hold(true); __app.step(0, 1)"},
+    "conjugate": {"select": [".q-scan-cell"], "js": "__app.hold(true); __app.setups.conjugate(); __app.hold(true); __app.step(0, 1)"},
+    "range": {"select": [".q-scan-cell"], "js": "__app.hold(true); __app.setups.range(); __app.hold(true); __app.step(0, 1)"},
+    "fdbscan": {"select": [".q-b"], "address": "#view=fourier&qmode=bscan&scene=retina&shift=120&motor=0", "js": "__app.hold(true); __app.step(0, 1)"}
+  }
+}
