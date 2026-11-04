@@ -91,7 +91,7 @@
           <div class="hint" id="s-vhint">Click or drag on any slice to move the other two through that point (or use the sliders under The slices).</div>
         </div>
         <div class="cell">
-          <div class="head"><h2><span class="sw xy"></span>En face</h2><span class="note">the plane at one depth, seen from above</span></div>
+          <div class="head"><h2><span class="sw xy"></span>En face</h2><span class="note" id="s-xy-note">the plane at one depth, seen from above</span></div>
           <div class="box dark-box s-xy-box"><canvas id="s-xy" aria-label="The en-face slice: the volume at one depth, seen from above"></canvas></div>
         </div>
         <div class="cell">
@@ -103,7 +103,12 @@
           <div class="box dark-box s-sl-box"><canvas id="s-yz" aria-label="The cross-section across y at the chosen x"></canvas></div>
         </div>
       </div>
-      <div class="readout" id="s-readout"><div id="s-readout-1"></div><div id="s-readout-2"></div><div id="s-readout-3"></div></div>
+      <div class="s-foot" id="s-foot">
+        <div class="readout" id="s-readout"><div id="s-readout-1"></div><div id="s-readout-2"></div><div id="s-readout-3"></div><div id="s-readout-4"></div></div>
+        <div class="cell s-cplot-cell">
+          <div class="box s-cplot-box"><canvas id="s-cplot" aria-label="The speckle contrast against the number of B-scans averaged: the measured contrast after each one, on the curve it should follow"></canvas></div>
+        </div>
+      </div>
     </div>
 
     <!-- 4 · Fourier-domain OCT -->
@@ -181,9 +186,21 @@
       <div class="row"><button type="button" id="s-play" class="primary" title="Pause, or go on scanning">Pause</button><button type="button" id="s-step" title="One more column (one more B-scan for the volume), then stop">Step</button><button type="button" id="s-finish" title="Measure everything that is left, at once">Finish</button></div>
       <div id="s-image-box" class="stack"></div>
     </div>
+    <div class="panel for-scan s-b-only">
+      <div class="label">Averaging against speckle</div>
+      <div class="row"><span class="small muted">B-scans</span><span id="s-avg-box"></span></div>
+      <div class="gloss">Measure the same line N times and average the brightness.  Between repeats the tissue moves a fraction of a wavelength, enough for a new speckle pattern; the layers stay where they are.</div>
+      <details id="s-avg-more">
+        <summary>More: what moves between repeats</summary>
+        <div id="s-how-box" class="stack"></div>
+        <div class="gloss">The tissue: every repeat's speckle is new.  The beam: the tissue keeps still and the beam steps along y, out of the picture's plane; the speckle changes only as much as the beam moves against its own width (and a step of 0 measures the same speckle every time).</div>
+      </details>
+    </div>
     <div class="panel for-scan s-vol-only">
       <div class="label">The slices</div>
       <div id="s-slice-box" class="stack"></div>
+      <div id="s-follow-box" class="stack"></div>
+      <div class="gloss">The en-face slab: a flat plane at one depth, or a set depth below a layer in every A-scan, following its curve (clinics flatten to the pigment epithelium).  A flat plane cuts a curved retina through several layers, in rings.</div>
     </div>
     <div class="panel for-scan">
       <div class="label">The sample</div>
@@ -371,13 +388,36 @@
     the layers stay.  Turn Speckle off: the scatterers add their power instead of their fields,
     which is what averaging many independent pictures gives, and the layers are smooth.  Averaged
     over the picture, the speckle's brightness is the smooth picture's; their ratio fluctuates
-    from grain to grain with a contrast (its standard deviation over its mean) of about 1.3 here,
-    near the 1 of fully developed speckle (each cell here holds only a few scatterers).
-    Real instruments average several B-scans at slightly different places to calm it.</p>
+    from grain to grain with a contrast (its standard deviation over its mean), which the readout
+    measures in the tissue's bands: 1.31 here, near the 1 of fully developed speckle (each cell
+    here holds only a few scatterers).  Real instruments calm it by averaging B-scans: the next
+    experiment.</p>
+  </article>
+
+  <article class="exp" data-setup="average">
+    <h3>10. Average sixteen B-scans: the grain calms as 1/√N, the layers stay</h3>
+    <p>The same line of the retina measured 16 times, faster (1024 A-scans a second), each B-scan's
+    brightness averaged with those before it: watch the grain melt away and the layers stay.
+    Speckle is interference, not noise: the same tissue measured again with nothing moved gives
+    the same speckle.  But a living eye moves between B-scans, and a fraction of a wavelength is
+    enough: a scatterer's phase $2k_0nz$ turns a whole cycle for every $\lambda_0/2n=0.30$ μm it
+    moves in depth, so each repeat's speckle is a new pattern with the same mean.  Averaging the
+    intensities of $N$ independent patterns divides their fluctuation by $\sqrt N$: the speckle
+    contrast is 1.31 in one B-scan, 0.93 after 2, 0.66 after 4, 0.47 after 8 and 0.33 after 16,
+    on the dashed curve $C_1/\sqrt N$ beside the readout (0.92, 0.65, 0.46, 0.33).  The mean
+    brightness, which the layers are made of, stays where it was.  Clinical instruments make
+    their clean pictures this way: they track the eye and average up to a hundred B-scans of the
+    same line.  Under "More: what moves between repeats", let the beam move instead, along y, out
+    of the picture's plane: with a step of 0 nothing moves and sixteen B-scans leave the contrast
+    of one (1.30: only the noise has been averaged).  The speckle changes only as much as the beam
+    moves against its own width, since two A-scans $\delta$ apart share $e^{-2\delta^2/w^2}$ of
+    their grain: a step of 4.5 μm (half the waist $w_0=8.9$ μm) leaves 0.53 after 16, a step of
+    9 μm 0.38, and 18 μm 0.33, each on its own expected curve.  (Steps across also blur whatever
+    changes along y; the tissue's own motion does not.)</p>
   </article>
 
   <article class="exp" data-setup="lateral">
-    <h3>10. Across and in depth: two resolutions that do not depend on each other</h3>
+    <h3>11. Across and in depth: two resolutions that do not depend on each other</h3>
     <p>Tiny beads in clear gel, 60 μm apart across and 100 μm in depth, and a tightly focused beam:
     NA 0.1, focused at 300 μm.  Its waist is $w_0=\lambda_0/(\pi\,\mathrm{NA})=2.7$ μm, and it
     stays in focus over only $2z_R=2\pi n w_0^2/\lambda_0=71$ μm.  At the focus a bead's image is
@@ -391,7 +431,7 @@
   </article>
 
   <article class="exp" data-setup="tilt">
-    <h3>11. A tilted plate: OCT measures optical path</h3>
+    <h3>12. A tilted plate: OCT measures optical path</h3>
     <p>A plate of glass 200 μm thick ($n=1.5$, its faces ground so they scatter light back) on a
     painted backing, tilted 5°.  Its front face runs across the B-scan at 5.00° (fitted to the
     brightest point of each column).  But the paint behind it appears 300 μm below the front face,
@@ -404,7 +444,7 @@
   </article>
 
   <article class="exp" data-setup="volume">
-    <h3>12. The second axis: a volume, and the retina in 3D</h3>
+    <h3>13. The second axis: a volume, and the retina in 3D</h3>
     <p>Step the beam along y too, after every B-scan, and the B-scans stack into a volume: 64 of
     them, each 64 A-scans of 256 depths, a million numbers (the red lines on the cube's top are the
     B-scans measured so far).  It is shown as three slices you can move: a B-scan at one y
@@ -412,16 +452,39 @@
     from above (yellow), drawn as planes in the cube.  The en-face plane at 212 μm cuts through the
     fovea's pit (the dark disc in the middle, the fluid filling it) and through the cyst beside it,
     which shows as a dark oval 0.4 mm across; the rings around them are the layers, which curve
-    with the eye and so cross the flat plane.  Click on any slice to move the other two there, and
+    with the eye and so cross the flat plane (the readout counts six of them under it, the inner
+    plexiform under half the A-scans).  Click on any slice to move the other two there, and
     find the cyst in all three.  This is the 3D image: clinics read retinal volumes like this
     every day.  (The volume steps 47 μm between A-scans, coarser than the B-scan's 5.9 μm: a
     finer volume would take 64 times longer.)</p>
   </article>
 
+  <article class="exp" data-setup="flatten">
+    <h3>14. Follow the layer: a flattened en-face slab, one layer at a time</h3>
+    <p>The same volume, with the en-face slab no longer flat: it follows the pigment epithelium,
+    11 μm below its top in every A-scan and 12 μm thick, the yellow curve in the two
+    cross-sections and the bowl in the cube.  The retina lines the inside of the eyeball, so it
+    is curved: in the picture the pigment epithelium rises 48 μm from the middle to the middle of
+    an edge and 101 μm to a corner, and over the pit the inner layers thin.  A flat plane cuts them at a
+    slant, through several layers, which show as rings, as a flat cut through a dome of onion
+    does.  The slab that follows the layer lies in the pigment epithelium under all 4096
+    A-scans: the en-face picture is that one layer, even all over.  Choose Flat plane: the plane
+    goes to the slab's mean depth, 400 μm, and lies in three layers, the photoreceptors under 38%
+    of the A-scans, the pigment epithelium under 32% and the choroid under the rest: rings whose
+    brightness is the layers', not anything in the tissue.  Follow the layer again and set the
+    slab 18 μm above it (−18): the photoreceptors, under every A-scan, where a flat plane at the
+    same mean depth crosses four layers.  Clinics flatten their volumes this way, to the pigment
+    epithelium or to Bruch's membrane under it, to look at one layer at a time: where the
+    photoreceptors are lost, where new vessels grow under the retina.  They find the layer in
+    each A-scan first (segmentation); this page knows where it is.  Follow the surface instead,
+    95 μm below it, and the slab passes through the cyst's middle all round: a dark oval
+    0.40 × 0.34 mm, in a slab that is mostly the ganglion cells except over the pit.</p>
+  </article>
+
   <h3>4 · Fourier domain</h3>
 
   <article class="exp" data-setup="fourier">
-    <h3>13. The mirror still: a fringe in the spectrum for every layer</h3>
+    <h3>15. The mirror still: a fringe in the spectrum for every layer</h3>
     <p>Fourier-domain OCT leaves the reference mirror at zero path and sends the light coming back
     to a grating, which spreads it over a line camera: one pixel per wavelength.  One surface,
     moved slowly in depth by a stage motor.  The camera sees the source's spectrum with fringes
@@ -438,7 +501,7 @@
   </article>
 
   <article class="exp" data-setup="conjugate">
-    <h3>14. The mirror image: zero path inside the sample</h3>
+    <h3>16. The mirror image: zero path inside the sample</h3>
     <p>The three-layer film with its front 60 μm nearer than the reference mirror, so zero path
     falls inside it: its layers are at −60, −15, +75 and +142.5 μm.  The camera records a real
     spectrum, and $\cos(k\Delta)=\cos(-k\Delta)$: a layer 60 μm before zero path makes exactly the
@@ -451,7 +514,7 @@
   </article>
 
   <article class="exp" data-setup="range">
-    <h3>15. The depth range: how many pixels, and the fall-off</h3>
+    <h3>17. The depth range: how many pixels, and the fall-off</h3>
     <p>The cover slip again, now on a camera of only 256 pixels.  The camera's pixels are
     $\delta k$ apart, and a fringe must have at least two pixels to itself: the deepest fringes it
     can follow belong to $z_\text{max}=\pi/(2n\,\delta k)$, here 301 μm of optical path.  The back
@@ -465,7 +528,7 @@
   </article>
 
   <article class="exp" data-setup="fdbscan">
-    <h3>16. A whole B-scan, one camera frame per column</h3>
+    <h3>18. A whole B-scan, one camera frame per column</h3>
     <p>The retina, measured the Fourier-domain way: 256 A-scans, each one camera frame.  At 70,000
     frames a second (a typical clinical camera) that is 3.7 ms per B-scan, 270 B-scans a second:
     video rate, and the picture follows the sample as the stage motor moves it.  A time-domain
@@ -474,7 +537,7 @@
     for 1024 pixels) or, for the same floor, makes it that much faster.  Move the sample: up
     through zero path, the retina's mirror image folds in from the top; deeper than 1204 μm, its
     bottom folds back from the end of the range; and everything dims with depth, the fall-off of
-    experiment 15.  Choose 512 pixels: the range halves and the choroid folds back over the
+    experiment 17.  Choose 512 pixels: the range halves and the choroid folds back over the
     retina.</p>
   </article>
 
@@ -519,6 +582,26 @@
   so a point $\rho$ off the axis is seen with amplitude $e^{-2\rho^2/w^2}$, and a point's image is
   $1.18\,w$ wide at half height.  Depth and lateral resolution are set by different things:
   $\ell_c/n$ by the spectrum, $w_0$ by the lens.</p>
+  <p><em>Speckle and averaging</em> (experiments 9 and 10).  A resolution cell's field is
+  $E=\sum_j a_j e^{-2\rho_j^2/w^2}e^{i\phi_j}$ over its scatterers, with phases $\phi_j=2k_0 n z_j$
+  that differ by many turns from one to the next.  Its intensity $I=|E|^2$ fluctuates about its
+  mean $I_0$ (the speckle-free picture, $\sum_j|a_j|^2e^{-4\rho_j^2/w^2}$ on average) with the
+  contrast $C=\sigma_I/\langle I\rangle$, measured here as the spread of $I/I_0$ over the bands
+  of scatterers, at least 8 μm from their edges; 1 for fully developed speckle, more when a cell
+  holds only a few scatterers.  Averaging the intensities of $N$ repeats whose speckle is
+  correlated $\rho_{jk}$ in pairs leaves
+  $$C_N=\frac{C_1}{N}\Big(\sum_{j,k}\rho_{jk}\Big)^{1/2},$$
+  $C_1/\sqrt N$ when they are independent ($\rho_{jk}=\delta_{jk}$) and $C_1$ when they are the
+  same.  Tissue that has moved by more than a fraction of $\lambda_0/2n$ gives an independent
+  pattern.  A beam moved by $\delta$ sees the same scatterers weighted by
+  $e^{-2\rho^2/w^2}e^{-2(\rho-\delta)^2/w^2}$, whose integral over the cell is $e^{-\delta^2/w^2}$
+  of the beam's own; the intensities are correlated as its square, $\rho=e^{-2\delta^2/w^2}$
+  (and so is the count of scatterers in the cell, for any number of them).  The speckle grain is
+  a beam's width across.</p>
+  <p><em>Flattening</em> (experiment 14).  The en-face slab at depth $s$ below a layer whose optical
+  depth under the A-scan at $(x, y)$ is $d_L(x,y)$ takes the samples at optical depth
+  $d_L(x,y)+n s$ in each A-scan (and the $\pm$ half-thickness about it), where the flat plane
+  takes the same depth everywhere.</p>
   <p><em>Dispersion</em> (experiment 4): glass of length $L$ in one arm adds the phase
   $2Lk\,n(k)$; its quadratic part $\beta(k-k_0)^2$, $\beta=L\,d^2(nk)/dk^2$ (N-BK7 from Schott's
   Sellmeier formula), turns $\gamma$ into
@@ -534,9 +617,15 @@
   the chosen floor correlated over a coherence length; demodulation is assumed perfect.  The
   tissue is made up: bands of scatterers (about 40 in every 10 × 10 × 100 μm) with the retina's
   thicknesses and its pit roughly right, a cyst of clear fluid, attenuation by $e^{-\int\mu\,dz}$
-  in amplitude, and one index per band.  The spectrometer's pixels are evenly spaced in $k$
+  in amplitude, and one index per band.  Real tissue has thousands of scatterers to a resolution
+  cell, and moving each a fraction of a wavelength makes a new speckle pattern with the same
+  mean; the page's tissue has only a few, so when it moves between averaged B-scans it is drawn
+  afresh, its scatterers in new places (moving the few by a fraction of a wavelength would leave
+  each cell's own count of them behind, a grain no averaging removes).  The speckle contrast is
+  measured against a speckle-free picture of every fourth column, and the averaged B-scans' noise
+  is new each time.  A flattened slab follows its layer where the page knows it to be.  The spectrometer's pixels are evenly spaced in $k$
   (a real one is resampled to $k$ first) and span three bandwidths; its blur is one pixel.  The
-  Fourier-domain B-scan of experiment 16 folds the power of each column, not its field.  The
+  Fourier-domain B-scan of experiment 18 folds the power of each column, not its field.  The
   noise floors are raised far above real ones so that they can be seen.</p>
   <p class="small muted">New in 2026 for BrainFlux.
   Source: <a href="https://github.com/gallicchio/brainflux">github.com/gallicchio/brainflux</a>, MIT licence.</p>
