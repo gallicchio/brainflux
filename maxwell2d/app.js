@@ -60,10 +60,11 @@ function build() {
   layout();
 }
 
-/** After the materials change: the pictures of them, and the grid's resolution. */
-function refreshMaterials() {
-  mats = materialImage(scene);
-  lines = outlines(scene);
+/** After the materials change (in `region` of the grid, if given): the pictures of them, and the
+ *  grid's resolution. */
+function refreshMaterials(region = null) {
+  mats = materialImage(scene, mats, region);
+  lines = outlines(scene, lines, region);
   bgLines = backgroundContours();
   const nmax = scene.maxIndex(), cells = state.ppw / nmax;
   warning = cells < 10 ? `Too coarse: ${fmt(cells, 2)} cells per wavelength in n = ${fmt(nmax, 3)} (want 15 or more): raise the cells per λ (Grid).`
@@ -784,7 +785,7 @@ function applyStroke(op, x0, y0, x1, y1) {
   if (!region) return;
   scene.applyTo(sim, region);
   clearMetal(region);
-  mats = materialImage(scene);
+  mats = materialImage(scene, mats, region);
   strokeDirty = true;
 }
 let strokeDirty = false, outlineTimer = 0;
@@ -909,7 +910,7 @@ function rebuildMaterials() {
   const region = scene.rebuild();
   scene.applyTo(sim, region);
   clearMetal(region);
-  refreshMaterials();
+  refreshMaterials(region);
   for (const m of meters) m.reset();
   hashSoon(); kick();
 }

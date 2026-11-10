@@ -1,6 +1,6 @@
 import { test, assert, close } from './harness.js';
 import { Yee2D, PointSource, BeamSource, MovingSource, Probe, FluxLine, FlowField, OMEGA, numericalK } from '../maxwell2d/fdtd.js';
-import { Scene, SHAPES } from '../maxwell2d/scene.js';
+import { Scene, SHAPES, geometry } from '../maxwell2d/scene.js';
 import { reflectance, snell, layerTransmission, cavityFrequency, cavityFrequencyYee, cherenkovAngle, ringdown, fresnelR, brewsterAngle, beamAverage, rayThroughPolygon, minimumDeviation } from '../maxwell2d/theory.js';
 
 const deg = Math.PI / 180;
@@ -461,6 +461,57 @@ test('materials: partial cells get the mean of eps (arithmetic for E along the i
   s2.setShapes([{ k: 'rect', x0: -9, x1: 9, y0: -9, y1: 0, mat: { n: 2 } }]);
   close(s2.m.nodeEps[1 * s2.nx + 1], 4, 1e-12, 'in the corner of the layer');
   close(s2.maxIndex(), 2, 1e-12, 'max index');
+});
+
+test('materials: drawn by spans, sample for sample as the shapes\' own tests; a slider\'s rebuild worked out only where it changed is the same as one from scratch', () => {
+  // The span raster against the inside() test of every shape, sample by sample.
+  const scene = new Scene({ W: 8, H: 6, ppw: 20, pml: 4 }), f = scene.dx / 4;
+  let samples = 0;
+  for (const [shape, p, n] of [['prism', 3.3, 1.5], ['surface', 23, 1.5], ['surface', -41.3, 1.5], ['lens', 4, 1.5], ['crystal', 0.37, 3], ['bend', 1.3, 1.5], ['gap', 0.33, 1.5], ['slits', 1.7, 1]]) {
+    const ops = SHAPES[shape].build(p, n, scene.W, scene.H);
+    scene.setShapes(ops);
+    const want = new Uint8Array(scene.fine.length), lo = scene.pml * 4;
+    ops.forEach((op) => {
+      const [inside] = geometry(op), id = scene.materialId(op.mat);
+      for (let q = lo; q < scene.fy - lo; q++) for (let s = lo; s < scene.fx - lo; s++) if (inside(scene.x0 + (s + 0.5) * f, scene.y0 + (q + 0.5) * f)) want[q * scene.fx + s] = id;
+    });
+    for (let q = lo; q < scene.fy - lo; q++) for (let s = lo; s < scene.fx - lo; s++) {
+      const k = q * scene.fx + s;
+      assert(scene.fine[k] === want[k], `${shape} ${p}: sample (${s}, ${q}) is ${scene.fine[k]}, its test says ${want[k]}`);
+      samples++;
+    }
+  }
+  // Slider steps (outline and index) with paint and a typed background, against a fresh scene.
+  const fields = ['nodeEps', 'nodeSig', 'aEps', 'aSig', 'bEps', 'bSig', 'nodePec', 'nodeTouch', 'aPec', 'bPec'];
+  const bg = (xs, ys) => Float64Array.from(ys, (y) => 1 + 0.05 * (y + 3));
+  const paint = () => [{ k: 'path', pts: [1, 1, 2, 1.5], r: 0.2, mat: { n: 2 } }, { k: 'path', pts: [-3, -2, -1, -2.2], r: 0.15, mat: { pec: true } }];
+  let steps = 0, worst = 0;
+  for (const [shape, ps, ns] of [['surface', [0, 4.8, 9.6, -30], [1.5, 2]], ['prism', [3, 3.3, 4], [1.5, 1.7]], ['crystal', [0.37, 0.4], [3, 2.5]], ['cavity', [0.4, 0, 0.3], [1]], ['lens', [4, 4.4], [1.5, 1.6]]]) {
+    for (const extra of [false, true]) {
+      const live = new Scene({ W: 8, H: 6, ppw: 20, pml: 4 });
+      if (extra) { live.setBackground(bg); live.paintOps = paint(); }
+      const check = (p, n) => {
+        live.shapeOps = SHAPES[shape].build(p, n, live.W, live.H); live.rebuild();
+        const fresh = new Scene({ W: 8, H: 6, ppw: 20, pml: 4 });
+        if (extra) { fresh.setBackground(bg); fresh.paintOps = paint(); }
+        fresh.setShapes(SHAPES[shape].build(p, n, fresh.W, fresh.H));
+        for (const fl of fields) for (let k = 0; k < live.m[fl].length; k++) {
+          const d = Math.abs(live.m[fl][k] - fresh.m[fl][k]);
+          worst = Math.max(worst, d);
+          assert(d <= 1e-13 * Math.max(1, Math.abs(fresh.m[fl][k])), `${shape} p=${p} n=${n}${extra ? ' (paint, background)' : ''}: ${fl}[${k}] ${live.m[fl][k]} instead of ${fresh.m[fl][k]}`);
+        }
+        steps++;
+      };
+      for (const p of ps) check(p, ns[0]);
+      for (const n of ns.slice(1)) check(ps[ps.length - 1], n);
+      // A brush stroke in between, then the shape again, then the paint taken off.
+      live.paintOps.push({ k: 'path', pts: [-2, 0, 2, 0.5], r: 0.3, mat: { n: 1.8 } });
+      live.stroke({ k: 'seg', x0: -2, y0: 0, x1: 2, y1: 0.5, r: 0.3, mat: { n: 1.8 } });
+      live.paintOps = extra ? paint() : [];
+      check(ps[0], ns[0]);
+    }
+  }
+  return `${samples} samples of 8 shapes as their tests say; ${steps} rebuilds the same as from scratch (largest difference ${worst.toExponential(1)})`;
 });
 
 test('speed: cell updates per second (a 400 x 300 grid with its PML)', () => {

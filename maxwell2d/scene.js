@@ -46,38 +46,80 @@ function segDist2(x, y, x0, y0, x1, y1) {
   return ex * ex + ey * ey;
 }
 
-/** A test for being inside an operation's shape, and its bounding box [x0, x1, y0, y1]. */
-function geometry(op) {
+/**
+ * A test for being inside an operation's shape, its bounding box [x0, x1, y0, y1], and (for most
+ * shapes) its spans: spans(y, out) fills out with x0, x1, x0', x1', ... where the row at height y
+ * crosses the shape, sorted, and returns how many numbers it put there.  Rasterizing by spans
+ * fills each run of samples at once and tests only the samples at its ends, which decides them
+ * exactly as the test does (the spans need only be right to within a sample).  `each`: the spans
+ * only bound the shape, and every sample in them must still be tested (a ring's sector).
+ */
+export function geometry(op) {
   switch (op.k) {
-    case 'rect': return [(x, y) => x >= op.x0 && x < op.x1 && y >= op.y0 && y < op.y1, [op.x0, op.x1, op.y0, op.y1]];
-    case 'disk': return [(x, y) => (x - op.x) ** 2 + (y - op.y) ** 2 < op.r * op.r, [op.x - op.r, op.x + op.r, op.y - op.r, op.y + op.r]];
+    case 'rect': return [(x, y) => x >= op.x0 && x < op.x1 && y >= op.y0 && y < op.y1, [op.x0, op.x1, op.y0, op.y1],
+      (y, out) => { if (!(y >= op.y0 && y < op.y1)) return 0; out[0] = op.x0; out[1] = op.x1; return 2; }];
+    case 'disk': return [(x, y) => (x - op.x) ** 2 + (y - op.y) ** 2 < op.r * op.r, [op.x - op.r, op.x + op.r, op.y - op.r, op.y + op.r],
+      (y, out) => { const q = op.r * op.r - (y - op.y) ** 2; if (!(q > 0)) return 0; const s = Math.sqrt(q); out[0] = op.x - s; out[1] = op.x + s; return 2; }];
     case 'poly': {
-      const xs = op.pts.map((p) => p[0]), ys = op.pts.map((p) => p[1]);
-      return [(x, y) => inPoly(op.pts, x, y), [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]];
+      const xs = op.pts.map((p) => p[0]), ys = op.pts.map((p) => p[1]), pts = op.pts;
+      // The crossings that inPoly counts, in the same arithmetic: inside between the first and
+      // second, the third and fourth...
+      const spans = (y, out) => {
+        let m = 0;
+        for (let a = 0, b = pts.length - 1; a < pts.length; b = a++) {
+          const [xa, ya] = pts[a], [xb, yb] = pts[b];
+          if ((ya > y) !== (yb > y)) out[m++] = ((xb - xa) * (y - ya)) / (yb - ya) + xa;
+        }
+        sortSmall(out, m);
+        return m;
+      };
+      return [(x, y) => inPoly(pts, x, y), [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)], pts.length <= SPANS.length ? spans : null];
     }
-    case 'seg': {   // a brush stroke: a capsule of radius r
+    case 'seg': {   // a brush stroke: a capsule of radius r (small: tested sample by sample)
       const { x0, y0, x1, y1, r } = op;
       return [(x, y) => segDist2(x, y, x0, y0, x1, y1) < r * r, [Math.min(x0, x1) - r, Math.max(x0, x1) + r, Math.min(y0, y1) - r, Math.max(y0, y1) + r]];
     }
     case 'arc': {   // part of a ring: r0 <= rho < r1, a0 <= angle <= a1
       const { x, y, r0, r1, a0, a1 } = op;
+      // The ring's two runs across the row, every sample in them tested for the angle.
+      const spans = (py, out) => {
+        const d2 = (py - y) ** 2, o = r1 * r1 - d2;
+        if (!(o > 0)) return 0;
+        const so = Math.sqrt(o), i = r0 * r0 - d2, si = i > 0 ? Math.sqrt(i) : 0;
+        if (si === 0) { out[0] = x - so; out[1] = x + so; return 2; }
+        out[0] = x - so; out[1] = x - si; out[2] = x + si; out[3] = x + so; return 4;
+      };
+      spans.each = true;
       return [(px, py) => {
         const rho2 = (px - x) ** 2 + (py - y) ** 2;
         if (rho2 < r0 * r0 || rho2 >= r1 * r1) return false;
         let a = Math.atan2(py - y, px - x);
         while (a < a0) a += 2 * Math.PI;
         return a <= a1;
-      }, [x - r1, x + r1, y - r1, y + r1]];
+      }, [x - r1, x + r1, y - r1, y + r1], spans];
     }
     case 'lens': {  // biconvex: the intersection of two disks of radius R, half-aperture h
       const { x, y, R, h } = op, sag = R - Math.sqrt(Math.max(0, R * R - h * h));
       const c = R - sag;
       return [(px, py) => Math.abs(py - y) < h && (px - x + c) ** 2 + (py - y) ** 2 < R * R && (px - x - c) ** 2 + (py - y) ** 2 < R * R,
-        [x - sag, x + sag, y - h, y + h]];
+        [x - sag, x + sag, y - h, y + h],
+        (py, out) => {
+          const q = R * R - (py - y) ** 2;
+          if (!(Math.abs(py - y) < h) || !(q > 0)) return 0;
+          const s = Math.sqrt(q), lo = x + c - s, hi = x - c + s;
+          if (!(hi > lo)) return 0;
+          out[0] = lo; out[1] = hi; return 2;
+        }];
     }
     default: throw new Error(`unknown shape ${op.k}`);
   }
 }
+
+/** Sort the first m numbers of a (a handful: insertion sort). */
+function sortSmall(a, m) {
+  for (let i = 1; i < m; i++) { const v = a[i]; let j = i - 1; while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; } a[j + 1] = v; }
+}
+const SPANS = new Float64Array(64);
 
 // --------------------------------------------------------------------------- preset shapes
 
@@ -190,6 +232,7 @@ export class Scene {
     this.x0 = -this.W / 2 - pml * this.dx; this.y0 = -this.H / 2 - pml * this.dx;
     this.fx = this.nx * SUB; this.fy = this.ny * SUB;
     this.fine = new Uint8Array(this.fx * this.fy);
+    this.words = new Uint32Array(this.fine.buffer);   // a cell's four samples in a row, as one word
     this.bgEps = null;          // the background's eps on the fine grid, when it is not vacuum
     this.bgN = null;            // the function n(x, y) for it (arrays in, array out)
     this.shapeOps = []; this.paintOps = [];
@@ -242,16 +285,31 @@ export class Scene {
       }
       return r;
     }
-    const [inside, [bx0, bx1, by0, by1]] = geometry(op), id = this.materialId(op.mat);
-    const { fx, fine, pml } = this, f = this.dx / SUB;
+    const [inside, [bx0, bx1, by0, by1], spans] = geometry(op), id = this.materialId(op.mat);
+    const { fx, fine, pml } = this, f = this.dx / SUB, X0 = this.x0;
     // Only the box itself; the layer copies its edges afterwards.
     const pLo = pml * SUB, pHi = (this.nx - pml) * SUB, qLo = pml * SUB, qHi = (this.ny - pml) * SUB;
-    const p0 = Math.max(pLo, Math.floor((bx0 - this.x0) / f - 0.5)), p1 = Math.min(pHi, Math.ceil((bx1 - this.x0) / f + 0.5));
+    const p0 = Math.max(pLo, Math.floor((bx0 - X0) / f - 0.5)), p1 = Math.min(pHi, Math.ceil((bx1 - X0) / f + 0.5));
     const q0 = Math.max(qLo, Math.floor((by0 - this.y0) / f - 0.5)), q1 = Math.min(qHi, Math.ceil((by1 - this.y0) / f + 0.5));
     if (p1 <= p0 || q1 <= q0) return null;
+    const xs = (p) => X0 + (p + 0.5) * f;      // the sample's x, exactly as the test is given it
     for (let q = q0; q < q1; q++) {
       const y = this.y0 + (q + 0.5) * f, row = q * fx;
-      for (let p = p0; p < p1; p++) if (inside(this.x0 + (p + 0.5) * f, y)) fine[row + p] = id;
+      if (!spans) { for (let p = p0; p < p1; p++) if (inside(xs(p), y)) fine[row + p] = id; continue; }
+      const m = spans(y, SPANS);
+      for (let s = 0; s + 1 < m; s += 2) {
+        // The samples p with SPANS[s] <= x_p < SPANS[s + 1], to within one; then the ends exactly.
+        let a = Math.max(p0, Math.min(p1, Math.ceil((SPANS[s] - X0) / f - 0.5))), b = Math.max(a, Math.min(p1, Math.ceil((SPANS[s + 1] - X0) / f - 0.5)));
+        if (spans.each) {
+          for (let p = Math.max(p0, a - 1); p < Math.min(p1, b + 1); p++) if (inside(xs(p), y)) fine[row + p] = id;
+          continue;
+        }
+        while (a > p0 && inside(xs(a - 1), y)) a--;
+        while (a < b && !inside(xs(a), y)) a++;
+        while (b < p1 && inside(xs(b), y)) b++;
+        while (b > a && !inside(xs(b - 1), y)) b--;
+        if (b > a) fine.fill(id, row + a, row + b);
+      }
     }
     return [Math.floor(p0 / SUB), Math.ceil(p1 / SUB), Math.floor(q0 / SUB), Math.ceil(q1 / SUB)];
   }
@@ -268,31 +326,106 @@ export class Scene {
     for (let q = hiY + 1; q < fy; q++) fine.copyWithin(q * fx, hiY * fx, hiY * fx + fx);
   }
 
-  /** Rebuild everything from the shape and paint operations.  When only the shapes' refractive
-   *  indices have changed (the index slider), their outlines on the fine grid are the same: only
-   *  their materials' values change, and the cells' properties are worked out again from them. */
+  /** Rebuild everything from the shape and paint operations; returns the cells whose properties
+   *  changed [i0, i1, j0, j1).  The fine grid is drawn again whole (a span at a time, which is
+   *  quick), but the cells' properties are worked out again only where its samples changed: a
+   *  slider that moves or turns a shape changes the cells along its outline.  When only the
+   *  shapes' refractive indices have changed (the index slider), their outlines are the same:
+   *  only their materials' values change, and only the cells holding them. */
   rebuild() {
     const geom = shapeOutlines(this.shapeOps), paints = this.paintOps.length;
-    if (geom === this._geom && this.paintOps === this._paintRef && paints === this._paints && this._retune()) {
-      this._properties(0, this.nx, 0, this.ny);
-      this.version++;
-      return [0, this.nx, 0, this.ny];
+    if (geom === this._geom && this.paintOps === this._paintRef && paints === this._paints && this._kept) {
+      const retuned = this._retune();
+      if (retuned) {
+        const region = this._update(retuned, false);
+        this._keptPal = this._paletteKeys();
+        this.version++;
+        return region;
+      }
     }
     this.fine.fill(0);
     this.palette.length = 1;
     for (const op of this.shapeOps) this._raster(op);
     for (const op of this.paintOps) this._raster(op);
     this._extend();
-    this._properties(0, this.nx, 0, this.ny);
+    const keys = this._paletteKeys();
+    let region;
+    if (this._kept && this.bgEps === this._keptBg) {
+      // The cells whose samples changed, and those holding a material that is not what it was.
+      region = this._update(new Set(keys.map((k, id) => (k === this._keptPal[id] ? -1 : id)).filter((id) => id >= 0)), true);
+    } else { this._properties(0, this.nx, 0, this.ny); region = [0, this.nx, 0, this.ny]; }
+    this._kept = this._kept || new Uint8Array(this.fine.length);
+    this._kept.set(this.fine); this._keptPal = keys; this._keptBg = this.bgEps;
     this._geom = geom; this._paintRef = this.paintOps; this._paints = paints;
     this._shapeIds = this.shapeOps.map((op) => this.materialId(op.mat));
     this._paintIds = new Set(this.paintOps.map((op) => this.materialId(op.mat)));
     this.version++;
-    return [0, this.nx, 0, this.ny];
+    return region;
+  }
+
+  /** What each palette entry is, as strings by id: properties worked out under another palette
+   *  must be worked out again where the entries that changed are used. */
+  _paletteKeys() { return this.palette.map((p) => `${p.eps},${p.sig},${p.pec},${p.bg}`); }
+
+  /** The id of the material filling all of cell k's samples, or -1 if it holds more than one. */
+  _uniform(k) {
+    const w = this.words, nx = this.nx, i = k % nx, base = ((k - i) * SUB) + i, v = w[base];
+    if (w[base + nx] !== v || w[base + 2 * nx] !== v || w[base + 3 * nx] !== v || (v & 255) * 0x01010101 !== v) return -1;
+    return v & 255;
+  }
+
+  /**
+   * Work out the properties again where they may have changed: in the cells whose fine samples
+   * differ from those the properties were last worked out from (diff), and in those that hold any
+   * of the palette entries `ids` (a Set).  A node depends on its own cell; the edges on the top
+   * and right of a cell look into the cell above or to the right too.  Returns the cells changed.
+   */
+  _update(ids, diff) {
+    const { nx, ny, fine } = this, N = nx * ny;
+    const chg = this._chg && this._chg.length === N ? this._chg.fill(0) : (this._chg = new Uint8Array(N));
+    let any = false;
+    if (diff) {
+      // The four samples across a cell in one row of the fine grid are one 32-bit word (SUB = 4).
+      const a = this.words, b = new Uint32Array(this._kept.buffer, this._kept.byteOffset, fine.length >> 2);
+      for (let q = 0; q < this.fy; q++) {
+        const row = q * nx, crow = (q >> 2) * nx;
+        for (let i = 0; i < nx; i++) if (a[row + i] !== b[row + i]) { chg[crow + i] = 1; any = true; }
+      }
+    }
+    if (ids.size) {
+      const hit = new Uint8Array(256), fx = this.fx;
+      for (const id of ids) hit[id] = 1;
+      for (let k = 0; k < N; k++) {
+        if (chg[k]) continue;
+        const u = this._uniform(k);
+        if (u >= 0) { if (hit[u]) { chg[k] = 1; any = true; } continue; }
+        const i = k % nx, row0 = ((k - i) * SUB) * SUB + i * SUB;
+        for (let q = 0; q < SUB && !chg[k]; q++) for (let p = 0; p < SUB; p++) if (hit[fine[row0 + q * fx + p]]) { chg[k] = 1; any = true; break; }
+      }
+    }
+    if (!any) return [0, 0, 0, 0];
+    const T = this._tables();
+    for (let k = 0; k < N; k++) if (chg[k]) this._node(k % nx, (k / nx) | 0, T);
+    let i0 = nx, i1 = 0, j0 = ny, j1 = 0;
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const k = j * nx + i;
+      if (!(chg[k] || (j + 1 < ny && chg[k + nx]) || (i + 1 < nx && chg[k + 1]))) continue;
+      this._edges(i, j, T);
+      if (i < i0) i0 = i;
+      if (i >= i1) i1 = i + 1;
+      if (j < j0) j0 = j;
+      if (j >= j1) j1 = j + 1;
+    }
+    // (Which cells' own samples changed, for the pictures of the materials; valid until the next
+    // rebuild.)
+    const region = [i0, i1, j0, j1];
+    region.cells = chg;
+    return region;
   }
 
   /** Give the shapes' palette entries their new indices, if that alone is the change and it can be
-   *  done (each entry still one material, none shared with paint); false: rebuild instead. */
+   *  done (each entry still one material, none shared with paint): the ids changed (a Set, maybe
+   *  empty); false: rebuild instead. */
   _retune() {
     if (!this._shapeIds || this._shapeIds.length !== this.shapeOps.length) return false;
     const next = new Map();
@@ -307,8 +440,12 @@ export class Scene {
     // No two entries may end up the same material (materialId would have merged them).
     const keys = new Set();
     for (const [id, { key }] of next) { if (keys.has(key) || this.palette.some((p, j) => j !== id && !next.has(j) && p.key === key)) return false; keys.add(key); }
-    for (const [id, { key, mat }] of next) Object.assign(this.palette[id], { key, eps: mat.n ? mat.n * mat.n : 1, n: mat.n });
-    return true;
+    const changed = new Set();
+    for (const [id, { key, mat }] of next) {
+      if (this.palette[id].key !== key) changed.add(id);
+      Object.assign(this.palette[id], { key, eps: mat.n ? mat.n * mat.n : 1, n: mat.n });
+    }
+    return changed;
   }
 
   setShapes(ops) { this.shapeOps = ops; return this.rebuild(); }
@@ -337,58 +474,112 @@ export class Scene {
     }
     i0 = Math.max(0, i0 - 1); j0 = Math.max(0, j0 - 1); i1 = Math.min(nx, i1 + 1); j1 = Math.min(ny, j1 + 1);
     this._properties(i0, i1, j0, j1);
+    // The properties follow the fine grid in this region now: so must the copy kept of it.
+    if (this._kept) {
+      const { fx } = this, S = SUB;
+      for (let q = j0 * S; q < j1 * S; q++) this._kept.set(this.fine.subarray(q * fx + i0 * S, q * fx + i1 * S), q * fx + i0 * S);
+    }
     this.version++;
     return [i0, i1, j0, j1];
   }
 
   clearPaint() { this.paintOps = []; return this.rebuild(); }
 
+  /** The palette as lookup tables by id. */
+  _tables() {
+    const T = this._t || (this._t = { eps: new Float64Array(256), sig: new Float64Array(256), pec: new Uint8Array(256), bg: new Uint8Array(256) });
+    this.palette.forEach((p, id) => { T.eps[id] = p.eps; T.sig[id] = p.sig; T.pec[id] = p.pec; T.bg[id] = p.bg; });
+    return T;
+  }
+
+  /** The properties of cells [i0, i1) x [j0, j1) and of the edges that look into them. */
   _properties(i0, i1, j0, j1) {
-    const { fx, fy, fine, nx, palette, bgEps, m } = this, S = SUB, H = S / 2;
-    const eps = new Float64Array(256), sig = new Float64Array(256), pec = new Uint8Array(256), bg = new Uint8Array(256);
-    palette.forEach((p, id) => { eps[id] = p.eps; sig[id] = p.sig; pec[id] = p.pec; bg[id] = p.bg; });
-    const epsAt = (f) => { const id = fine[f]; return bg[id] && bgEps ? bgEps[f] : eps[id]; };
+    const T = this._tables();
     // Nodes first (the edges need their neighbours' metal flags).
-    for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
-      let sE = 0, sS = 0, np = 0, cnt = 0;
-      for (let q = 0; q < S; q++) {
-        const row = (j * S + q) * fx + i * S;
-        for (let p = 0; p < S; p++) {
-          const f = row + p, id = fine[f];
-          sS += sig[id];
-          if (pec[id]) np++; else { sE += epsAt(f); cnt++; }
-        }
-      }
-      const k = j * nx + i;
-      m.nodePec[k] = 2 * np >= S * S ? 1 : 0;
-      m.nodeTouch[k] = np > 0 ? 1 : 0;
-      m.nodeEps[k] = cnt ? sE / cnt : 1;
-      m.nodeSig[k] = sS / (S * S);
+    for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) this._node(i, j, T);
+    const jj1 = Math.min(j1 + 1, this.ny), ii1 = Math.min(i1 + 1, this.nx);
+    for (let j = Math.max(0, j0 - 1); j < jj1; j++) for (let i = Math.max(0, i0 - 1); i < ii1; i++) this._edges(i, j, T);
+  }
+
+  /** The node of cell (i, j): the mean eps of its samples that are not metal; metal if half of
+   *  them are (nodeTouch if any is); the mean conductivity. */
+  _node(i, j, T) {
+    const { fx, fine, bgEps, m } = this, S = SUB, { eps, sig, pec, bg } = T;
+    const u = this._uniform(j * this.nx + i);
+    if (u >= 0 && !(bg[u] && bgEps)) {
+      // One material (the usual case): its own values.
+      const k = j * this.nx + i;
+      m.nodePec[k] = m.nodeTouch[k] = pec[u] ? 1 : 0;
+      m.nodeEps[k] = pec[u] ? 1 : eps[u];
+      m.nodeSig[k] = sig[u];
+      return;
     }
-    // Edge a, at the middle of the top of cell (i, j): E along x (TE); edge b, the right side: E along y.
-    const window = (pa, qa, along) => {
-      // Mean of eps across the field (arithmetic), then along it (harmonic); mean conductivity.
+    let sE = 0, sS = 0, np = 0, cnt = 0;
+    for (let q = 0; q < S; q++) {
+      const row = (j * S + q) * fx + i * S;
+      for (let p = 0; p < S; p++) {
+        const f = row + p, id = fine[f];
+        sS += sig[id];
+        if (pec[id]) np++; else { sE += bg[id] && bgEps ? bgEps[f] : eps[id]; cnt++; }
+      }
+    }
+    const k = j * this.nx + i;
+    m.nodePec[k] = 2 * np >= S * S ? 1 : 0;
+    m.nodeTouch[k] = np > 0 ? 1 : 0;
+    m.nodeEps[k] = cnt ? sE / cnt : 1;
+    m.nodeSig[k] = sS / (S * S);
+  }
+
+  /** Edge a, at the middle of the top of cell (i, j) (E along x in TE), and edge b, its right
+   *  side (E along y): over a cell-sized window centred on each, the mean of eps across the
+   *  field (arithmetic), then along it (harmonic); the mean conductivity; metal where a node it
+   *  joins is. */
+  _edges(i, j, T) {
+    const { bgEps, m, nx } = this, S = SUB, H = S / 2, { eps, sig, pec, bg } = T, k = j * nx + i;
+    m.aPec[k] = m.nodePec[k] || (j + 1 < this.ny && m.nodePec[k + nx]) ? 1 : 0;
+    m.bPec[k] = m.nodePec[k] || (i + 1 < nx && m.nodePec[k + 1]) ? 1 : 0;
+    // One material over the whole window (the usual case): its own values.
+    const w = this.words, wa = (j * S + H) * nx + i, va = w[wa];
+    let ua = -1;
+    if (j + 1 < this.ny && w[wa + nx] === va && w[wa + 2 * nx] === va && w[wa + 3 * nx] === va && (va & 255) * 0x01010101 === va) ua = va & 255;
+    const u0 = i + 1 < nx ? this._uniform(k) : -1, ub = u0 >= 0 && this._uniform(k + 1) === u0 ? u0 : -1;
+    if (ua >= 0 && !(bg[ua] && bgEps)) { m.aEps[k] = pec[ua] ? 1 : eps[ua]; m.aSig[k] = sig[ua]; }
+    else this._window(i * S, j * S + H, true, k, T);
+    if (ub >= 0 && !(bg[ub] && bgEps)) { m.bEps[k] = pec[ub] ? 1 : eps[ub]; m.bSig[k] = sig[ub]; }
+    else this._window(i * S + H, j * S, false, k, T);
+  }
+
+  /** The general case of an edge's window, from its lower-left sample (pa, qa): along x (edge a)
+   *  or y (edge b). */
+  _window(pa, qa, alongX, k, T) {
+    const { fx, fy, fine, bgEps, m } = this, S = SUB, { eps, sig, pec, bg } = T;
+    if (alongX) {
       let inv = 0, sS = 0;
       for (let u = 0; u < S; u++) {
+        const p = Math.min(fx - 1, pa + u);
         let s = 0, c = 0;
         for (let v = 0; v < S; v++) {
-          const p = Math.min(fx - 1, along === 'x' ? pa + u : pa + v), q = Math.min(fy - 1, along === 'x' ? qa + v : qa + u);
-          const f = q * fx + p, id = fine[f];
+          const f = Math.min(fy - 1, qa + v) * fx + p, id = fine[f];
           sS += sig[id];
-          if (!pec[id]) { s += epsAt(f); c++; }
+          if (!pec[id]) { s += bg[id] && bgEps ? bgEps[f] : eps[id]; c++; }
         }
         inv += c ? c / s : 1;
       }
-      return [S / inv, sS / (S * S)];
-    };
-    const jj1 = Math.min(j1 + 1, this.ny), ii1 = Math.min(i1 + 1, nx);
-    for (let j = Math.max(0, j0 - 1); j < jj1; j++) for (let i = Math.max(0, i0 - 1); i < ii1; i++) {
-      const k = j * nx + i;
-      [m.aEps[k], m.aSig[k]] = window(i * S, j * S + H, 'x');
-      [m.bEps[k], m.bSig[k]] = window(i * S + H, j * S, 'y');
-      m.aPec[k] = m.nodePec[k] || (j + 1 < this.ny && m.nodePec[k + nx]) ? 1 : 0;
-      m.bPec[k] = m.nodePec[k] || (i + 1 < nx && m.nodePec[k + 1]) ? 1 : 0;
+      m.aEps[k] = S / inv; m.aSig[k] = sS / (S * S);
+      return;
     }
+    let inv = 0, sS = 0;
+    for (let u = 0; u < S; u++) {
+      const q = Math.min(fy - 1, qa + u);
+      let s = 0, c = 0;
+      for (let v = 0; v < S; v++) {
+        const f = q * fx + Math.min(fx - 1, pa + v), id = fine[f];
+        sS += sig[id];
+        if (!pec[id]) { s += bg[id] && bgEps ? bgEps[f] : eps[id]; c++; }
+      }
+      inv += c ? c / s : 1;
+    }
+    m.bEps[k] = S / inv; m.bSig[k] = sS / (S * S);
   }
 
   /** The material at a point: { n, pec, absorb }. */
@@ -405,11 +596,18 @@ export class Scene {
   /** The largest index inside the box (what sets the finest wavelength). */
   maxIndex() {
     let e = 1;
-    const { fx, pml, fine, palette } = this, lo = pml * SUB, hiX = this.fx - lo, hiY = this.fy - lo;
+    const { fx, pml, palette, words, nx } = this, lo = pml * SUB, hiX = this.fx - lo, hiY = this.fy - lo;
     const used = new Uint8Array(256);
-    for (let q = lo; q < hiY; q++) for (let p = lo; p < hiX; p++) used[fine[q * fx + p]] = 1;
+    // A word at a time (a cell's four samples in a row), and its bytes only where they differ.
+    for (let q = lo; q < hiY; q++) {
+      for (let i = pml, w = q * nx + pml; i < nx - pml; i++, w++) {
+        const v = words[w];
+        if ((v & 255) * 0x01010101 === v) used[v & 255] = 1;
+        else { used[v & 255] = used[(v >>> 8) & 255] = used[(v >>> 16) & 255] = used[v >>> 24] = 1; }
+      }
+    }
     palette.forEach((m, id) => { if (used[id] && !m.pec && !m.bg) e = Math.max(e, m.eps); });
-    if (used[0] && this.bgEps) for (let q = lo; q < hiY; q++) for (let p = lo; p < hiX; p++) e = Math.max(e, this.bgEps[q * fx + p]);
+    if (this.bgEps && palette.some((m, id) => used[id] && m.bg)) for (let q = lo; q < hiY; q++) for (let p = lo; p < hiX; p++) e = Math.max(e, this.bgEps[q * fx + p]);
     return Math.sqrt(e);
   }
 

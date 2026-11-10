@@ -44,13 +44,18 @@ export function tintOf(mat) {
 /**
  * The scene's interior as RGB tints (one per cell) and a mask of metal cells, from the fine
  * samples: the average colour of the samples of each cell, and the background's index shown
- * as a faint glow where it is not vacuum.
+ * as a faint glow where it is not vacuum.  Given the last image and the cells that changed since
+ * (region [i0, i1, j0, j1) of the solver's grid, as Scene.rebuild returns it), only those again.
  */
-export function materialImage(scene) {
+export function materialImage(scene, last = null, region = null) {
   const { cw, ch, pml, fx, fine, palette, bgEps } = scene;
-  const tint = new Uint8ClampedArray(cw * ch * 3), metal = new Uint8Array(cw * ch);
+  const reuse = last && region && last.tint.length === cw * ch * 3;
+  const tint = reuse ? last.tint : new Uint8ClampedArray(cw * ch * 3), metal = reuse ? last.metal : new Uint8Array(cw * ch);
   const tints = palette.map(tintOf);
-  for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
+  const [ia, ib, ja, jb] = reuse ? [Math.max(0, region[0] - pml), Math.min(cw, region[1] - pml), Math.max(0, region[2] - pml), Math.min(ch, region[3] - pml)] : [0, cw, 0, ch];
+  const cells = reuse ? region.cells : null, gx = scene.nx;
+  for (let j = ja; j < jb; j++) for (let i = ia; i < ib; i++) {
+    if (cells && !cells[(j + pml) * gx + i + pml]) continue;
     let r = 0, g = 0, b = 0, m = 0;
     for (let q = 0; q < SUB; q++) {
       const row = ((j + pml) * SUB + q) * fx + (i + pml) * SUB;
@@ -71,26 +76,37 @@ export function materialImage(scene) {
 
 /**
  * Outlines of the painted materials as segments in box coordinates (vacuum wavelengths): for
- * each material, the half-way contour of its share of each cell.
+ * each material, the half-way contour of its share of each cell.  Given the last outlines and the
+ * cells that changed since (region [i0, i1, j0, j1) of the solver's grid, as Scene.rebuild
+ * returns it), the shares are counted again only there.
  */
-export function outlines(scene) {
+export function outlines(scene, last = null, region = null) {
   const { cw, ch, pml, fx, fine, palette, dx, W, H } = scene, S2 = SUB * SUB;
-  const ids = new Set();
-  for (let q = pml * SUB; q < (pml + ch) * SUB; q++) for (let p = pml * SUB; p < (pml + cw) * SUB; p++) ids.add(fine[q * fx + p]);
-  const segs = [];
-  // Pad by one cell of zeros so that shapes touching the edge of the box are closed there.
+  // Pad by one cell so that shapes touching the edge of the box are closed there.
   const nx = cw + 2, ny = ch + 2;
-  for (const id of ids) {
-    if (palette[id].bg) continue;
-    const share = new Float32Array(nx * ny);
-    for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
-      let c = 0;
+  // One share array per material of the palette (one that is not in the box has no outline).
+  const ids = palette.map((p, id) => id).filter((id) => !palette[id].bg);
+  const key = `${cw}x${ch}:${ids.join(',')}`;
+  const reuse = last && region && last.key === key;
+  const shares = reuse ? last.shares : new Map(ids.map((id) => [id, new Float32Array(nx * ny)]));
+  const [ia, ib, ja, jb] = reuse ? [Math.max(0, region[0] - pml), Math.min(cw, region[1] - pml), Math.max(0, region[2] - pml), Math.min(ch, region[3] - pml)] : [0, cw, 0, ch];
+  if (ids.length) {
+    const count = new Uint8Array(256), arrays = ids.map((id) => shares.get(id));
+    const cells = reuse ? region.cells : null, gx = scene.nx;
+    for (let j = ja; j < jb; j++) for (let i = ia; i < ib; i++) {
+      if (cells && !cells[(j + pml) * gx + i + pml]) continue;
+      for (const id of ids) count[id] = 0;
       for (let q = 0; q < SUB; q++) {
         const row = ((j + pml) * SUB + q) * fx + (i + pml) * SUB;
-        for (let p = 0; p < SUB; p++) if (fine[row + p] === id) c++;
+        for (let p = 0; p < SUB; p++) count[fine[row + p]]++;
       }
-      share[(j + 1) * nx + i + 1] = c / S2;
+      const o = (j + 1) * nx + i + 1;
+      for (let m = 0; m < ids.length; m++) arrays[m][o] = count[ids[m]] / S2;
     }
+  }
+  const segs = [];
+  for (const id of ids) {
+    const share = shares.get(id);
     // Copy the edge cells outwards: no outline along the edge of the box.
     for (let i = 0; i < nx; i++) { share[i] = share[nx + i]; share[(ny - 1) * nx + i] = share[(ny - 2) * nx + i]; }
     for (let j = 0; j < ny; j++) { share[j * nx] = share[j * nx + 1]; share[j * nx + nx - 1] = share[j * nx + nx - 2]; }
@@ -99,8 +115,9 @@ export function outlines(scene) {
       // Grid point (i, j) of the padded array is the centre of cell (i - 1, j - 1).
       out.push((x0 - 0.5) * dx - W / 2, (y0 - 0.5) * dx - H / 2, (x1 - 0.5) * dx - W / 2, (y1 - 0.5) * dx - H / 2);
     });
-    segs.push({ id, pec: !!palette[id].pec, absorb: !!palette[id].sig, segs: Float32Array.from(out) });
+    if (out.length) segs.push({ id, pec: !!palette[id].pec, absorb: !!palette[id].sig, segs: Float32Array.from(out) });
   }
+  segs.key = key; segs.shares = shares;
   return segs;
 }
 
