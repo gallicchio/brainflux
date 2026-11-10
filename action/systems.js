@@ -4,17 +4,27 @@
 
 import { parse } from '../lib/expr.js';
 
-const fill = (n, v) => new Float64Array(n).fill(v);
 const map3 = (q, v, s, f) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) out[i] = f(q[i], v[i], s[i]); return out; };
 
 /** L = (m/2) v^2 - V(q, s) from a function V. */
 function mechanical(m, V, dVdq) {
   return {
-    L: (q, v, s) => map3(q, v, s, (x, u, t) => 0.5 * m * u * u - V(x, t)),
-    accel: dVdq ? (q, v, s) => map3(q, v, s, (x, u, t) => -dVdq(x, t) / m) : undefined,
-    p: (q, v) => Float64Array.from(v, (u) => m * u),
-    vOfP: (q, p) => Float64Array.from(p, (x) => x / m),
-    kinetic: (q, v) => Float64Array.from(v, (u) => 0.5 * m * u * u),
+    L: (q, v, s) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - V(q[i], s[i]); return out; },
+    accel: dVdq ? (q, v, s) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) out[i] = -dVdq(q[i], s[i]) / m; return out; } : undefined,
+    p: (q, v) => { const out = new Float64Array(v.length); for (let i = 0; i < v.length; i++) out[i] = m * v[i]; return out; },
+    vOfP: (q, p) => { const out = new Float64Array(p.length); for (let i = 0; i < p.length; i++) out[i] = p[i] / m; return out; },
+    kinetic: (q, v) => { const out = new Float64Array(v.length); for (let i = 0; i < v.length; i++) out[i] = 0.5 * m * v[i] * v[i]; return out; },
+  };
+}
+
+/**
+ * Light in a medium of index n(y), "time" x: L = n sqrt(1 + y'^2), whose Euler-Lagrange equation
+ * d/dx (n y' / sqrt(1 + y'^2)) = n'(y) sqrt(1 + y'^2) is y'' = (1 + y'^2) n'(y) / n(y).
+ */
+function optical(n, dn) {
+  return {
+    L: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? ni * Math.sqrt(1 + v[i] * v[i]) : NaN; } return out; },
+    accel: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? ((1 + v[i] * v[i]) * dn(q[i])) / ni : NaN; } return out; },
   };
 }
 
@@ -88,9 +98,7 @@ export const SYSTEMS = [
     s: 'x', q: 'y', s0: 0, s1: 10, q0: 0, q1: 0, qrange: [-1.5, 4], knots: 5, vmax: 3,
     params: { n0: { value: 1, min: 1, max: 2 }, alpha: { value: 0.05, min: -0.2, max: 0.2 } },
     formula: 'L = n(y)\\sqrt{1+y\'^2},\\quad n = n_0+\\alpha y',
-    make: ({ n0, alpha }) => ({
-      L: (q, v) => map3(q, v, q, (y, u) => { const n = n0 + alpha * y; return n > 0 ? n * Math.sqrt(1 + u * u) : NaN; }),
-    }),
+    make: ({ n0, alpha }) => optical((y) => n0 + alpha * y, () => alpha),
     blurb: 'Fermat\'s principle: light takes the path of least optical length ∫n ds.  Over a hot road the air near the ground is thinner (lower n, α > 0), so the quickest path dips down into it and curves back up, towards the higher index: light from the sky reaches you from below, and the road looks wet.',
   },
   {
@@ -98,10 +106,9 @@ export const SYSTEMS = [
     s: 'x', q: 'y', s0: 0, s1: 10, q0: 3, q1: -3, qrange: [-5, 5], knots: 9, vmax: 4,
     params: { n1: { value: 1, min: 1, max: 2 }, n2: { value: 1.5, min: 1, max: 2.5 } },
     formula: 'L = n(y)\\sqrt{1+y\'^2}',
-    make: ({ n1, n2 }) => ({
-      // Air (n1) above y = 0, glass (n2) below, with a thin smooth interface.
-      L: (q, v) => map3(q, v, q, (y, u) => ((n1 + n2) / 2 + ((n1 - n2) / 2) * Math.tanh(y / 0.15)) * Math.sqrt(1 + u * u)),
-    }),
+    // Air (n1) above y = 0, glass (n2) below, with a thin smooth interface.
+    make: ({ n1, n2 }) => optical((y) => (n1 + n2) / 2 + ((n1 - n2) / 2) * Math.tanh(y / 0.15),
+      (y) => { const c = Math.cosh(y / 0.15); return (n1 - n2) / (2 * 0.15 * c * c); }),
     blurb: 'From air into glass.  The least-time path bends at the surface so that n₁ sin θ₁ = n₂ sin θ₂ (θ from the normal): Snell\'s law is the conserved "energy" in the phase-space picture.',
   },
   {
@@ -148,7 +155,11 @@ export function typedSystem(kind, expr, params, m = 1) {
   const env = (q, v, s) => ({ x: q, v, t: s, m, ...params });
   if (kind === 'V') {
     const V = (q, s) => expr.evaluate(env(q, q, s), q.length).re;
+    // The points x + h and x - h of every trajectory in one array, so that the expression is
+    // evaluated once a step for both (and the arrays are kept from call to call).
+    let X = new Float64Array(0), T = X, H = X;
     return {
+      ...mechanical(m, null, null),
       L: (q, v, s) => {
         const Vq = V(q, s), out = new Float64Array(q.length);
         for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - Vq[i];
@@ -156,13 +167,16 @@ export function typedSystem(kind, expr, params, m = 1) {
       },
       // Newton: m x'' = -dV/dx, by a central difference of V alone.
       accel: (q, v, s) => {
-        const n = q.length, h = Float64Array.from(q, (x) => 1e-5 * (1 + Math.abs(x)));
-        const a = V(Float64Array.from(q, (x, i) => x + h[i]), s), b = V(Float64Array.from(q, (x, i) => x - h[i]), s);
-        return Float64Array.from({ length: n }, (_, i) => -(a[i] - b[i]) / (2 * h[i] * m));
+        const n = q.length;
+        if (X.length !== 2 * n) { X = new Float64Array(2 * n); T = new Float64Array(2 * n); H = new Float64Array(n); }
+        for (let i = 0; i < n; i++) {
+          const h = 1e-5 * (1 + Math.abs(q[i]));
+          H[i] = h; X[i] = q[i] + h; X[n + i] = q[i] - h; T[i] = T[n + i] = s[i];
+        }
+        const Vx = V(X, T), out = new Float64Array(n);
+        for (let i = 0; i < n; i++) out[i] = -(Vx[i] - Vx[n + i]) / (2 * H[i] * m);
+        return out;
       },
-      p: (q, v) => Float64Array.from(v, (u) => m * u),
-      vOfP: (q, p) => Float64Array.from(p, (x) => x / m),
-      kinetic: (q, v) => Float64Array.from(v, (u) => 0.5 * m * u * u),
     };
   }
   return { L: (q, v, s) => expr.evaluate(env(q, v, s), q.length).re };

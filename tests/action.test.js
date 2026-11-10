@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Path, action, quadrature, knotQuadrature, truePaths, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, hamiltonianGrid, knotPhasors } from '../action/physics.js';
+import { Path, action, acceleration, quadrature, knotQuadrature, truePaths, followPaths, legendre, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, hamiltonianGrid, knotPhasors } from '../action/physics.js';
 import { SYSTEMS, typedSystem, parseTyped, cycloid, oscillatorOrbit } from '../action/systems.js';
 
 const sys = (id, over = {}) => {
@@ -391,4 +391,52 @@ test('Feynman\'s arrows over the heights of one knot add up to the Fresnel integ
   close(rt.zone[1], Math.sqrt(6.25 - (2.5 - Math.PI / 4) ** 2), 0.04, 'twin: zone');
   assert(rt.x.every(Number.isFinite) && rt.y.every(Number.isFinite), 'twin: heights beyond the light cone add nothing');
   return notes.join('; ');
+});
+
+test('following the true paths after a small change finds what a full search finds', () => {
+  // What a slider does while it moves (followPaths, a few trajectories) against what it does
+  // when it stops (truePaths, hundreds): the same paths, actions and Morse indices.
+  const notes = [];
+  const cases = [
+    ['double well, m 1 -> 1.05', typedSystem('V', parseTyped('V', 'x^4/4 - x^2'), {}, 1), typedSystem('V', parseTyped('V', 'x^4/4 - x^2'), {}, 1.05), [0, -1, 3, 1], [0, -1, 3, 1], 20],
+    ['damped, gamma 0.3 -> 0.33', typedSystem('L', parseTyped('L', 'exp(gamma t) (v^2/2 - x^2/2)'), { gamma: 0.3 }), typedSystem('L', parseTyped('L', 'exp(gamma t) (v^2/2 - x^2/2)'), { gamma: 0.33 }), [0, 1, 6, 0], [0, 1, 6, 0], 10],
+    ['pendulum, T 8 -> 8.1', sys('pendulum').L, sys('pendulum').L, [0, 0, 8, 1], [0, 0, 8.1, 1], 6],
+    ['oscillator, end 0.5 -> 0.6', sys('harmonic').L, sys('harmonic').L, [0, 1, 4, 0.5], [0, 1, 4, 0.6], 30],
+  ];
+  for (const [name, L0, L1, a, b, vmax] of cases) {
+    const before = truePaths(L0, ...a, { vmax }), full = truePaths(L1, ...b, { vmax });
+    for (const steps of [400, 200]) {
+      const fol = followPaths(L1, ...b, before.map((t) => t.v0), { steps });
+      assert(fol.length === full.length, `${name}: ${fol.length} followed, ${full.length} found`);
+      fol.forEach((t, i) => {
+        close(t.S, full[i].S, (steps === 400 ? 1e-7 : 1e-4) * (1 + Math.abs(full[i].S)), `${name} (${steps} steps), S of path ${i}`);
+        assert(t.index === full[i].index, `${name}: index ${t.index} against ${full[i].index}`);
+      });
+    }
+    notes.push(`${name}: ${full.length}`);
+  }
+  return notes.join('; ');
+});
+
+test('Legendre\'s condition: L = T - V is convex in v, its negative concave (a maximum, not a minimum)', () => {
+  const osc = sys('harmonic'), neg = typedSystem('L', parseTyped('L', '-(v^2/2 - x^2/2)'), {});
+  const [t] = truePaths(osc.L, 0, 1, 2, 0.5, { vmax: 30 }), [u] = truePaths(neg, 0, 1, 2, 0.5, { vmax: 30 });
+  assert(t.legendre === 1 && t.index === 0, `T - V: Legendre ${t.legendre}, index ${t.index} (a minimum)`);
+  assert(u.legendre === -1 && u.index === 0, `V - T: Legendre ${u.legendre}, index ${u.index} (a maximum)`);
+  close(u.S, -t.S, 1e-6, 'the same path, the action of the opposite sign');
+  // Bending the path either way raises S on the first and lowers it on the second.
+  const n = 9, s = Array.from({ length: n }, (_, i) => (2 * i) / (n - 1)), q = truthAt(t, s), quad = knotQuadrature(s);
+  const bent = Float64Array.from(q, (x, i) => x + 0.2 * Math.sin((Math.PI * s[i]) / 2));
+  assert(action(osc.L, new Path(0, 2, bent, 'spline', { s }), quad).S > t.S, 'bent: S rises for T - V');
+  assert(action(neg, new Path(0, 2, bent, 'spline', { s }), quad).S < u.S, 'bent: S falls for V - T');
+  const flat = typedSystem('L', parseTyped('L', 'v'), {});
+  assert(legendre(flat, Float64Array.of(0, 1), Float64Array.of(1, 2), Float64Array.of(0, 1)) === 0, 'L = v: neither');
+});
+
+test('light: the closed-form ray equation y\'\' = (1 + y\'^2) n\'/n is the Euler-Lagrange equation of n sqrt(1 + y\'^2)', () => {
+  for (const id of ['refraction', 'mirage']) {
+    const { L } = sys(id), q = Float64Array.from({ length: 21 }, (_, i) => -1 + 0.1 * i), v = q.map((x) => 0.7 - 0.5 * x), s = new Float64Array(21);
+    const exact = acceleration(L, q, v, s), numerical = acceleration({ L: L.L }, q, v, s);
+    for (let i = 0; i < q.length; i++) close(exact[i], numerical[i], 1e-5 * (1 + Math.abs(exact[i])), `${id} at y = ${q[i].toFixed(1)}`);
+  }
 });

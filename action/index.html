@@ -153,8 +153,9 @@
     $E=\dot x\,\partial L/\partial\dot x-L=\tfrac12 m\dot x^2+V$ along your path.  On the true
     path it is flat, $E=50$ (the ball's $\tfrac12 m(gT/2)^2$ as it leaves the hand).  Drag a
     knot and it wanders.  Now choose <em>Straight segments</em>: each segment has its own
-    constant speed and its own energy (with $V$ averaged along it), and the best segments
-    through these 6 knots all have <span class="nobr">$E=48.0$.</span>  Drag a knot sideways: the energies of the
+    constant speed and its own energy, <span class="nobr">$\tfrac12 m\dot x^2$</span> plus $V$ averaged along it (the
+    bold steps; the thin line is $E$ point by point), and the best segments through these 6
+    knots all have <span class="nobr">$E=48.0$.</span>  Drag a knot sideways: the energies of the
     segments on either side part, and the slope of $S$ with the knot's time is exactly the
     jump,
     $$\frac{\partial S}{\partial t_k}=E_{\text{after}}-E_{\text{before}},$$
@@ -243,8 +244,9 @@
     home, drawn in straight legs.  A free particle's action is
     $$S=-mc^2\int\sqrt{1-\dot x^2/c^2}\,dt=-mc^2\tau,$$
     where $\tau$ is the time its own clock shows.  Drag the middle event sideways to <span class="nobr">$x=1.5$:</span>
-    the traveller goes out and back at <span class="nobr">$0.6c$,</span> each leg taking 2.5 years by the home clock and
-    2 by the traveller's, so $\tau=9$ and <span class="nobr">$S=-9$,</span> more than the stay-at-home's <span class="nobr">$-10$.</span>  The
+    the traveller waits at home until year 2.5, goes out and back at <span class="nobr">$0.6c$,</span> each leg taking
+    2.5 years by the home clock and <span class="nobr">$2.5\sqrt{1-0.6^2}=2$</span> by the traveller's, and waits again
+    from year 7.5: <span class="nobr">$\tau=2.5+2+2+2.5=9$</span> and <span class="nobr">$S=-9$,</span> more than the stay-at-home's <span class="nobr">$-10$.</span>  The
     straight world line has the least action, and so the most proper time.  Drag an event up
     or down to change when the traveller is there.  Past $x=2.5$ the legs would be faster than
     light: no proper time, no action.</p>
@@ -315,7 +317,11 @@
     which wobbles even on the true path, because $L$ depends on <span class="nobr">$t$:</span> it is $e^{\gamma t}$
     times the mechanical energy <span class="nobr">$\tfrac12\dot x^2+\tfrac12x^2$,</span> which decays.  Over this trip
     <span class="nobr">($T=6$)</span> the true path is a saddle, index 1: the damped oscillator's first conjugate point
-    is at <span class="nobr">$t=\pi/\omega_d=3.18$,</span> with <span class="nobr">$\omega_d=\sqrt{1-\gamma^2/4}$.</span></p>
+    is at <span class="nobr">$t=\pi/\omega_d=3.18$,</span> with <span class="nobr">$\omega_d=\sqrt{1-\gamma^2/4}$</span> (the zero of the
+    Jacobi field <span class="nobr">$e^{-\gamma t/2}\sin\omega_d t$,</span> the difference between two neighbouring true paths
+    from the same start).  Slide $T$ down to 3: the true path is a minimum again, <span class="nobr">$S=-2.712$.</span>
+    Close to 3.18 there is none to be found: every path from $x=1$ arrives near the same place,
+    and reaching $x=0$ takes a starting speed beyond the search's ±10.</p>
   </article>
 
   <article class="exp" data-setup="typed" data-frame="720x311">
@@ -334,8 +340,8 @@
     any path <span class="nobr">$x(t)$.</span>  Every path has an <em>action</em>, the kinetic energy less the potential
     energy added up along the way:
     $$S[x]=\int_{t_1}^{t_2}L(x,\dot x,t)\,dt,\qquad L=\tfrac12 m\dot x^2-V(x).$$
-    The path the particle really takes makes $S$ <em>stationary</em>: change it a little, any
-    way you like, and $S$ changes only at second order.  That is the Euler-Lagrange equation,
+    The path the particle really takes makes $S$ <em>stationary</em> (Hamilton's principle):
+    change it a little, any way you like, and $S$ changes only at second order.  That is the Euler-Lagrange equation,
     <span class="nobr">$\frac{d}{dt}\frac{\partial L}{\partial\dot x}=\frac{\partial L}{\partial x}$,</span> which for this
     $L$ is Newton's <span class="nobr">$m\ddot x=-dV/dx$.</span>  Usually the true path has the <em>least</em> action of all
     the paths near it (a minimum); over a long enough trip it can be a <em>saddle</em>, with some

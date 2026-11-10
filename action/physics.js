@@ -212,15 +212,32 @@ export function action(system, path, quad) {
 
 const EPS = 1e-5, EPS2 = 1e-4;
 
-function shifted(arr, d) { const out = new Float64Array(arr.length); for (let i = 0; i < arr.length; i++) out[i] = arr[i] + d * (1 + Math.abs(arr[i])); return out; }
 function step(arr, eps = EPS) { const out = new Float64Array(arr.length); for (let i = 0; i < arr.length; i++) out[i] = eps * (1 + Math.abs(arr[i])); return out; }
+
+/**
+ * L at many shifted copies of the points (q, v, s) in one call: shifts is a list of
+ * [cq, cv, cs], each copy j being (q + cq dq, v + cv dv, s + cs ds).  One call of L over all
+ * of them costs far less than one call per copy when L is a typed expression, which walks its
+ * syntax tree once per call whatever the number of points.  Returns L, copy j at j n .. j n + n - 1.
+ */
+function shiftedL(system, q, v, s, shifts, dq, dv, ds) {
+  const n = q.length, m = shifts.length, Q = new Float64Array(m * n), V = new Float64Array(m * n), Sa = new Float64Array(m * n);
+  for (let j = 0; j < m; j++) {
+    const [cq, cv, cs] = shifts[j], o = j * n;
+    for (let i = 0; i < n; i++) {
+      Q[o + i] = cq ? q[i] + cq * dq[i] : q[i];
+      V[o + i] = cv ? v[i] + cv * dv[i] : v[i];
+      Sa[o + i] = cs ? s[i] + cs * ds[i] : s[i];
+    }
+  }
+  return system.L(Q, V, Sa);
+}
 
 /** dL/dv: the momentum conjugate to q. */
 export function momentum(system, q, v, s) {
   if (system.p) return system.p(q, v, s);
-  const hp = shifted(v, EPS), hm = shifted(v, -EPS), dv = step(v);
-  const a = system.L(q, hp, s), b = system.L(q, hm, s), out = new Float64Array(q.length);
-  for (let i = 0; i < q.length; i++) out[i] = (a[i] - b[i]) / (2 * dv[i]);
+  const n = q.length, dv = step(v), L = shiftedL(system, q, v, s, [[0, 1, 0], [0, -1, 0]], null, dv, null), out = new Float64Array(n);
+  for (let i = 0; i < n; i++) out[i] = (L[i] - L[n + i]) / (2 * dv[i]);
   return out;
 }
 
@@ -237,23 +254,24 @@ export function energy(system, q, v, s) {
  * the fourth root of the rounding error, the best for a second difference): with 1e-5 their
  * rounding error was 1e-6 of L, enough to make the shooting miss true paths that exist.
  */
+// The 13 copies acceleration() needs: L itself, q and v shifted each way, and the mixed pairs.
+const ACCEL_SHIFTS = [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0],
+  [1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0], [0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1]];
+
 export function acceleration(system, q, v, s) {
   if (system.accel) return system.accel(q, v, s);
-  const n = q.length, L = system.L;
+  const n = q.length;
   const dq = step(q, EPS2), dv = step(v, EPS2), ds = step(s, EPS2);
-  const add = (arr, d, sgn) => { const o = new Float64Array(n); for (let i = 0; i < n; i++) o[i] = arr[i] + sgn * d[i]; return o; };
-  const qp = add(q, dq, 1), qm = add(q, dq, -1), vp = add(v, dv, 1), vm = add(v, dv, -1), sp = add(s, ds, 1), sm = add(s, ds, -1);
-  const L0 = L(q, v, s);
-  const Lqp = L(qp, v, s), Lqm = L(qm, v, s);
-  const Lvp = L(q, vp, s), Lvm = L(q, vm, s);
-  const Lvpqp = L(qp, vp, s), Lvpqm = L(qm, vp, s), Lvmqp = L(qp, vm, s), Lvmqm = L(qm, vm, s);
-  const Lvpsp = L(q, vp, sp), Lvpsm = L(q, vp, sm), Lvmsp = L(q, vm, sp), Lvmsm = L(q, vm, sm);
+  const L = shiftedL(system, q, v, s, ACCEL_SHIFTS, dq, dv, ds);
   const out = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    const Lq = (Lqp[i] - Lqm[i]) / (2 * dq[i]);
-    const Lvv = (Lvp[i] - 2 * L0[i] + Lvm[i]) / (dv[i] * dv[i]);
-    const Lvq = (Lvpqp[i] - Lvpqm[i] - Lvmqp[i] + Lvmqm[i]) / (4 * dv[i] * dq[i]);
-    const Lvs = (Lvpsp[i] - Lvpsm[i] - Lvmsp[i] + Lvmsm[i]) / (4 * dv[i] * ds[i]);
+    const L0 = L[i], Lqp = L[n + i], Lqm = L[2 * n + i], Lvp = L[3 * n + i], Lvm = L[4 * n + i];
+    const Lvpqp = L[5 * n + i], Lvpqm = L[6 * n + i], Lvmqp = L[7 * n + i], Lvmqm = L[8 * n + i];
+    const Lvpsp = L[9 * n + i], Lvpsm = L[10 * n + i], Lvmsp = L[11 * n + i], Lvmsm = L[12 * n + i];
+    const Lq = (Lqp - Lqm) / (2 * dq[i]);
+    const Lvv = (Lvp - 2 * L0 + Lvm) / (dv[i] * dv[i]);
+    const Lvq = (Lvpqp - Lvpqm - Lvmqp + Lvmqm) / (4 * dv[i] * dq[i]);
+    const Lvs = (Lvpsp - Lvpsm - Lvmsp + Lvmsm) / (4 * dv[i] * ds[i]);
     out[i] = (Lq - Lvs - Lvq * v[i]) / Lvv;
   }
   return out;
@@ -265,20 +283,19 @@ export function acceleration(system, q, v, s) {
  */
 function lagrangianDerivatives(system, q, v, s) {
   if (system.derivatives) return system.derivatives(q, v, s);
-  const n = q.length, L = system.L;
-  const add = (arr, d, sgn) => { const o = new Float64Array(n); for (let i = 0; i < n; i++) o[i] = arr[i] + sgn * d[i]; return o; };
+  const n = q.length;
   const dq = step(q), dv = step(v), Dq = step(q, EPS2), Dv = step(v, EPS2);
-  const a = L(add(q, dq, 1), v, s), b = L(add(q, dq, -1), v, s), c = L(q, add(v, dv, 1), s), d = L(q, add(v, dv, -1), s);
-  const qp = add(q, Dq, 1), qm = add(q, Dq, -1), vp = add(v, Dv, 1), vm = add(v, Dv, -1);
-  const L0 = L(q, v, s), Lqp = L(qp, v, s), Lqm = L(qm, v, s), Lvp = L(q, vp, s), Lvm = L(q, vm, s);
-  const Lpp = L(qp, vp, s), Lpm = L(qp, vm, s), Lmp = L(qm, vp, s), Lmm = L(qm, vm, s);
+  // First derivatives with steps of 1e-5, second ones with 1e-4: two batches of shifted copies.
+  const A = shiftedL(system, q, v, s, [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]], dq, dv, null);
+  const B = shiftedL(system, q, v, s, [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [1, 1, 0], [1, -1, 0], [-1, 1, 0], [-1, -1, 0]], Dq, Dv, null);
   const out = { Lq: new Float64Array(n), Lv: new Float64Array(n), Lqq: new Float64Array(n), Lqv: new Float64Array(n), Lvv: new Float64Array(n) };
   for (let i = 0; i < n; i++) {
-    out.Lq[i] = (a[i] - b[i]) / (2 * dq[i]);
-    out.Lv[i] = (c[i] - d[i]) / (2 * dv[i]);
-    out.Lqq[i] = (Lqp[i] - 2 * L0[i] + Lqm[i]) / (Dq[i] * Dq[i]);
-    out.Lvv[i] = (Lvp[i] - 2 * L0[i] + Lvm[i]) / (Dv[i] * Dv[i]);
-    out.Lqv[i] = (Lpp[i] - Lpm[i] - Lmp[i] + Lmm[i]) / (4 * Dq[i] * Dv[i]);
+    out.Lq[i] = (A[i] - A[n + i]) / (2 * dq[i]);
+    out.Lv[i] = (A[2 * n + i] - A[3 * n + i]) / (2 * dv[i]);
+    const L0 = B[i];
+    out.Lqq[i] = (B[n + i] - 2 * L0 + B[2 * n + i]) / (Dq[i] * Dq[i]);
+    out.Lvv[i] = (B[3 * n + i] - 2 * L0 + B[4 * n + i]) / (Dv[i] * Dv[i]);
+    out.Lqv[i] = (B[5 * n + i] - B[6 * n + i] - B[7 * n + i] + B[8 * n + i]) / (4 * Dq[i] * Dv[i]);
   }
   return out;
 }
@@ -290,34 +307,89 @@ function lagrangianDerivatives(system, q, v, s) {
  * by RK4 in `steps` steps; q0 is one number or one per slope.  Returns {q: Float64Array[] per
  * step, v: ...} as arrays over the slopes, or just the end values when record is false.
  */
+//
+// Every trajectory is integrated with all the others at once (the arrays run over the
+// trajectories), so a typed Lagrangian's syntax tree is walked once per stage of a step for all
+// of them: the searches below shoot many trajectories together rather than one at a time.
 function shootAll(system, s0, s1, q0, v0, steps, record = false) {
   const n = v0.length, h = (s1 - s0) / steps;
   let q = typeof q0 === 'number' ? new Float64Array(n).fill(q0) : Float64Array.from(q0), v = Float64Array.from(v0);
   const qs = record ? [q.slice()] : null, vs = record ? [v.slice()] : null;
-  const k = (qq, vv, s) => acceleration(system, qq, vv, s);
+  // Work arrays, reused from step to step.
+  const sA = new Float64Array(n), sB = new Float64Array(n), sC = new Float64Array(n);
+  const q2 = new Float64Array(n), v2 = new Float64Array(n), q3 = new Float64Array(n), v3 = new Float64Array(n), q4 = new Float64Array(n), v4 = new Float64Array(n);
+  let qn = new Float64Array(n), vn = new Float64Array(n);
   for (let j = 0; j < steps; j++) {
     const s = s0 + j * h;
-    const sA = new Float64Array(n).fill(s), sB = new Float64Array(n).fill(s + h / 2), sC = new Float64Array(n).fill(s + h);
-    const a1 = k(q, v, sA);
-    const q2 = new Float64Array(n), v2 = new Float64Array(n);
+    sA.fill(s); sB.fill(s + h / 2); sC.fill(s + h);
+    const a1 = acceleration(system, q, v, sA);
     for (let i = 0; i < n; i++) { q2[i] = q[i] + (h / 2) * v[i]; v2[i] = v[i] + (h / 2) * a1[i]; }
-    const a2 = k(q2, v2, sB);
-    const q3 = new Float64Array(n), v3 = new Float64Array(n);
+    const a2 = acceleration(system, q2, v2, sB);
     for (let i = 0; i < n; i++) { q3[i] = q[i] + (h / 2) * v2[i]; v3[i] = v[i] + (h / 2) * a2[i]; }
-    const a3 = k(q3, v3, sB);
-    const q4 = new Float64Array(n), v4 = new Float64Array(n);
+    const a3 = acceleration(system, q3, v3, sB);
     for (let i = 0; i < n; i++) { q4[i] = q[i] + h * v3[i]; v4[i] = v[i] + h * a3[i]; }
-    const a4 = k(q4, v4, sC);
-    const qn = new Float64Array(n), vn = new Float64Array(n);
+    const a4 = acceleration(system, q4, v4, sC);
     for (let i = 0; i < n; i++) {
       qn[i] = q[i] + (h / 6) * (v[i] + 2 * v2[i] + 2 * v3[i] + v4[i]);
       vn[i] = v[i] + (h / 6) * (a1[i] + 2 * a2[i] + 2 * a3[i] + a4[i]);
       if (!Number.isFinite(qn[i]) || !Number.isFinite(vn[i])) { qn[i] = NaN; vn[i] = NaN; }
     }
-    q = qn; v = vn;
+    let t = q; q = qn; qn = t; t = v; v = vn; vn = t;
     if (record) { qs.push(q.slice()); vs.push(v.slice()); }
   }
   return record ? { qs, vs } : { q, v };
+}
+
+/**
+ * Narrow down sign changes of f, a function evaluated on many points in one call (f(xs) ->
+ * values), all brackets {lo, hi, flo, fhi} together.  First a couple of rounds cut each bracket
+ * into K + 1 pieces and keep the first where the sign changes (robust whatever f does); then
+ * false position with the Illinois modification, one point per bracket a round, which closes
+ * in on a simple root superlinearly and never leaves its bracket.  A value that is not finite
+ * (a trajectory that flew off) ends that bracket where it is.  Returns the roots.  (Bisection
+ * one bracket at a time took 50 calls of f per bracket; this takes about 10 for all of them.)
+ */
+function refineRoots(f, brackets, { K = 7, sections = 2, rounds = 40, rel = 1e-13 } = {}) {
+  for (const b of brackets) { b.x = null; b.side = 0; b.ftol = 1e-13 * Math.max(Math.abs(b.flo), Math.abs(b.fhi)); }
+  let live = brackets.filter((b) => !b.done);
+  const finish = (b) => { if (b.hi - b.lo <= rel * (1 + Math.abs(b.lo))) b.done = true; };
+  for (let r = 0; r < sections && live.length; r++) {
+    const xs = new Float64Array(live.length * K);
+    live.forEach((b, i) => { for (let j = 0; j < K; j++) xs[i * K + j] = b.lo + ((b.hi - b.lo) * (j + 1)) / (K + 1); });
+    const fs = f(xs);
+    live.forEach((b, i) => {
+      let x0 = b.lo, f0 = b.flo, found = false;
+      for (let j = 0; j < K && !found; j++) {
+        const x = xs[i * K + j], fx = fs[i * K + j];
+        if (!Number.isFinite(fx)) { b.lo = x0; b.hi = x; b.done = true; found = true; }
+        else if (fx === 0) { b.x = x; b.done = true; found = true; }
+        else if ((fx < 0) !== (f0 < 0)) { b.lo = x0; b.flo = f0; b.hi = x; b.fhi = fx; found = true; }
+        else { x0 = x; f0 = fx; }
+      }
+      if (!found) { b.lo = x0; b.flo = f0; }
+      finish(b);
+    });
+    live = live.filter((b) => !b.done);
+  }
+  for (let r = 0; r < rounds && live.length; r++) {
+    const xs = Float64Array.from(live, (b) => {
+      const c = (b.lo * b.fhi - b.hi * b.flo) / (b.fhi - b.flo);
+      return c > b.lo && c < b.hi ? c : (b.lo + b.hi) / 2;
+    });
+    const fs = f(xs);
+    live.forEach((b, i) => {
+      const c = xs[i], fc = fs[i];
+      if (!Number.isFinite(fc)) { b.done = true; return; }
+      if (Math.abs(fc) <= b.ftol) { b.x = c; b.done = true; return; }
+      // Keep the sign change; when the same end moves twice running, halve the other's value
+      // (Illinois), so that it moves too.
+      if ((fc < 0) === (b.fhi < 0)) { b.hi = c; b.fhi = fc; if (b.side === 1) b.flo /= 2; b.side = 1; }
+      else { b.lo = c; b.flo = fc; if (b.side === -1) b.fhi /= 2; b.side = -1; }
+      finish(b);
+    });
+    live = live.filter((b) => !b.done);
+  }
+  return brackets.map((b) => b.x ?? (b.lo + b.hi) / 2);
 }
 
 /**
@@ -328,46 +400,117 @@ export function truePaths(system, s0, q0, s1, q1, { vmax = 20, scan = 241, steps
   steps += steps % 2;
   const v0 = Float64Array.from({ length: scan }, (_, i) => -vmax + (2 * vmax * i) / (scan - 1));
   const end = shootAll(system, s0, s1, q0, v0, Math.max(100, steps >> 1)).q;
-  const roots = [];
+  const brackets = [];
   for (let i = 0; i + 1 < scan; i++) {
     const a = end[i] - q1, b = end[i + 1] - q1;
     if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-    if (a === 0) { roots.push(v0[i]); continue; }
-    if (a * b < 0) {
-      // Refine by bisection (robust, and cheap: one trajectory at a time).
-      let lo = v0[i], hi = v0[i + 1], flo = a;
-      for (let it = 0; it < 50; it++) {
-        const mid = (lo + hi) / 2;
-        const f = shootAll(system, s0, s1, q0, [mid], steps).q[0] - q1;
-        if (!Number.isFinite(f)) break;
-        if ((f < 0) === (flo < 0)) { lo = mid; flo = f; } else hi = mid;
-      }
-      roots.push((lo + hi) / 2);
-    }
+    if (a === 0) brackets.push({ lo: v0[i], hi: v0[i], flo: 0, fhi: 0, done: true });
+    else if (a * b < 0) brackets.push({ lo: v0[i], hi: v0[i + 1], flo: a, fhi: b, done: false });
   }
-  const out = [];
-  // A root must land: a sign change across a jump (where the trajectories fly off) bisects to
-  // the jump and misses by its size.  The tolerance is far above the rounding of a numerical
-  // acceleration, which a tolerance of 1e-6 was not.
-  const tol = 1e-5 * (1 + Math.abs(q0) + Math.abs(q1));
-  for (const r of roots.slice(0, 3 * max)) {
-    const tr = shootAll(system, s0, s1, q0, [r], steps, true);
-    const q = Float64Array.from(tr.qs, (a) => a[0]), v = Float64Array.from(tr.vs, (a) => a[0]);
-    if (!(Math.abs(q[q.length - 1] - q1) <= tol)) continue;
-    const s = Float64Array.from(q, (_, j) => s0 + ((s1 - s0) * j) / steps);
+  // The first 3 max sign changes, narrowed down all together.
+  const roots = refineRoots((vs) => {
+    const e = shootAll(system, s0, s1, q0, vs, steps).q;
+    for (let i = 0; i < e.length; i++) e[i] -= q1;
+    return e;
+  }, brackets.slice(0, 3 * max));
+  return landedPaths(system, s0, q0, s1, q1, roots, steps, max);
+}
+
+/**
+ * The trajectories from (s0, q0) with these starting slopes that land on (s1, q1), with their
+ * actions and Morse indices, sorted by action, duplicates dropped: all shot at once, each with a
+ * neighbour on either side for the Jacobi field (see morseIndex).
+ */
+function landedPaths(system, s0, q0, s1, q1, roots, steps, max) {
+  return pathsFrom(system, s0, q0, s1, q1, shootWithNeighbours(system, s0, q0, s1, roots, steps), 1e-5, max);
+}
+
+/** Trajectories from (s0, q0) with these starting slopes, each with a neighbour either side. */
+function shootWithNeighbours(system, s0, q0, s1, slopes, steps) {
+  const n = slopes.length, starts = new Float64Array(3 * n);
+  slopes.forEach((r, i) => {
+    // Far enough apart that their difference stands well clear of the rounding in a numerical
+    // acceleration, close enough to stay linear (see morseIndex).
+    const d = 1e-4 * (1 + Math.abs(r));
+    starts[3 * i] = r; starts[3 * i + 1] = r - d; starts[3 * i + 2] = r + d;
+  });
+  return { slopes, starts, steps, tr: n ? shootAll(system, s0, s1, q0, starts, steps, true) : null };
+}
+
+/**
+ * The true paths among a shot's trajectories (shootWithNeighbours): those that land within
+ * tol (relative) of q1, with their actions and Morse indices, sorted by action, duplicates
+ * dropped.  A root must land: a sign change across a jump (where the trajectories fly off)
+ * narrows to the jump and misses by its size.  The tolerance is far above the rounding of a
+ * numerical acceleration, which a tolerance of 1e-6 was not.
+ */
+function pathsFrom(system, s0, q0, s1, q1, { slopes, steps, tr }, tol, max) {
+  const out = [], miss = tol * (1 + Math.abs(q0) + Math.abs(q1)), h = (s1 - s0) / steps;
+  const s = Float64Array.from({ length: steps + 1 }, (_, j) => s0 + ((s1 - s0) * j) / steps);
+  slopes.forEach((r, i) => {
+    const q = new Float64Array(steps + 1), v = new Float64Array(steps + 1);
+    for (let j = 0; j <= steps; j++) { q[j] = tr.qs[j][3 * i]; v[j] = tr.vs[j][3 * i]; }
+    if (!(Math.abs(q[steps] - q1) <= miss)) return;
     // The action along it, by Simpson's rule on the RK4 samples (steps is even).
-    const L = system.L(q, v, s), h = (s1 - s0) / steps;
+    const L = system.L(q, v, s);
     let S = L[0] + L[steps];
     for (let j = 1; j < steps; j++) S += (j % 2 ? 4 : 2) * L[j];
     S *= h / 3;
-    if (!Number.isFinite(S)) continue;
-    out.push({ v0: r, s, q, v, S, index: morseIndex(system, s, q, v) });
-  }
+    if (!Number.isFinite(S)) return;
+    out.push({ v0: r, s: s.slice(), q, v, S, index: conjugatePoints(tr.qs, 3 * i + 1, 3 * i + 2), legendre: legendre(system, q, v, s) });
+  });
   // Drop duplicates (the same path found twice).
   out.sort((a, b) => a.S - b.S);
   const unique = [];
   for (const p of out) if (!unique.some((u) => Math.abs(u.v0 - p.v0) < 1e-6 * (1 + Math.abs(p.v0)))) unique.push(p);
   return unique.slice(0, max);
+}
+
+/**
+ * The true paths near known ones after a small change (a slider moved: a mass, a duration, a
+ * parameter of the potential, an end point): Newton's method on each starting slope, all at
+ * once, the slope's effect on where the trajectory lands taken from its neighbours on either
+ * side, which give the Morse index too.  Two or three shots of a few trajectories, against the
+ * hundreds of a full search: what a slider can afford while it moves.  A true path that
+ * disappears is dropped; one that appears is found only by truePaths.  steps: fewer for speed.
+ */
+export function followPaths(system, s0, q0, s1, q1, slopes, { steps = 400, iterations = 6, max = 6, tol = 1e-8 } = {}) {
+  steps += steps % 2;
+  let v = Array.from(slopes);
+  const miss = tol * (1 + Math.abs(q0) + Math.abs(q1));
+  for (let it = 0; it < iterations && v.length; it++) {
+    const shot = shootWithNeighbours(system, s0, q0, s1, v, steps), end = shot.tr.qs[steps];
+    let landed = true;
+    const next = [];
+    v.forEach((r, i) => {
+      const f = end[3 * i] - q1, slope = (end[3 * i + 2] - end[3 * i + 1]) / (shot.starts[3 * i + 2] - shot.starts[3 * i + 1]);
+      let dv = f / slope;
+      if (!Number.isFinite(dv)) return;   // lost: flew off, or at a conjugate point
+      if (Math.abs(f) > miss) landed = false;
+      // Not too far at once: a path that has gone is better dropped than jumped to another.
+      const cap = 0.5 * (1 + Math.abs(r));
+      next.push(r - Math.max(-cap, Math.min(cap, dv)));
+    });
+    // Every one has landed: this shot holds the paths.
+    if (landed && next.length === v.length) return pathsFrom(system, s0, q0, s1, q1, shot, tol, max);
+    v = next;
+  }
+  return landedPaths(system, s0, q0, s1, q1, v, steps, max);
+}
+
+/**
+ * The number of zeros in (s0, s1) of the difference of two neighbouring trajectories, columns
+ * a and b of a shot's record: the conjugate points of the path between them (see morseIndex).
+ */
+function conjugatePoints(qs, a, b) {
+  const n = qs.length - 1;
+  let zeros = 0, prev = 0;
+  for (let j = 1; j < n; j++) {
+    const eta = qs[j][b] - qs[j][a];
+    if (j > 2 && prev !== 0 && Math.sign(eta) !== Math.sign(prev)) zeros++;
+    if (eta !== 0) prev = eta;
+  }
+  return zeros;
 }
 
 /**
@@ -386,43 +529,61 @@ export function closedOrbits(system, s0, q0, s1, { qrange = [-4, 4], scan = 241,
   const A = Float64Array.from({ length: scan }, (_, i) => lo + ((hi - lo) * i) / (scan - 1));
   const half = (a, n = steps >> 1, record = false) => shootAll(system, s0, s0 + T / 2, a, new Float64Array(a.length), n, record);
   const end = half(A, steps >> 2).v;
-  const roots = [];
+  const brackets = [];
   for (let i = 0; i + 1 < scan; i++) {
     const a = end[i], b = end[i + 1];
-    if (!Number.isFinite(a) || !Number.isFinite(b) || !(a * b < 0)) continue;
-    let l = A[i], h = A[i + 1], fl = a;
-    for (let it = 0; it < 50; it++) {
-      const mid = (l + h) / 2, f = half([mid]).v[0];
-      if (!Number.isFinite(f)) break;
-      if ((f < 0) === (fl < 0)) { l = mid; fl = f; } else h = mid;
-    }
-    roots.push((l + h) / 2);
+    if (Number.isFinite(a) && Number.isFinite(b) && a * b < 0) brackets.push({ lo: A[i], hi: A[i + 1], flo: a, fhi: b, done: false });
   }
+  const roots = refineRoots((as) => half(as).v, brackets);
   const at = (q, v) => system.L(Float64Array.of(q), Float64Array.of(v), Float64Array.of(s0))[0];
-  const out = [];
-  for (const a of roots) {
-    // The swing: from a to the other turning point and back.
-    const tr = half([a], steps, true), xs = tr.qs.map((x) => x[0]);
+  // Each swing, from its turning point a to the other and back (all of them at once).
+  const swings = roots.length ? half(Float64Array.from(roots), steps, true) : null;
+  const trips = [];
+  roots.forEach((a, r) => {
+    const xs = swings.qs.map((x) => x[r]);
     const xmin = Math.min(...xs), xmax = Math.max(...xs);
-    if (!(xmax - xmin > 1e-6)) continue;
+    if (!(xmax - xmin > 1e-6)) return;
     // Its energy, and the speed it has at q0: E = -L(a, 0) = m v^2/2 - L(q0, 0).
     const E = -at(a, 0), m = at(q0, 1) + at(q0, -1) - 2 * at(q0, 0);
     const inside = q0 > xmin && q0 < xmax, speed = inside ? Math.sqrt(Math.max(0, (2 * (E + at(q0, 0))) / m)) : 0;
     const starts = inside ? [[q0, speed], [q0, -speed]] : [[Math.abs(q0 - xmax) < Math.abs(q0 - xmin) ? xmax : xmin, 0]];
-    for (const [x0, v0] of starts) {
-      const run = shootAll(system, s0, s1, x0, [v0], steps, true);
-      const q = Float64Array.from(run.qs, (x) => x[0]), v = Float64Array.from(run.vs, (x) => x[0]);
-      const span = xmax - xmin, n = q.length - 1;
-      if (!(Math.abs(q[n] - x0) < 1e-4 * span && Math.abs(v[n] - v0) < 1e-3 * (span + Math.abs(v0)))) continue;
-      const s = Float64Array.from(q, (_, j) => s0 + (T * j) / steps), L = system.L(q, v, s), h = T / steps;
-      let S = L[0] + L[steps];
-      for (let j = 1; j < steps; j++) S += (j % 2 ? 4 : 2) * L[j];
-      S *= h / 3;
-      if (out.some((o) => Math.abs(o.v0 - v0) < 1e-6 * (1 + Math.abs(v0)) && Math.abs(o.q[0] - x0) < 1e-9 && Math.abs(o.S - S) < 1e-6 * (1 + Math.abs(S)))) continue;
-      out.push({ v0, s, q, v, S, closed: true, swing: [xmin, xmax], through: inside || Math.abs(q0 - x0) < 1e-9 });
-    }
-  }
+    for (const [x0, v0] of starts) trips.push({ x0, v0, xmin, xmax, inside });
+  });
+  // The whole trips, from where each starts, all at once.
+  const runs = trips.length ? shootAll(system, s0, s1, Float64Array.from(trips, (t) => t.x0), Float64Array.from(trips, (t) => t.v0), steps, true) : null;
+  const out = [];
+  trips.forEach(({ x0, v0, xmin, xmax, inside }, r) => {
+    const q = Float64Array.from(runs.qs, (x) => x[r]), v = Float64Array.from(runs.vs, (x) => x[r]);
+    const span = xmax - xmin, n = q.length - 1;
+    if (!(Math.abs(q[n] - x0) < 1e-4 * span && Math.abs(v[n] - v0) < 1e-3 * (span + Math.abs(v0)))) return;
+    const s = Float64Array.from(q, (_, j) => s0 + (T * j) / steps), L = system.L(q, v, s), h = T / steps;
+    let S = L[0] + L[steps];
+    for (let j = 1; j < steps; j++) S += (j % 2 ? 4 : 2) * L[j];
+    S *= h / 3;
+    if (out.some((o) => Math.abs(o.v0 - v0) < 1e-6 * (1 + Math.abs(v0)) && Math.abs(o.q[0] - x0) < 1e-9 && Math.abs(o.S - S) < 1e-6 * (1 + Math.abs(S)))) return;
+    out.push({ v0, s, q, v, S, closed: true, swing: [xmin, xmax], through: inside || Math.abs(q0 - x0) < 1e-9 });
+  });
   return out.sort((a, b) => (Math.abs(a.S - b.S) > 1e-6 * (1 + Math.abs(a.S)) ? a.S - b.S : b.v0 - a.v0));
+}
+
+/**
+ * Legendre's condition along a path: +1 if L is convex in v all along it (d2L/dv2 > 0, as for
+ * every L = T - V), -1 if concave all along it, 0 otherwise.  Counting conjugate points tells
+ * a minimum from a saddle only for +1; for -1 it tells a maximum (none) from a saddle; for 0
+ * it tells nothing.
+ */
+export function legendre(system, q, v, s) {
+  let Lvv;
+  if (system.derivatives) Lvv = system.derivatives(q, v, s).Lvv;
+  else {
+    const n = q.length, dv = step(v, EPS2), L3 = shiftedL(system, q, v, s, [[0, 0, 0], [0, 1, 0], [0, -1, 0]], null, dv, null);
+    Lvv = new Float64Array(n);
+    for (let i = 0; i < n; i++) Lvv[i] = (L3[n + i] - 2 * L3[i] + L3[2 * n + i]) / (dv[i] * dv[i]);
+  }
+  let pos = 0, neg = 0, big = 0;
+  for (const x of Lvv) if (Number.isFinite(x)) big = Math.max(big, Math.abs(x));
+  for (const x of Lvv) { if (!Number.isFinite(x)) continue; if (x > 1e-6 * big) pos++; else if (x < -1e-6 * big) neg++; else return 0; }
+  return pos && !neg ? 1 : neg && !pos ? -1 : 0;
 }
 
 /**
@@ -439,13 +600,7 @@ export function morseIndex(system, s, q, v) {
   // point it does not have), close enough to stay linear.
   const d = 1e-4 * (1 + Math.abs(v[0]));
   const pair = shootAll(system, s0, s1, q[0], [v[0] - d, v[0] + d], n, true);
-  let zeros = 0, prev = 0;
-  for (let j = 1; j < n; j++) {
-    const eta = pair.qs[j][1] - pair.qs[j][0];
-    if (j > 2 && prev !== 0 && Math.sign(eta) !== Math.sign(prev)) zeros++;
-    if (eta !== 0) prev = eta;
-  }
-  return zeros;
+  return conjugatePoints(pair.qs, 0, 1);
 }
 
 /** A true path's position at the points ss: cubic Hermite between its samples (which carry slopes). */
