@@ -225,6 +225,19 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
     type_material(-1, 'sqrt(1 - (lambda/0.3)^2)')
     finite = b.eval("(() => { const c = __app.compute(); return ['R', 'T', 'A'].every((q) => ['s', 'p'].every((p) => c.spec[q][p].every(Number.isFinite) && c.x2[q][p].every(Number.isFinite))); })()")
     check(finite and 'NaN' not in b.eval("document.getElementById('readouts').innerText"), 'awkward typed indices still give finite curves')
+    # An index too big to square (it once gave R = NaN), and a negative one (no angles for it).
+    type_material(1, '1e300')
+    ro = b.eval("document.getElementById('readouts').innerText")
+    check(b.eval("__app.compute().spec.R.s.every(Number.isFinite)") and '–' not in ro and 'NaN' not in ro, f'a typed index of 1e300 is a mirror, not a NaN ({ro[:60]}...)')
+    setup(b, 'fresnel'); type_material(0, '-1.5')
+    ro = b.eval("document.getElementById('readouts').innerText")
+    check('–' not in ro and 'Brewster' not in ro and 'critical' not in ro, f'a typed n = -1.5: no angles made from it ({ro[:60]}...)')
+
+    # An address typed while the page is open is followed; the light cannot come in through a metal.
+    b.eval("location.hash = '#setup=gold'"); b.sleep(0.6)
+    check(b.eval("__app.state.layers.map((m) => m.mat).join()") == 'gold', 'typing #setup=gold into the address of the open page loads it')
+    b.eval("location.hash = '#st=' + encodeURIComponent(JSON.stringify([['silver'], [], ['bk7']])) + '&lam=1e9'"); b.sleep(0.6)
+    check(b.eval('__app.state.inc.mat') == 'air' and b.eval('__app.state.lambda') <= 2000, f"an address with silver as the incident medium gets air there ({b.eval('__app.state.inc.mat')}), and a wavelength in range ({b.eval('__app.state.lambda')} nm)")
 
     # The numbers the help text quotes.
     def readout(): return b.eval("document.getElementById('readouts').innerText").replace('\n', '  ')
@@ -242,6 +255,10 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
         typed_number(b, '#design-sliders .slider:nth-child(2) input[type=number]', N); b.sleep(0.25)
         Rs.append(round(float(re.search(r'reflected R\s+([\d.]+)%', readout()).group(1)), 1))
     check(Rs == [76.8, 92.3, 97.6, 99.8], f'help, Bragg mirror: R {Rs} %')
+    # ... which the help's formula for (HL)^N H gives too.
+    p = point(b); nH, nL, ns = p['nr'][0], p['nr'][1], p['ns'][0]
+    form = [round(100 * ((ns * nL ** (2 * N) - nH ** (2 * N + 2)) / (ns * nL ** (2 * N) + nH ** (2 * N + 2))) ** 2, 1) for N in (1, 2, 3, 5)]
+    check(form == Rs and round(nH, 2) == 2.65 and round(nL, 2) == 1.46 and round(ns, 2) == 1.52, f'help, the formula for (HL)^N H: {form} % (n_H {nH:.3f}, n_L {nL:.3f}, n_s {ns:.3f})')
     b.eval("(() => { const s = document.getElementById('design-H'); s.value = 'bk7'; s.dispatchEvent(new Event('change')); })()"); b.sleep(0.3)
     check(round(point(b)['Rs'] * 100) == 15, f"help, Bragg mirror with BK7 for H: R = {point(b)['Rs']:.3f}")
     setup(b, 'filter'); widths = []
@@ -250,6 +267,13 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
         typed_number(b, '#design-sliders .slider:nth-child(2) input[type=number]', N); b.sleep(0.3)
         widths.append(round(b.eval('__app.comp.finesse.fwhm'), 2))
     check(widths == [3.75, 1.12, 0.34] and round(peak) == 74, f'help, filter: widths {widths} nm, field {peak:.1f} times')
+    # The etalon opens on a transmission peak, the light piled up between the mirrors; a few
+    # nanometres off it, it drains away.
+    setup(b, 'etalon')
+    gap = lambda: b.eval("(() => { const f = __app.comp.field; let m = 0; for (let i = 0; i < f.E2.length; i++) if (f.where[i] === 1) m = Math.max(m, f.E2[i]); return m; })()")
+    g1, T1 = gap(), point(b)['Ts']
+    typed_number(b, '#light-box .slider:nth-child(1) input[type=number]', 520); b.sleep(0.3); g2 = gap()
+    check(round(g1) == 20 and round(T1 * 100) == 41 and g2 < 3, f'help, etalon: at 514.2 nm T = {T1:.3f} and the field between the mirrors {g1:.1f} times the incoming |E|^2; at 520 nm {g2:.1f} times')
     setup(b, 'etalon'); F1 = b.eval('__app.comp.finesse')
     for j in (0, 2):
         b.eval(f'__app.selectMedium({j})'); typed_number(b, '#thick-box input[type=number]', 55); b.sleep(0.2)

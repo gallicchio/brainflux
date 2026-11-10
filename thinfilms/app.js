@@ -71,13 +71,17 @@ function matOf(m) {
   }
   return MATERIALS[m.mat] || MATERIALS.air;
 }
+// A typed index can be anything: N = 0 exactly has no admittance, and |N| beyond a million (a
+// perfect mirror, as far as light can tell) would overflow N^2.
+const N_MAX = 1e6;
 /** [n[], kappa[]] of medium m over the wavelengths nms; never throws. */
 function indices(m, nms) {
   try {
     const [n, k] = indexArray(matOf(m), nms);
     for (let i = 0; i < n.length; i++) {
       if (!Number.isFinite(n[i]) || !Number.isFinite(k[i])) { n[i] = 1; k[i] = 0; }
-      else if (n[i] * n[i] + k[i] * k[i] < 1e-12) n[i] = 1e-6;   // N = 0 exactly has no admittance
+      else if (n[i] * n[i] + k[i] * k[i] < 1e-12) n[i] = 1e-6;
+      else { n[i] = clamp(n[i], -N_MAX, N_MAX); k[i] = clamp(k[i], -N_MAX, N_MAX); }
     }
     return [n, k];
   } catch { return [new Float64Array(nms.length).fill(1), new Float64Array(nms.length)]; }
@@ -87,7 +91,7 @@ function index1(m, nm) {
   try {
     const v = matOf(m).index(nm);
     if (!Number.isFinite(v[0]) || !Number.isFinite(v[1])) return [1, 0];
-    return v[0] * v[0] + v[1] * v[1] < 1e-12 ? [1e-6, 0] : v;
+    return v[0] * v[0] + v[1] * v[1] < 1e-12 ? [1e-6, 0] : [clamp(v[0], -N_MAX, N_MAX), clamp(v[1], -N_MAX, N_MAX)];
   } catch { return [1, 0]; }
 }
 
@@ -144,8 +148,9 @@ function both(st, nm, beta, out, i) {
 }
 function curves(m) {
   const mk = () => ({ s: new Float64Array(m), p: new Float64Array(m) });
-  return { R: mk(), T: mk(), A: mk() };
+  return { R: mk(), T: mk(), A: mk(), id: ++curveSerial };
 }
+let curveSerial = 0;           // each set of curves computed gets a number: the plots' pictures are kept by it
 
 function computeSpectrum(m) {
   const [a, b] = state.lrange;
@@ -596,10 +601,51 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // --- the R, T, A plots
 
+// A plot's picture apart from what moves on it (the curves, axes and words, not the marker) is
+// kept in a canvas off the page and copied in while it stays the same: dragging the wavelength
+// moves the marker on the plot against wavelength, whose curves stay as they are.  (Thick
+// anti-aliased curves are the slowest thing a canvas draws without a graphics chip.)  key:
+// everything the picture depends on besides the canvas's size and the colours; draw(ctx, width,
+// height) returns what the page needs to know of it.
+const kept = new Map();
+function keptPicture(cv, key, draw) {
+  const { ctx, width, height, dpr } = fitCanvas(cv);
+  const full = `${key}|${cv.width}x${cv.height}|${dpr}|${colors.ink}${colors.panel}${series.R}`;
+  let k = kept.get(cv);
+  if (!k) kept.set(cv, k = { canvas: document.createElement('canvas'), key: null, data: null });
+  if (k.key !== full) {
+    if (k.canvas.width !== cv.width || k.canvas.height !== cv.height) { k.canvas.width = cv.width; k.canvas.height = cv.height; }
+    const c2 = k.canvas.getContext('2d');
+    c2.setTransform(1, 0, 0, 1, 0, 0); c2.clearRect(0, 0, cv.width, cv.height); c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    k.data = draw(c2, width, height);
+    k.key = full;
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(k.canvas, 0, 0); ctx.restore();
+  return { ctx, width, height, data: k.data };
+}
+
 const LOG_MIN = -4;
-function drawCurves(cv, data, { x0, x1, xlabel, marker, markerParts, kind }) {
-  const { ctx, width, height } = fitCanvas(cv);
-  ctx.clearRect(0, 0, width, height);
+function drawCurves(cv, data, opts) {
+  const key = [data.id, opts.x0, opts.x1, opts.xlabel, opts.kind, state.show.R, state.show.T, state.show.A, state.show.log, state.pol].join('|');
+  const { ctx, width, data: k } = keptPicture(cv, key, (c2, w, h) => drawCurvesKept(c2, w, h, data, opts));
+  const { f } = k, c = colors, { markerParts } = opts;
+  // The marker, its handle and its label, above the plot; then the legend, if it is inside.
+  const mx = Math.round(f.X(opts.marker)) + 0.5;
+  ctx.save();
+  ctx.strokeStyle = c.ink; ctx.lineWidth = 1;
+  if (mx >= f.left && mx <= f.right) { ctx.beginPath(); ctx.moveTo(mx, f.top); ctx.lineTo(mx, f.bottom); ctx.stroke(); }
+  ctx.fillStyle = c.ink; ctx.beginPath(); ctx.moveTo(mx - 6, f.top - 9); ctx.lineTo(mx + 6, f.top - 9); ctx.lineTo(mx, f.top); ctx.closePath(); ctx.fill();
+  ctx.font = '600 11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  const tw = slotsWidth(ctx, markerParts);
+  const tx = mx + 9 + tw < width - 2 ? mx + 9 : mx - 9 - tw;
+  fillSlots(ctx, markerParts, tx, f.top - 9);
+  ctx.restore();
+  legend(ctx, f, k.qs, k.pols, k.labelEnd, 'inside');
+  return f;
+}
+
+/** A plot of R, T and A, all but its marker: kept between frames by drawCurves. */
+function drawCurvesKept(ctx, width, height, data, { x0, x1, xlabel, kind }) {
   const c = colors, log = state.show.log;
   const f = new Frame(ctx, width, height, { left: 42, right: 12, top: 22, bottom: 34 });
   f.x0 = x0; f.x1 = x1;
@@ -621,7 +667,11 @@ function drawCurves(cv, data, { x0, x1, xlabel, marker, markerParts, kind }) {
   for (const v of yt) { const y = Math.round(f.Y(v)) + 0.5; ctx.beginPath(); ctx.moveTo(f.left, y); ctx.lineTo(f.right, y); ctx.stroke(); }
   ctx.save(); ctx.beginPath(); ctx.rect(f.left, f.top - 3, f.w, f.h + 6); ctx.clip();
   if (kind === 'spec') ctx.drawImage(spectrumBand(f), f.left, f.bottom - 5, f.w, 5);
+  // (At normal incidence s and p are the same: the dashed p curve would only be drawn over the
+  // solid s one.)
+  const same = (q) => data[q].s.every((v, i) => Math.abs(v - data[q].p[i]) < 1e-12);
   for (const q of qs) for (const pol of pols) {
+    if (pol === 'p' && pols.length === 2 && same(q)) continue;
     const arr = pol === 'avg' ? data[q].s.map((v, i) => (v + data[q].p[i]) / 2) : data[q][pol];
     ctx.strokeStyle = series[q]; ctx.lineWidth = 2; ctx.setLineDash(pol === 'p' ? [6, 4] : []);
     ctx.beginPath();
@@ -631,10 +681,6 @@ function drawCurves(cv, data, { x0, x1, xlabel, marker, markerParts, kind }) {
   ctx.setLineDash([]);
   // Extras: the critical and Brewster angles, the R_p minimum.
   if (kind === 'angle') angleMarks(ctx, f);
-  // The marker.
-  const mx = Math.round(f.X(marker)) + 0.5;
-  ctx.strokeStyle = c.ink; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(mx, f.top); ctx.lineTo(mx, f.bottom); ctx.stroke();
   ctx.restore();
   // Axes (log ticks by hand).
   f.axes({ colors: c, yTicks: !log });
@@ -647,16 +693,9 @@ function drawCurves(cv, data, { x0, x1, xlabel, marker, markerParts, kind }) {
     for (const v of yt) ctx.fillText(['10⁻⁴', '0.001', '0.01', '0.1', '1'][v + 4], f.left - 6, f.Y(v));
     ctx.restore();
   }
-  // Marker handle and label, above the plot.
-  ctx.save();
-  ctx.fillStyle = c.ink; ctx.beginPath(); ctx.moveTo(mx - 6, f.top - 9); ctx.lineTo(mx + 6, f.top - 9); ctx.lineTo(mx, f.top); ctx.closePath(); ctx.fill();
-  ctx.font = '600 11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  const tw = slotsWidth(ctx, markerParts);
-  const tx = mx + 9 + tw < width - 2 ? mx + 9 : mx - 9 - tw;
-  fillSlots(ctx, markerParts, tx, f.top - 9);
-  ctx.restore();
-  legend(ctx, f, qs, pols, labelEnd);
-  return f;
+  // The legend under the plot, if it fits there (inside it, it goes over the marker: drawCurves).
+  legend(ctx, f, qs, pols, labelEnd, 'outside');
+  return { f, qs, pols, labelEnd };
 }
 
 // The visible spectrum, drawn under the wavelength axis: one pixel per column, made once for
@@ -680,7 +719,9 @@ function spectrumBand(f) {
   return cv;
 }
 
-function legend(ctx, f, qs, pols, labelEnd) {
+/** The legend: on the x label's row if it fits there, else inside the plot at the top right.
+ *  where: 'outside' or 'inside', the one place it is drawn if it goes there (nothing otherwise). */
+function legend(ctx, f, qs, pols, labelEnd, where) {
   ctx.save();
   ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   const items = qs.map((q) => ({ text: q, color: series[q], dash: [] }));
@@ -688,9 +729,10 @@ function legend(ctx, f, qs, pols, labelEnd) {
   else items.push({ text: pols[0] === 'avg' ? 'unpolarised' : pols[0], color: colors.ink2, dash: pols[0] === 'p' ? [6, 4] : [] });
   const wItem = (it) => 18 + ctx.measureText(it.text).width + 9;
   const total = items.reduce((a, it) => a + wItem(it), 0) - 9;
-  // On the x label's row if it fits there, else inside the plot at the top right.
   let x = f.right - total, y = f.bottom + 25;
-  if (x < labelEnd + 12) {
+  const inside = x < labelEnd + 12;
+  if (inside !== (where === 'inside')) { ctx.restore(); return; }
+  if (inside) {
     x = f.right - total - 6; y = f.top + 12;
     ctx.fillStyle = colors.panel; ctx.globalAlpha = 0.85; ctx.fillRect(x - 4, y - 8, total + 8, 16); ctx.globalAlpha = 1;
   }
@@ -703,13 +745,15 @@ function legend(ctx, f, qs, pols, labelEnd) {
   ctx.restore();
 }
 
+// (Only for a transparent substrate with n > 0: a typed n < 0 with no absorption has the same
+// N^2, and so the same reflections, as |n|, but the angles are not about it.)
 function criticalAngle() {
   const n0 = comp.point.st.n0, ns = comp.point.st.ns;
-  return ns[1] < 1e-9 && ns[0] < n0 ? Math.asin(ns[0] / n0) / DEG : null;
+  return Math.abs(ns[1]) < 1e-9 && ns[0] > 0 && ns[0] < n0 ? Math.asin(ns[0] / n0) / DEG : null;
 }
 function brewsterAngle() {
   const n0 = comp.point.st.n0, ns = comp.point.st.ns;
-  return nLayers() === 0 && ns[1] < 1e-9 ? Math.atan(ns[0] / n0) / DEG : null;
+  return nLayers() === 0 && Math.abs(ns[1]) < 1e-9 && ns[0] > 0 ? Math.atan(ns[0] / n0) / DEG : null;
 }
 function angleMarks(ctx, f) {
   const marks = [];
@@ -889,7 +933,7 @@ function readouts() {
   if (tb !== null) items.push(['Brewster angle θ', { html: '<sub>B</sub>' }, ' = ', { v: tb, dec: 2, w: 5 }, '°']);
   // The evanescent wave in the substrate.
   const { st, beta } = v;
-  if (st.ns[1] < 1e-9 && beta > st.ns[0]) {
+  if (Math.abs(st.ns[1]) < 1e-9 && beta > Math.abs(st.ns[0])) {
     const decay = state.lambda / (2 * Math.PI * Math.sqrt(beta * beta - st.ns[0] ** 2));
     items.push(['evanescent wave beyond the surface: |E| falls by 1/e in ', boldPart(decay, 0, 5, ' nm')]);
     if (nLayers() === 0) items.push(['the reflected s and p waves differ in phase by ', boldPart(phaseDifference(s, p), 1, 6, '°')]);
@@ -1361,7 +1405,7 @@ const setups = {
   ar: () => apply({ layers: [A('mgf2', +(550 / 4 / nAt('mgf2', 550)).toFixed(1))], sub: { mat: 'bk7' }, log: true, filmShown: true, film: { profile: 'wedge', dmax: 400 } }),
   bragg: () => apply({ sub: { mat: 'bk7' }, design: { text: '(HL)^N H', H: 'tio2', L: 'silica', lambda0: 550, params: { N: 5 } } }),
   filter: () => apply({ sub: { mat: 'bk7' }, design: { text: '(HL)^N 2H (LH)^N', H: 'tio2', L: 'silica', lambda0: 550, params: { N: 4 } }, lrange: [450, 680] }),
-  etalon: () => apply({ inc: { mat: 'bk7' }, layers: [A('silver', 40), A('air', 2000), A('silver', 40)], sub: { mat: 'bk7' }, sel: 1, x2: 'thickness', dmaxPlot: 2500 }),
+  etalon: () => apply({ inc: { mat: 'bk7' }, layers: [A('silver', 40), A('air', 2000), A('silver', 40)], sub: { mat: 'bk7' }, sel: 1, x2: 'thickness', dmaxPlot: 2500, lambda: 514.2 }),
   silver: () => apply({ sub: { mat: 'silver' }, lrange: [280, 900] }),
   gold: () => apply({ layers: [A('gold', 40)], sub: { mat: 'bk7' }, filmShown: true, film: { profile: 'wedge', dmax: 120 } }),
   spr: () => apply({ inc: { mat: 'bk7' }, layers: [A('gold', 50)], sub: { mat: 'typed', label: 'water', src: 'n', params: { n: 1.333 }, hints: { n: { min: 1.3, max: 1.4, value: 1.333 } } },
@@ -1385,7 +1429,7 @@ function encodeMedium(m) {
 function decodeMedium(a, layer) {
   if (!Array.isArray(a) || typeof a[0] !== 'string' || !(a[0] === 'typed' || MATERIALS[a[0]])) throw new Error('bad medium');
   const m = { mat: a[0] };
-  if (layer) m.d = Math.max(0, +a[1] || 0);
+  if (layer) m.d = clamp(+a[1] || 0, 0, 1e6);
   if (a[0] === 'typed') {
     m.src = String(a[2] ?? 'n'); m.params = {};
     if (a[3] && typeof a[3] === 'object') for (const [k, v] of Object.entries(a[3])) if (Number.isFinite(+v)) m.params[k] = +v;
@@ -1415,7 +1459,9 @@ function fromHash(h) {
   try {
     const [inc, layers, sub] = JSON.parse(h.st);
     const o = { inc: decodeMedium(inc, false), layers: layers.map((m) => decodeMedium(m, true)), sub: decodeMedium(sub, false) };
-    if (Number.isFinite(+h.lam) && +h.lam > 0) o.lambda = +h.lam;
+    // The light arrives through a transparent medium (the menu offers no metal there either).
+    if (MATERIALS[o.inc.mat]?.kind === 'metal') o.inc = { mat: 'air' };
+    if (Number.isFinite(+h.lam) && +h.lam > 0) o.lambda = clamp(+h.lam, 200, 2000);
     if (Number.isFinite(+h.th)) o.theta = clamp(+h.th, 0, 89.9);
     if (['s', 'p', 'avg'].includes(h.pol)) o.pol = h.pol;
     if (h.x2 === 'thickness') o.x2 = 'thickness';
@@ -1424,7 +1470,7 @@ function fromHash(h) {
     if (h.rta) o.show = { R: h.rta.includes('R'), T: h.rta.includes('T'), A: h.rta.includes('A') };
     if (h.fm === 'wave') o.fieldMode = 'wave';
     if (h.fp === 'p') o.fieldPol = 'p';
-    if (h.lr) { const [a, b] = h.lr.split(',').map(Number); if (b > a && a > 0) o.lrange = [a, b]; }
+    if (h.lr) { const [a, b] = h.lr.split(',').map(Number); if (b >= a + 10 && a >= 200 && b <= 2000) o.lrange = [a, b]; }
     if (h.film) {
       const [prof, v, view] = h.film.split(',');
       o.filmShown = true;
@@ -1443,9 +1489,15 @@ function fromHash(h) {
 
 // ------------------------------------------------------------------------------ start
 
-const hash = readHash();
-if (setups[hash.setup]) setups[hash.setup]();
-else if (!fromHash(hash)) setups.soap();
+function fromAddress() {
+  const hash = readHash();
+  if (setups[hash.setup]) setups[hash.setup]();
+  else if (!fromHash(hash)) setups.soap();
+}
+fromAddress();
+// An address typed or pasted while the page is open (the page rewrites its own address with
+// history.replaceState, which fires no hashchange).
+window.addEventListener('hashchange', fromAddress);
 
 window.__app = {
   state, setups, ready: true, kick, selectMedium, setThickness, zRange,
