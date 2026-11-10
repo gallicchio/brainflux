@@ -431,6 +431,16 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     check('2.00 pixels' in note and 'past the edge' in S('__app.verdict()') and abs(th - 3.6287) < 0.001,
           f'the steepest reference, {th:.2f}°: {note!r}; {S("__app.verdict()")!r}')
 
+    # ... how steep, then: an object spread over +-lambda/8p fits beside the middle island and
+    # inside the transform at sin(theta) = 3 lambda/8p.
+    B0, Z = LAM / (8 * P), 150000
+    W = 2 * Z * B0 - L
+    S(f"__app.apply({{ object: 'picture', picture: 'F', picZ: {Z}, picSize: {0.99 * W:.1f}, diffuser: true, ref: 'plane', theta: Math.asin({3 * B0}), focus: {Z} }})"); redraw()
+    v = S('__app.verdict()')
+    hs = S("document.querySelector('.exp[data-setup=steep]').textContent.replace(/\\s+/g, ' ')")
+    check('Three separate islands' in v and all(q in hs for q in ('16 mrad', '47 mrad', '2.7°')),
+          f'an F {W / 1000:.2f} mm wide at {Z / 1000:.0f} mm (B = lambda/8p = {1000 * B0:.1f} mrad), the reference at {math.degrees(math.asin(3 * B0)):.2f}°: {v!r}, as the help says')
+
     # ... and the object's light: a point nearer than N p^2 / lambda = 10 mm makes rings finer
     # than two pixels at the edge of the plate.
     zc = N * P * P / LAM
@@ -470,7 +480,7 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     xs, texts, stretch = set(), set(), set()
     for v in (6, 45, 90.5, 480, 140):
         S(f"T.slider('depth (mm)', {v}, '#points-box')")
-        S('__texts.length = 0; __app.redraw()')
+        S('__texts.length = 0; __app.redraw(true)')   # (every view: the Record and front views are drawn only when they change)
         calls = S('__texts')
         texts |= {t for c_, t, _, _ in calls if c_ == 'front'}
         xs.add(tuple(sorted({x for c_, _, x, _ in calls if c_ == 'front'})))
@@ -504,6 +514,29 @@ with Browser('holography/index.html', size=(1400, 900)) as b:
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 
+    # Odd addresses and numbers typed past the sliders' ends are brought within limits: no
+    # exceptions, no NaN in the hologram or the view, and a brush typed as 1e9 pixels doesn't
+    # hang the page.
+    import time
+    FINITE = "__app.W.H.every(Number.isFinite) && __app.W.view.every(Number.isFinite) && !/NaN|undefined|Infinity/.test(document.querySelector('.stage').textContent)"
+    for h in ('lam=0&bits=100&pitch=0', 'obj=picture&pz=0&pic=toString&lam2=0', 'setup=toString', 'th=-90&ratio=-1&d=0'):
+        b.console.clear()
+        b.call('Page.navigate', url='about:blank'); b.goto(f'holography/index.html#{h}')
+        b.wait('window.__app && __app.ready'); b.sleep(0.4); b.eval(HELPERS); redraw()
+        errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
+        st = S('[__app.state.lambda, __app.state.pitch, __app.state.bits, __app.state.picZ, __app.state.picture, __app.state.lambda2, __app.state.theta, __app.state.ratio, __app.state.focus]')
+        check(not errors and S(FINITE), f'#{h}: no exceptions or NaN, the state held to {st}' + ('' if not errors else ': ' + errors[0][:120]))
+    b.eval("document.querySelector('#camera-panel').open = true; document.querySelector('#tools-panel').open = true; document.querySelector('#tools-panel').dispatchEvent(new Event('toggle'))")
+    S("T.button('Erase')")
+    S("T.slider('laser λ (nm)', 0, '#camera-box')"); S("T.slider('pixel (µm)', -3, '#camera-box')"); S("T.slider('brush (px)', 1e9)"); redraw()
+    t0 = time.time()
+    b.drag('#holo', (0.5, 0.5), (0.52, 0.5), steps=2); redraw()
+    dt = time.time() - t0
+    st = S('[__app.state.lambda, __app.state.pitch, __app.state.brush]')
+    check(dt < 5 and st[0] > 0 and st[1] > 0 and st[2] <= N and S(FINITE), f'laser λ typed as 0, the pixel as −3 µm, the brush as 1e9 px: held to {st}, and erasing took {dt:.1f} s')
+    errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
+    check(not errors, 'odd numbers: no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
+
 # Dark theme, and a phone.
 with Browser('holography/index.html#setup=offaxis', size=(1400, 900)) as b:
     b.call('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'dark'}])
@@ -520,6 +553,8 @@ with Browser('holography/index.html', size=(390, 844)) as b:
     check(wide <= 390, f'at phone width nothing sticks out sideways (page {wide} px wide)')
     order = b.eval("[...document.querySelectorAll('.stage > .pane')].map((e) => [e.id, Math.round(e.getBoundingClientRect().top)]).sort((a, b) => a[1] - b[1]).map((e) => e[0])")
     check(order[:4] == ['pane-rec', 'pane-front', 'pane-holo', 'pane-play'], f'on a phone the panes come in the order of the story: {order}')
+    tops = b.eval("['#pane-front', '#ref-box', '#pane-holo', '#pane-terms', '#relight-box', '#pane-recon'].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().top))")
+    check(all(a < c for a, c in zip(tops, tops[1:])), f'on a phone the Record controls come after the object, before the hologram, and the Relight controls after the three beams, before the view through the plate ({tops})')
     ph = b.eval("(() => { const r = document.querySelector('#rec-hint').getBoundingClientRect(); return [r.top, r.bottom, innerHeight, scrollY]; })()")
     check(ph[3] == 0 and ph[0] > 0 and ph[1] <= ph[2], f'phone: the hint is on the first screen, under the Record view (its bottom at {ph[1]:.0f} of {ph[2]} px)')
     b.screenshot('build/holo-phone.png')

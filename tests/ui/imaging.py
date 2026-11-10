@@ -204,6 +204,8 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
           f"NA 0.35 < lambda/d = 0.43: only the zero order passes and the image is an even I = {st['mean']:.3f} (contrast {st['contrast']:.1e})")
     check(b.eval(f'{SIDE_PASS}(0)') and not b.eval(f'{SIDE_PASS}(0.55 / 1.28)') and not b.eval(f'{SIDE_PASS}(-0.55 / 1.28)'),
           'the sketch agrees: the zero order passes, the first orders stop at the aperture')
+    zw = b.eval('__app.side.zero.w')
+    check(zw > 0.5, f"light gets through, but not the grating: the zero order carries {100 * zw:.1f}% of the light (the help: more than half)")
     put(b, NA=1.3)
     check(b.eval('__app.orders()') == [-3, -1, 0, 1, 3], 'NA 1.3 > 3 lambda/d = 1.289: the third orders pass (no second orders for equal bars)')
     quoted(b, 'abbe', '1.28', '0.5', '0.43', '0.250', '1.29')
@@ -214,7 +216,9 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     period = b.eval('__app.profilePeriod')
     check(b.eval('__app.orders()') == [-1, 1] and near(period, 0.640, 3) and b.eval('__app.side.zero.amp') == 0,
           f'zero order blocked (in the sketch too): the image repeats every {period} um = d/2')
-    quoted(b, 'zero', '0.6', '0.640')
+    lim = b.eval("document.querySelector('#limit').textContent")
+    check('object' in lim and '0.917' in lim and period < 0.917, f'the image repeats every {period} um, finer than the limit on the object, λ/NA = 0.917 um: "{lim}"')
+    quoted(b, 'zero', '0.6', '0.640', '0.92')
 
     # 3. Oblique light: 0 and +1 make fringes of period d where axial light shows nothing.
     setup(b, 'oblique')
@@ -436,8 +440,43 @@ with Browser('imaging/index.html', size=(1400, 900)) as b:
     b.goto('imaging/index.html?again#setup=star'); b.wait('window.__app && __app.ready', timeout=30); settle(b)
     check(b.eval('__app.state.preset') == 'star', '#setup=star opens the Siemens star')
 
+    # Tilted light puts its zero order beside a stop or a dot in the middle: the note says so.
+    setup(b, 'zernike')
+    put(b, tiltNA=0.2)
+    note = b.eval("document.querySelector('#filter-note').textContent")
+    check('beside it' in note, f'phase dot, light tilted: "{note}"')
+    put(b, filter='stop', tiltNA=0.2)
+    note = b.eval("document.querySelector('#filter-note').textContent")
+    check('beside it' in note and b.eval('__app.side.zero.amp') > 0, f'stop, light tilted: the zero order gets through, and "{note}"')
+
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
+
+    # Odd addresses and numbers typed past the sliders' ends are brought within limits: no
+    # exceptions, no NaN, no condenser so wide that the page stalls.
+    import time
+    TYPE = """((label, v) => { const s = [...document.querySelectorAll('.slider')].find((e) => !e.hidden && e.offsetParent && e.querySelector('label')?.textContent.trim().startsWith(label));
+      const box = s.querySelector('input[type=number]'); box.value = v; box.dispatchEvent(new Event('change')); })"""
+    FINITE = '__app.I.every(Number.isFinite) && !/NaN|undefined|Infinity/.test(document.querySelector(".controls").textContent + document.querySelector(".trio").textContent)'
+    for h in ('xzoom=7&zoom=3&row=9999&filter=foo&preset=toString', 'lambda=0&NA=-1&condNA=100&illum=condenser', 'preset=formula&formula=1e300*x*x'):
+        b.console.clear()
+        b.call('Page.navigate', url='about:blank'); b.goto(f'imaging/index.html#{h}')
+        b.wait('window.__app && __app.ready', timeout=30); settle(b)
+        errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
+        st = b.eval('[__app.state.xzoom, __app.state.zoom, __app.state.row, __app.state.filter, __app.state.preset, __app.state.lambda, __app.state.NA, __app.state.condNA]')
+        check(not errors and b.eval(FINITE), f'#{h}: opens without exceptions or NaN, as {st}' + ('' if not errors else ': ' + errors[0][:120]))
+    setup(b, 'abbe')
+    put(b, illum='condenser')
+    t0 = time.time()
+    b.eval(f'{TYPE}("condenser NA", 100)'); settle(b)
+    dt = time.time() - t0
+    check(b.eval('__app.state.condNA') <= 2 and dt < 10 and b.eval(FINITE), f"condenser NA typed as 100: held to {b.eval('__app.state.condNA')}, the image in {dt:.1f} s")
+    for label, v in (('λ (nm)', 0), ('NA', -1), ('size', 1e9)):
+        b.eval(f'{TYPE}({json.dumps(label)}, {v})'); settle(b)
+    st = b.eval('[__app.state.lambda, __app.state.NA, __app.state.objBrush]')
+    check(st[0] > 0 and st[1] > 0 and st[2] <= 256 and b.eval(FINITE), f'λ typed as 0, NA as −1, the brush as 1e9: held to {st}')
+    errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
+    check(not errors, 'odd numbers: no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
 
 # A phone, and the dark theme.
 with Browser('imaging/index.html', size=(390, 844)) as b:
