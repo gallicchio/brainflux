@@ -121,6 +121,52 @@ function discSpectrum(R, lmax, half) {
   return out.sort((p, q) => p.lambda - q.lambda);
 }
 
+/**
+ * The exact labels of a disc's (or half disc's) first `count` grid modes, in the grid's order.
+ * Sorting the exact λ = (j_mk/R)² and the grid's eigenvalues side by side pairs them wrongly
+ * where two exact levels of different m lie closer than the grid's error, which depends on m
+ * (the half disc's (16, 2) and (20, 1) swap places at modes 69 and 70).  So each grid mode's m
+ * is read off the mode itself, as its largest Fourier component round rings about the centre
+ * (cos mθ and sin mθ; sin mθ alone for the half disc), and k by counting the modes of that m
+ * met so far (two per k for m ≥ 1 in the full disc).
+ *   field(k): mode k as a function (x, y) => value; values: the grid's eigenvalues (J_m has no
+ *   zero below m, so m < R√λ: only those m are tried).  Returns [{ lambda, label, m, k, j }].
+ */
+export function discLabels(R, y0, half, count, field, values) {
+  const zeros = new Map(), seen = new Map(), out = [], M = 128, MMAX = 40;
+  const rings = [0.55, 0.75, 0.9];
+  const th = Float64Array.from({ length: M }, (_, i) => (half ? (PI * (i + 0.5)) / M : (2 * PI * i) / M));
+  const cosT = Array.from({ length: MMAX + 1 }, (_, m) => th.map((t) => Math.cos(m * t)));
+  const sinT = Array.from({ length: MMAX + 1 }, (_, m) => th.map((t) => Math.sin(m * t)));
+  const v = new Float64Array(M);
+  for (let q = 0; q < count; q++) {
+    const f = field(q), power = new Float64Array(MMAX + 1), top = Math.min(MMAX, Math.floor(1.05 * R * Math.sqrt(values[q])) + 1);
+    for (const r of rings) {
+      for (let i = 0; i < M; i++) v[i] = f(r * R * Math.cos(th[i]), y0 + r * R * Math.sin(th[i]));
+      for (let m = 0; m <= top; m++) {
+        let c = 0, s = 0;
+        const C = cosT[m], S = sinT[m];
+        for (let i = 0; i < M; i++) { c += v[i] * C[i]; s += v[i] * S[i]; }
+        // (A pure a cos(mθ + φ) gives (aM/2)²; a constant a gives (aM)², so m = 0 counts a quarter.
+        // On the half disc only sin mθ, m ≥ 1, fits the straight edge.)
+        power[m] += half ? s * s : (c * c + s * s) * (m === 0 ? 0.25 : 1);
+      }
+    }
+    let best = half ? 1 : 0;
+    for (let m = best + 1; m <= top; m++) if (power[m] > power[best]) best = m;
+    const n = seen.get(best) || 0;
+    seen.set(best, n + 1);
+    out.push({ m: best, k: half || best === 0 ? n + 1 : Math.floor(n / 2) + 1 });
+  }
+  // The zeros, each m's at once (finding them is the slow part).
+  for (const e of out) zeros.set(e.m, Math.max(zeros.get(e.m) || 0, e.k));
+  for (const [m, kmax] of zeros) zeros.set(m, besselZeros(m, kmax));
+  return out.map(({ m, k }) => {
+    const j = zeros.get(m)[k - 1];
+    return { lambda: (j / R) ** 2, label: `(${half || m === 0 ? m : `±${m}`}, ${k})`, m, k, j };
+  });
+}
+
 /** Equilateral triangle of side s (Lamé): λ = (16π²/9s²)(m² + mn + n²), m, n ≥ 1. */
 function triangleSpectrum(s, lmax) {
   const out = [], c = (16 * PI * PI) / (9 * s * s);
@@ -179,6 +225,7 @@ export const PRESETS = {
         sdf: (x, y) => R - Math.hypot(x, y), area: PI * R * R, perimeter: 2 * PI * R, K: 1 / 6,
         outline: [arcPoints(0, 0, R, 0, 2 * PI, 160)],
         exact: (lmax) => discSpectrum(R, lmax, false),
+        exactInGridOrder: (count, field, values) => discLabels(R, 0, false, count, field, values),
         exactNote: 'λ = (jₘₖ/R)², jₘₖ the k-th zero of the Bessel function Jₘ; (m, k) with ±m for cos mθ and sin mθ',
       };
     },
@@ -194,6 +241,7 @@ export const PRESETS = {
         area: (PI * R * R) / 2, perimeter: PI * R + 2 * R, K: 1 / 8 + 1 / 12,
         outline: [[...arcPoints(0, y0, R, 0, PI, 100), [R, y0]]],
         exact: (lmax) => discSpectrum(R, lmax, true),
+        exactInGridOrder: (count, field, values) => discLabels(R, y0, true, count, field, values),
         exactNote: 'λ = (jₘₖ/R)² with m ≥ 1 only: the circle\'s modes sin mθ',
       };
     },
@@ -318,15 +366,23 @@ function rect(a, b, h) {
     exact: (lmax) => rectangleSpectrum(a, b, lmax),
     exactNote: 'λ = π²(m²/a² + n²/b²), a × b the sides',
     // The 5-point Laplacian's own eigenvalues for this rectangle: products of sines.
-    discrete: (count) => {
-      const Ma = Math.round(a / h) - 1, Mb = Math.round(b / h) - 1, out = [];
-      for (let m = 1; m <= Ma; m++) for (let k = 1; k <= Mb; k++) {
-        out.push((4 / (h * h)) * (Math.sin((m * PI * h) / (2 * a)) ** 2 + Math.sin((k * PI * h) / (2 * b)) ** 2));
-      }
-      return out.sort((p, q) => p - q).slice(0, count);
-    },
+    discrete: (count) => discreteRect(a, b, h, count).map((e) => e.grid),
+    // The exact modes in the grid's order, for labelling the solver's list: the grid lowers
+    // short waves by an amount that depends on their direction, and so can swap two close
+    // levels ((9, 4) and (11, 1) of the 1 × 0.614 rectangle).  Its own eigenvalues are known
+    // exactly here, with their (m, n), so each of the solver's modes gets its true label.
+    exactInGridOrder: (count) => discreteRect(a, b, h, count).map(({ m, k }) => ({ lambda: PI * PI * ((m * m) / (a * a) + (k * k) / (b * b)), label: `(${m}, ${k})` })),
     sides: [a, b],
   };
+}
+
+/** The 5-point Laplacian's lowest `count` eigenvalues for the rectangle a × b: { grid, m, k }. */
+function discreteRect(a, b, h, count) {
+  const Ma = Math.round(a / h) - 1, Mb = Math.round(b / h) - 1, out = [];
+  for (let m = 1; m <= Ma; m++) for (let k = 1; k <= Mb; k++) {
+    out.push({ grid: (4 / (h * h)) * (Math.sin((m * PI * h) / (2 * a)) ** 2 + Math.sin((k * PI * h) / (2 * b)) ** 2), m, k });
+  }
+  return out.sort((p, q) => p.grid - q.grid).slice(0, count);
 }
 
 function gwwDrum(which, l, h) {

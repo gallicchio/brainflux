@@ -362,11 +362,30 @@ function exactField(k) {
   return f;
 }
 
-/** Labels of the exact modes from the shape's exactly known spectrum, if there is one. */
+/**
+ * Labels of the exact modes from the shape's exactly known spectrum, if there is one.  Kept with
+ * the modes they label: the circle's Bessel zeros take a while to find, and the list is drawn
+ * again on every step of the wave-speed slider.
+ */
+let labels = { modes: null, geo: null, list: null };
 function analyticLabels() {
   if (!modes || !geo.exact) return null;
-  const lmax = modes.values[modes.values.length - 1] * 1.25 + 50;
-  return geo.exact(lmax);
+  if (labels.modes !== modes || labels.geo !== geo) {
+    const lmax = modes.values[modes.values.length - 1] * 1.25 + 50;
+    labels = { modes, geo, list: geo.exactInGridOrder ? geo.exactInGridOrder(Math.min(modes.values.length, modes.nvec), modeFunction, modes.values) : geo.exact(lmax) };
+  }
+  return labels.list;
+}
+
+/** Exact mode k as a function of (x, y), bilinear between the grid points (zero outside). */
+function modeFunction(k) {
+  const f = exactField(k), n = state.n, h = grid.h;
+  return (x, y) => {
+    const u = (x + 0.5) / h, v = (y + 0.5) / h, i = Math.floor(u), j = Math.floor(v);
+    if (!f || i < 0 || j < 0 || i >= n - 1 || j >= n - 1) return 0;
+    const s = u - i, t = v - j, g = j * n + i;
+    return (1 - s) * (1 - t) * f[g] + s * (1 - t) * f[g + 1] + (1 - s) * t * f[g + n] + s * t * f[g + n + 1];
+  };
 }
 
 // ------------------------------------------------------------------ sound
@@ -663,7 +682,10 @@ function drawSignal() {
   // them (lib/scope.js).  The picture is kept while the signal holds still (paused, or full).
   const { re, im } = signal, q = isQ(), still = !state.running || K >= SIGNAL_MAX;
   const y = q ? (k) => top + h - (Math.sqrt(re[k] * re[k] + im[k] * im[k]) / mx) * h : (k) => top + h / 2 - (re[k] / mx) * (h / 2);
-  scopeTrace(ctx, { left, top, w, h }, { n: K, y, x0: left, x1: left + w, color: c.ink2, key: still ? `drums signal ${signalCount} ${K} ${q}` : undefined });
+  // The billiard's |overlap| is a magnitude, with no carrier under it: its sample-to-sample
+  // ripple is not a band to smooth, and smoothing it only thickens the line and blurs the
+  // returns (a scar's, the square's revival).  The drum's displacement is a band of cycles.
+  scopeTrace(ctx, { left, top, w, h }, { n: K, y, x0: left, x1: left + w, color: c.ink2, smooth: q ? false : undefined, key: still ? `drums signal ${signalCount} ${K} ${q}` : undefined });
   ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif';
   ctx.fillText(isQ() ? 'signal: overlap with the start |⟨ψ(0)|ψ(t)⟩|' : 'signal: the membrane under the mallet', left + 4, top + 11);
   ctx.fillText('0', left, height - 3);
