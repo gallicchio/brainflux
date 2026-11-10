@@ -840,7 +840,7 @@ export function createBench(app) {
     if (state.field === 'real') {
       setSlots(note, ['Crests drawn ', ...lenParts(crest, 6, { mm: 1 }), ' apart, not ', { v: state.lambda, dec: 0, w: 4 }, NBSP + 'nm: to keep its true shape, a beam drawn ',
         { v: state.E, dec: 0, w: 6 }, '× wider needs a wavelength ', { v: state.E, dec: 0, w: 6 }, '² times longer.' + (px < 4 ? ' Too close to draw here: zoom in.' : '')]);
-    } else if (state.field === 'intensity') setSlots(note, ['The brighter, the more intense (as √I, so that a focus doesn’t hide the rest); white: overexposed.']);
+    } else if (state.field === 'intensity') setSlots(note, ['The brighter, the more intense: across the beam as I, along it as √I (so that a focus doesn’t hide the rest); white: overexposed.']);
     else if (state.field === 'phase') setSlots(note, ['Colour: the phase compared with a plane wave (red 0, cyan π); brightness: the amplitude.']);
     else setSlots(note, ['The edge of the beam, ±w(z): where the intensity is 1/e² = 13.5% of its peak.']);
   }

@@ -70,18 +70,13 @@ export function createCavity(app) {
     F.clip();
     const rgb = wavelengthRGB(app.state.bench.lambda);
     if (mode) {
-      // The mode's intensity (a glow in the laser's colour) and its outline +-w(z).
-      const img = ctx.createImageData(Math.max(1, Math.round(F.X(L) - F.X(0))), Math.round(F.h));
-      const d = img.data, iw = img.width, ih = img.height;
-      for (let i = 0; i < iw; i++) {
-        const z = (i + 0.5) / sx, dz = z - mode.zw, w = mode.w0 * Math.sqrt(1 + (dz / mode.zR) ** 2), a = (mode.w0 / w) ** 2;
-        for (let j = 0; j < ih; j++) {
-          const x = (ih / 2 - j - 0.5) / sy, I = a * Math.exp((-2 * x * x) / (w * w)), v = Math.min(1, 0.75 * Math.sqrt(I));
-          const o = 4 * (j * iw + i);
-          d[o] = 255 * rgb[0] * v; d[o + 1] = 255 * rgb[1] * v; d[o + 2] = 255 * rgb[2] * v; d[o + 3] = 255;
-        }
-      }
-      ctx.putImageData(img, Math.round(F.X(0)), Math.round(F.top));
+      // The mode's intensity (a glow in the laser's colour) and its outline +-w(z).  The glow
+      // depends on the cavity and the canvas only, not on the rays: kept, and made again only
+      // when one of those changes.
+      const iw = Math.max(1, Math.round(F.X(L) - F.X(0))), ih = Math.max(1, Math.round(F.h));
+      const key = [iw, ih, sx, sy, mode.w0, mode.zw, mode.zR, rgb].join();
+      if (!glow || glow.key !== key) glow = { key, img: modeGlow(iw, ih, sx, sy, rgb) };
+      ctx.putImageData(glow.img, Math.round(F.X(0)), Math.round(F.top));
       ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5;
       for (const s of [1, -1]) {
         ctx.beginPath();
@@ -170,6 +165,32 @@ export function createCavity(app) {
     const wide = F.w > 440;
     ctx.textAlign = 'left'; fillSlots(ctx, [wide ? 'mirror 1: R₁ = ' : 'R₁ = ', ...lenParts(state.R1, 6, { mm: 1 })], F.left, 15);
     ctx.textAlign = 'right'; fillSlots(ctx, [wide ? 'mirror 2: R₂ = ' : 'R₂ = ', ...lenParts(state.R2, 6, { mm: 1 }), wide ? '  (drag it)' : ' (drag)'], F.right, 15);
+  }
+
+  /**
+   * The glow of the mode, iw x ih pixels from mirror 1 on: brightness min(1, 0.75 sqrt I) with
+   * I = (w0/w)^2 exp(-2x^2/w^2), so 0.75 (w0/w) exp(-x^2/w^2).  Down each column the Gaussian is
+   * stepped by multiplication from the axis outwards (as the bench does), the two halves mirror
+   * images: no exp or sqrt per pixel.
+   */
+  let glow = null;
+  function modeGlow(iw, ih, sx, sy, rgb) {
+    const img = new ImageData(iw, ih), out = new Uint32Array(img.data.buffer);
+    const R = 255 * rgb[0], Gc = 255 * rgb[1], B = 255 * rgb[2];
+    const px = (v) => (255 << 24) | (Math.round(B * v) << 16) | (Math.round(Gc * v) << 8) | Math.round(R * v);
+    // Rows j and ih - 1 - j sit at x = +-(k + e)/sy, k = 0, 1, ..., e = 1/2 (even ih) or 0 (odd).
+    const e = ih % 2 ? 0 : 0.5, half = Math.ceil(ih / 2), d2 = 1 / (sy * sy);
+    for (let i = 0; i < iw; i++) {
+      const z = (i + 0.5) / sx, dz = z - mode.zw, w2 = mode.w0 * mode.w0 * (1 + (dz / mode.zR) ** 2);
+      const a = 0.75 * mode.w0 / Math.sqrt(w2), q = Math.exp(-2 * d2 / w2);
+      let g = a * Math.exp(-(e * e * d2) / w2), r = Math.exp(-((2 * e + 1) * d2) / w2);
+      for (let k = 0; k < half; k++) {
+        const c = px(g < 1 ? g : 1), up = Math.floor(ih / 2 - k - e), down = ih - 1 - up;
+        out[up * iw + i] = c; out[down * iw + i] = c;
+        g *= r; r *= q;
+      }
+    }
+    return img;
   }
 
   // ------------------------------------------------------------------- the stability diagram
@@ -520,7 +541,8 @@ export function createCavity(app) {
         if (rays.every((r) => r.lost)) { clock = 0; break; }
       }
     }
-    if (moved) { drawCavity(); drawRayPhase(); numbers(); }
+    // (The numbers depend on the mirrors only, not on the rays.)
+    if (moved) { drawCavity(); drawRayPhase(); }
     return true;
   }
 

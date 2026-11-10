@@ -3,8 +3,8 @@ import {
   free, lens, mirror, mul, applyABCD, qOfWaist, beamOf, analytic, traceBench, beamAt, waists,
   envelope, lensLaw, coupling, gouyThrough, hermite,
 } from '../beams/gauss.js';
-import { gParams, isStable, roundTrip, eigenmode, closedForms, modeLines, bounce, afterRoundTrip } from '../beams/cavity.js';
-import { fillMode, hg1d, laguerre, order, overlap, modeAt, spectrum, fromSpectrum } from '../beams/modes.js';
+import { gParams, isStable, roundTrip, eigenmode, closedForms, modeLines, bounce, afterRoundTrip, C_LIGHT } from '../beams/cavity.js';
+import { fillMode, hg1d, laguerre, order, overlap, modeAt, modeColumn, spectrum, fromSpectrum } from '../beams/modes.js';
 import { propagate } from '../diffraction/optics.js';
 
 const LAMBDA = 633e-6; // mm
@@ -258,6 +258,36 @@ test('cavity: the mode against the textbook formulas; the confocal spectrum', ()
   assert(b.w2 > a.w2 && b.w0 < a.w0, 'approaching the hemispherical limit');
 });
 
+test('cavity: the resonances\' Gouy term is the field\'s own round-trip phase (Collins), for either sign of g', () => {
+  // The resonances are nu = (c/2L)(q + (N+1) psi1/pi), psi1 = arccos(+-sqrt(g1 g2)).  Check psi1
+  // against the phase the fundamental mode's field itself gains on the axis in one round trip
+  // through the cavity's ABCD matrix, -arg(A + B/q) (Collins' integral): it must be 2 psi1,
+  // modulo 2 pi, for cavities with both g positive, both negative, and near the edges.
+  const wrap = (a) => ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  let n = 0;
+  for (const [L, R1, R2] of [[250, 1000, 1000], [250, 1000, 500], [250, 400, 400], [350, 200, 200], [180, -500, 300], [100, 60, 75],
+    [250, 130, 130], [250, Infinity, 270], [250, 2500, 2500], [150, 200, 200], [250, 251, 251], [250, 126, 126]]) {
+    const md = eigenmode(L, R1, R2, LAMBDA);
+    assert(md, `a mode for (${L}, ${R1}, ${R2})`);
+    const collins = wrap(gouyThrough(roundTrip(L, R1, R2), md.q1));
+    close(collins, wrap(2 * md.gouy), 1e-9, `(${L}, ${R1}, ${R2}): round-trip Gouy phase`);
+    // One pass, mirror 1 to mirror 2, is psi1 itself; and the line of TEM00 is that far above the comb.
+    close(wrap(gouyThrough(free(L), md.q1)), md.gouy, 1e-9, 'one-way Gouy phase');
+    const [g1, g2] = gParams(L, R1, R2);
+    close(md.gouy, Math.acos((g1 < 0 ? -1 : 1) * Math.sqrt(g1 * g2)), 1e-9, 'psi1 = arccos(+-sqrt(g1 g2))');
+    const line = modeLines(md.gouy, 0, 0, 1)[0];
+    close(line.nu, md.gouy / Math.PI, 1e-12, 'TEM00 sits psi1/pi of a free spectral range above the comb');
+    n++;
+  }
+  // The numbers experiment 9 quotes: R1 = R2 = 1 m, L = 250 mm.
+  const m9 = eigenmode(250, 1000, 1000, LAMBDA), FSR = C_LIGHT / 500;
+  close(m9.gouy / Math.PI, 0.230, 5e-4, 'psi1 = 0.230 pi');
+  close(FSR / 1e6, 600, 0.5, 'c/2L = 600 MHz');
+  close((FSR * m9.gouy) / Math.PI / 1e6, 138, 0.5, 'the orders 138 MHz apart');
+  assert(Math.floor(500 / LAMBDA - m9.gouy / Math.PI) === 789889, 'q0 = 789 889');
+  return `${n} cavities`;
+});
+
 test('modes: Hermite-Gauss and Laguerre-Gauss modes are orthonormal', () => {
   const n = 160, half = 7, dA = ((2 * half) / n) ** 2;
   const list = [];
@@ -297,6 +327,29 @@ test('modes: HG10 + i HG01 is the Laguerre-Gauss donut LG01', () => {
   const [r, i] = modeAt(md, -2 + 0.5 + 1, 2 - 0.5, 0.6);
   close(r, re[1], 1e-12, 'modeAt re'); close(i, im[1], 1e-12, 'modeAt im');
   assert(order(md) === 4, 'order 2p + |l|');
+});
+
+test('modes: a column of the side view (modeColumn) is modeAt down the column', () => {
+  const list = [{ family: 'hg', m: 0, n: 0 }, { family: 'hg', m: 3, n: 1 }, { family: 'hg', m: 8, n: 8 }, { family: 'lg', p: 0, l: 1 }, { family: 'lg', p: 2, l: -3 },
+    { family: 'lg', p: 5, l: 6 }, { family: 'mix', alpha: 0.3, phi: 1.1 }, { family: 'mix', alpha: Math.PI / 4, phi: -Math.PI / 2 }];
+  let worst = 0;
+  for (const md of list) for (const zeta of [-3, -0.4, 0, 1, 2.7]) for (const y0 of [0, 0.7]) {
+    const count = 300, X = 9, dx = (2 * X) / count, re = new Float64Array(2 * count), im = new Float64Array(2 * count);
+    // Every other place, times a factor: the offset, stride and factor are honoured.
+    const f = [Math.cos(0.4), Math.sin(0.4)];
+    modeColumn(md, X - dx / 2, dx, count, y0, zeta, re, im, 1, 2, 0.9 * f[0], 0.9 * f[1]);
+    let big = 0;
+    for (let j = 0; j < count; j++) big = Math.max(big, Math.hypot(...modeAt(md, X - dx / 2 - j * dx, y0, zeta)));
+    for (let j = 0; j < count; j++) {
+      const [a, b] = modeAt(md, X - dx / 2 - j * dx, y0, zeta);
+      const wr = 0.9 * (a * f[0] - b * f[1]), wi = 0.9 * (a * f[1] + b * f[0]);
+      const err = Math.hypot(re[1 + 2 * j] - wr, im[1 + 2 * j] - wi) / (big || 1);   // (HG_m1 at y0 = 0 is zero)
+      worst = Math.max(worst, err);
+      assert(err < 1e-10, `${JSON.stringify(md)} zeta ${zeta} y0 ${y0} row ${j}: ${re[1 + 2 * j]}, ${im[1 + 2 * j]} against ${wr}, ${wi}`);
+      assert(re[2 * j] === 0 && im[2 * j] === 0, 'only every other place written');
+    }
+  }
+  return `largest difference ${worst.toExponential(1)} of the column's peak`;
 });
 
 test('modes: the split angular spectrum propagator is the diffraction demo\'s propagate()', () => {

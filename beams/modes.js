@@ -136,6 +136,59 @@ export function modeAt(mode, x, y, zeta) {
 }
 
 /**
+ * A whole column of modeAt: the field at the rows x_j = x0 - j dx (j < count), y = y0, at zeta,
+ * times the factor (cr + i ci), written to re[offset + j stride], im[...].  The same numbers as
+ * modeAt, made fast for the side view: everything that depends on zeta alone is worked out once
+ * per column, and the Gaussian with its curved wavefront, exp(-a x^2) with a = 1/w^2 - i curv,
+ * is stepped down the column by complex multiplication, f(j+1) = f(j) r(j), r(j+1) = r(j) rho,
+ * so each point costs a polynomial and a few products: no exp, cos or sin.
+ */
+export function modeColumn(mode, x0, dx, count, y0, zeta, re, im, offset = 0, stride = 1, cr = 1, ci = 0) {
+  const w2 = 1 + zeta * zeta, w = Math.sqrt(w2), psi = Math.atan(zeta), curv = zeta / w2;
+  const N = order(mode), fam = mode.family, s = Math.SQRT2 / w;
+  // The factor common to the column: 1/w, the y0 part of the Gaussian and the wavefront, the
+  // Gouy phase, and (cr, ci).
+  const yph = y0 * y0 * curv - (N + 1) * psi, yamp = Math.exp(-(y0 * y0) / w2) / w;
+  let kr = yamp * Math.cos(yph), ki = yamp * Math.sin(yph);
+  [kr, ki] = [kr * cr - ki * ci, kr * ci + ki * cr];
+  // exp(-a x^2) down the column, a = 1/w^2 - i curv (the bench's recurrence).
+  const ar = 1 / w2, ai = -curv;
+  const cexp = (t) => { const m = Math.exp(-ar * t); return [m * Math.cos(ai * t), -m * Math.sin(ai * t)]; };
+  let [fr, fi] = cexp(x0 * x0), [rr, ri] = cexp(-2 * dx * x0 + dx * dx);
+  const [qr, qi] = cexp(2 * dx * dx);
+  // The polynomial part, as a function of x: Hermite (HG, mix) or the Laguerre-Gauss radial
+  // factor with its winding, (sqrt2 (x +- i y0)/w)^|l| L_p^|l|(2 r^2/w^2).
+  const c = (m) => Math.pow(2 / Math.PI, 0.25) / Math.sqrt(2 ** m * factorial(m));
+  let poly;
+  if (fam === 'hg') {
+    const k = c(mode.m) * c(mode.n) * hermite(mode.n, s * y0);
+    poly = (x) => [k * hermite(mode.m, s * x), 0];
+  } else if (fam === 'mix') {
+    const a = Math.cos(mode.alpha) * c(1) * c(0) * hermite(0, s * y0), b = Math.sin(mode.alpha) * c(0) * c(1) * hermite(1, s * y0);
+    const br = b * Math.cos(mode.phi), bi = b * Math.sin(mode.phi);
+    poly = (x) => { const h = hermite(1, s * x); return [a * h + br, bi]; };
+  } else {
+    const al = Math.abs(mode.l), sgn = mode.l < 0 ? -1 : 1, p = mode.p;
+    const norm = Math.sqrt((2 * factorial(p)) / (Math.PI * factorial(p + al))), uy = sgn * s * y0;
+    poly = (x) => {
+      const ux = s * x;
+      let pr = 1, pi = 0;
+      for (let k = 0; k < al; k++) { const t = pr * ux - pi * uy; pi = pr * uy + pi * ux; pr = t; }
+      const L = norm * laguerre(p, al, ux * ux + uy * uy);
+      return [L * pr, L * pi];
+    };
+  }
+  for (let j = 0, o = offset; j < count; j++, o += stride) {
+    const [pr, pi] = poly(x0 - j * dx);
+    // poly * f * k
+    const gr = pr * fr - pi * fi, gi = pr * fi + pi * fr;
+    re[o] = gr * kr - gi * ki; im[o] = gr * ki + gi * kr;
+    const t = fr * rr - fi * ri; fi = fr * ri + fi * rr; fr = t;
+    const u = rr * qr - ri * qi; ri = rr * qi + ri * qr; rr = u;
+  }
+}
+
+/**
  * The angular spectrum method of diffraction/optics.js, split in two so that one field can be
  * sent to many distances cheaply: spectrum() transforms it once, fromSpectrum() applies
  * exp(i (kz - k) z), kz = sqrt(k^2 - kx^2 - ky^2), and transforms back.  The same numbers as
