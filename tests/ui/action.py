@@ -232,6 +232,13 @@ with Browser('action/index.html', size=(1400, 900)) as b:
     free = [score_after('find', js)['S'] for js in ('__app.move(2, 1, 3)', '__app.move(2, 1.3, 2)', '__app.rush()', '__app.move(2, 1.25, 2.5)')]
     check(near(free[0], 8.13, 0.005) and near(free[1], 8.08, 0.005) and near(free[2], 4.32, 0.005) and near(free[3], 4, 1e-9),
           f'free particle: middle knot to x = 3 {free[0]:.3f}, to t = 1.3 {free[1]:.3f}, rush {free[2]:.3f}, along the line {free[3]:.4f} (the help: 8.13, 8.08, 4.32, 4.000)')
+    # The closed form beside what the shooting found, where there is one.
+    forms = {}
+    for name in ('find', 'throw', 'phase', 'saddle', 'twin'):
+        run(b, f'__app.setups.{name}()')
+        txt = b.eval("document.querySelector('#truth').textContent")
+        forms[name] = (txt.split('(')[0].replace('S =', '').strip(), txt.split('gives ')[-1].rstrip('.') if 'The formula' in txt else None)
+    check(all(f[1] is not None and f[0] == f[1] for f in forms.values()), f'the true path found by shooting has the closed form\'s action, to 5 figures: {forms}')
 
     # ---- rolling downhill
     run(b, '__app.setups.hints()')

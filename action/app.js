@@ -205,8 +205,9 @@ function followTruths() {
   const d = state.sys;
   if (periodic() || d.truePaths || truths.some((t) => t.closed)) return null;
   // (None to follow: none until the search, a moment after the last change.)
-  // Steps of about 0.05 in s: enough to draw the paths and their actions to 4 or 5 figures meanwhile.
-  const steps = 2 * clamp(Math.round(10 * (state.s1 - state.s0)), 50, 200);
+  // Steps of about 0.1 in s (at least 50): enough to draw the paths, and their actions to 4
+  // figures, meanwhile.
+  const steps = 2 * clamp(Math.round(5 * (state.s1 - state.s0)), 25, 200);
   return truths.length ? followPaths(L, state.s0, state.q0, state.s1, state.q1, truths.map((t) => t.v0), { steps, max: 6, tol: 1e-6 }) : [];
 }
 
@@ -249,8 +250,9 @@ function recomputeTruth(delay = 0, { snap = false, quick = false } = {}) {
       record('start');
     }
     if (!dragging) pathView = null;
-    // (Phase space's contours wait for the full search too.)
-    if (!followed || !phaseGrid) computePhaseGrid();
+    // (A typed L's phase-space contours wait for the full search too: its p = dL/dv must be
+    // inverted numerically at every point of the grid, through the typed expression.)
+    if (!followed || !phaseGrid || L.vOfP || !state.sys.typed) computePhaseGrid();
     showTruthList();
     draw();
   };
@@ -729,6 +731,11 @@ function showTruthList() {
       el('span', { class: 'swatch', style: { borderColor: truthColor(i) } }),
       `${actionWord()} ${fmt(t.S, 5)} (${kind}${way})`, t === ref ? el('span', { class: 'mark' }, ' ◂ yours') : null));
   });
+  // The homework answer, where there is one, beside what the shooting found.
+  if (d.exactText && !periodic() && truths.length === 1) {
+    const S = d.exact(paramValues(), state.s0, state.q0, state.s1, state.q1);
+    if (Number.isFinite(S)) box.append(el('div', { class: 'muted' }, `The formula, ${d.exactText}, gives ${fmt(S, 5)}.`));
+  }
 }
 
 // ------------------------------------------------------------------- drawing

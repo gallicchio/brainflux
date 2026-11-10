@@ -36,6 +36,7 @@ export const SYSTEMS = [
     formula: 'L = \\tfrac12 m\\dot x^2',
     make: ({ m }) => mechanical(m, () => 0, () => 0),
     exact: ({ m }, s0, q0, s1, q1) => (m * (q1 - q0) ** 2) / (2 * (s1 - s0)),
+    exactText: 'S = m(x₂ − x₁)²/2T',
     blurb: 'The true path is a straight line at constant speed.  Any detour costs action.',
   },
   {
@@ -44,6 +45,7 @@ export const SYSTEMS = [
     params: { m: { value: 1, min: 0.1, max: 5 }, g: { value: 10, min: 0, max: 20 } },
     formula: 'L = \\tfrac12 m\\dot x^2 - mgx',
     make: ({ m, g }) => mechanical(m, (x) => m * g * x, () => m * g),
+    exactText: 'S = m(x₂ − x₁)²/2T − mg(x₁ + x₂)T/2 − mg²T³/24',
     exact: ({ m, g }, s0, q0, s1, q1) => {
       const T = s1 - s0;
       // x(t) = q0 + (q1 - q0) t/T + g t (T - t)/2: S = m (q1-q0)^2/2T - m g (q0+q1) T/2 - m g^2 T^3/24.
@@ -57,6 +59,7 @@ export const SYSTEMS = [
     params: { m: { value: 1, min: 0.1, max: 5 }, omega: { value: 1, min: 0.1, max: 3 } },
     formula: 'L = \\tfrac12 m\\dot x^2 - \\tfrac12 m\\omega^2x^2',
     make: ({ m, omega }) => mechanical(m, (x) => 0.5 * m * omega * omega * x * x, (x) => m * omega * omega * x),
+    exactText: 'S = mω[(x₁² + x₂²) cos ωT − 2x₁x₂] / (2 sin ωT)',
     exact: ({ m, omega }, s0, q0, s1, q1) => {
       const w = omega, T = s1 - s0;
       return ((m * w) / (2 * Math.sin(w * T))) * ((q0 * q0 + q1 * q1) * Math.cos(w * T) - 2 * q0 * q1);
@@ -91,6 +94,7 @@ export const SYSTEMS = [
       vOfP: (q, p) => Float64Array.from(p, (x) => x / Math.sqrt(x * x + m * m)),
     }),
     exact: ({ m }, s0, q0, s1, q1) => -m * Math.sqrt((s1 - s0) ** 2 - (q1 - q0) ** 2),
+    exactText: 'S = −m√(T² − (x₂ − x₁)²)',
     blurb: 'A free particle in special relativity (c = 1).  Its action is −m times its proper time, the time its own clock shows.  The twin who stays home (the straight world line) ages the most: the action is least, the proper time greatest.',
   },
   {

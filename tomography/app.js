@@ -881,10 +881,12 @@ function overlays(v, which) {
 // The sixth panel.
 let directCache = { key: '', img: null, time: 0 };
 function directImage() {
-  const key = `${dataVersion()}`;
+  // While the scan runs, a quarter of the work: the slices gridded onto N x N points of Fourier
+  // space rather than 2N x 2N (no zero padding), a few times a second; the fine one once it stops.
+  const K = state.playing ? N : 2 * N, key = `${dataVersion()}:${K}`;
   const now = performance.now();
   if (directCache.key !== key && (!state.playing || now - directCache.time > 400)) {
-    directCache = { key, img: sc.directFourier(), time: now };
+    directCache = { key, img: sc.directFourier(K), time: now };
   }
   return directCache.img;
 }
