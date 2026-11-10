@@ -453,14 +453,18 @@ export function drawCurve(ctx, width, height, o) {
   for (const m of o.levels || []) {
     ctx.strokeStyle = c.fit; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(f.left, f.Y(m.y)); ctx.lineTo(f.right, f.Y(m.y)); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
-    ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(m.label, f.left + 4, f.Y(m.y) + 3);
   }
   ctx.fillStyle = c.points;
   (o.x || []).forEach((x, i) => { ctx.beginPath(); ctx.arc(f.X(x), f.Y(o.y[i]), 3.5, 0, 2 * Math.PI); ctx.fill(); });
   if (o.current !== undefined) {
     ctx.strokeStyle = c.b1; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(f.X(o.current), f.top); ctx.lineTo(f.X(o.current), f.bottom); ctx.stroke();
+  }
+  // (The levels' labels last, on a halo of the panel's colour, so a line across them leaves them legible.)
+  for (const m of o.levels || []) {
+    ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = c.panel; ctx.lineWidth = 3; ctx.strokeText(m.label, f.left + 4, f.Y(m.y) + 3); ctx.lineWidth = 1;
+    ctx.fillStyle = c.ink2; ctx.fillText(m.label, f.left + 4, f.Y(m.y) + 3);
   }
   ctx.restore();
   ctx.save();

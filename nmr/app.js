@@ -424,8 +424,11 @@ function drawSpec(t0, t1, acq = null) {
   drawSpectrum(ctx, width, height, {
     spec, fmin: -span, fmax: span, unit: fu, colors: C, mark: true,
     title: 'Its spectrum (power)', xlabel: `frequency − f₀ (${fu.u})`,
-    // (An FID's line is 1/(πT₂*) wide; an echo's, or a train's, is not: the note says which.)
-    note: spec && spec.fwhm > 0 ? ['width at half power ', { v: spec.fwhm * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u} · an FID's, 1/(πT₂*): `, { v: line * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u}`] : null,
+    // (An FID's line is 1/(πT₂*) wide; an echo's, or a train's, is not, so the width is set
+    // beside 1/(πT₂*) only when what is listened to is an FID: after the one pulse, or the
+    // preset FID's or inversion recovery's last.)
+    note: spec && spec.fwhm > 0 ? ['width at half power ', { v: spec.fwhm * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u}`,
+      ...((state.view === 'seq' ? (seq.preset === 'fid' || seq.preset === 'ir') && !seq.edited : eng.sent.length <= 1) ? [' · 1/(πT₂*) = ', { v: line * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u}`] : [])] : null,
   });
 }
 
@@ -1678,7 +1681,7 @@ function loadHash(h) {
   loadInstrument(INSTRUMENTS[h.i] ? h.i : 'teachspin');
   const I = inst();
   state.frame = h.fr === 'rot' ? 'rot' : 'lab';
-  state.speed = num(h.sp, state.speed);
+  state.speed = Math.max(I.speedRange[0], num(h.sp, state.speed));
   state.ensemble = h.e === '1'; state.arrows = Math.round(num(h.n, 32)); state.spreadHz = num(h.df, I.spread);
   if (I.samples[h.s]) { state.sample = h.s; state.T1 = I.samples[h.s].T1; state.T2 = I.samples[h.s].T2; }
   else if (h.ck === '1') state.sample = null;   // (the three clocks' made-up sample)
@@ -1701,10 +1704,12 @@ function loadHash(h) {
   setView(['one', 'many', 'seq', 'earth'].includes(h.v) ? h.v : 'one');
   if (state.view === 'many' && h.ck === '1') { clocks.on = true; clocks.cpmg = h.ce !== '0'; syncClocks(); view.look(...CLOCKS.look); startClocks(); return; }
   if (state.view === 'seq') {
-    seq.error = num(h.err, 0);
-    setPreset(PRESETS[h.q] ? h.q : 'cpmg', { tau: num(h.tau, undefined) });
-    if (h.pn) { seq.n = num(h.pn, seq.n); buildSeq(); syncSeq(); runSeq(); }
-    state.speed = num(h.sp, state.speed); speedSlider.value = state.speed;
+    // (Kept within the sliders' ranges: a typed address can say anything.)
+    const R = SEQ[state.inst].tauRange, tau = num(h.tau, undefined);
+    seq.error = Math.max(-0.25, Math.min(0.25, num(h.err, 0)));
+    setPreset(PRESETS[h.q] ? h.q : 'cpmg', { tau: tau === undefined ? undefined : Math.max(R[0], Math.min(R[1], tau)) });
+    if (h.pn) { seq.n = Math.max(1, Math.min(40, Math.round(num(h.pn, seq.n)))); buildSeq(); syncSeq(); runSeq(); }
+    state.speed = Math.max(I.speedRange[0], num(h.sp, state.speed)); speedSlider.value = state.speed;
     return;
   }
   const [th, ph] = (h.m || '0_0').split('_').map(Number);
