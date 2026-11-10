@@ -176,8 +176,25 @@
     change it.</p>
   </article>
 
+  <article class="exp" data-setup="saddle" data-frame="720x311">
+    <h3>6. When the action is not least</h3>
+    <p>The oscillator again, but now the trip takes <span class="nobr">$T=4$,</span> longer than half a period
+    <span class="nobr">($\pi/\omega=\pi$)</span>.  The true path still makes $S$ stationary, <span class="nobr">$S=1.2005$,</span> but as a
+    saddle.  Drag the third knot up by 0.5: <span class="nobr">$S=1.659$,</span> up, as at a minimum.  Now press
+    <em>Bend ↑</em>, which moves every knot at once along half a sine wave: <span class="nobr">$S=1.002$,</span>
+    <em>below</em> the true path's; <em>Bend ↓</em> the same.  <em>Roll downhill</em> from
+    there runs away: the bend grows until the path hits the edge of the plot, <span class="nobr">$S=-9.47$.</span>
+    Why: for a change $\delta x=a\sin(\pi t/T)$ the action changes by
+    $$\delta^2S=\frac m2\int_0^T\left(\delta\dot x^2-\omega^2\delta x^2\right)dt=\frac{ma^2T}{4}\left[\left(\frac\pi T\right)^2-\omega^2\right],$$
+    negative once <span class="nobr">$T>\pi/\omega$.</span>  Set $T=3$ and bending raises $S$ again (from $-7.923$ to
+    <span class="nobr">$-7.885$)</span>.  At $t=\pi/\omega$ every true path leaving $x_1$ arrives at <span class="nobr">$-x_1$,</span> whatever its
+    speed: a <em>conjugate point</em>.  Past the first one the action is no longer least, only
+    stationary; the number of conjugate points, the Morse index, counts the independent
+    directions in which $S$ goes down.</p>
+  </article>
+
   <article class="exp" data-setup="orbit" data-frame="615x744">
-    <h3>6. A closed orbit</h3>
+    <h3>7. A closed orbit</h3>
     <p>To be a loop in phase space a path must end where it began, <span class="nobr">$x(T)=x(0)$,</span> with the same
     momentum.  Choose <em>Periodic</em> (for the oscillator and the pendulum): the first and
     last knots become one point (■, drag either), and the path is smooth across its ends.  Why
@@ -192,30 +209,13 @@
     first.  Drag the start point to $\theta=0.3$ and go back to the true path: the orbit
     through it is the same loop, started elsewhere, with the same <span class="nobr">$S$.</span>  Shorter than <span class="nobr">$2\pi$,</span> no
     swing fits; longer than <span class="nobr">$4\pi$,</span> a swing of half the period, made twice, fits too.</p>
-    <p>A closed orbit is a saddle of <span class="nobr">$S$.</span>  <em>Bend ↑</em> and $S$ rises, to 8.358; but drag
+    <p>A closed orbit is a saddle of <span class="nobr">$S$,</span> as the oscillator's long trip was in experiment 6.  <em>Bend ↑</em> and $S$ rises, to 8.358; but drag
     the start point a little and press <em>Roll downhill</em>, and the whole loop climbs to
     the top: balanced upside down, <span class="nobr">$\theta=\pi$,</span> the pendulum has the least action of all,
     <span class="nobr">$S=-T=-8$,</span> since $L=\tfrac12\dot\theta^2+\cos\theta$ is never below <span class="nobr">$-1$.</span></p>
     <p>For the harmonic oscillator every swing takes <span class="nobr">$2\pi/\omega$:</span> there <em>Periodic</em>
     fixes $T$ at one period, every amplitude is a true orbit, and every one has
     <span class="nobr">$S=\tfrac12 m[x\dot x]_0^T=0$.</span>  <em>Bend ↑</em> and the loop grows, with $S$ still 0.000.</p>
-  </article>
-
-  <article class="exp" data-setup="saddle" data-frame="720x311">
-    <h3>7. When the action is not least</h3>
-    <p>The oscillator again, but now the trip takes <span class="nobr">$T=4$,</span> longer than half a period
-    <span class="nobr">($\pi/\omega=\pi$)</span>.  The true path still makes $S$ stationary, <span class="nobr">$S=1.2005$,</span> but as a
-    saddle.  Drag the third knot up by 0.5: <span class="nobr">$S=1.659$,</span> up, as at a minimum.  Now press
-    <em>Bend ↑</em>, which moves every knot at once along half a sine wave: <span class="nobr">$S=1.002$,</span>
-    <em>below</em> the true path's; <em>Bend ↓</em> the same.  <em>Roll downhill</em> from
-    there runs away: the bend grows until the path hits the edge of the plot, <span class="nobr">$S=-9.47$.</span>
-    Why: for a change $\delta x=a\sin(\pi t/T)$ the action changes by
-    $$\delta^2S=\frac m2\int_0^T\left(\delta\dot x^2-\omega^2\delta x^2\right)dt=\frac{ma^2T}{4}\left[\left(\frac\pi T\right)^2-\omega^2\right],$$
-    negative once <span class="nobr">$T>\pi/\omega$.</span>  Set $T=3$ and bending raises $S$ again (from $-7.923$ to
-    <span class="nobr">$-7.885$)</span>.  At $t=\pi/\omega$ every true path leaving $x_1$ arrives at <span class="nobr">$-x_1$,</span> whatever its
-    speed: a <em>conjugate point</em>.  Past the first one the action is no longer least, only
-    stationary; the number of conjugate points, the Morse index, counts the independent
-    directions in which $S$ goes down.</p>
   </article>
 
   <article class="exp" data-setup="pendulum" data-frame="720x311">
@@ -346,7 +346,7 @@
     $L$ is Newton's <span class="nobr">$m\ddot x=-dV/dx$.</span>  Usually the true path has the <em>least</em> action of all
     the paths near it (a minimum); over a long enough trip it can be a <em>saddle</em>, with some
     nearby paths below it, and the Morse index counts how many independent ways down there are
-    (experiment 7).</p>
+    (experiment 6).</p>
     <p>What is computed: the path is a cubic spline (or straight segments) through the knots,
     and $S$ is its integral by Gauss quadrature between the knots; the true paths are found by
     shooting, trying every starting velocity and keeping those that arrive, and their actions

@@ -51,7 +51,9 @@ const uniformTimes = (n) => Float64Array.from({ length: n }, (_, i) => state.s0 
 // The knots keep their order in time, at least this far apart.
 const gap = () => (0.2 * (state.s1 - state.s0)) / (state.knots.length - 1);
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-const busy = () => !!dragging || state.rolling;
+// Something is moving (a knot, a roll, or a slider whose full search or nudge is still to come):
+// the plots' ranges and the phase-space contours hold still meanwhile.
+const busy = () => !!dragging || state.rolling || !!settleTimer || !!nudgeTimer;
 
 function buildL() {
   const d = state.sys;
@@ -203,7 +205,9 @@ function followTruths() {
   const d = state.sys;
   if (periodic() || d.truePaths || truths.some((t) => t.closed)) return null;
   // (None to follow: none until the search, a moment after the last change.)
-  return truths.length ? followPaths(L, state.s0, state.q0, state.s1, state.q1, truths.map((t) => t.v0), { steps: 200, max: 6 }) : [];
+  // Steps of about 0.05 in s: enough to draw the paths and their actions to 4 or 5 figures meanwhile.
+  const steps = 2 * clamp(Math.round(10 * (state.s1 - state.s0)), 50, 200);
+  return truths.length ? followPaths(L, state.s0, state.q0, state.s1, state.q1, truths.map((t) => t.v0), { steps, max: 6, tol: 1e-6 }) : [];
 }
 
 let truthTimer = 0, truthPending = false, settleTimer = 0;
@@ -228,7 +232,13 @@ function recomputeTruth(delay = 0, { snap = false, quick = false } = {}) {
       try { truths = computeTruths().map(withKinetic); } catch { truths = []; }
     }
     ref = snap ? truths[0] || null : sameTruth(ref);
-    if ((snap || state.onTrue) && ref) snapTo(ref);
+    // (While things move, the knots go onto the true path without the nudge to stationary, which
+    // comes when they stop: with the full search, or on its own.)
+    if ((snap || state.onTrue) && ref) {
+      const later = quick && !snap;
+      snapTo(ref, !later);
+      if (later && !followed) nudgeSoon();
+    }
     evaluate();
     if (snap) {
       slots = null;
@@ -247,12 +257,23 @@ function recomputeTruth(delay = 0, { snap = false, quick = false } = {}) {
   if (delay) { truthPending = true; truthTimer = setTimeout(run, delay); } else run();
 }
 
+/** The nudge to stationary that snapTo(ref, false) left out, once the knots slider stops. */
+let nudgeTimer = 0;
+function nudgeSoon() {
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => {
+    nudgeTimer = 0;
+    if (!state.onTrue || !ref || dragging || morph) return;
+    snapTo(ref); evaluate(); draw();
+  }, SETTLE_MS);
+}
+
 /**
  * Put the path on a true path: knots evenly spaced in time, on the true path, then nudged (by
  * far less than a pixel, as a rule) to where the action of the path drawn through them is
  * stationary, so that every drag changes S at second order only.
  */
-function snapTo(t) {
+function snapTo(t, nudge = true) {
   if (!t || !L) return;
   const n = state.knots.length;
   state.times = uniformTimes(n);
@@ -260,7 +281,7 @@ function snapTo(t) {
   if (periodic()) { state.q0 = state.q1 = t.q[0]; q[0] = q[n - 1] = t.q[0]; }
   else { q[0] = state.q0; q[n - 1] = state.q1; }
   let p = new Path(state.s0, state.s1, q, state.mode, { s: state.times, periodic: periodic() });
-  if (!t.family) {
+  if (!t.family && nudge) {
     // The ends stay put (a closed orbit's start too: it fixes where on the loop the trip begins).
     try {
       const r = stationaryKnots(L, p, { ...qopt(), free: freeKnots(p).filter((k) => k > 0) });
@@ -430,8 +451,10 @@ function setKnotCount(n) {
   setRolling(false);
   stopMorph();
   if (state.onTrue && ref) {
+    // On the true path at once; nudged to stationary when the slider stops.
     state.knots = new Float64Array(n);
-    snapTo(ref);
+    snapTo(ref, false);
+    nudgeSoon();
   } else {
     // Keep the shape: resample the current path at evenly spaced new knots.
     const p = path(), ss = uniformTimes(n);
@@ -1217,10 +1240,23 @@ function segmentEnergies() {
 
 function drawEnergy(ctx, width, height, c) {
   const d = state.sys, segs = state.mode === 'segments' ? segmentEnergies() : null;
-  const f = new Frame(ctx, width, height, { left: 52, right: 12, top: 24, bottom: 32 });
   const tr = path().trace(30), E = energy(L, tr.q, tr.v, tr.s);
-  const all = Array.from(E).filter(Number.isFinite);
   const tE = state.show.truth ? truths.map((t) => energy(L, t.q, t.v, t.s)) : [];
+  // The numbers, above the plot: the true path's energy (or its range, when L depends on time),
+  // and the range of yours (of its segments' energies, for straight segments); on two lines if
+  // the plot is narrow.
+  const range = (e) => { let a = Infinity, b = -Infinity; for (const x of e) if (Number.isFinite(x)) { a = Math.min(a, x); b = Math.max(b, x); } return a <= b ? [a, b] : null; };
+  const t = ref || truths[0], ti = Math.max(0, truths.indexOf(t)), rt = state.show.truth && t ? range(tE[ti] || energy(L, t.q, t.v, t.s)) : null, ry = range(segs || E);
+  // Decimals for the size of the true path's energy (fixed for the set-up, so the line holds still).
+  const big = Math.max(...(rt || ry || [1]).map(Math.abs), 1e-3), digits = Math.max(1, Math.floor(Math.log10(big)) + 1);
+  const dec = clamp(4 - digits, 1, 4), w = digits + 1 + dec + 1, num = (v) => ({ v, dec, w });
+  const lines = [];
+  if (rt) lines.push([truthColor(ti), rt[1] - rt[0] <= 1e-6 * (1 + Math.abs(rt[0])) ? [`${truthWord(t)}: E = `, num(rt[0])] : [`${truthWord(t)}: E from `, num(rt[0]), ' to ', num(rt[1])]]);
+  if (ry) lines.push([c.accent, [segs ? 'your segments: ' : 'yours: ', 'from ', num(ry[0]), ' to ', num(ry[1])]]);
+  ctx.font = '12px system-ui, sans-serif';
+  const oneLine = lines.reduce((a, [, p]) => a + slotsWidth(ctx, p) + 18, 0) < width - 60;
+  const f = new Frame(ctx, width, height, { left: 52, right: 12, top: oneLine || lines.length < 2 ? 24 : 40, bottom: 32 });
+  const all = Array.from(E).filter(Number.isFinite);
   for (const e of tE) for (const x of e) if (Number.isFinite(x)) all.push(x);
   if (!all.length) return;
   const sorted = all.sort((a, b) => a - b);
@@ -1256,22 +1292,11 @@ function drawEnergy(ctx, width, height, c) {
   }
   ctx.restore();
   f.axes({ xlabel: d.s, ylabel: 'E' });
-  // The numbers, above the plot: the true path's energy (or its range, when L depends on time),
-  // and the range of yours (of its segments' energies, for straight segments).
-  const range = (e) => { let a = Infinity, b = -Infinity; for (const x of e) if (Number.isFinite(x)) { a = Math.min(a, x); b = Math.max(b, x); } return a <= b ? [a, b] : null; };
-  const t = ref || truths[0], ti = Math.max(0, truths.indexOf(t)), rt = state.show.truth && t ? range(tE[ti] || energy(L, t.q, t.v, t.s)) : null, ry = range(segs || E);
-  // Decimals for the size of the true path's energy (fixed for the set-up, so the line holds still).
-  const big = Math.max(...(rt || ry || [1]).map(Math.abs), 1e-3), digits = Math.max(1, Math.floor(Math.log10(big)) + 1);
-  const dec = clamp(4 - digits, 1, 4), w = digits + 1 + dec + 1, num = (v) => ({ v, dec, w });
   ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-  let x = f.left + 4;
-  if (rt) {
-    const parts = rt[1] - rt[0] <= 1e-6 * (1 + Math.abs(rt[0])) ? [`${truthWord(t)}: E = `, num(rt[0])] : [`${truthWord(t)}: E from `, num(rt[0]), ' to ', num(rt[1])];
-    ctx.fillStyle = truthColor(ti); fillSlots(ctx, parts, x, 16); x += slotsWidth(ctx, parts) + 18;
-  }
-  if (ry) {
-    const parts = [segs ? 'your segments: ' : 'yours: ', 'from ', num(ry[0]), ' to ', num(ry[1])];
-    ctx.fillStyle = c.accent; fillSlots(ctx, parts, x, 16);
+  let x = 8, y = 16;
+  for (const [colour, parts] of lines) {
+    ctx.fillStyle = colour; fillSlots(ctx, parts, x, y);
+    if (oneLine) x += slotsWidth(ctx, parts) + 18; else y += 16;
   }
 }
 
@@ -1564,8 +1589,8 @@ const setups = {
   hints: () => go('gravity', { show: { hints: true }, knots: 7, then: () => bend(-1) }),
   energy: () => go('gravity', { knots: 6, view: 'energy' }),
   phase: () => go('harmonic'),
-  orbit: () => go('pendulum', { ends: 'periodic', T: 8, knots: 12 }),
   saddle: () => go('harmonic', { T: 4 }),
+  orbit: () => go('pendulum', { ends: 'periodic', T: 8, knots: 12 }),
   pendulum: () => go('pendulum'),
   twin: () => go('twin', { mode: 'segments' }),
   light: () => go('refraction'),
@@ -1593,8 +1618,8 @@ window.__app = {
   rollToEnd(max = 3000) { setRolling(true); for (let i = 0; i < max && rollStep(); i++); setRolling(false); draw(); return rollFrames; },
   get truths() { return truths; }, get ref() { return ref; }, get current() { return current; }, get history() { return history; },
   get frame() { return frame; }, get hover() { return hover; }, get phasor() { return phasor; }, get ranges() { return ranges; },
-  get idle() { return !frameDue && !truthPending && !dragging && !state.rolling && !morph; },
-  get truthPending() { return truthPending; },
+  get idle() { return !frameDue && !truthPending && !nudgeTimer && !dragging && !state.rolling && !morph; },
+  get truthPending() { return truthPending; }, segmentEnergies,
   toPx: (s, q) => toPx(s, q),
   ready: true,
 };

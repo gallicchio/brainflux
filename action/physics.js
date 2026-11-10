@@ -222,13 +222,10 @@ function step(arr, eps = EPS) { const out = new Float64Array(arr.length); for (l
  */
 function shiftedL(system, q, v, s, shifts, dq, dv, ds) {
   const n = q.length, m = shifts.length, Q = new Float64Array(m * n), V = new Float64Array(m * n), Sa = new Float64Array(m * n);
+  const put = (out, o, x, c, d) => { if (c) for (let i = 0; i < n; i++) out[o + i] = x[i] + c * d[i]; else out.set(x, o); };
   for (let j = 0; j < m; j++) {
     const [cq, cv, cs] = shifts[j], o = j * n;
-    for (let i = 0; i < n; i++) {
-      Q[o + i] = cq ? q[i] + cq * dq[i] : q[i];
-      V[o + i] = cv ? v[i] + cv * dv[i] : v[i];
-      Sa[o + i] = cs ? s[i] + cs * ds[i] : s[i];
-    }
+    put(Q, o, q, cq, dq); put(V, o, v, cv, dv); put(Sa, o, s, cs, ds);
   }
   return system.L(Q, V, Sa);
 }
