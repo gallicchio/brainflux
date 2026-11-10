@@ -60,10 +60,11 @@ function build() {
   layout();
 }
 
-/** After the materials change: the pictures of them, and the grid's resolution. */
-function refreshMaterials() {
-  mats = materialImage(scene);
-  lines = outlines(scene);
+/** After the materials change (in `region` of the grid, if given): the pictures of them, and the
+ *  grid's resolution. */
+function refreshMaterials(region = null) {
+  mats = materialImage(scene, mats, region);
+  lines = outlines(scene, lines, region);
   bgLines = backgroundContours();
   const nmax = scene.maxIndex(), cells = state.ppw / nmax;
   warning = cells < 10 ? `Too coarse: ${fmt(cells, 2)} cells per wavelength in n = ${fmt(nmax, 3)} (want 15 or more): raise the cells per λ (Grid).`
@@ -605,8 +606,9 @@ const pct = (v, ch = 6) => slot(`${(100 * v).toFixed(2)}%`, ch);
 const ang = (a, ch = 5) => slot(`${(a / deg).toFixed(1)}°`, ch);
 const val = (v, d = 3, ch = 5) => slot(v.toFixed(d), ch);
 function physicsNotes() {
-  const out = [], src = state.src, pred = predictions(), pol = state.mode === 'TM' ? 'TM (s)' : 'TE (p)';
-  if (pred.ray) {
+  const out = [], src = state.src, pred = predictions(), pol = state.mode === 'TM' ? 's (E out of the screen)' : 'p (E in the picture)';
+  if (pred.ray && !(Number.isFinite(pred.ray.n1) && Number.isFinite(pred.ray.n2))) out.push('the beam meets metal there: it is all reflected');
+  else if (pred.ray) {
     const { th1, th2, n1, n2 } = pred.ray;
     out.push(`incidence <b>${ang(th1)}</b> from n = ${val(n1, 2, 4)} into n = ${val(n2, 2, 4)}`);
     if (Number.isFinite(th2)) {
@@ -615,7 +617,7 @@ function physicsNotes() {
       let fres = `Fresnel, ${pol}: R = <b>${pct(Rp)}</b> for a plane wave`;
       if (src.type === 'beam') fres += `, ${pct(theory.beamAverage((t) => theory.reflectance(n1, n2, t, state.mode), th1, n1, src.width))} for this beam (a spread of angles)`;
       out.push(fres);
-      if (n2 > n1) out.push(`Brewster's angle ${ang(theory.brewsterAngle(n1, n2))}`);
+      if (Math.abs(n2 - n1) > 1e-9) out.push(`Brewster's angle ${ang(theory.brewsterAngle(n1, n2))}${state.mode === 'TM' ? ' (for p light: s light has none)' : ''}`);
     } else {
       let tir = `beyond the critical angle ${ang(theory.criticalAngle(n1, n2))}: total internal reflection; the evanescent field falls by 1/e in <b>${val(theory.evanescentDepth(n1, n2, th1), 2, 4)} λ</b>`;
       // A beam is a spread of angles, and those nearer the normal than the critical angle escape.
@@ -633,18 +635,22 @@ function physicsNotes() {
     }
     out.push(note);
   }
-  if (state.shape === 'gap' && src.type === 'beam') {
+  if (state.shape === 'gap' && src.type === 'beam' && Math.abs(scene.materialAt(src.x, src.y).n - state.n) < 1e-9) {
     const n = state.n, th = Math.abs(90 - Math.abs(src.angle)) * deg;
-    const T = theory.beamAverage((t) => theory.layerTransmission(n, 1, state.p, t, state.mode), th, n, src.width);
-    out.push(`incidence ${ang(th)} (critical ${ang(theory.criticalAngle(n, 1))}); through a gap of ${val(state.p, 2, 4)} λ the plane-wave theory, averaged over this beam's angles, gives T = <b>${pct(T)}</b>`);
+    if (!(n > 1)) out.push('the blocks are no denser than the gap: no total internal reflection to frustrate');
+    else {
+      const T = theory.beamAverage((t) => theory.layerTransmission(n, 1, state.p, t, state.mode), th, n, src.width);
+      out.push(`incidence ${ang(th)} (critical ${ang(theory.criticalAngle(n, 1))}); through a gap of ${val(state.p, 2, 4)} λ the plane-wave theory, averaged over this beam's angles, gives T = <b>${pct(T)}</b>`);
+    }
   }
   if (state.shape === 'metalguide') {
     const w = state.p;
-    if (state.mode === 'TE') out.push('TE: the plates guide a wave with E across the gap at any width (no cutoff)');
+    if (!(w > 0)) out.push('the channel is closed');
+    else if (state.mode === 'TE') out.push('p: E across the channel can be the same all the way across, so the plates guide it at any width (no cutoff)');
     else if (w < 0.5) {
       const k = theory.metalGuideDecay(w);
-      out.push(`TM needs a width over λ/2: at ${val(w, 2, 4)} λ the field decays as e<sup>−κx</sup>, κ = <b>${val(k, 2, 5)}</b>/λ, its amplitude by a factor ${slot(Math.exp(-4 * k).toExponential(1), 7)} over the 4 λ guide`);
-    } else out.push(`width ${val(w, 2, 4)} λ: over the cutoff λ/2, ${slot(Math.floor(2 * w), 2)} TM mode${Math.floor(2 * w) > 1 ? 's' : ''} can travel`);
+      out.push(`s (E along the walls, zero on them) needs a width over λ/2: at ${val(w, 2, 4)} λ the field decays as e<sup>−κx</sup>, κ = <b>${val(k, 2, 5)}</b>/λ, its amplitude by a factor ${slot(Math.exp(-4 * k).toExponential(1), 7)} over the 4 λ channel`);
+    } else out.push(`width ${val(w, 2, 4)} λ: over the cutoff λ/2, ${slot(Math.floor(2 * w), 2)} mode${Math.floor(2 * w) > 1 ? 's' : ''} of s light can travel`);
   }
   if ((state.shape === 'crystal' || state.shape === 'pcbend') && src) out.push(`lattice a = ${val(state.p)} λ: a/λ = <b>${val(state.p)}</b> (rods of n = ${val(state.n, 2, 4)}, radius a/5)`);
   if (pred.cone) out.push(`nβ = ${val(pred.cone.n * src.beta)} > 1: the wavefronts pile up on a V (dashed) at ${ang(pred.cone.alpha)} to the path, sin α = 1/nβ; the Cherenkov light leaves across it at <b>θ = ${ang(theory.cherenkovAngle(pred.cone.n, src.beta))}</b> to the motion, cos θ = 1/nβ (arrows)`);
@@ -784,7 +790,7 @@ function applyStroke(op, x0, y0, x1, y1) {
   if (!region) return;
   scene.applyTo(sim, region);
   clearMetal(region);
-  mats = materialImage(scene);
+  mats = materialImage(scene, mats, region);
   strokeDirty = true;
 }
 let strokeDirty = false, outlineTimer = 0;
@@ -859,11 +865,11 @@ $('#src-type').append(srcType);
 $('#src-wave').append(srcWave, fireButton, movWave);
 const sourceSliders = {
   angle: slider({ label: 'angle (°)', min: -180, max: 180, step: 0.5, value: state.src.angle, title: 'Direction of the beam or the motion, from the x axis',
-    onInput: (v) => { state.src.angle = v; makeSource(false); sourceChanged(); } }),
+    onInput: (v) => { state.src.angle = wrapAngle(v); if (state.src.angle !== v) sourceSliders.angle.value = state.src.angle; makeSource(false); sourceChanged(); } }),
   width: slider({ label: 'width (λ)', min: 0.3, max: 8, value: state.src.width, title: 'The beam\'s half-width at its waist (1/e of the amplitude)',
-    onInput: (v) => { state.src.width = v; makeSource(false); sourceChanged(); } }),
+    onInput: (v) => { state.src.width = Math.max(0.1, Math.min(20, v)); makeSource(false); sourceChanged(); } }),
   beta: slider({ label: 'β = v/c', min: 0.05, max: 0.99, step: 0.01, value: state.src.beta, title: 'The speed of the moving source',
-    onInput: (v) => { state.src.beta = Math.min(0.99, v); makeSource(true); sourceChanged(); } }),
+    onInput: (v) => { state.src.beta = Math.max(0, Math.min(0.99, v)); makeSource(true); sourceChanged(); } }),
 };
 $('#src-box').append(...Object.values(sourceSliders), el('div', { class: 'note' }, 'Or drag the source on the picture, and the ring at its arrow\'s tip to aim it.'));
 function showSourceControls() {
@@ -899,9 +905,16 @@ const brushNSlider = slider({ label: 'index n', min: 1, max: 4, step: 0.01, valu
 brushNSlider.hidden = true;
 $('#n-box').append(brushNSlider);
 $('#brush-box').append(
-  slider({ label: 'brush (λ)', min: 0.05, max: 2, value: state.brushSize, title: 'The brush\'s diameter', onInput: (v) => { state.brushSize = v; } }),
+  slider({ label: 'brush (λ)', min: 0.05, max: 2, value: state.brushSize, title: 'The brush\'s diameter', onInput: (v) => { state.brushSize = Math.max(0.01, Math.min(5, v)); } }),
   el('div', { class: 'row' }, el('button', { type: 'button', title: 'Take off everything you painted (the set-up\'s shape stays)', onclick: () => { state.paint.length = 0; rebuildMaterials(); } }, 'Clear paint'),
     el('span', { class: 'note' }, 'drag on the picture to paint')));
+
+/** An angle in degrees, brought into (-180, 180]. */
+const wrapAngle = (a) => { if (a > -180 && a <= 180) return a; const w = ((((a + 180) % 360) + 360) % 360) - 180; return w === -180 ? 180 : w; };
+
+/** A shape's parameter, kept where the shape can be built (a lattice constant of 0 would ask for
+ *  infinitely many rods). */
+const clampP = (id, v) => (id && SHAPES[id] ? Math.max(SHAPES[id].pMin ?? -Infinity, v) : v);
 
 function rebuildMaterials() {
   scene.shapeOps = state.shape ? SHAPES[state.shape].build(state.p, state.n, scene.W, scene.H) : [];
@@ -909,7 +922,7 @@ function rebuildMaterials() {
   const region = scene.rebuild();
   scene.applyTo(sim, region);
   clearMetal(region);
-  refreshMaterials();
+  refreshMaterials(region);
   for (const m of meters) m.reset();
   hashSoon(); kick();
 }
@@ -952,7 +965,7 @@ function presetOf(setup, shape) {
   if (shapeButtons[setup]) return setup;
   return (PRESETS.find((p) => p.shape === shape && p.fromShape !== false) || {}).setup || null;
 }
-const shapeP = slider({ label: 'size', min: 0, max: 1, value: 0, onInput: (v) => { state.p = v; rebuildMaterials(); } });
+const shapeP = slider({ label: 'size', min: 0, max: 1, value: 0, onInput: (v) => { state.p = clampP(state.shape, v); if (state.p !== v) shapeP.value = state.p; rebuildMaterials(); } });
 const shapeN = slider({ label: 'index n', min: 1, max: 4, step: 0.01, value: 1.5, title: 'The shape\'s refractive index: light goes at c/n inside it', onInput: (v) => { state.n = Math.max(1, Math.min(6, v)); rebuildMaterials(); } });
 $('#shape-box').append(shapeP, shapeN);
 function showShapeControls() {
@@ -974,9 +987,11 @@ const viewSeg = segmented([
   { value: 'field', label: 'Field', title: 'The field itself: red positive, blue negative' },
   { value: 'intensity', label: 'Intensity', title: 'Its square averaged over about a period' },
 ], state.view, (v) => setView(v), { label: 'Show' });
+// (Inside, the two are named as books on the method name them, after z: 'TM' is TM_z, which is
+// s; 'TE' is TE_z, which is p.  The page says s and p, as Fresnel's formulas do.)
 const polSeg = segmented([
-  { value: 'TM', label: 'TM: Ez', title: 'E along z, out of the picture (s polarisation)' },
-  { value: 'TE', label: 'TE: Hz', title: 'H along z, E in the picture (p polarisation: has a Brewster angle)' },
+  { value: 'TM', label: 's: E out of screen', title: 'E along z, out of the picture, perpendicular to the plane of incidence: s polarisation (TE in optics books, TM_z in books on FDTD); the picture shows E_z' },
+  { value: 'TE', label: 'p: E in the plane', title: 'E in the picture, the plane of incidence, and H out of it: p polarisation (TM in optics books, TE_z in books on FDTD), the one with a Brewster angle; the picture shows H_z' },
 ], state.mode, (v) => { state.mode = v; build(); hashSoon(); kick(); }, { label: 'Polarisation' });
 const flowToggle = toggle('Energy flow', state.flow, (on) => { state.flow = on; makeMonitors(); hashSoon(); kick(); }, 'Arrows: the Poynting vector E × H averaged over a period (their length grows as the square root of its size, so that weak flows show)');
 const probeToggle = toggle('Probe', !!state.probe, (on) => { state.probe = on ? { x: 0, y: 0 } : null; makeMonitors(); layout(); hashSoon(); kick(); }, 'A yellow cross you drag: the field there against time, on a chart under the picture (and Q, when it rings down)');
@@ -1043,7 +1058,7 @@ let hashTimer = 0;
 function hashSoon() { clearTimeout(hashTimer); hashTimer = setTimeout(saveHash, 300); }
 const r3 = (v) => +(+v).toFixed(3);
 function encodeMat(m) { return m.pec ? 'm' : m.absorb ? 'a' : m.bg ? 'e' : `n${m.n}`; }
-function decodeMat(s) { return s === 'm' ? { pec: true } : s === 'a' ? { absorb: true } : s === 'e' ? { bg: true } : { n: +s.slice(1) }; }
+function decodeMat(s) { return s === 'm' ? { pec: true } : s === 'a' ? { absorb: true } : s === 'e' ? { bg: true } : { n: Math.max(1, Math.min(6, +s.slice(1) || 1)) }; }
 function saveHash() {
   const s = state.src, h = {
     W: r3(state.W), H: r3(state.H), ppw: state.ppw, mode: state.mode === 'TM' ? undefined : 'TE',
@@ -1063,12 +1078,13 @@ function saveHash() {
 }
 function loadHash(h) {
   const num = (k, d) => (h[k] !== undefined && Number.isFinite(+h[k]) ? +h[k] : d);
-  Object.assign(state, { W: num('W', state.W), H: num('H', state.H), ppw: Math.round(num('ppw', state.ppw)), mode: h.mode === 'TE' ? 'TE' : 'TM' });
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  Object.assign(state, { W: clamp(num('W', state.W), 2, 40), H: clamp(num('H', state.H), 2, 40), ppw: Math.round(clamp(num('ppw', state.ppw), 6, 120)), mode: h.mode === 'TE' ? 'TE' : 'TM' });
   state.shape = SHAPES[h.shape] ? h.shape : h.shape === 'none' ? null : state.shape;
-  if (state.shape) { state.p = num('p', SHAPES[state.shape].p[2]); state.n = num('n', SHAPES[state.shape].n ?? 1.5); }
+  if (state.shape) { state.p = clampP(state.shape, num('p', SHAPES[state.shape].p[2])); state.n = clamp(num('n', SHAPES[state.shape].n ?? 1.5), 1, 6); }
   const s = state.src;
   if (['point', 'beam', 'moving', 'off'].includes(h.src)) s.type = h.src;
-  Object.assign(s, { x: num('sx', s.x), y: num('sy', s.y), angle: num('ang', s.angle), width: num('w', s.width), beta: Math.min(0.99, num('beta', s.beta)) });
+  Object.assign(s, { x: num('sx', s.x), y: num('sy', s.y), angle: wrapAngle(num('ang', s.angle)), width: Math.max(0.1, Math.min(20, num('w', s.width))), beta: Math.max(0, Math.min(0.99, num('beta', s.beta))) });
   if (h.wave === 'pulse' || h.wave === 'cw') s.wave = h.wave;
   if (h.mwave === 'steady' || h.mwave === 'cw') s.mwave = h.mwave;
   state.view = h.view === 'intensity' ? 'intensity' : 'field';
@@ -1078,7 +1094,7 @@ function loadHash(h) {
   if (h.paint) {
     state.paint = h.paint.split(';').map((p) => {
       const [m, r, pts] = p.split(':');
-      return { k: 'path', mat: decodeMat(m), r: +r, pts: pts.split(',').map(Number) };
+      return { k: 'path', mat: decodeMat(m), r: Math.min(2.5, +r), pts: pts.split(',').map(Number) };
     }).filter((op) => op.pts.length >= 2 && op.pts.every(Number.isFinite) && op.r > 0);
   }
   if (h.bg) { let p = {}; try { p = JSON.parse(h.bgp || '{}'); } catch { p = {}; } bgField.set(h.bg, p, false); setBackground(bgField.expr, bgField.params, false); }

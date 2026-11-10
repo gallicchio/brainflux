@@ -207,6 +207,11 @@ def desktop(b):
 
     setup(b, 'snell', 4)
     check('refracted at 19.5°' in notes() and '5.78%' in notes(), 'Snell: 19.5°, Fresnel 5.78% in the notes')
+    # The polarisations are named as Fresnel's formulas name them (the screen is the plane of
+    # incidence): s with E out of the screen, p with E in it; never TE for the one with E_z.
+    pol = b.eval("[...document.querySelectorAll('#show-pol button')].map((e) => e.textContent)")
+    check('Fresnel, s (E out of the screen)' in notes() and "for p light" in notes() and pol[0].startswith('s:') and pol[1].startswith('p:'),
+          f'the polarisations are s and p, as in Fresnel\'s formulas (buttons {pol}; "{notes()[60:150]}...")')
 
     setup(b, 'tir', 25)
     A = meters(b)[0]
@@ -227,7 +232,7 @@ def desktop(b):
     te = meters(b)[0]
     b.eval("document.querySelector('#show-pol button:first-child').click()"); b.eval('__app.state.running = false; __app.run(28)')
     tm = meters(b)[0]
-    check(te > 0.985 and 0.82 < tm < 0.85, f"Brewster: transmitted {te:.4f} in TE (p), {tm:.4f} in TM (s)")
+    check(te > 0.985 and 0.82 < tm < 0.85, f"Brewster: transmitted {te:.4f} in p, {tm:.4f} in s")
     b.screenshot('build/mx-brewster-tm.png')
 
     setup(b, 'guide', 40)
@@ -239,12 +244,12 @@ def desktop(b):
 
     setup(b, 'cutoff', 40)
     A = meters(b)[0]
-    check(A < 1e-4, f'metal channel 0.4 λ wide, TM: {A:.2e} gets through')
+    check(A < 1e-4, f"metal channel 0.4 λ wide, s: {A:.2e} gets through")
     shape_param(b, 0.55); b.eval('__app.restart(); __app.state.running = false'); b.eval('__app.run(40)')
-    check(0.37 < meters(b)[0] < 0.44, f'0.55 λ wide, TM: {meters(b)[0]:.3f}')
+    check(0.37 < meters(b)[0] < 0.44, f"0.55 λ wide, s: {meters(b)[0]:.3f}")
     setup(b, 'cutoff', 2)
     b.eval("document.querySelector('#show-pol button:last-child').click()"); b.eval('__app.state.running = false; __app.run(24)')
-    check(0.15 < meters(b)[0] < 0.19, f'0.4 λ wide, TE: {meters(b)[0]:.3f}')
+    check(0.15 < meters(b)[0] < 0.19, f"0.4 λ wide, p: {meters(b)[0]:.3f}")
 
     setup(b, 'lens', 24)
     r = b.eval("""(() => { const s = __app.sim, sc = __app.scene, op = sc.shapeOps[0]; let best = 0, bx = 0, by = 0;
@@ -259,6 +264,10 @@ def desktop(b):
     for a, lo, hi in [(0.26, 0.38, 0.5), (0.46, 0.33, 0.45)]:
         shape_param(b, a); b.eval('__app.restart(); __app.state.running = false'); b.eval('__app.run(30)')
         check(lo < meters(b)[0] < hi, f'outside the gap, a = {a} λ: T = {meters(b)[0]:.3f}')
+    # A lattice constant typed as 0 would ask for infinitely many rods (the page hung): kept at 0.1 λ.
+    shape_param(b, 0)
+    check(b.eval('__app.state.p') == 0.1 and b.eval("+document.querySelectorAll('#shape-box input[type=number]')[0].value") == 0.1 and b.eval('__app.scene.shapeOps.length') > 100,
+          f"typing a lattice constant of 0 gives {b.eval('__app.state.p')} λ ({b.eval('__app.scene.shapeOps.length')} rods)")
 
     setup(b, 'pcbend', 30)
     up = b.eval('(() => { const s = __app.sim; let m = 0; for (let x = 0.9; x < 1.4; x += 0.02) m = Math.max(m, Math.abs(s.sample(x, 3.2))); return m; })()')
