@@ -129,20 +129,23 @@ M.init({ onChange: saveHash });
 S.init({ onChange: saveHash, target, kick: () => {} });
 drawer($('#help'), $('#help-button'), setups);
 
+// (Every number from the address is kept within its slider's range: an address typed by hand, or
+// garbled, cannot ask for a step of zero or a negative brightness.)
+const clamp = (v, lo, hi) => (v === undefined ? v : Math.max(lo, Math.min(hi, v)));
 function fromHash(h) {
   if (h.mode === 'stellar') {
-    const n = (k, d) => (Number.isFinite(+h[k]) && h[k] !== undefined ? +h[k] : d);
-    stellar({ kind: h.kind === 'binary' ? 'binary' : 'single', theta: n('th', 47), limb: n('ld', 0), rho: n('rho', 50), pa: n('pa', 0),
-      ratio: n('ratio', 0.8), B: n('B', 0.5), lam: n('lam', 575), bw: n('bw', 0), seeing: h.seeing === '1', sweeping: false });
+    const n = (k, d, lo, hi) => clamp(Number.isFinite(+h[k]) && h[k] !== undefined ? +h[k] : d, lo, hi);
+    stellar({ kind: h.kind === 'binary' ? 'binary' : 'single', theta: n('th', 47, 0, 200), limb: n('ld', 0, 0, 1), rho: n('rho', 50, 1, 300), pa: n('pa', 0, -90, 90),
+      ratio: n('ratio', 0.8, 0.05, 1), B: n('B', 0.5, 0, 400), lam: n('lam', 575, 400, 800), bw: n('bw', 0, 0, 200), seeing: h.seeing === '1', sweeping: false });
     return;
   }
-  const num = (k) => (h[k] !== undefined && Number.isFinite(+h[k]) ? +h[k] : undefined);
+  const num = (k, lo = -Infinity, hi = Infinity) => clamp(h[k] !== undefined && Number.isFinite(+h[k]) ? +h[k] : undefined, lo, hi);
   const src = SOURCES[h.src] && h.src !== 'draw' ? h.src : 'hene';
-  const params = src === 'gauss' ? { lam: num('lam') ?? 550, fwhm: num('fwhm') ?? 10 } : src === 'lamp' ? { T: num('T') ?? 3000 } : undefined;
+  const params = src === 'gauss' ? { lam: num('lam', 400, 700) ?? 550, fwhm: num('fwhm', 0.05, 150) ?? 10 } : src === 'lamp' ? { T: num('T', 1500, 12000) ?? 3000 } : undefined;
   michelson({
-    source: src, params, d: num('d') ?? 500, tilt: num('tilt') ?? 0, motor: ['fwd', 'back', 'stop', 'sweep'].includes(h.motor) ? h.motor : 'fwd',
-    speed: num('v') ?? 0.3, plot: h.plot === 'fts' ? 'fts' : 'trace', L: num('L') ?? 50, step: num('step') ?? 0.1, apodize: h.apo === '1',
-    sides: h.sides === '1' ? 1 : 2, zero: num('eps') ?? 0,
+    source: src, params, d: num('d', -2500, 2500) ?? 500, tilt: num('tilt', -500, 500) ?? 0, motor: ['fwd', 'back', 'stop', 'sweep'].includes(h.motor) ? h.motor : 'fwd',
+    speed: num('v', 0.01, 1000) ?? 0.3, plot: h.plot === 'fts' ? 'fts' : 'trace', L: num('L', 1, 5000) ?? 50, step: num('step', 0.02, 2) ?? 0.1, apodize: h.apo === '1',
+    sides: h.sides === '1' ? 1 : 2, zero: num('eps', -0.5, 0.5) ?? 0,
     axis: h.axis === 'lambda' ? 'lambda' : 'sigma',
     win: num('w0') !== undefined && num('w1') > num('w0') ? [num('w0'), num('w1')] : undefined,
     view: num('s0') !== undefined && num('s1') > num('s0') ? [num('s0'), num('s1')] : undefined,

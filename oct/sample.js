@@ -6,9 +6,12 @@
 // in a medium of index n: a reflector at depth z is at optical depth n z, round-trip path 2nz.
 //
 // A stack is { n, layers: [{ z, r }] }: interfaces at depths z with amplitude reflectivities r
-// (signed: light going from a lower index to a higher one is reflected with r > 0, the other
-// way with r < 0).  The light must get through every interface above a reflector, down and up,
-// so the burst from interface i has amplitude r_i Π_{j<i} (1 − r_j²).
+// (signed, and measured against the reference mirror's reflection: the Fresnel coefficient at
+// normal incidence is (n₁ − n₂)/(n₁ + n₂), negative where the index rises, and the metal reference
+// mirror's is −1, so relative to it a face where the index rises has r > 0, one where it falls
+// r < 0; only this relative sign shows in the fringes).  The light must get through every
+// interface above a reflector, down and up, so the burst from interface i has amplitude
+// r_i Π_{j<i} (1 − r_j²).
 
 import { TWO_PI } from './source.js';
 
@@ -42,7 +45,8 @@ export function gaussPair(rng, out = [0, 0]) {
 
 // ------------------------------------------------------------------------ stacks
 
-/** Fresnel amplitude reflectivity at normal incidence from index n1 into n2. */
+/** The Fresnel amplitude reflectivity at normal incidence from index n1 into n2, (n1 − n2)/(n1 + n2),
+ *  divided by the reference mirror's −1 (see the top of this file). */
 export const fresnel = (n1, n2) => (n2 - n1) / (n2 + n1);
 
 /**

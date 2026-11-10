@@ -308,11 +308,24 @@ test('FT spectroscopy: the scan length sets the resolution (the sodium doublet)'
   let p = peaks(r, 1.69, 1.705);
   assert(p.length === 2, `2 mm: ${p.length} peaks`);
   close(p[0][0], s1, r.ds, 'D1'); close(p[1][0], s2, r.ds, 'D2');
-  // 0.2 mm: Δσ = 0.0017 is below the resolution 1/(2 Δmax) = 0.0025: one peak.
+  // 0.2 mm: Δσ = 0.0017 is well below the resolution 1/Δmax = 0.005: one peak.
   r = recoverSpectrum(sampleInterferogram(na, step, 800), step, { pad: 16 });
   p = peaks(r, 1.69, 1.705);
   assert(p.length === 1, `0.2 mm: ${p.length} peaks`);
   return 'resolved with Δmax = 2 mm, one peak with Δmax = 0.2 mm';
+});
+
+test('FT spectroscopy: a two-sided scan splits the sodium doublet at Δmax = 0.41 mm (0.7/Δσ), 0.57 mm apodized (1/Δσ)', () => {
+  // What experiment 10 says: the resolution δσ ≈ 1/Δmax; the boxcar's sincs show a dip a little
+  // before a whole beat 1/Δσ = 0.58 mm, the triangle's sinc² at about a whole one.
+  const na = lineSpectrum(LINE_DATA.sodium), step = 0.25, ds = 1000 / 588.995 - 1000 / 589.592;
+  const count = (L, apodize) => {
+    const K = Math.round(L / step), I = sampleInterferogram(na, step, K, 'auto', { sides: 2 });
+    return peaks(recoverSpectrum(I, step, { sides: 2, zero: K, length: 1 << 18, apodize }), 1.69, 1.705).length;
+  };
+  const got = [count(400, false), count(420, false), count(560, true), count(580, true)];
+  assert(got.join() === '1,2,1,2', `peaks at 0.40, 0.42 mm: ${got[0]}, ${got[1]}; apodized at 0.56, 0.58 mm: ${got[2]}, ${got[3]}`);
+  return `one line at 0.40 mm, two at 0.42 mm (Δσ·Δmax = ${(420 * ds).toFixed(2)}); apodized one at 0.56, two at 0.58 mm (${(580 * ds).toFixed(2)})`;
 });
 
 test('FT spectroscopy: too coarse a step folds a line back below σ_N = 1/(2δ)', () => {

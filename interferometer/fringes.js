@@ -247,9 +247,13 @@ export class FringeCounter {
     if (D0 === D1 || !(spec.I0 > 0)) return;
     const step = 1 / (16 * sigmaTop), n = Math.ceil(Math.abs(D1 - D0) / step);
     if (n > 40000) { this.lost = true; return; }   // too fast for the counter
-    const hi = 1.3 * spec.I0, lo = 0.7 * spec.I0, dir = Math.sign(D1 - D0);
+    const hi = 1.3 * spec.I0, lo = 0.7 * spec.I0, dir = Math.sign(D1 - D0), h = (D1 - D0) / n;
+    // A long move through a continuum (a slider's jump in white light): its samples by one FFT
+    // (fts.js) rather than a sum over the whole continuum at each of them.
+    const many = spec.i1 >= spec.i0 && n * (spec.i1 - spec.i0 + 1) > 4e5;
+    const v = many ? sampleInterferogram(spec, Math.abs(h), n, 'auto', { sides: 1, offset: Math.min(D0, D1) }) : null;
     for (let i = 1; i <= n; i++) {
-      const I = spec.intensity(D0 + ((D1 - D0) * i) / n);
+      const I = many ? v[h > 0 ? i : n - i] : spec.intensity(D0 + h * i);
       if (I < lo) this.armed = true;
       else if (I > hi && this.armed) { this.count += dir; this.armed = false; }
     }

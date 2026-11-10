@@ -283,18 +283,23 @@ function drawZoom(c) {
   const mx = f.X(state.d);
   ctx.strokeStyle = c.mirror; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(mx, f.top); ctx.lineTo(mx, f.bottom); ctx.stroke();
   // A scale bar: one fringe is λ₀/2 of mirror travel.
-  const half = S.src.lam0 / 2, bx = f.left + 8, by = f.top + 10;
-  ctx.strokeStyle = c.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + f.X(f.x0 + half) - f.left, by); ctx.stroke();
-  ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText(`one fringe: λ₀/2 = ${(half * 1000).toFixed(0)} nm of mirror travel`, bx + f.X(f.x0 + half) - f.left + 6, by);
+  const half = S.src.lam0 / 2, bx = f.left + 8, by = f.top + 10, text = `one fringe: λ₀/2 = ${(half * 1000).toFixed(0)} nm of mirror travel`;
+  ctx.font = '11px system-ui, sans-serif';
+  // On the panel's colour, so that it reads over the burst's top.
+  const bw = f.X(f.x0 + half) - f.left, tw = ctx.measureText(text).width;
+  ctx.globalAlpha = 0.85; ctx.fillStyle = c.panel; ctx.fillRect(bx - 4, by - 8, bw + tw + 14, 16); ctx.globalAlpha = 1;
+  ctx.strokeStyle = c.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.stroke();
+  ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, bx + bw + 6, by);
   ctx.restore();
 }
 
 function readout() {
   const src = S.src, s = surfaces(), d = state.d;
   const near = s.reduce((p, q) => (Math.abs(q.d - d) < Math.abs(p.d - d) ? q : p));
-  setGroups($('#f-readout-1'), [['Mirror at d = ', { v: d, dec: 2, w: 6 }, ' μm;'], [`the ${near.label} is `, { v: near.d, dec: 1, w: 5 }, ' μm away in optical path,'],
-    ['so the two paths differ by ', { v: 2 * (d - near.d), dec: 2, w: 7, plus: '+' }, ' μm']]);
+  // (Both measured from where the two arms are equal: the surface at its optical depth, what the mirror must match.)
+  setGroups($('#f-readout-1'), [['Mirror at d = ', { v: d, dec: 2, w: 6 }, ' μm;'], [`the ${near.label} at `, { v: near.d, dec: 1, w: 5 }, ' μm of optical depth:'],
+    ['the paths differ by 2(d − depth) = ', { v: 2 * (d - near.d), dec: 2, w: 7, plus: '+' }, ' μm']]);
   const w = burstWidth(0), spread = src.spread(B[0]?.beta || 0);
   const wide = src.lc > 999;
   const parts = [['The burst\'s width at half height: ', Number.isFinite(w) && !wide ? { v: w, dec: 2, w: 5 } : { text: wide ? 'all' : '–', w: 5 }, ' μm'],
@@ -391,9 +396,9 @@ export function init(shared) {
     onInput: (v) => { state.z = v; sampleChanged(); } });
   twoToggle = toggle('Add the back face: a glass plate', state.two, (on) => { state.two = on; $('#f-plate-box').hidden = !on; sampleChanged(); },
     'Make the surface the front of a plate of glass, and let its back face reflect too');
-  tSlider = slider({ label: 'thickness t (μm)', min: 5, max: 500, step: 0.5, value: state.t, onInput: (v) => { state.t = v; sampleChanged(); } });
+  tSlider = slider({ label: 'thickness t (μm)', min: 5, max: 500, step: 0.5, value: state.t, onInput: (v) => { state.t = Math.max(0, v); sampleChanged(); } });
   nSlider = slider({ label: 'index n', min: 1, max: 2.4, step: 0.01, value: state.n, title: 'The glass\'s refractive index (taken the same for every wavelength here)',
-    onInput: (v) => { state.n = v; sampleChanged(); } });
+    onInput: (v) => { state.n = Math.max(1, v); if (state.n !== v) nSlider.value = state.n; sampleChanged(); } });
   glassSlider = slider({ label: 'BK7 glass (mm)', min: 0, max: 10, step: 0.05, value: state.glass,
     title: 'A block of BK7 glass in the sample arm, with no twin in the reference arm', onInput: (v) => { state.glass = v; sampleChanged(); } });
   $('#f-sample-box').append(zSlider, twoToggle);
@@ -450,9 +455,9 @@ export function toHash() {
     motor: s.motor, v: s.speed, w0: +s.win[0].toPrecision(6), w1: +s.win[1].toPrecision(6) };
 }
 export function fromHash(h, num) {
-  configure({ d: num('d', 32), z: num('z', 50), two: h.two === '1', t: num('t', 100), n: num('n', 1.5), glass: num('glass', 0),
-    motor: ['fwd', 'back', 'stop', 'sweep'].includes(h.motor) ? h.motor : 'sweep', speed: num('v', 8),
-    win: num('w1', NaN) > num('w0', NaN) ? [num('w0'), num('w1')] : [20, 80] });
+  configure({ d: num('d', 32, D_LIM[0], D_LIM[1]), z: num('z', 50, 0, 300), two: h.two === '1', t: num('t', 100, 5, 500), n: num('n', 1.5, 1, 2.4), glass: num('glass', 0, 0, 10),
+    motor: ['fwd', 'back', 'stop', 'sweep'].includes(h.motor) ? h.motor : 'sweep', speed: num('v', 8, 0.2, 200),
+    win: num('w1', NaN) > num('w0', NaN) ? [num('w0', 0, -1000, 4000), num('w1', 0, -1000, 4000)] : [20, 80] });
 }
 
 /** For the tests. */

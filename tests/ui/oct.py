@@ -428,6 +428,10 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     b.eval("location.hash = '#view=fringes&lam=1300&bw=80&z=70&two=1&t=50&n=1.4'"); b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
     st = b.eval('[__app.view, __app.src.lamNm, __app.src.fwhmNm, __app.F.state.z, __app.F.state.two, __app.F.state.t, __app.F.state.n]')
     check(st == ['fringes', 1300, 80, 70, True, 50, 1.4], f'an address with the light and a plate opens them ({st})')
+    # A hand-typed address out of range: NA = 0 asked for an infinitely wide beam and hung the page.
+    b.eval("location.hash = '#view=scan&NA=0&focus=-5&ix=999&bw=0'"); b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
+    st = b.eval('[__app.view, __app.B.state.NA, __app.B.state.focus, __app.B.state.ix, __app.src.fwhmNm]')
+    check(st == ['scan', 0.01, 0, 63, 0.05], f'an address out of range opens, its numbers kept within their sliders\' ranges ({st})')
     # Averaging and the flattened slab are kept in the address too.
     b.eval('__app.hold(true)'); run(b, 'average'); b.eval("document.querySelector('#s-avg-more').open = true"); press_button(b, '#s-how-box', 'The beam'); set_num(b, '#s-how-box', 'beam step', 4.5)
     b.wait("location.hash.includes('avg=16') && location.hash.includes('how=beam') && location.hash.includes('step=4.5')", timeout=20)
@@ -456,6 +460,23 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
         got[name] = (live, held)
     check(all(abs(l[0] - h[0]) <= 1e-9 * abs(h[0]) and abs(l[1] - h[1]) <= 1e-9 * abs(h[1]) and l[2] == h[2] for l, h in got.values()),
           'the worker computes the same A-scans as the page: ' + '; '.join(f'{n}: Σ {l[0]:.6g} and {h[0]:.6g}' for n, (l, h) in got.items()) + f"; contrasts {got['average'][0][2]} and {got['average'][1][2]}")
+    # View 4's B-scan in new light: with the clock running, the bandwidth's slider leaves the
+    # picture already measured on show (refolded) while a worker measures the new one, which must
+    # be what the page measures itself with the clock held.
+    qsum = "(() => { const a = __app.Q.peek().bscan.img; let s = 0, s2 = 0; for (let i = 0; i < a.length; i++) { s += a[i]; s2 += a[i] * a[i] * ((i % 7) + 1); } return [s, s2, __app.Q.peek().bscan.nz]; })()"
+    b.eval("__app.hold(true); __app.setups.fdbscan(); __app.Q.state.motor = false; __app.hold(false)")
+    before = b.eval(qsum)
+    # (Read two frames after the step: the new B-scan's 256 columns take the worker far longer.)
+    kept = b.eval("""(async () => { const s = document.querySelector('#bw-box input[type=range]'); s.value = String(+s.value - 60);
+      s.dispatchEvent(new Event('input', { bubbles: true })); for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(r));
+      return [...""" + qsum + """, __app.Q.peek().pending]; })()""")
+    bw = b.eval('__app.src.fwhmNm')
+    b.wait('!__app.Q.peek().pending', timeout=300)
+    live = b.eval(qsum)
+    b.eval(f"__app.hold(true); __app.setups.fdbscan(); __app.shared.setBandwidth({bw}); __app.step(0, 1)")
+    held = b.eval(qsum)
+    check(kept[:3] == before and kept[3] and live[0] != before[0] and abs(live[0] - held[0]) <= 1e-9 * held[0] and abs(live[1] - held[1]) <= 1e-9 * held[1] and live[2] == held[2],
+          f'view 4: a new bandwidth ({bw:.4g} nm) keeps the B-scan on show, then the worker\'s matches the page\'s own (Σ {live[0]:.6g} and {held[0]:.6g}, {live[2]} depths)')
 
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))
