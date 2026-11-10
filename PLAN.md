@@ -393,25 +393,51 @@ Left for later:
   3131.  The scope traces aren't the limit anywhere (`?scope=fast` ranks the same).  The slowest
   are recomputations on a slider step, all on the main thread at full quality.
 
-Left for later (where the time goes, from `tools/perf.py --profile`):
+Left for later: see the status of 2026-11-10 below (the list that stood here is done or
+carried there).
 
-- action, the mass slider with a typed or damped potential (3-4 s a step slowed 4x): the force in
-  the integrator (45%) evaluating the typed expression node by node (`lib/expr.js`, 35%) while all
-  the true paths are shot again.  Compile the expression to a function, or tabulate the force.
-- maxwell2d, the prism's tilt (2.3 s): rebuilding the material grid by a point-in-polygon test
-  per cell (`scene.js` inPoly/rebuild, 53%, and 18% garbage).  Rasterize by scanline, or rebuild
-  only the cells the outline crosses.
-- schrodinger1d: done (the levels found again only when the potential changes, and only those
-  in view while a slider moves); "bloch" still runs at 12 frames a second slowed 4x (its FFT
-  steps, the work itself).
-- oct: the scatterers are kept per scene now (bandwidth 250 to 150 ms; view 4's frames 17 ms);
-  what is left of a bandwidth step is summing their fields, which does depend on it.
-- maxwell2d: the index alone no longer rasterizes again (about 130 ms); the tilt still does.
-- radiointerferometer, maximum entropy (180 ms frames): its iterations' 2D FFTs each frame.
-- diffraction, white light (0.4 s a step): one 2D propagation per wavelength.  Fewer wavelengths
-  while dragging.
-- tomography and mri (0.25-0.37 s): the formula phantom re-evaluated, FFTs, the k-space
-  reconstruction.
-- scope.js: a dense trace that must be recomputed (not copied from its kept picture) costs
-  5-20x the old min/max (putImageData and shading over a band's area); NMR's growing-trace
-  tiling is the pattern to reuse where a record grows.
+## Status, 2026-11-10: the eighteen beta demos reviewed
+
+A full review of every beta demo (nine agents, two related demos each): the physics and every
+number the pages quote checked against closed forms or independent scripts, responsiveness with
+the CPU slowed 4x, the teaching read as an undergraduate who has just met the idea.  Each agent's
+verdict: ready to lose "beta".  Bugs found and fixed include: maxwell2d's TE/TM named backwards
+for an optics student (now s and p, both conventions explained); thin films' Bragg formula for
+the wrong stack; drums' "a nodal line silences a mode" (not a nodal diameter: the degenerate
+twin rings) and mode labels swapped where levels lie closer than the grid's error; NMR's FID
+start depending on the sampling, Carr–Purcell's errors described wrongly, the handbook's 0.8 V
+explained (fully polarized; 0.57 V at its 3 s); MRI's tab-freezing loop for a slice above the
+head; OCT's sign of a reflection, a hang from an address with NA = 0; quantum optics' 48 Hz
+(85), f^(−7/6) (f^(−2/3)) and laser power; radio's experiment 20 (the Y's beam stays round, the
+east–west line streaks); arrays' focal spot; imaging's Abbe limit and "the light is all there";
+action's energy view, typed-L time dependence and V − T labels; radiation's black dots; and in
+most demos, addresses and typed values that could hang the page or fill it with NaN.
+
+Responsiveness, CPU slowed 4x (`build/perf/review-rate4-dpr1.md`), worst experiment's frame or
+slider step: imaging, fourier 18 ms; fft2d 46; holography, action 55; planewave 62; oct 68; beams
+74; nmr 82; arrays 83; thinfilms 87; radiation 92; drums 95; interferometer 96; mri 107;
+phasespace 113; tomography 121; dispersion 126; quantumoptics 132; maxwell2d 151; schrodinger2d
+171; radiointerferometer 375 (maximum entropy); diffraction 445; schrodinger1d about 240 after a
+fix the same day (was 718).  Before: action 3131, maxwell2d 1848, oct 1037.
+
+The shared library (the professor: "you wrote it; checking, using and maintaining it falls to
+you"): `slider()` limits and onRelease; `keptPicture()` in plot.js; `\mathrm{}` with exponents;
+plain loops for expr.js's real arithmetic.
+
+Left for later:
+
+- Diffraction's white light (0.45 s a step slowed 4x): one 2D propagation per wavelength; fewer
+  wavelengths while dragging.
+- Radio: maximum entropy's slider steps (0.4 s) and view 4's (0.13-0.3 s) are honest
+  recomputation (a worker would help); views 1-3's frames are mostly the browser drawing many
+  scope traces.
+- Schrödinger 2D (171 ms frames): its 2D split-step FFTs.
+- Proposed by the reviewers, not done: phase space's decoherence experiment and a moving-centre
+  marker; quantum optics' LIGO readout folded, the matched filter over both phases; beams' modes
+  named in the cavity spectrum and where a mismatched beam's 1 − η goes; holography's coarse view
+  while sweeping; imaging's CTF against OTF plot; NMR's pulse-width calibration scan (as TeachSpin
+  students do) and the CAL IN sweep; OCT's "complex spectrum" switch; dispersion's marker at the
+  cut front's arrival; action's fan of true paths refocusing at a conjugate point; maxwell2d's
+  one-click s/p comparison.
+- The oil and water T₁/T₂ values in NMR are typical ones, not checked against TeachSpin's manual;
+  MRI's low-field T₁ fit (O'Reilly and Webb 2022) checked for consistency only.

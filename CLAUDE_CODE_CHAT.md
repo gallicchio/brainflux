@@ -1785,3 +1785,79 @@ more steps than a frame allows, the frame stopped short and still paused with "B
 the recovered packet was really at t = 0.39 (⟨x⟩ = −24.30 against −25).  The pause now comes only
 on the frame that gets there, and the packet comes back to ⟨x⟩ = −24.99999997, σ = 4.00000002.
 A UI check covers both, and the experiment's picture is remade.
+
+## Prompt 30
+
+> Go through all of the ones marked "beta" in a full top-down review. Make sure they are all correct, responsive, and good pedagogically for a physics undergrad who just learned about each concept in their classes.
+
+### Response 30 (2026-11-10)
+
+Nine agents, two related demos each, from one brief: the physics and every number each page
+quotes checked against closed forms or independent scripts, the edges tried (sliders at their
+ends, typed and addressed values, odd orders), responsiveness measured with the CPU slowed 4x
+and waste removed, and the teaching read as an undergraduate who has just met the idea, with
+standard textbook names.  Every one judged its demos ready to lose "beta".  What they found and
+fixed, besides wording and layout:
+
+- maxwell2d: TE and TM named the way FDTD codes do, the reverse of Hecht, so "only TE has a
+  Brewster angle" said the opposite of the textbook; now s and p, both conventions explained.
+  The FTIR and waveguide write-ups corrected; Brewster moved after Fresnel.  The prism's tilt
+  slider 2 s to 70 ms a step (shapes drawn a span at a time, cells redone only where changed).
+- radiation: black dots along the synchrotron spiral (centre samples landing on a thin zero of
+  the flux); speeds above c accepted when typed.
+- arrays: the focal spot (0.70λ measured, not "never much less than λ/2"); the length called L.
+- radio: experiment 20's claim that the Y's beam streaks at 5° declination (it stays round; an
+  east–west line streaks 16 to 1); maximum entropy three times smoother.
+- thin films: experiment 8's Bragg formula was for (HL)ᴺ, the page builds (HL)ᴺH; R + T = 1
+  with the n cos θ factor and the sign convention for r_p stated.
+- dispersion: two numbers corrected; the pulse animation at 60 frames a second.
+- interferometer: the spectrometer's resolution is about 1/Δmax (it said 1/(2Δmax)), its
+  resolving power Δmax/λ; coherence named (γ(τ), Wiener–Khinchin, the three conventions).
+- OCT: the sign of a reflection off glass into air stated backwards (the numbers were right);
+  an address with NA = 0 hung the page; view 4's bandwidth slider 658 to 56 ms (a worker).
+- imaging: "the light is all there" with the first orders blocked (43% is stopped); λ/2NA is
+  Abbe's limit, not half of it; the defocus phase's sign; resolution experiments first.
+- holography: the steepness rule experiment 12 promised; NaN and hangs from extreme values.
+- beams: numbers quoted before the change the student had just been asked to make; the Gouy
+  strip's zero; the stability condition 0 < g₁g₂ < 1; mode sliders three times faster.
+- drums: "a nodal line silences a mode" is true of a nodal circle, not a diameter (the
+  degenerate twin rings); exact labels swapped where levels lie closer than the grid's error.
+- phase space: the odd cat at the origin normalised a rounding residue into a state; the ⊕ is
+  where the blob starts.  Quantum optics: 48 Hz should be 85, f^(−7/6) should be f^(−2/3), ρ² is
+  not "the area between", 20% loss costs at every frequency, the laser is tens of watts.
+- NMR: the FID's start depended on the record's sampling (0.781 against 0.750 μV for the same
+  FID); Carr–Purcell's pulse errors described wrongly; the handbook's 0.8 V explained (fully
+  polarized; 0.57 V at its 3 s).  MRI: a slice above the head froze the tab.
+- action: slider steps 3-6 s to about 60 ms (all trajectories integrated together, roots
+  narrowed together, followed while a slider moves); the energy view, a typed L without t, and
+  V − T labelled a minimum fixed.  Tomography: overflowing formulas gave NaN; 2.5x faster.
+
+`tools/test_all.sh` on the merged `main`: the unit tests (473), the pictures (355) and every UI
+run pass; one radio check read a running average of noise and failed by chance about once in
+60 runs (no bias across 20 seeds), now seeded.  With the CPU slowed 4x every beta demo's worst
+experiment is 151 ms or less except the radio's maximum entropy (375 ms); before the review the
+worst were 3.1 s (action), 1.8 s (maxwell2d) and 1.0 s (OCT).  Schrödinger 1D's set-ups with
+many levels came down from 600-700 ms to 100-240 ms the same day.
+
+## Prompt 31
+
+> I would be fine with your proposals for the shared library. You wrote it. If you want to improve it, checking its correctness, using it, and maintaining it will probably fall to you.
+
+### Response 31 (2026-11-10)
+
+Done, each with a test: `slider()` takes limits (typed values brought inside what the page can
+compute) and onRelease (for the work too slow for every step of a drag), and exprField passes
+both through; `keptPicture()` in `lib/plot.js` keeps a plot's unchanging part off the page
+(thin films and dispersion had a copy each and use it now); `\mathrm{fs^2/mm}` is set upright
+with its exponent; `lib/expr.js` does real +, −, ×, ÷ as plain loops, the same numbers to the
+bit and a typed formula about a quarter cheaper.  Keeping "number = number" on one line needed
+nothing new: `setGroups()` does it.
+
+## Prompt 32
+
+> polarisations "s and p" is probably the best.
+
+### Response 32 (2026-11-10)
+
+Kept: maxwell2d names them s and p, and says once how the FDTD convention's TE and TM map onto
+them.
