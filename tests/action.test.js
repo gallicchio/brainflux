@@ -1,5 +1,5 @@
 import { test, assert, close } from './harness.js';
-import { Path, action, acceleration, quadrature, knotQuadrature, truePaths, followPaths, legendre, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, hamiltonianGrid, knotPhasors } from '../action/physics.js';
+import { Path, action, acceleration, quadrature, knotQuadrature, truePaths, followPaths, legendre, closedOrbits, truthAt, knotGradient, knotDerivatives, knotTimeDerivatives, stationaryKnots, freeKnots, energy, momentum, hamiltonianGrid, knotPhasors } from '../action/physics.js';
 import { SYSTEMS, typedSystem, parseTyped, cycloid, oscillatorOrbit } from '../action/systems.js';
 
 const sys = (id, over = {}) => {
@@ -433,10 +433,17 @@ test('Legendre\'s condition: L = T - V is convex in v, its negative concave (a m
   assert(legendre(flat, Float64Array.of(0, 1), Float64Array.of(1, 2), Float64Array.of(0, 1)) === 0, 'L = v: neither');
 });
 
-test('light: the closed-form ray equation y\'\' = (1 + y\'^2) n\'/n is the Euler-Lagrange equation of n sqrt(1 + y\'^2)', () => {
+test('light: the closed-form ray equation y\'\' = (1 + y\'^2) n\'/n is the Euler-Lagrange equation of n sqrt(1 + y\'^2), and p = n y\' / sqrt(1 + y\'^2)', () => {
   for (const id of ['refraction', 'mirage']) {
     const { L } = sys(id), q = Float64Array.from({ length: 21 }, (_, i) => -1 + 0.1 * i), v = q.map((x) => 0.7 - 0.5 * x), s = new Float64Array(21);
     const exact = acceleration(L, q, v, s), numerical = acceleration({ L: L.L }, q, v, s);
     for (let i = 0; i < q.length; i++) close(exact[i], numerical[i], 1e-5 * (1 + Math.abs(exact[i])), `${id} at y = ${q[i].toFixed(1)}`);
+    // Its momentum p = dL/dy' in closed form, and y' back from p.
+    const p = momentum(L, q, v, s), pn = momentum({ L: L.L }, q, v, s), back = L.vOfP(q, p, s);
+    for (let i = 0; i < q.length; i++) { close(p[i], pn[i], 1e-8, `${id}: p`); close(back[i], v[i], 1e-9, `${id}: y' from p`); }
   }
+  // The brachistochrone's too (y > 0).
+  const { L } = sys('brachistochrone'), q = Float64Array.of(0.1, 0.5, 2), v = Float64Array.of(3, -0.4, 0.2), s = new Float64Array(3);
+  const p = momentum(L, q, v, s), pn = momentum({ L: L.L }, q, v, s), back = L.vOfP(q, p, s);
+  for (let i = 0; i < 3; i++) { close(p[i], pn[i], 1e-8, 'brachistochrone: p'); close(back[i], v[i], 1e-9, 'brachistochrone: y\' from p'); }
 });

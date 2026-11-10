@@ -25,6 +25,10 @@ function optical(n, dn) {
   return {
     L: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? ni * Math.sqrt(1 + v[i] * v[i]) : NaN; } return out; },
     accel: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? ((1 + v[i] * v[i]) * dn(q[i])) / ni : NaN; } return out; },
+    // The momentum p = n y' / sqrt(1 + y'^2) (n times the sine of the ray's angle to the x axis),
+    // and back: y' = p / sqrt(n^2 - p^2), for |p| < n only.
+    p: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? (ni * v[i]) / Math.sqrt(1 + v[i] * v[i]) : NaN; } return out; },
+    vOfP: (q, p) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = Math.abs(p[i]) < ni ? p[i] / Math.sqrt(ni * ni - p[i] * p[i]) : NaN; } return out; },
   };
 }
 
@@ -122,6 +126,9 @@ export const SYSTEMS = [
     formula: 'L = \\frac{\\sqrt{1+y\'^2}}{\\sqrt{2gy}}',
     make: ({ g }) => ({
       L: (q, v) => map3(q, v, q, (y, u) => (y > 0 ? Math.sqrt(1 + u * u) / Math.sqrt(2 * g * y) : NaN)),
+      // p = c y' / sqrt(1 + y'^2) with c = 1 / sqrt(2 g y), and back: y' = p / sqrt(c^2 - p^2).
+      p: (q, v) => map3(q, v, q, (y, u) => (y > 0 ? u / (Math.sqrt(1 + u * u) * Math.sqrt(2 * g * y)) : NaN)),
+      vOfP: (q, p) => map3(q, p, q, (y, x) => { const c = y > 0 ? 1 / Math.sqrt(2 * g * y) : 0; return Math.abs(x) < c ? x / Math.sqrt(c * c - x * x) : NaN; }),
       // Exact derivatives: differences would step above the start, where L is undefined.
       derivatives: (q, v) => {
         const n = q.length, c = 1 / Math.sqrt(2 * g), out = { Lq: new Float64Array(n), Lv: new Float64Array(n), Lqq: new Float64Array(n), Lqv: new Float64Array(n), Lvv: new Float64Array(n) };
