@@ -270,7 +270,10 @@
     of them within the burst's half height.  The burst is 6.23 μm wide at half height, which is the
     coherence length
     $$\ell_c=\frac{2\ln 2}{\pi}\frac{\lambda_0^2}{\Delta\lambda}=0.44\,\frac{(0.84\ \text{μm})^2}{0.05\ \text{μm}}=6.23\ \text{μm}.$$
-    It is the same reason white light's fringes stopped a few micrometres from equal paths: every
+    (That is OCT's convention: the burst's full width at half height against the mirror's
+    position, which is its half width in the path difference $\Delta=2d$.  The interferometer demo,
+    like Hecht, calls $\lambda_0^2/\Delta\lambda=14$ μm the coherence length: the same physics,
+    another factor in front.)  It is the same reason white light's fringes stopped a few micrometres from equal paths: every
     wavelength in the light makes fringes of its own spacing, and they are in step only where the
     paths match.  So the burst says where the surface is, to within a few micrometres, however
     blurred the light is sideways.  Stop the motor (■) and drag the mirror through it slowly; the
@@ -298,8 +301,12 @@
     second burst moves; change $t$ and it moves $n$ times as far.  (For a burst it is the group
     index that counts; this glass has no dispersion, so the two are the same.)  Look at the centre
     of each burst in the magnified view: the front face's is a bright fringe (the signal goes up
-    to 1.48), the back face's a dark one (down to 0.69): light reflected from glass into air has
-    its amplitude turned over, $r=(1-n)/(1+n)<0$.</p>
+    to 1.48), the back face's a dark one (down to 0.69).  The two faces reflect with opposite
+    signs, $r=(n_1-n_2)/(n_1+n_2)$: going from air into the denser glass, the front face turns the
+    field over, $r=-0.2$, just as the metal reference mirror does ($r\approx-1$); going from glass
+    out into air, the back face does not, $r=+0.2$.  So at the centre of its burst the front face's
+    light comes back in step with the reference's, and the back face's half a wave out of step.
+    (The beam splitter is taken to treat the two arms alike.)</p>
   </article>
 
   <article class="exp" data-setup="dispersion" data-frame="720x532">
@@ -522,9 +529,11 @@
     layer at $2z_\text{max}-318.4=283.7$ μm, where it appears, folded back.  And it is faint, −27
     dB instead of −14: each pixel averages over its own width of spectrum, which washes out fine
     fringes (the dashed fall-off curve).  Choose 512 pixels: the range doubles to 602 μm, the
-    face is back at 318.4 μm, at 69% of its height (−17 dB); 1024 pixels: 91%.  The range is
-    $N\lambda_0^2/(12\,\Delta\lambda)$ for $N$ pixels spanning three bandwidths: more pixels, or
-    narrower light, go deeper.</p>
+    face is back at 318.4 μm, at 69% of its height (−17 dB); 1024 pixels: 91%.  In wavelength the
+    range is $z_\text{max}=\lambda_0^2/(4n\,\delta\lambda)$, with $\delta\lambda$ the pixels' spacing
+    in wavelength, here $N\lambda_0^2/(12\,\Delta\lambda)$ for $N$ pixels spanning three bandwidths.
+    More pixels go deeper; so does narrower light, at the cost of depth resolution: the range holds
+    about $N/5$ coherence lengths whatever the light.</p>
   </article>
 
   <article class="exp" data-setup="fdbscan" data-frame="720x437">
@@ -549,9 +558,10 @@
   layer at geometric depth $z$ in a medium of index $n$ matches the mirror at $d=nz$, its optical
   depth.  Reflections are amplitudes $r$; in decibels, $20\log_{10}|r|$, which is
   $10\log_{10}$ of the reflected power.</p>
-  <p><em>The interference integral.</em>  With the reference's amplitude 1 and the sample sending
-  back amplitudes $a_i$ from paths $\Delta_i$, light of spectrum $S(k)$ (of unit area) gives the
-  detector
+  <p><em>The interference integral.</em>  With the reference's light as the unit (amplitude 1) and
+  the sample sending back amplitudes $a_i$ from paths $\Delta_i$, measured against it (so a face
+  that turns the field over as the metal reference mirror does, where the index rises, has
+  $a_i>0$), light of spectrum $S(k)$ (of unit area) gives the detector
   $$I(\Delta)=\int S(k)\Big|1+\sum_i a_i e^{ik(\Delta_i-\Delta)}\Big|^2 dk
   = I_\text{dc}+2\,\mathrm{Re}\sum_i a_i\,\gamma(\Delta-\Delta_i),\qquad \gamma(\Delta)=\int S(k)\,e^{ik\Delta}dk,$$
   where $I_\text{dc}=1+\sum a_i^2+\dots$ does not depend on the mirror.  The coherence function
@@ -580,8 +590,9 @@
   <a href="../beams/">Gaussian-beam demo</a>'s $w_0=\lambda f/(\pi w)$, with Rayleigh range $z_R=\pi n w_0^2/\lambda_0$
   and width $w(z)=w_0\sqrt{1+((z-z_f)/z_R)^2}$.  The fibre that sends the light also collects it,
   so a point $\rho$ off the axis is seen with amplitude $e^{-2\rho^2/w^2}$, and a point's image is
-  $1.18\,w$ wide at half height.  Depth and lateral resolution are set by different things:
-  $\ell_c/n$ by the spectrum, $w_0$ by the lens.</p>
+  $1.18\,w$ wide at half height.  (OCT papers usually quote the beam's diameter $2w_0$ as the
+  lateral resolution and $2z_R$ as the depth of field.)  Depth and lateral resolution are set by
+  different things: $\ell_c/n$ by the spectrum, $w_0$ by the lens.</p>
   <p><em>Speckle and averaging</em> (experiments 9 and 10).  A resolution cell's field is
   $E=\sum_j a_j e^{-2\rho_j^2/w^2}e^{i\phi_j}$ over its scatterers, with phases $\phi_j=2k_0 n z_j$
   that differ by many turns from one to the next.  Its intensity $I=|E|^2$ fluctuates about its

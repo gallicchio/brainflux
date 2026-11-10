@@ -31,11 +31,14 @@ const shared = {
 };
 
 let bwSlider = null, lamSeg = null;
+// The views the light has changed under while they were hidden: each catches up when it is shown
+// (a hidden view's work, a few to a hundred milliseconds for each step of the slider, shows nothing).
+const stale = new Set();
 function setSource(lam, fwhm) {
   shared.src.set(lam, fwhm);
   if (bwSlider && Math.abs(bwSlider.value - fwhm) > 1e-9 * fwhm) bwSlider.value = +fwhm.toPrecision(4);
   if (lamSeg) lamSeg.value = lam;
-  for (const v of Object.values(VIEWS)) v.sourceChanged();
+  for (const [k, v] of Object.entries(VIEWS)) if (k === app.view) v.sourceChanged(); else stale.add(k);
   lightReadout();
   scheduleHash();
 }
@@ -62,6 +65,7 @@ function setView(v) {
   app.view = v;
   viewSeg.value = v;
   $('#main').dataset.view = v;
+  if (stale.delete(v)) VIEWS[v].sourceChanged();
   VIEWS[v].invalidate();
   scheduleHash();
 }

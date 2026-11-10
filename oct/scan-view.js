@@ -134,8 +134,10 @@ function resetVolume() { vol.reset(); vnext = 0; vprogress = 0; epoch++; }
 
 // --------------------------------------------------------------------- the scene and the scans
 
-let sceneKey = '';
-function makeAll() {
+let sceneKey = '', levelTimer = 0;
+/** quick: from a slider being dragged (the light's, the tilt, the roughness); the grey levels' preview
+ *  (nine columns, all their scatterers: 0.1 to 0.4 s) waits until it has kept still a moment. */
+function makeAll(quick = false) {
   // A new scene only when the scene changes (not the light): its scatterers are kept with it.
   const key = JSON.stringify([state.scene, state.tilt, state.rough, state.lesion, state.seed]);
   if (key !== sceneKey || !scene) { scene = makeScene(state.scene, { tilt: state.tilt, rough: state.rough, lesion: state.lesion, seed: state.seed }); sceneKey = key; }
@@ -143,7 +145,9 @@ function makeAll() {
   bs = new BScan(scene, S.src);
   bs.setAverage(state.avg, state.how, state.step);
   vol = null; layerD = null;
-  autoLevel();
+  clearTimeout(levelTimer); levelTimer = 0;
+  if (quick && !S.held) levelTimer = setTimeout(() => { levelTimer = 0; autoLevel(); bImgStale = true; dirty = true; }, 200);
+  else autoLevel();
   restart();
 }
 
@@ -239,7 +243,7 @@ export function finishNow() {
   state.playing = false; fast = vfast = false; updatePlay(); dirty = true;
 }
 
-export function sourceChanged() { if (S) { makeAll(); } }
+export function sourceChanged() { if (S) { makeAll(true); } }
 
 // --------------------------------------------------------------------- the speckle contrast
 
@@ -566,7 +570,7 @@ function drawVolume() {
     lines: [{ u: u(state.iy, ny), colour: SLICE.xz }, xyLine('y')] });
   let surface = null;
   if (state.follow) { surface = new Float32Array(nx * ny); for (let iy = 0; iy < ny; iy++) for (let ix = 0; ix < nx; ix++) surface[iy * nx + ix] = frac(ix, iy); }
-  drawCube(cubeC, { nx, ny, nz, ix: state.ix, iy: state.iy, m: state.m, xz: xzImg, yz: yzImg, xy: xyImg, done: vol.done, surface });
+  drawCube(cubeC, { nx, ny, nz, ix: state.ix, iy: state.iy, m: state.m, xz: xzImg, yz: yzImg, xy: xyImg, done: vol.done, surface, coarse: state.playing });
 }
 
 function readout() {
@@ -711,7 +715,7 @@ export function setMode(m) {
   S.onChange();
 }
 
-function rebuildScene() { makeAll(); syncSlices(); drawLegend(); S.onChange(); }
+function rebuildScene(quick = false) { makeAll(quick); syncSlices(); drawLegend(); S.onChange(); }
 function rescan() { if (state.mode === 'volume') { ensureVolume(); resetVolume(); vfast = true; state.playing = true; } else restart(next >= bs.tasks); updatePlay(); S.onChange(); }
 
 /** A new number of repeats, or a new way for them to differ: the B-scan starts again. */
@@ -759,8 +763,8 @@ export function init(shared) {
   lesionT = toggle('Cyst / lump', state.lesion, (on) => { state.lesion = on; rebuildScene(); }, 'Put the lesion in the sample, or take it out');
   $('#s-toggles').append(speckleT, lesionT);
   $('#s-reseed').addEventListener('click', () => { state.seed++; rebuildScene(); });
-  tiltS = slider({ label: 'tilt (°)', min: -15, max: 15, step: 0.1, value: state.tilt, title: 'Tilt the sample about the y axis', onInput: (v) => { state.tilt = v; rebuildScene(); } });
-  roughS = slider({ label: 'roughness (μm)', min: 0, max: 30, step: 0.5, value: state.rough, title: 'How far the top surface wanders up and down', onInput: (v) => { state.rough = v; rebuildScene(); } });
+  tiltS = slider({ label: 'tilt (°)', min: -15, max: 15, step: 0.1, value: state.tilt, title: 'Tilt the sample about the y axis', onInput: (v) => { state.tilt = v; rebuildScene(true); } });
+  roughS = slider({ label: 'roughness (μm)', min: 0, max: 30, step: 0.5, value: state.rough, title: 'How far the top surface wanders up and down', onInput: (v) => { state.rough = v; rebuildScene(true); } });
   $('#s-shape-box').append(tiltS, roughS);
   naS = slider({ label: 'aperture NA', min: 0.01, max: 0.2, log: true, value: state.NA, title: 'The numerical aperture: the sine of the half-angle of the cone of light the lens focuses',
     onInput: (v) => { state.NA = v; beam = sceneBeam(scene, S.src, state.NA, state.focus); rescan(); } });

@@ -283,18 +283,23 @@ function drawZoom(c) {
   const mx = f.X(state.d);
   ctx.strokeStyle = c.mirror; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(mx, f.top); ctx.lineTo(mx, f.bottom); ctx.stroke();
   // A scale bar: one fringe is λ₀/2 of mirror travel.
-  const half = S.src.lam0 / 2, bx = f.left + 8, by = f.top + 10;
-  ctx.strokeStyle = c.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + f.X(f.x0 + half) - f.left, by); ctx.stroke();
-  ctx.fillStyle = c.ink2; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText(`one fringe: λ₀/2 = ${(half * 1000).toFixed(0)} nm of mirror travel`, bx + f.X(f.x0 + half) - f.left + 6, by);
+  const half = S.src.lam0 / 2, bx = f.left + 8, by = f.top + 10, text = `one fringe: λ₀/2 = ${(half * 1000).toFixed(0)} nm of mirror travel`;
+  ctx.font = '11px system-ui, sans-serif';
+  // On the panel's colour, so that it reads over the burst's top.
+  const bw = f.X(f.x0 + half) - f.left, tw = ctx.measureText(text).width;
+  ctx.globalAlpha = 0.85; ctx.fillStyle = c.panel; ctx.fillRect(bx - 4, by - 8, bw + tw + 14, 16); ctx.globalAlpha = 1;
+  ctx.strokeStyle = c.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.stroke();
+  ctx.fillStyle = c.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, bx + bw + 6, by);
   ctx.restore();
 }
 
 function readout() {
   const src = S.src, s = surfaces(), d = state.d;
   const near = s.reduce((p, q) => (Math.abs(q.d - d) < Math.abs(p.d - d) ? q : p));
-  setGroups($('#f-readout-1'), [['Mirror at d = ', { v: d, dec: 2, w: 6 }, ' μm;'], [`the ${near.label} is `, { v: near.d, dec: 1, w: 5 }, ' μm away in optical path,'],
-    ['so the two paths differ by ', { v: 2 * (d - near.d), dec: 2, w: 7, plus: '+' }, ' μm']]);
+  // (Both measured from where the two arms are equal: the surface at its optical depth, what the mirror must match.)
+  setGroups($('#f-readout-1'), [['Mirror at d = ', { v: d, dec: 2, w: 6 }, ' μm;'], [`the ${near.label} at `, { v: near.d, dec: 1, w: 5 }, ' μm of optical depth:'],
+    ['the paths differ by 2(d − depth) = ', { v: 2 * (d - near.d), dec: 2, w: 7, plus: '+' }, ' μm']]);
   const w = burstWidth(0), spread = src.spread(B[0]?.beta || 0);
   const wide = src.lc > 999;
   const parts = [['The burst\'s width at half height: ', Number.isFinite(w) && !wide ? { v: w, dec: 2, w: 5 } : { text: wide ? 'all' : '–', w: 5 }, ' μm'],

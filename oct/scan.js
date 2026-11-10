@@ -38,6 +38,9 @@ import { CELL, GH, cellScatterers, interfacesAt, makeBeam, mulberry32, hashCell,
 export const DENSITY = 40;
 
 const scratch = { n: 0 };
+// The profile of the column at a quadrature point across the beam, kept between calls (it is
+// wanted a hundred times a column, and only for the moment).
+const qprof = { tops: new Float64Array(16), dtops: new Float64Array(16), atts: new Float64Array(16) };
 function buffers(nz) {
   if (scratch.n !== nz) Object.assign(scratch, { n: nz, re: new Float64Array(nz), im: new Float64Array(nz), P: new Float64Array(nz), nr: new Float64Array(nz), ni: new Float64Array(nz) });
   return scratch;
@@ -107,7 +110,8 @@ export function column(scene, src, x, y, hd, nz, out, opts = {}) {
     if (!beam) { addPower(f0.d, f0.a * f0.a); continue; }
     const w = beam.width(f0.z);
     for (let s = 0; s < 5; s++) for (let t = 0; t < 5; t++) {
-      const g = s === 2 && t === 2 ? f0 : interfacesAt(scene, x + (GH.t[s] * w) / 2, y + (GH.t[t] * w) / 2).find((f) => f.id === f0.id);
+      const qx = x + (GH.t[s] * w) / 2, qy = y + (GH.t[t] * w) / 2;
+      const g = s === 2 && t === 2 ? f0 : interfacesAt(scene, qx, qy, scene.profile(qx, qy, qprof)).find((f) => f.id === f0.id);
       if (g) addPower(g.d, GH.w[s] * GH.w[t] * g.a * g.a);
     }
   }
@@ -383,7 +387,7 @@ export class Volume {
    */
   layerDepths(band = 0, out = new Float32Array(this.nx * this.ny)) {
     const b = Math.max(0, Math.min(this.scene.nb, band | 0));
-    for (let iy = 0; iy < this.ny; iy++) for (let ix = 0; ix < this.nx; ix++) out[iy * this.nx + ix] = this.scene.profile(this.x(ix), this.y(iy)).dtops[b];
+    for (let iy = 0; iy < this.ny; iy++) for (let ix = 0; ix < this.nx; ix++) out[iy * this.nx + ix] = this.scene.profile(this.x(ix), this.y(iy), qprof).dtops[b];
     return out;
   }
   /** The depth sample (fractional) at `below` μm of depth as the images show it (optical ÷ nView)

@@ -103,7 +103,13 @@ export function drawMichelson(canvas, o) {
     line([[sx - 0.9, y], [sx + 0.9, y]], 1, 'rgba(255,255,255,0.4)');
     label(fmtUm(d), sx + 1.8, y, 'left', DIM, 8);
   }
-  label('depth (optical)', sx - 1, SY - span - 4.2, 'left', DIM, 9);
+  {
+    // Over the scale, left of the mirror's carriage (which sits over it when the mirror is at the
+    // scale's near end, as in Fourier-domain OCT).
+    ctx.font = `${fs(9)}px system-ui, sans-serif`;
+    const wd = ctx.measureText('depth (optical)').width / u;
+    label('depth (optical)', Math.min(sx - 1, mx - 1.2 - wd), SY - span - 4.2, 'left', DIM, 9);
+  }
   // The sample: a block between its surfaces (in optical path), and its surfaces.
   const yOf = (d) => SY + off(d), inView = (y) => y >= SY - span - 2 && y <= SY + span + 2;
   if (o.slab) {
@@ -169,7 +175,8 @@ export function drawMichelson(canvas, o) {
 }
 
 function niceStep(W) {
-  const raw = W / 4, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
+  // Three to six ticks: their labels (up to four figures) must not run into each other on the rail.
+  const raw = W / 3, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
   return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p;
 }
 function fmtUm(d) { return `${+d.toFixed(2)}`; }
@@ -295,7 +302,8 @@ function drawSceneMoving(ctx, o, { sc, hw, left, top, w, h, X, Z }) {
  *       images: x across and depth down; y across and depth down; x across and y down), done (which
  *       B-scans are measured), surface (optional: Float32Array nx × ny, the en-face slab's depth
  *       under each A-scan as a fraction of the cube's, when it follows a layer rather than lying
- *       flat at m: drawn curved, in small tiles each tilted to its corners' depths) }
+ *       flat at m: drawn curved, in small tiles each tilted to its corners' depths), coarse (larger
+ *       tiles, for a cube drawn every frame) }
  */
 let slabCanvas = null;
 export function drawCube(canvas, o) {
@@ -331,7 +339,9 @@ export function drawCube(canvas, o) {
     // of its corners (the mean of the A-scans around each corner), drawn back to front onto a
     // canvas of their own (opaque, overlapping by a little so no seams show), then laid in the
     // cube like the other slices.
-    const nx = o.nx, ny = o.ny, S = o.surface, T = 2;
+    // (Tiles of 4 while the volume is being scanned and this is drawn every frame: a quarter of the
+    // drawImage calls, which were half a frame's time; of 2 once it is still.)
+    const nx = o.nx, ny = o.ny, S = o.surface, T = o.coarse ? 4 : 2;
     const zc = (i, j) => { let s = 0, n = 0; for (const a of [i - 1, i]) for (const b of [j - 1, j]) if (a >= 0 && a < nx && b >= 0 && b < ny) { s += S[b * nx + a]; n++; } return s / n; };
     if (!slabCanvas || slabCanvas.width !== canvas.width || slabCanvas.height !== canvas.height) { slabCanvas = document.createElement('canvas'); slabCanvas.width = canvas.width; slabCanvas.height = canvas.height; }
     const g = slabCanvas.getContext('2d');

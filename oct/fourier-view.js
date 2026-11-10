@@ -24,6 +24,22 @@ const NS = [128, 256, 512, 1024, 2048, 4096];
 
 let S = null, stack = null, B = [], spec = null, cam = null, fd = null, seed = 1, dirty = true, motorDir = 1;
 let bscan = null, bscanKey = '', fdImg = document.createElement('canvas'), fdKey = '';
+// A new light for the same scene: the B-scan is measured again in a worker (scan-worker.js, the
+// same numbers as here), while the one already measured stays on show, folded with the new
+// spectrometer (its depth range and fall-off, what the bandwidth changes most); summing all the
+// scatterers again takes 0.1 to 0.2 s, which a slider's every step would otherwise wait for.
+// (Started the first time it is wanted.)
+let worker, pending = null, jobSeq = 0;
+function getWorker() {
+  if (worker === undefined) {
+    try {
+      worker = new Worker(new URL('./scan-worker.js', import.meta.url), { type: 'module' });
+      worker.onmessage = onWorker;
+      worker.onerror = (e) => { e.preventDefault?.(); worker = null; pending = null; bscanKey = ''; dirty = true; };
+    } catch (e) { worker = null; }
+  }
+  return worker;
+}
 const schemC = $('#q-schem'), specC = $('#q-spec'), scanC = $('#q-scan'), imgC = $('#q-bscan');
 
 const sigmaR = () => (state.noise <= -119 ? 0 : 10 ** (state.noise / 20) / Math.SQRT2);
@@ -40,7 +56,7 @@ function compute() {
   fd = fdAScan(cam, spec, { subtract: state.subtract, pad: 4 });
   dirty = true;
 }
-export function sourceChanged() { if (S) { compute(); bscanKey = ''; } }
+export function sourceChanged() { if (S) { compute(); fdKey = ''; } }
 
 /** The FD A-scan at optical depth d (= Δ/2), interpolated. */
 export function fdAt(d) {
@@ -230,19 +246,49 @@ function legendLine() {
  *  as the sample moves: only where it lands does). */
 function ensureBscan() {
   const key = `${state.scene}|${S.src.lamNm}|${S.src.fwhmNm}`;
-  if (bscanKey === key) return;
+  if (bscanKey === key) { cancel(); return; }
+  // The same scene in new light: measured in the worker (unless the tests hold the clock), the
+  // old picture kept meanwhile.
+  if (bscan && bscan.scene.name === state.scene && !S.held && getWorker()) {
+    if (!pending || pending.key !== key) post(key);
+    return;
+  }
+  cancel();
   bscanKey = key;
   // The same scene object while the scene is the same: its scatterers are kept with it (scan.js's
   // cell cache), so a new bandwidth sums them again instead of making them again.
   if (!ensureBscan.scene || ensureBscan.scene.name !== state.scene) ensureBscan.scene = makeScene(state.scene, {});
   const sc = ensureBscan.scene;
   const beam = sceneBeam(sc, S.src, sc.NA, sc.focus);
-  bscan = new BScan(sc, S.src, { nx: 256 });
-  bscan.measureAll({ beam, speckle: true, noise: 0 });
-  // White at the brightest 0.5%.
-  const all = Array.from(bscan.img).sort((p, q) => p - q);
-  bscan.level = 20 * Math.log10(all[Math.floor(0.995 * (all.length - 1))] || 1e-3) + 2;
-  fdKey = '';
+  const bs = new BScan(sc, S.src, { nx: 256 });
+  bs.measureAll({ beam, speckle: true, noise: 0 });
+  adopt(bs);
+}
+
+/** Show a measured B-scan: white at its brightest 0.5%.  (A typed array sorts by number, and fast.) */
+function adopt(bs) {
+  const all = Float32Array.from(bs.img).sort();
+  bs.level = 20 * Math.log10(all[Math.floor(0.995 * (all.length - 1))] || 1e-3) + 2;
+  bscan = bs; fdKey = ''; dirty = true;
+}
+
+/** Forget the worker's job, if any (the light came back, or a new scene was measured here). */
+function cancel() { if (pending) { pending = null; worker?.postMessage({ type: 'stop' }); } }
+
+/** Ask the worker for the scene's B-scan in the present light (it drops any job it was on). */
+function post(key) {
+  const sc = ensureBscan.scene, id = ++jobSeq, bs = new BScan(sc, S.src, { nx: 256 });
+  pending = { id, key, bs };
+  worker.postMessage({ type: 'job', id, kind: 'bscan', from: 0, scene: sc.name, sceneOpts: {}, lam: S.src.lamNm, fwhm: S.src.fwhmNm,
+    NA: sc.NA, focus: sc.focus, opts: { speckle: true, noise: 0 }, nz: bs.nz, nx: bs.nx, y: 0, N: 1, how: 'tissue', step: 0, ref: false });
+}
+
+function onWorker(e) {
+  const m = e.data, p = pending;
+  if (!p || m.id !== p.id || m.type !== 'tasks') return;
+  const nz = p.bs.nz;
+  for (let t = m.from; t < m.to; t++) p.bs.add(t, m.data.subarray((t - m.from) * nz, (t - m.from + 1) * nz));
+  if (m.to >= p.bs.nx) { pending = null; bscanKey = p.key; adopt(p.bs); }
 }
 
 /** The B-scan as the Fourier-domain system shows it: each column's power folded into [0, dm],
@@ -250,7 +296,7 @@ function ensureBscan() {
 function fdImage() {
   ensureBscan();
   const dm = dMax(), nz = Math.max(256, Math.min(1024, Math.round(dm / bscan.hd))), h = dm / nz;
-  const key = `${state.shift.toFixed(2)}|${state.N}|${state.subtract}|${nz}|${bscanKey}`;
+  const key = `${state.shift.toFixed(2)}|${state.N}|${spec.dk}|${state.subtract}|${nz}|${bscanKey}`;
   if (key === fdKey) return { nz, h };
   fdKey = key;
   const nx = bscan.nx, P = new Float32Array(nx * nz);
@@ -414,4 +460,4 @@ export function fromHash(h, num) {
 }
 
 /** For the tests. */
-export const peek = () => ({ bursts: B.map((b) => ({ ...b })), spec, cam, fd, bscan, dMax: dMax() });
+export const peek = () => ({ bursts: B.map((b) => ({ ...b })), spec, cam, fd, bscan, pending: !!pending, dMax: dMax() });
