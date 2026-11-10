@@ -253,7 +253,8 @@
     product $x(t)\,x(t+\tau)$, blue above zero and red below, and its average is
     $R(\tau)$, the <em>autocorrelation</em>, the dot on the autocorrelation plot.  At $\tau=0$ the
     product is $x^2$, never negative, and its average is the power.  Here $\tau$ is half a
-    cycle: the copy is upside down, the product is mostly negative, and $R=-0.99$ (the
+    cycle: the copy is upside down, the product is mostly negative, and $R=-0.999$, all but
+    −1, since the envelope hardly changes in half a cycle (the
     running average wanders a few hundredths either side of it: it is an average of noise,
     and its scatter is the radiometer's, about $1/\sqrt{N}$ for $N$ independent stretches
     of $1/\Delta\nu$; raise the averaging to steady it).  Drag
@@ -311,6 +312,11 @@
     not on a screen but in the separation of the antennas.  The orange line is the power B
     receives: the same wherever B is.  One antenna alone sees no fringe; only the product of
     two does.  Drag the source: the fringes get finer as $\theta$ grows.</p>
+    <p>The slides ask how a pair tells left from right.  The real part cannot: a cosine is the
+    same for $+\theta$ and $-\theta$.  Drag the source to −10°: the real part stays, and the
+    dot crosses to the other side of the real axis, at +38°.  The imaginary part, the same
+    product with B delayed by a quarter cycle (a sine instead of a cosine), changes sign: that is
+    why the correlator keeps both, a complex number.</p>
   </article>
 
   <article class="exp" data-setup="twosources" data-frame="720x323">
@@ -348,8 +354,9 @@
     went: its peak is at the delay.  The spectrum shows it too: the phase of A·B* winds across
     the band, so its parts cancel.  Press <em>Delay tracking</em>: the correlator delays B by
     the geometric delay towards the source (the reference direction), the lumps line up, and
-    the dot comes back to 1.  Real arrays have delays of microseconds, millions of cycles: the
-    electronic delay is what sets the direction the array looks at.</p>
+    the dot comes back to 1.  Real arrays have far longer delays: up to 120 µs across the VLA's
+    36 km, 600,000 cycles at 5 GHz, and tens of milliseconds across the Earth.  The electronic
+    delay is what sets the direction the array looks at.</p>
   </article>
 
   <h3 class="part">3 · The uv plane</h3>
@@ -427,9 +434,12 @@
     <em>Slide the pair</em>: the correlation now changes as the pair moves with its
     separation fixed, so there is no uv plane to map at all.  Turn <em>Coherent sources</em>
     off (under More): the curve goes flat and the dot returns to its colour.  The van
-    Cittert–Zernike theorem, that the correlation of the fields far from an incoherent source is
-    the Fourier transform of its brightness, is exactly the statement that the cross terms
-    vanish.  ("Spatially incoherent sources make coherent fields far away.")</p>
+    Cittert–Zernike theorem says that, far from a spatially incoherent source, the correlation
+    of the fields at two places is the Fourier transform of its brightness.  It rests on two
+    things you have now seen fail: the cross terms between different parts of the source
+    average away (incoherence, here), and the source is far enough away that only the
+    separation matters (experiment 14).  ("Spatially incoherent sources make coherent fields far
+    away.")</p>
   </article>
 
   <article class="exp" data-setup="hbt" data-frame="720x295">
@@ -517,8 +527,11 @@
     in the uv plane sweeps an ellipse of axis ratio $\sin\delta$ (the white tracks); the sampled
     plane fills in, the beam's spokes fade and the image sharpens.  Press <em>Turn the
     Earth</em> to watch it fill.  This is Earth-rotation synthesis (Martin Ryle, Nobel prize
-    1974).  Set the declination to 85°: the tracks are nearly circles; to 5°: nearly straight
-    lines, and the beam is a streak that can hardly tell north from south.</p>
+    1974).  Set the declination to 85°: the tracks are nearly circles.  Set it to 5°: they flatten
+    into nearly straight east–west lines, yet the beam stays round, because the Y's northern arm
+    puts its baselines higher and lower in the uv plane.  Now press <em>Line of 8</em>, dishes on
+    an east–west line only: at 5° its beam is a north–south streak, 16 times longer than it is
+    wide, and the image can hardly tell north from south.  That is one reason the VLA is a Y.</p>
   </article>
 
   <article class="exp" data-setup="resolution" data-frame="720x294">

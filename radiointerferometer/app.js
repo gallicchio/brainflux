@@ -12,9 +12,9 @@ import {
   samplePoints, idealGrid, idealAt, idealWindow, totalFlux, N, NS,
 } from './sky.js';
 import {
-  stationXYZ, tracks, gridSamples, dirtyBeam, dirtyImage, skyTransform, cleanStart, cleanSteps, fitBeam, restore, layout, baselineRange, EHT_CENTRE,
+  stationXYZ, tracks, gridSamples, dirtyBeam, dirtyImage, skyTransform, cleanStart, cleanSteps, fitBeam, restore, cleanBeamKernel, layout, baselineRange, EHT_CENTRE,
 } from './synthesis.js';
-import { memStart, memSteps, windowIndices, rmsError } from './imaging.js';
+import { memStart, memSteps, memRestored, windowIndices, rmsError } from './imaging.js';
 import { colorize, colorOf, cssColorOf, MODES } from '../lib/complexcolor.js';
 import { el, $, slider, segmented, toggle, drawer, toast, readHash, writeHash, setGroups, fixedNum } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, niceTicks, tickLabel, fillSlots } from '../lib/plot.js';
@@ -250,11 +250,33 @@ const ONES = new Float64Array(N * N).fill(1);
 function startImager({ watch = false } = {}) {
   cs = cleanStart(dirtyImg, BOX); ms = null; img.version++;
   img.playing = false;
-  if (state.imager === 'clean') { if (watch) img.playing = true; else if (state.cleanAuto) runClean(state.cleanRun); }
-  if (state.imager === 'mem') { ms = memStart(dirtyImg, beam, N, { alpha: state.alpha * dirtyPeak, flux: fluxIn, box: BOX }); img.playing = true; }
+  if (state.imager === 'clean') {
+    if (watch) img.playing = true;
+    else if (state.cleanAuto) { const n = isQuick() ? Math.min(100, state.cleanRun) : state.cleanRun; runClean(n); cs.capped = n < state.cleanRun; }
+  }
+  // (Maximum entropy keeps its image through the clean beam and its transform as it goes: the
+  // strip shows both every frame, and they cost no transforms of their own.)
+  if (state.imager === 'mem') { ms = memStart(dirtyImg, beam, N, { alpha: state.alpha * dirtyPeak, flux: fluxIn, box: BOX, smooth: cleanBeamKernel(fit, N) }); img.playing = true; }
   syncWatch();
   if (img.playing) kick();
 }
+// While a control of view 4 is dragged (or the Earth turns), each step makes the tracks, the
+// samples, the dirty beam and the dirty image again, and leaves until it stops what would cost as
+// much again: the strip under the pictures, the image's error against the true sky, and CLEAN's
+// steps beyond the first hundred.  (In views 3 and 4 the ideal uv plane of a picture is drawn at
+// half the resolution meanwhile.)
+let quick = false, settleTimer = 0;
+const isQuick = () => quick || anim.earthPlaying;
+function quickSoon() {
+  if (!spatial()) return;
+  quick = true; clearTimeout(settleTimer); settleTimer = setTimeout(settle, 250);
+}
+function settle() { clearTimeout(settleTimer); settleTimer = 0; if (quick) { quick = false; dirty(); } }
+/** CLEAN's steps left over from a drag. */
+function finishClean() {
+  if (cs && cs.capped && !isQuick()) { cs.capped = false; if (!img.playing) runClean(state.cleanRun - cs.iterations); }
+}
+
 function runClean(steps) {
   if (!cs || !beam) return;
   cleanSteps(cs, beam, N, { gain: state.gain, steps, threshold: 0.01 * dirtyPeak });
@@ -282,7 +304,10 @@ function stopWatching() { img.playing = false; syncWatch(); }
  *  what is left of the residual. */
 function imageNow() {
   if (state.imager === 'dirty') return dirtyImg;
-  if (img.restoredVersion !== img.version || !restored) { restored = restore(state.imager === 'mem' && ms ? ms : cs, fit, N); img.restoredVersion = img.version; }
+  if (img.restoredVersion !== img.version || !restored) {
+    restored = state.imager === 'mem' && ms ? memRestored(ms) : restore(cs, fit, N);
+    img.restoredVersion = img.version;
+  }
   return restored;
 }
 const restoredImage = imageNow;
@@ -681,6 +706,8 @@ let fieldImg = null;
 
 function drawScene() {
   const canvas = $('#scene'), { ctx, width, height } = fitCanvas(canvas);
+  // (A canvas not laid out yet, or hidden for a moment, has no room for the waves.)
+  if (!(width >= 40 && height >= 60)) return;
   Object.assign(scene, { W: width, H: height, groundY: height - 30, cx: width / 2 });
   scene.xScale = (width - 24) / (2 * SCENE_HALF);
   scene.arcR = Math.min(scene.groundY - 16, width / 2 - 70);
@@ -794,7 +821,7 @@ function dish(ctx, x, y, colour, name) {
 
 /** The fringe: the correlation against B's position (A where it is), and the power at B. */
 function drawFringe() {
-  const { ctx, width, f } = plotFrame($('#fringe'), { left: 38, bottom: 26, top: 10 });
+  const { ctx, width, f } = plotFrame($('#fringe'), { left: 38, bottom: 34, top: 10 });
   const sc = state.scene, L = lambda(), rA = { u: toWaves(sc.xA), v: 0 }, n = Math.max(200, Math.round(width));
   const xs = new Float64Array(n), re = new Float64Array(n), mag = new Float64Array(n), pw = new Float64Array(n), each = sc.sources.map(() => new Float64Array(n));
   let top = 0;
@@ -1043,7 +1070,9 @@ function uvPicture(n) {
   const re = new Float64Array(n * n), im = new Float64Array(n * n);
   idealWindow(skyModel, pix(), directions, null, uvMax(), n, n, re, im);
   if (skyModel.kind === 'picture') {
-    const mags = Float64Array.from(re, (r, i) => Math.hypot(r, im[i])).sort();
+    const mags = new Float64Array(re.length);
+    for (let i = 0; i < re.length; i++) mags[i] = Math.hypot(re[i], im[i]);
+    mags.sort();
     pictureR = Math.max(mags[Math.floor(0.985 * (mags.length - 1))] / 2, 0.003 * totalFlux(skyModel));
   }
   const img = new ImageData(n, n);
@@ -1066,7 +1095,7 @@ function drawUV() {
   const g = area.uv = squareArea($('#uv'), { left: 40, bottom: 30, top: 30, right: 8 });
   const { ctx, width, height } = g;
   ctx.clearRect(0, 0, width, height);
-  const n = Math.max(64, Math.min(200, Math.round(g.s * 0.6)));
+  const full = Math.max(64, Math.min(200, Math.round(g.s * 0.6))), n = quick && skyModel.kind === 'picture' ? Math.max(48, full >> 1) : full;
   blit(ctx, g, uvPicture(n).img, n, true);
   uvAxes(ctx, g);
   ctx.save(); ctx.beginPath(); ctx.rect(g.x, g.y, g.s, g.s); ctx.clip();
@@ -1095,24 +1124,33 @@ function drawUV() {
 function drawTracks(ctx, g) {
   computeArray();
   const L = lambda(), upto = state.earth ? Math.round(state.tNow * (tr.nt - 1)) : 0;
+  // (toPx(g, uvToF(u/λ, v/λ)) written out: a hundred thousand points, every one a step.)
+  const sc = g.s / (2 * uvMax() * L), cx = g.x + g.s / 2, cy = g.y + g.s / 2;
   ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
-  for (let p = 0; p < tr.nb; p++) {
-    for (const sg of [1, -1]) {
-      if (state.earth && tr.nt > 1) {
-        ctx.beginPath();
+  if (state.earth && tr.nt > 1) {
+    // Every track in one path, and its mirror image.
+    ctx.beginPath();
+    for (let p = 0; p < tr.nb; p++) {
+      for (const sg of [1, -1]) {
         let pen = false;
         for (let k = 0; k <= upto; k++) {
           const o = p * tr.nt + k;
           if (!tr.ok[o]) { pen = false; continue; }
-          const [x, y] = toPx(g, uvToF((sg * tr.u[o]) / L, (sg * tr.v[o]) / L));
-          pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y); pen = true;
+          const x = cx + sg * tr.u[o] * sc, y = cy - sg * tr.v[o] * sc;
+          if (pen) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+          pen = true;
         }
-        ctx.stroke();
       }
-      const o = p * tr.nt + Math.min(upto, tr.nt - 1);
-      if (tr.ok[o]) { const [x, y] = toPx(g, uvToF((sg * tr.u[o]) / L, (sg * tr.v[o]) / L)); ctx.beginPath(); ctx.arc(x, y, 2, 0, TWO_PI); ctx.fill(); }
     }
+    ctx.stroke();
   }
+  ctx.beginPath();
+  for (let p = 0; p < tr.nb; p++) {
+    const o = p * tr.nt + Math.min(upto, tr.nt - 1);
+    if (!tr.ok[o]) continue;
+    for (const sg of [1, -1]) { const x = cx + sg * tr.u[o] * sc, y = cy - sg * tr.v[o] * sc; ctx.moveTo(x + 2, y); ctx.arc(x, y, 2, 0, TWO_PI); }
+  }
+  ctx.fill();
 }
 
 /** The sampled uv plane: V where something has been measured, black elsewhere. */
@@ -1159,12 +1197,15 @@ function fieldPeak(data) {
 }
 /** The field of view of an N x N image as pixels: grey for positive, blue for negative, on the
  *  scale `top` (a square-root scale, so that faint parts show). */
+// (The square root by a table of 65,536 steps: off by at most one grey level, and the strip's
+// eight pictures are made every frame while an image is being made.)
+const SQRT_STEPS = 65535, SQRT_GREY = Uint8Array.from({ length: SQRT_STEPS + 1 }, (_, i) => Math.round(255 * Math.sqrt(i / SQRT_STEPS)));
 function fieldPixels(data, top) {
-  const o = (N - NS) / 2, img = new ImageData(NS, NS);
+  const o = (N - NS) / 2, img = new ImageData(NS, NS), px = img.data, s = SQRT_STEPS / top;
   for (let j = 0; j < NS; j++) for (let i = 0; i < NS; i++) {
-    const v = data[(j + o) * N + i + o] / top, k = 4 * (j * NS + i), q = Math.round(255 * Math.sqrt(Math.min(1, Math.abs(v))));
-    if (v >= 0) { img.data[k] = q; img.data[k + 1] = q; img.data[k + 2] = q; } else { img.data[k] = 0; img.data[k + 1] = Math.round(q * 0.45); img.data[k + 2] = q; }
-    img.data[k + 3] = 255;
+    const v = data[(j + o) * N + i + o] * s, k = 4 * (j * NS + i), q = SQRT_GREY[Math.min(SQRT_STEPS, Math.round(v < 0 ? -v : v))];
+    if (v >= 0) { px[k] = q; px[k + 1] = q; px[k + 2] = q; } else { px[k] = 0; px[k + 1] = Math.round(q * 0.45); px[k + 2] = q; }
+    px[k + 3] = 255;
   }
   return img;
 }
@@ -1184,9 +1225,10 @@ function drawImageGrid(canvas, data, { scale = null } = {}) {
 function drawRecon() {
   if (state.view === 'array') {
     computeArray();
+    finishClean();
     drawImageGrid($('#recon'), imageNow());
     drawImageGrid($('#beam'), beam, { scale: 1 });
-    drawMethod();
+    if (!isQuick()) drawMethod();
   } else {
     // (The image is a 256 × 256 transform: remade every fourth frame at most while painting.)
     if (paint.stale && (!paint.image || anim.frames - anim.lastPaint >= 4 || testHold)) { anim.lastPaint = anim.frames; paintedImage(); }
@@ -1222,9 +1264,9 @@ function tileArea(id) {
 function tileEdge(g) { g.ctx.strokeStyle = C.line; g.ctx.lineWidth = 1; g.ctx.strokeRect(g.x + 0.5, g.y + 0.5, g.s - 1, g.s - 1); }
 /** Where pixel o of the grid is in a tile of the field of view. */
 function tilePoint(g, o) { const i = (o % N) - (N - NS) / 2, j = Math.floor(o / N) - (N - NS) / 2; return [g.x + ((i + 0.5) / NS) * g.s, g.y + ((j + 0.5) / NS) * g.s]; }
-function tileField(id, data, top = fieldPeak(data), mark = -1) {
+function tileField(id, data, top = fieldPeak(data), mark = -1, pixels = fieldPixels(data, top)) {
   const g = tileArea(id);
-  blit(g.ctx, g, fieldPixels(data, top), NS, true);
+  blit(g.ctx, g, pixels, NS, true);
   if (mark >= 0) {
     const [x, y] = tilePoint(g, mark), ctx = g.ctx;
     for (const [w, col] of [[4, '#000'], [2, C.accent]]) {
@@ -1270,7 +1312,19 @@ function cleanBeamImage() {
 /** The model's transform, kept until the model changes. */
 function modelV(model) {
   const key = `${state.imager}|${img.version}`;
-  if (tileCache.key !== key || tileCache.model !== model) { tileCache.V = skyTransform(model, N); tileCache.key = key; tileCache.model = model; }
+  if (tileCache.key !== key || tileCache.model !== model) {
+    // Maximum entropy keeps the transform of its image (origin at index 0): moved to the middle,
+    // it is what skyTransform would give, V(p, q) = (−1)^(p+q) T(p − N/2, q − N/2).
+    if (ms && model === ms.model && ms.transform) {
+      const [Tr, Ti] = ms.transform, re = new Float64Array(N * N), im = new Float64Array(N * N), h = N / 2;
+      for (let q = 0; q < N; q++) for (let p = 0; p < N; p++) {
+        const o = q * N + p, t = ((q + h) % N) * N + ((p + h) % N), sgn = (p + q) & 1 ? -1 : 1;
+        re[o] = sgn * Tr[t]; im[o] = sgn * Ti[t];
+      }
+      tileCache.V = { re, im };
+    } else tileCache.V = skyTransform(model, N);
+    tileCache.key = key; tileCache.model = model;
+  }
   return tileCache.V;
 }
 
@@ -1288,7 +1342,9 @@ function nextCleanStep() {
   return { best, g, taken, left };
 }
 
-function drawMethod() {
+/** The strip.  partial: while the image is being made, the clean beam's tile (which does not
+ *  change) is left as it is. */
+function drawMethod({ partial = false } = {}) {
   const m = state.imager, spec = STRIP[m];
   $('#eq-b').hidden = !spec.b;
   if (m === 'dirty') {
@@ -1307,13 +1363,14 @@ function drawMethod() {
   } else {
     const rtop = dirtyPeak, target = new Float64Array(N * N), stop = fieldPeak(ms.model);
     for (const o of BOX_IDX) target[o] = ms.default[o] * Math.exp(Math.min(50, ms.residual[o] / ms.alpha));
+    const sky = fieldPixels(ms.model, stop);
     tileField('t-a1', ms.residual, rtop);
     tileField('t-a2', target, stop);
-    tileField('t-a3', ms.model, stop);
+    tileField('t-a3', ms.model, stop, -1, sky);
     tileUV('t-a4', modelV(ms.model));
-    tileField('t-b1', ms.model, stop);
+    tileField('t-b1', ms.model, stop, -1, sky);
   }
-  tileField('t-b2', cleanBeamImage(), 1);
+  if (!partial) tileField('t-b2', cleanBeamImage(), 1);
   tileField('t-b3', (m === 'mem' ? ms : cs).residual, top);
   tileField('t-b4', final, top);
 }
@@ -1336,8 +1393,8 @@ function syncStrip() {
 
 /** The numbers under the strip, the image's error and the list of CLEAN's latest steps. */
 function readoutMethod() {
-  const m = state.imager, err = imageError();
-  setGroups($('#recon-err'), [['Off the true sky by', { v: 100 * err, dec: 2, w: 5 }, '%'], '(root-mean-square, of the peak of the true sky seen through the clean beam)']);
+  const m = state.imager, err = isQuick() ? null : imageError();
+  setGroups($('#recon-err'), [['Off the true sky by', err === null ? { text: '…', w: 5 } : { v: 100 * err, dec: 2, w: 5 }, '%'], '(root-mean-square, of the peak of the true sky seen through the clean beam)']);
   if (m === 'dirty') {
     let sum = 0;
     for (const v of dirtyImg) sum += v;
@@ -1413,7 +1470,7 @@ function groundHalf() {
 const slideHalf = () => (U().nearField ? 1 : U().uvMax / 2);
 let slideCache = null;
 function drawSlide() {
-  const { ctx, width, f } = plotFrame($('#slide3'), { left: 36, bottom: 26, top: 10 });
+  const { ctx, width, f } = plotFrame($('#slide3'), { left: 36, bottom: 34, top: 10 });
   const p = state.pair, half = slideHalf(), n = Math.max(120, Math.round(width));
   // (The curve changes only when the pair's separation or the sources do: kept until then.)
   const key = [n, half, p.bx, p.by, p.cy, p.fixA, sim.hbt, sim.coherent, sim.coherentPhase, sim.band, sim.tracking, sim.nearField, sim.lambda, sim.sources.length, ...sim.sources.slice(0, 8).flatMap((q) => [q.l, q.m, q.x, q.y, q.I]), sim.sources[0]?.l].join('|');
@@ -1503,10 +1560,11 @@ function readoutUV() {
     readoutMethod();
     return;
   }
+  // (Small groups, so that a narrow column wraps the line between them, not past its edge.)
   setGroups($('#uv-foot'), [
-    ['Δx =', { text: lenText(u * L), w: 9 }, ', Δy =', { text: lenText(v * L), w: 9 }, ':'],
-    ['u =', { text: wavesText(u), w: 6 }, ', v =', { text: wavesText(v), w: 6 }, ' wavelengths;'],
-    ['u = Δx/λ: fringes 1/|b| =', { text: angleText(Math.min(1, 1 / Math.max(b, 1e-9))), w: 7 }, ' apart on the sky'],
+    ['Δx =', { text: lenText(u * L), w: 9 }, ','], ['Δy =', { text: lenText(v * L), w: 9 }, ':'],
+    ['u =', { text: wavesText(u), w: 6 }, ', v =', { text: wavesText(v), w: 6 }], 'wavelengths (u = Δx/λ);',
+    'fringes', ['1/|b| =', { text: angleText(Math.min(1, 1 / Math.max(b, 1e-9))), w: 7 }], 'apart on the sky',
   ]);
   const ideal = idealAt(skyModel, pix(), directions, u, v), avg = sim.hbt ? [sim.avgHbt, 0] : sim.avg;
   setGroups($('#plane3-foot'), sim.hbt
@@ -1561,10 +1619,23 @@ function loop(now) {
   const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 1 / 60;
   lastNow = now;
   const animating = isAnimating();
+  // (While CLEAN or maximum entropy works in view 4 and nothing else moves, only the image, the
+  // strip and their numbers change: the rest is left as it was drawn.)
+  const imagingOnly = animating && !needDraw && state.view === 'array' && img.playing && !anim.earthPlaying;
   if (animating && !testHold) advance(dt);
-  if (needDraw || animating) { needDraw = false; drawNow(); }
+  if (imagingOnly && !needDraw) drawImaging();
+  else if (needDraw || animating) { needDraw = false; drawNow(); }
   // (Drawing may have started something to watch: a new maximum-entropy image.)
   if (isAnimating()) { if (!raf) raf = requestAnimationFrame(loop); } else lastNow = 0;
+}
+
+/** View 4 while an image is being made: the image, the strip and their numbers only. */
+function drawImaging() {
+  readColours();
+  computeArray();
+  drawImageGrid($('#recon'), imageNow());
+  drawMethod({ partial: true });
+  readoutMethod();
 }
 
 function drawNow() {
@@ -1686,11 +1757,11 @@ document.addEventListener('paste', (e) => {
   zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('drop'); loadFile(e.dataTransfer.files[0]); });
 }
 const sizeSlider = slider({ label: 'Size', min: 0.2, max: 2.5, log: true, value: state.sky.size, title: 'Scale the layout or the picture: larger on the sky means finer patterns in the uv plane',
-  onInput: (v) => { state.sky.size = v; if (state.sky.kind === 'picture') loadPicture(state.sky.picture); else { buildSky(); dirty(); } scheduleHash(); } });
+  onInput: (v) => { state.sky.size = v; quickSoon(); if (state.sky.kind === 'picture') loadPicture(state.sky.picture); else { buildSky(); dirty(); } scheduleHash(); } });
 const rotSlider = slider({ label: 'Rotation', min: -180, max: 180, step: 1, value: state.sky.rotation, title: 'Turn the layout of points (degrees): the uv plane turns with it',
-  onInput: (v) => { state.sky.rotation = v; buildSky(); dirty(); scheduleHash(); } });
+  onInput: (v) => { state.sky.rotation = v; quickSoon(); buildSky(); dirty(); scheduleHash(); } });
 const brightSlider = slider({ label: 'Brightness', min: 0.1, max: 3, step: 0.1, value: state.sky.bright, title: 'The brightness of every source: the size of V scales with it',
-  onInput: (v) => { state.sky.bright = v; buildSky(); dirty(); scheduleHash(); } });
+  onInput: (v) => { state.sky.bright = v; quickSoon(); buildSky(); dirty(); scheduleHash(); } });
 $('#sky-box').append(sizeSlider, rotSlider, brightSlider);
 const stripesToggle = toggle('The pair’s stripes on the sky', state.stripes, (on) => { state.stripes = on; dirty(); scheduleHash(); }, 'Draw e^{−2πi(ul + vm)} over the sky: what one baseline weighs the sky with');
 $('#stripes-row').append(stripesToggle);
@@ -1715,8 +1786,8 @@ function setLayout(id) {
   if (id === 'eht' && state.units !== 'eht') { setUnits('eht', { quiet: true }); if (state.sky.kind === 'points') { loadPicture('ring'); } }
   buildArray(); syncPanels(); dirty(); scheduleHash();
 }
-const nSlider = slider({ label: 'Dishes N', min: 2, max: 30, step: 1, value: state.n, title: 'How many dishes in the ring or the random array', onInput: (v) => { state.n = Math.round(v); buildArray(); dirty(); scheduleHash(); } });
-const armSlider = slider({ label: 'Spread', min: 0.05, max: 2, log: true, value: state.arm, title: 'How far the array reaches: the longest baseline sets the finest detail', onInput: (v) => { state.arm = v; buildArray(); dirty(); scheduleHash(); } });
+const nSlider = slider({ label: 'Dishes N', min: 2, max: 30, step: 1, value: state.n, title: 'How many dishes in the ring or the random array', onInput: (v) => { state.n = Math.round(v); quickSoon(); buildArray(); dirty(); scheduleHash(); } });
+const armSlider = slider({ label: 'Spread', min: 0.05, max: 2, log: true, value: state.arm, title: 'How far the array reaches: the longest baseline sets the finest detail', onInput: (v) => { state.arm = v; quickSoon(); buildArray(); dirty(); scheduleHash(); } });
 $('#array-box').append(nSlider, armSlider);
 const earthToggle = toggle('Earth rotation', state.earth, (on) => { state.earth = on; state.tNow = 1; arrayDirty = true; syncPanels(); dirty(); scheduleHash(); }, 'Let each pair sweep its track in the uv plane as the Earth turns, for the hours set below');
 const earthButton = el('button', { type: 'button', title: 'Watch the tracks fill in over the observation', onclick: () => {
@@ -1727,9 +1798,9 @@ const earthButton = el('button', { type: 'button', title: 'Watch the tracks fill
   kick(); dirty();
 } }, 'Turn the Earth');
 $('#earth-row').append(earthToggle, earthButton);
-const hoursSlider = slider({ label: 'Hours', min: 0.5, max: 24, step: 0.5, value: state.hours, title: 'The length of the observation, centred on the source’s transit', onInput: (v) => { state.hours = v; arrayDirty = true; dirty(); scheduleHash(); } });
-const decSlider = slider({ label: 'Declination δ', min: -90, max: 90, step: 1, value: state.dec, title: 'The source’s declination: the tracks are ellipses of axis ratio sin δ', onInput: (v) => { state.dec = v; arrayDirty = true; dirty(); scheduleHash(); } });
-const latSlider = slider({ label: 'Latitude', min: -85, max: 85, step: 1, value: state.lat, title: 'Where on the Earth the array stands', onInput: (v) => { state.lat = v; arrayDirty = true; dirty(); scheduleHash(); } });
+const hoursSlider = slider({ label: 'Hours', min: 0.5, max: 24, step: 0.5, value: state.hours, title: 'The length of the observation, centred on the source’s transit', onInput: (v) => { state.hours = v; quickSoon(); arrayDirty = true; dirty(); scheduleHash(); } });
+const decSlider = slider({ label: 'Declination δ', min: -90, max: 90, step: 1, value: state.dec, title: 'The source’s declination: the tracks are ellipses of axis ratio sin δ', onInput: (v) => { state.dec = v; quickSoon(); arrayDirty = true; dirty(); scheduleHash(); } });
+const latSlider = slider({ label: 'Latitude', min: -85, max: 85, step: 1, value: state.lat, title: 'Where on the Earth the array stands', onInput: (v) => { state.lat = v; quickSoon(); arrayDirty = true; dirty(); scheduleHash(); } });
 const weightSeg = segmented([{ value: 'natural', label: 'Natural', title: 'Every sample counts' }, { value: 'uniform', label: 'Uniform', title: 'Every sampled cell counts once: a sharper beam' }], state.weighting, (v) => { state.weighting = v; arrayDirty = true; dirty(); scheduleHash(); }, { label: 'Weighting' });
 const weightRow = el('div', { class: 'row' }, el('span', { class: 'small muted' }, 'Weighting'), weightSeg);
 $('#earth-box').append(hoursSlider, decSlider, latSlider);
@@ -1918,7 +1989,7 @@ pointer($('#scene'), {
 });
 pointer($('#fringe'), {
   down: () => ({}),
-  move: (d, x, y, e, r) => { const f = frameOf(r, { left: 38, bottom: 26, top: 10 }, -SCENE_HALF, SCENE_HALF); state.scene.xB = Math.round(100 * Math.max(-SCENE_HALF, Math.min(SCENE_HALF, f.invX(x)))) / 100; moveScene(); syncPanels(); },
+  move: (d, x, y, e, r) => { const f = frameOf(r, { left: 38, bottom: 34, top: 10 }, -SCENE_HALF, SCENE_HALF); state.scene.xB = Math.round(100 * Math.max(-SCENE_HALF, Math.min(SCENE_HALF, f.invX(x)))) / 100; moveScene(); syncPanels(); },
 });
 
 // View 3: the sources on the sky, the baseline on the uv plane, the pair on the ground, the slide.
@@ -1933,7 +2004,7 @@ pointer($('#sky'), {
     const [fx, fy] = fromPx(area.sky, x, y), lim = fov() / 2, s = skyModel.sources[d.k];
     const l = Math.max(-lim, Math.min(lim, (fx - 0.5) * fov())), m = Math.max(-lim, Math.min(lim, (fy - 0.5) * fov()));
     if (s.z !== undefined) { const R = s.z / Math.sqrt(Math.max(1e-6, 1 - l * l - m * m)); s.x = l * R; s.y = m * R; } else { s.l = l; s.m = m; }
-    gridDirty = true; uvDirty = true; arrayDirty = true; stripesKey = '';
+    gridDirty = true; uvDirty = true; arrayDirty = true; stripesKey = ''; quickSoon();
     sim.sources = skyModel.sources.map((q) => ({ ...q }));
   },
 });
@@ -1968,7 +2039,7 @@ pointer($('#ground'), {
   },
   move: (d, x, y) => {
     const [fx, fy] = fromPx(area.ground, x, y), px = (fx - 0.5) * 2 * d.half, py = (fy - 0.5) * 2 * d.half;
-    if (d.i !== undefined) { dishes[d.i] = [px, py]; arrayDirty = true; return; }
+    if (d.i !== undefined) { dishes[d.i] = [px, py]; arrayDirty = true; quickSoon(); return; }
     const [a, b] = pairPositions(), A = d.which === 'A' ? [px, py] : a, B = d.which === 'B' ? [px, py] : b, p = state.pair;
     p.bx = B[0] - A[0]; p.by = B[1] - A[1];
     if (p.fixA) { p.cx = A[0]; p.cy = A[1]; } else { p.cx = (A[0] + B[0]) / 2; p.cy = (A[1] + B[1]) / 2; }
@@ -1978,7 +2049,7 @@ pointer($('#ground'), {
 pointer($('#slide3'), {
   down: () => ({}),
   move: (d, x, y, e, r) => {
-    const half = lenIn(slideHalf()), f = frameOf(r, { left: 36, bottom: 26, top: 10 }, -half, half), c = Math.max(-half, Math.min(half, f.invX(x))) * U().lenScale, p = state.pair;
+    const half = lenIn(slideHalf()), f = frameOf(r, { left: 36, bottom: 34, top: 10 }, -half, half), c = Math.max(-half, Math.min(half, f.invX(x))) * U().lenScale, p = state.pair;
     if (p.fixA) p.cx = c - p.bx / 2; else p.cx = c;
     movePair();
   },
@@ -2149,6 +2220,8 @@ window.__app = {
   lambda, uvMax, fov, bandwidth: bw,
   paint: () => paint, paintedImage,
   array: () => { computeArray(); return { dishes, tr, sampled, beam, dirtyImg, cs }; },
+  /** The array's samples to be made again on the next look (as a slider of view 4 does). */
+  markArray: () => { arrayDirty = true; },
   /** Making the image: the method, CLEAN's and maximum entropy's states, the image and its error. */
   imaging: () => { computeArray(); return { imager: state.imager, cs, ms, image: imageNow(), error: imageError(), skyGrid, skyRef: skyThroughBeam(), fit, dirtyPeak, flux: fluxIn, playing: img.playing, box: BOX }; },
   grid: ensureGrid,

@@ -1,12 +1,12 @@
 import { test, assert, close } from './harness.js';
 import { Simulation, M, sinc, binFrequency } from '../radiointerferometer/sim.js';
 import { makeTape, sampleTape, receiverStream, realVoltage, voltageAt, LEN, TAPE_CYCLES } from '../radiointerferometer/display.js';
-import { fft, ifft } from '../lib/fft.js';
+import { fft, ifft, fft2 } from '../lib/fft.js';
 import { idealGrid, idealAt, idealWindow, samplePoints, pointSources, galaxy, normalise, N, NS } from '../radiointerferometer/sky.js';
 import {
-  stationXYZ, tracks, gridSamples, dirtyBeam, skyTransform, dirtyImage, cleanStart, cleanSteps, fitBeam, restore, layout,
+  stationXYZ, tracks, gridSamples, dirtyBeam, skyTransform, dirtyImage, cleanStart, cleanSteps, fitBeam, restore, cleanBeamKernel, layout,
 } from '../radiointerferometer/synthesis.js';
-import { memStart, memSteps, windowIndices, rmsError, beamKernel, convolve } from '../radiointerferometer/imaging.js';
+import { memStart, memSteps, memRestored, windowIndices, rmsError, beamKernel, convolve } from '../radiointerferometer/imaging.js';
 
 const DEG = Math.PI / 180;
 // A tiny deterministic random generator, so the tests are repeatable.
@@ -530,6 +530,33 @@ test('maximum entropy from a sparse uv plane: J only falls, no pixel goes negati
     assert(obj > J0, `a nudge (${s > 0 ? '+' : '−'}) lowered J`);
   }
   return `${ms.iterations} iterations; I = M e^{R/α} to ${worst.toExponential(1)}; J fell from ${ms.objective[0].toExponential(3)} to ${J0.toExponential(3)}`;
+});
+
+test('maximum entropy keeps its image through the clean beam and its transform up to date as it goes: the same as restoring and transforming afresh', () => {
+  const n = 64, S = sparse(n, 2e-5, { dishes: 8, hours: 3 }), B = dirtyBeam(S, n), sky = blobs(n), D = dirtyImage(S, skyTransform(sky, n), n);
+  const box = [16, 16, 48, 48], idx = windowIndices(n, box), fit = fitBeam(B, n);
+  let flux = 0, peak = 0;
+  for (const o of idx) flux += sky[o];
+  for (const v of D) peak = Math.max(peak, Math.abs(v));
+  const opts = { alpha: 0.01 * peak, flux, box };
+  const plain = memStart(D, B, n, opts), kept = memStart(D, B, n, { ...opts, smooth: cleanBeamKernel(fit, n) });
+  const notes = [];
+  for (const steps of [1, 7, 19]) {     // (to iteration 1, 8 and 27: across the exact recomputation at 20)
+    memSteps(plain, { steps, tol: 1e-7 }); memSteps(kept, { steps, tol: 1e-7 });
+    const fresh = restore(kept, fit, n), mine = memRestored(kept), tr = Float64Array.from(kept.model), ti = new Float64Array(n * n);
+    fft2(tr, ti, n, n, -1);
+    let dImg = 0, dT = 0, dPlain = 0, top = 0, ttop = 0, itop = 0;
+    for (let o = 0; o < n * n; o++) {
+      dImg = Math.max(dImg, Math.abs(mine[o] - fresh[o])); top = Math.max(top, Math.abs(fresh[o]));
+      dT = Math.max(dT, Math.hypot(kept.transform[0][o] - tr[o], kept.transform[1][o] - ti[o])); ttop = Math.max(ttop, Math.hypot(tr[o], ti[o]));
+      dPlain = Math.max(dPlain, Math.abs(kept.model[o] - plain.model[o])); itop = Math.max(itop, plain.model[o]);
+    }
+    // (The image itself is the one found without the clean beam, to rounding: the beams share a
+    // transform, which changes the last bits, and conjugate gradients carry them on.)
+    assert(dImg < 1e-9 * top && dT < 1e-9 * ttop && dPlain < 1e-8 * itop, `iteration ${kept.iterations}: restored off by ${dImg / top}, transform by ${dT / ttop}, the image itself by ${dPlain / itop}`);
+    notes.push(`${kept.iterations}: ${(dImg / top).toExponential(0)}, ${(dT / ttop).toExponential(0)}, ${(dPlain / itop).toExponential(0)}`);
+  }
+  return `restored image, transform and image against fresh ones and the plain run, relative: ${notes.join('; ')}`;
 });
 
 test('CLEAN suits points, maximum entropy a smooth sky: a Y of 27 dishes for 8 hours at 5 GHz', () => {

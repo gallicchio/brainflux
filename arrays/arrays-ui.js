@@ -142,14 +142,14 @@ function drawOverlay(ctx, w, h) {
   const scale = w / A.view;
   ctx.save();
   ctx.font = '12px system-ui, sans-serif';
-  // The far field begins about 2 D^2 / lambda from the array.
+  // The far field begins about 2 L^2 / lambda from an array L across.
   const [cx, cy] = centroid(A.els), Dsz = extent(A.els), rf = 2 * Dsz * Dsz;
   if (A.els.length > 1 && rf * scale < w * 0.7 && rf > 1.5) {
     const [px, py] = toPx(cx, cy, w);
     ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(px, py, rf * scale, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('2D²/λ', px + rf * scale * 0.71 + 4, py - rf * scale * 0.71 - 4);
+    ctx.fillText('2L²/λ', px + rf * scale * 0.71 + 4, py - rf * scale * 0.71 - 4);
   }
   // The beam's direction, named.
   if (info && info.beam !== null && !info.omni && A.phaseMode !== 'focus') {
@@ -360,6 +360,9 @@ function drawPolar() {
   }
   if (A.factors) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.font = '12px system-ui, sans-serif';
+    // (On the panel's colour, over the angle label it would otherwise run into.)
+    const lines = A.kind === 'dipole' ? 3 : 2, wide = Math.max(...['— the pattern', '- - array factor', '··· one element'].map((t) => ctx.measureText(t).width));
+    ctx.fillStyle = c.panel; ctx.globalAlpha = 0.9; ctx.fillRect(2, 3, wide + 8, 16 * lines + 4); ctx.globalAlpha = 1;
     ctx.fillStyle = c.accent; ctx.fillText('— the pattern', 6, 6);
     ctx.fillStyle = c.ink2; ctx.fillText('- - array factor', 6, 22);
     if (A.kind === 'dipole') { ctx.fillStyle = c.warn; ctx.fillText('··· one element', 6, 38); }
@@ -386,13 +389,15 @@ function readouts() {
     let lo = 0, hi = 0;
     for (const e of A.els) { const a = Math.atan2(e.x - fx, e.y - fy) - ax, w = Math.atan2(Math.sin(a), Math.cos(a)); lo = Math.min(lo, w); hi = Math.max(hi, w); }
     const s = Math.sin(Math.min(Math.PI / 2, hi)) + Math.sin(Math.min(Math.PI / 2, -lo));
+    const spot = focalSpot();
     add('Focus', [{ v: r, dec: 2, w: 5 }, '\u00a0λ from the middle of the array']);
-    if (s > 0.02) add('Spot', ['dark about λ/(sin α₁ + sin α₂)\u00a0=\u00a0', { v: 1 / s, dec: 2, w: 4 }, '\u00a0λ to either side']);
+    if (spot.dark !== null) add('Spot', ['dark\u00a0', { v: spot.dark, dec: 2, w: 4 }, '\u00a0λ either side of its middle', s > 0.02 ? ['; λ/(sin α₁\u00a0+\u00a0sin α₂)\u00a0=\u00a0', { v: 1 / s, dec: 2, w: 4 }, '\u00a0λ'] : []].flat());
+    if (spot.shift !== null) add('Brightest', [{ v: Math.abs(spot.shift), dec: 2, w: 4 }, spot.shift <= 0 ? '\u00a0λ nearer the array than the cross' : '\u00a0λ beyond the cross']);
     add('Far field', ['no single beam: the waves meet at the focus and spread out again']);
   } else if (info.omni) add('Beam', ['none: the same power within 3 dB in every direction']);
   else {
     // Each row names what it is in words a first-time reader knows, and where it is in the plot.
-    add('Beam direction', ['θ = ', ...deg(info.beam), ' (the black line)']);
+    add('Beam direction', ['θ = ', ...deg(info.beam), ' (the line from the centre)']);
     add('Beamwidth', [{ v: info.hpbw / DEG, dec: 1, w: 5 }, '° between the half-power (−3 dB) points']);
     // A grating lobe proper: an equally spaced line with d > lambda / (1 + |sin theta0|).
     const grating = A.layout === 'line' && A.phaseMode === 'steer' && A.d > 1 / (1 + Math.abs(Math.sin(A.theta0 * DEG))) - 1e-9;
@@ -403,7 +408,8 @@ function readouts() {
   // (No line breaks either side of an "=": a wrapped line keeps the equation whole.)
   if (D > 0 && A.phaseMode !== 'focus') add('Directivity D', [{ v: D, dec: 1, w: 5 }, '× an isotropic antenna’s power towards the beam (', { v: 10 * Math.log10(D), dec: 1, w: 4 }, '\u00a0dBi)']);
   const Dsz = extent(A.els);
-  add('Elements', [{ v: A.els.length, dec: 0, w: 2 }, ', spanning D\u00a0=\u00a0', { v: Dsz, dec: 1, w: 4 }, '\u00a0λ; far field beyond 2D²/λ\u00a0=\u00a0', { v: 2 * Dsz * Dsz, dec: 1, w: 6 }, '\u00a0λ']);
+  // (L for the array's size: D is the directivity.)
+  add('Elements', [{ v: A.els.length, dec: 0, w: 2 }, ', spanning L\u00a0=\u00a0', { v: Dsz, dec: 1, w: 4 }, '\u00a0λ; far field beyond 2L²/λ\u00a0=\u00a0', { v: 2 * Dsz * Dsz, dec: 1, w: 6 }, '\u00a0λ']);
   // The rows are made again only when the quantities shown change; otherwise only their numbers.
   const key = rows.map(([k, , cls]) => `${k}|${cls}`).join(';');
   if (box._rows !== key) {
@@ -411,6 +417,34 @@ function readouts() {
     box.replaceChildren(...rows.flatMap(([k, , cls]) => [el('dt', {}, k), el('dd', { class: cls || undefined })]));
   }
   rows.forEach(([, parts], i) => setSlots(box.children[2 * i + 1], parts));
+}
+
+/**
+ * The focal spot, measured from the field: across the line from the array's middle through the
+ * cross, the distance from the cross to the first dark point on each side (averaged); and along
+ * that line, where the intensity is greatest, less the cross's distance (negative: nearer the
+ * array).  Within 3 wavelengths of the cross; null where it finds none.
+ */
+function focalSpot() {
+  const [cx, cy] = centroid(A.els), [fx, fy] = A.focus, L = Math.hypot(fx - cx, fy - cy);
+  if (!(L > 1e-6)) return { dark: null, shift: null };
+  const ex = (fx - cx) / L, ey = (fy - cy) / L, m = 300, span = 3, el = elem();
+  // (Not within a third of a wavelength of an element, where its own wave diverges.)
+  const I = (x, y) => {
+    if (A.els.some((e) => Math.hypot(x - e.x, y - e.y) < 0.33)) return NaN;
+    const [a, b] = fieldAt(A.els, el, x, y); return a * a + b * b;
+  };
+  const across = (t) => I(fx - t * ey, fy + t * ex), along = (t) => I(fx + t * ex, fy + t * ey);
+  const firstDark = (dir) => {
+    let prev = across(0);
+    for (let k = 1; k <= m; k++) { const t = (dir * span * k) / m, v = across(t); if (v > prev) return Math.abs(t) - span / m; prev = v; }
+    return null;
+  };
+  const a = firstDark(1), b = firstDark(-1);
+  let best = 0, bv = -1;
+  for (let k = -m; k <= m; k++) { const t = (span * k) / m; if (L + t < 0.25) continue; const v = along(t); if (v > bv) { bv = v; best = t; } }
+  const edge = Math.abs(Math.abs(best) - span) < 1e-9 || L + best < 0.26;
+  return { dark: a !== null && b !== null ? (a + b) / 2 : null, shift: edge ? null : best };
 }
 
 // ------------------------------------------------------------------ animation
@@ -495,8 +529,15 @@ const focusBox = el('div', { class: 'stack' }, fxSlider, fySlider, el('div', { c
 const manualBox = el('div', { class: 'note' }, 'Click an element to set its amplitude and phase.');
 $('#phase-box').append(steerBox, focusBox, manualBox);
 function syncFocus() { fxSlider.value = A.focus[0]; fySlider.value = A.focus[1]; }
+const HINTS = {
+  steer: 'Drag an element to move it; double-click to add one. Slide θ₀ in the panel to swing the beam, or click an element to set its own strength and phase.',
+  focus: 'Drag the cross, or click anywhere, to move the focus; drag an element to move it, double-click to add one.',
+  manual: 'Click an element and set its own strength and phase in the panel; drag it to move it, double-click to add one.',
+};
 function setPhaseMode(m) {
   A.phaseMode = m; phaseSeg.value = m;
+  const hint = $('#field-hint');
+  if (hint.textContent !== HINTS[m]) hint.textContent = HINTS[m];
   steerBox.hidden = m !== 'steer'; focusBox.hidden = m !== 'focus'; manualBox.hidden = m !== 'manual';
   if (m !== 'steer' && A.sweep) { A.sweep = false; sweepToggle.on = false; }
   arraysChanged();
