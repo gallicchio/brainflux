@@ -155,9 +155,11 @@ export class Propagator {
    * wTop > 0 leaves out frequencies above it, rolling off the top 40% below it smoothly (cos²):
    * a sharp front, which has every frequency, is then drawn rounded over a time of about 3/wTop,
    * which a picture cannot show anyway, at a fraction of the cost.
-   * Returns {re, im, w} (w: the local frequency, NaN where the field is negligible).
+   * Returns {re, im, w} (w: the local frequency, NaN where the field is negligible; all NaN with
+   * freq = false, which saves a third of the work when the colour is not wanted).
    */
-  snapshot(t, z0, dz, M, wTop = 0) {
+  snapshot(t, z0, dz, M, wTop = 0, freq = true) {
+    if (!freq) return this.snapshotField(t, z0, dz, M, wTop);
     const out = { re: new Float64Array(M), im: new Float64Array(M), w: new Float64Array(M) };
     const { Xr, Xi, pr, pi, dw, sig, t0 } = this, wr = new Float64Array(M), wi = new Float64Array(M);
     if (!sig || !this.n) return out;
@@ -188,6 +190,33 @@ export class Propagator {
       const p = out.re[j] ** 2 + out.im[j] ** 2;
       // The local frequency −d(arg a)/dt = Re(a* Σ ω c)/|a|².
       out.w[j] = p > 1e-8 * top ? (out.re[j] * wr[j] + out.im[j] * wi[j]) / p : NaN;
+    }
+    return out;
+  }
+
+  /** snapshot() without the local frequency (w all NaN): the same sum, a third less work. */
+  snapshotField(t, z0, dz, M, wTop = 0) {
+    const out = { re: new Float64Array(M), im: new Float64Array(M), w: new Float64Array(M).fill(NaN) };
+    const { Xr, Xi, pr, pi, dw, sig, t0 } = this, { re, im } = out;
+    if (!sig || !this.n) return out;
+    const knee = 0.6 * wTop;
+    for (const k of sig) {
+      const w = k * dw;
+      if (wTop > 0 && w > wTop) break;
+      const f = (k === 0 ? 1 : 2) * (wTop > 0 && w > knee ? Math.cos((0.5 * Math.PI * (w - knee)) / (wTop - knee)) ** 2 : 1);
+      const kr = w + pr[k], ki = pi[k];
+      const lnA0 = -ki * z0;
+      if (lnA0 < -700) continue;
+      const amp = Math.exp(Math.min(300, lnA0)), ph = kr * z0 + w * (t0 - t);
+      let cr = f * amp * (Xr[k] * Math.cos(ph) - Xi[k] * Math.sin(ph));
+      let ci = f * amp * (Xr[k] * Math.sin(ph) + Xi[k] * Math.cos(ph));
+      const g = Math.exp(Math.min(300, -ki * dz)), mr = g * Math.cos(kr * dz), mi = g * Math.sin(kr * dz);
+      for (let j = 0; j < M; j++) {
+        re[j] += cr; im[j] += ci;
+        const nr = cr * mr - ci * mi;
+        ci = cr * mi + ci * mr; cr = nr;
+        if (cr * cr + ci * ci < 1e-300 && j > 0) break;
+      }
     }
     return out;
   }

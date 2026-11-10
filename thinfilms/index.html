@@ -135,8 +135,10 @@
     <p>Why: light reflected from the front and back surfaces interferes.  The front reflection
     (air to water) flips the sign, the back one (water to air) does not, so a wavelength is
     reflected strongly when the round trip $2nd$ is a whole number of wavelengths plus a half,
-    and each thickness picks out its own colours.  Thinner than about 25 nm, the two reflections
-    cancel for every colour and the film is black: real films do this just before they burst.</p>
+    and each thickness picks out its own colours.  Much thinner than that, the round trip is a
+    small part of a wavelength for every colour and the two reflections nearly cancel ($R$ at
+    550 nm falls as $d^2$: 0.2% at 10 nm, against 7.9% for a quarter wave, 103 nm): below about
+    25 nm the film is black.  Real films do this just before they burst.</p>
   </article>
 
   <article class="exp" data-setup="fresnel" data-frame="720x267">
@@ -147,8 +149,12 @@
     first falls to zero and then rises.</p>
     <p>Why: at normal incidence $R=\left(\frac{n_1-n_2}{n_1+n_2}\right)^2$, which the glass's
     $n=1.52$ makes 4.2%.  The rise at glancing angles is why a lake reflects the sky so well when
-    you look across it.  In front of the glass the incident and reflected waves make a weak
-    standing wave: see the ripple in the stack picture.</p>
+    you look across it.  What is not reflected is transmitted: $R+T=1$ at every angle, for either
+    polarisation.  $T$ is not $|t|^2$ but $\frac{n_2\cos\theta_2}{n_1\cos\theta_1}|t|^2$ (Hecht's
+    form; Griffiths writes it $\alpha\beta\,t^2$), the power crossing the surface: a wave's
+    intensity in a medium is proportional to $n|E|^2$, and the transmitted beam is wider or
+    narrower than the incident one by $\cos\theta_2/\cos\theta_1$.  In front of the glass the
+    incident and reflected waves make a weak standing wave: see the ripple in the stack picture.</p>
   </article>
 
   <article class="exp" data-setup="brewster" data-frame="720x267">
@@ -159,7 +165,7 @@
     <p>Why: $\tan\theta_B=n_2/n_1$.  At this angle the refracted and reflected rays would be at
     right angles, and the dipoles in the glass, driven along the p-field, do not radiate along
     their own axis.  Polarising sunglasses, whose axis is vertical, cut the glare from water and
-    roads because it is s-polarised.</p>
+    roads because it is mostly s-polarised ($\vec E$ horizontal).</p>
   </article>
 
   <article class="exp" data-setup="tir" data-frame="720x517">
@@ -230,8 +236,10 @@
     5 pairs give 76.8%, 92.3%, 97.6% and 99.8%.  Then drag the angle up: the band moves to
     shorter wavelengths.</p>
     <p>Why: every reflection comes back in step, and with $N$ pairs the peak reflectance is
-    $$R=\left(\frac{n_0n_L^{2N}-n_sn_H^{2N}}{n_0n_L^{2N}+n_sn_H^{2N}}\right)^2$$
-    for $(HL)^N$ on a substrate of index $n_s$, which approaches 1 quickly.  The width of the
+    $$R=\left(\frac{n_0n_sn_L^{2N}-n_H^{2N+2}}{n_0n_sn_L^{2N}+n_H^{2N+2}}\right)^2$$
+    for $(HL)^N H$ between a medium of index $n_0$ and a substrate of index $n_s$ (each
+    quarter-wave layer turns the admittance $Y$ behind it into $n^2/Y$), which approaches 1
+    quickly: with $n_H=2.65$, $n_L=1.46$ and $n_s=1.52$, $N=1$ gives the 76.8% above.  The width of the
     band is set by the index contrast,
     $\frac{\Delta\lambda}{\lambda_0}\approx\frac{4}{\pi}\arcsin\frac{n_H-n_L}{n_H+n_L}$: choose
     BK7 glass ($n=1.52$) for H, close to SiO₂, and it shrinks to a sliver whose peak reflects
@@ -256,10 +264,13 @@
 
   <article class="exp" data-setup="etalon" data-frame="720x280">
     <h3>10. A Fabry–Pérot etalon: a comb of transmission peaks</h3>
-    <p><b>Set it up:</b> two thin silver films with 2 µm of air between them.  The plot against
-    wavelength is a comb of peaks, and the right-hand plot, $T$ against the gap, shows the same
-    comb as the gap grows: a peak every half wavelength, 275 nm.  The readout measures the peaks'
-    spacing, 63.8 nm at 514 nm, and the <em>finesse</em>, their spacing over their width: 16.4.
+    <p><b>Set it up:</b> two thin silver films on glass with 2 µm of air between them, and the
+    light at 514 nm, on one of the transmission peaks.  The plot against wavelength is a comb of
+    peaks, and the right-hand plot, $T$ against the gap, shows the same comb as the gap grows: a
+    peak every half wavelength, 257 nm.  The stack picture shows the light piled up between the
+    mirrors, 20 times the incoming $|E|^2$; drag the wavelength a few nanometres off the peak and
+    it drains away.  The readout measures the peaks' spacing, 63.8 nm at 514 nm, and the
+    <em>finesse</em>, their spacing over their width: 16.4.
     Select each silver film in turn and thicken it to 55 nm: the finesse rises to 30.4, but the
     peaks drop from 41% to 16%.</p>
     <p>Why: transmission peaks wherever the round trip is a whole number of wavelengths,
@@ -342,7 +353,12 @@
   with $\delta=k_zd$, the phase a wave picks up crossing the layer, and $\eta=N\cos\theta$ (s) or
   $N/\cos\theta$ (p), the layer's ratio $H/E$ of tangential fields for a wave going forward (in
   units of vacuum's, $1/377\ \Omega$).  Then $r=(\eta_0-Y)/(\eta_0+Y)$, where $Y=H/E$ at the front
-  of the stack.  The signs of $i$ are those of waves $e^{i(k_zz-\omega t)}$; books that write
+  of the stack.  Here $r$ and $t$ are ratios of tangential fields, so for p polarisation $r_p$
+  has Griffiths' sign ($r_p=r_s$ at normal incidence); Hecht's $r_\parallel$, which follows the
+  field vector itself, is its negative.  The fraction transmitted is the energy flowing across
+  the surface, $T=\mathrm{Re}(\eta_s)\,|t|^2/\eta_0$ with $\eta_s$ the substrate's $\eta$, which
+  for a single interface is Hecht's $T=\frac{n_t\cos\theta_t}{n_i\cos\theta_i}\,t^2$; what is
+  neither reflected nor transmitted is absorbed, $A=1-R-T$.  The signs of $i$ are those of waves $e^{i(k_zz-\omega t)}$; books that write
   $e^{i(\omega t-k_zz)}$ (Macleod's, for one) have $+i$ and $N=n-i\kappa$.  Indices are complex,
   $N=n+i\kappa$, so metals and evanescent waves need nothing special.  Every number is exact for
   ideal flat layers and plane waves; the materials are the approximations.</p>
@@ -352,9 +368,14 @@
   cent in the visible but not everywhere (their gold absorbs a little more than real gold, so
   its plasmon dip is shallower).  Evaporated films differ from bulk: real TiO₂ coatings have
   $n\approx2.3$, not 2.6.</p>
-  <p>Colours: the CIE 1931 colour-matching functions (the analytic fit of Wyman, Sloan and
-  Shirley, 2013) weight the reflected spectrum under daylight (D65) or equal-energy light, and
-  the result is converted to your screen's sRGB, adapted so that a perfect mirror is white.
+  <p>Colours: the CIE 1931 colour-matching functions $\bar x$, $\bar y$, $\bar z$ (the analytic
+  fit of Wyman, Sloan and Shirley, 2013) weight the reflected spectrum $R(\lambda)$ under the
+  light's spectrum $I(\lambda)$, daylight (D65) or equal energy:
+  $X=\int R\,I\,\bar x\,d\lambda\,/\int I\,\bar y\,d\lambda$, and $Y$ and $Z$ likewise with
+  $\bar y$ and $\bar z$.  $Y$ is the fraction of the light's brightness reflected, the number under
+  each swatch.  A fixed 3×3 matrix (the sRGB standard's) turns $X$, $Y$, $Z$ into your screen's
+  red, green and blue, after adapting the light's white to the screen's so that a perfect mirror
+  is white, and the screen's gamma curve comes last.
   The picture is brightened (the <em>Brightness</em> slider) so that faint reflections show
   their colour; the swatches say how much light is really reflected.  The light is unpolarised
   and coherent across each layer: very thick layers would wash out to white in reality, as

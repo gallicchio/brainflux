@@ -283,9 +283,16 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     run(b, 'spread')
     ms = b.eval('__app.bench()')
     check(ms < 33, f"spreading in glass: {ms:.1f} ms an animation frame")
-    st = b.eval('[1, 1.732, 5].map((mm) => __app.pulseAt(mm / 1.97327e-4).stretch)')
-    check(abs(st[0] - 2 ** 0.5) < 0.02 and abs(st[1] - 2) < 0.02 and abs(st[2] - 26 ** 0.5) < 0.05,
-          f"a 10 fs pulse in fused silica grows {st[0]:.3f}, {st[1]:.3f}, {st[2]:.3f} times in 1, 1.73, 5 mm (√(1 + (z/L)²) with L = 1.0 mm: 1.414, 2.000, 5.099)")
+    st = b.eval('[1, 1.73, 5].map((mm) => __app.pulseAt(mm / 1.97327e-4).stretch)')
+    # L = T0²/β2: T0 = T/2√ln2 with T = 10 fs, β2 = d²k/dω² at 800 nm from the page's own n(ω).
+    h = 1e-3
+    k = lambda w: w * b.eval(f'__app.optics({w}).n')
+    # (In the page's units, c = 1, ħω in eV: a time unit is 0.658212 fs, a length 1.97327e-4 mm.)
+    w0 = 1.55; beta2 = (k(w0 + h) - 2 * k(w0) + k(w0 - h)) / h ** 2 * 0.658212 ** 2 / 1.97327e-4   # fs²/mm
+    L = (10 / (2 * math.sqrt(math.log(2)))) ** 2 / beta2
+    form = [math.sqrt(1 + (z / L) ** 2) for z in (1, 1.73, 5)]
+    check([round(s, 3) for s in st] == [1.416, 2.002, 5.111] and all(abs(s / f - 1) < 1e-3 for s, f in zip(st, form)) and round(L, 3) == 0.997 and round(beta2, 1) == 36.2,
+          f"a 10 fs pulse in fused silica grows {st[0]:.3f}, {st[1]:.3f}, {st[2]:.3f} times in 1, 1.73, 5 mm, within 0.1% of √(1 + (z/L)²) ({', '.join(f'{f:.3f}' for f in form)}) with L = T0²/β2 = {L:.3f} mm, β2 = {beta2:.2f} fs²/mm")
     vac = b.eval('[0, 0.5, 1, 1.7, 2.3, 3.1, 3.9, 4.6, 5].map((mm) => __app.vacuumInView(mm / 1.97327e-4))')
     check(vac[0] > 0.99 and max(vac[2:]) < 1e-12, f"moving with the pulse, the vacuum pulse is in view at z = 0 ({vac[0]:.3f}) and gone, not wrapped round, beyond 1 mm (largest {max(vac[2:]):.1e})")
     sp = b.eval('(() => { const [a, c] = __app.run(); return [__app.snapshotPeak(a + 0.4 * (c - a)), __app.snapshotPeak(a + 0.8 * (c - a))]; })()')
@@ -316,8 +323,13 @@ with Browser('dispersion/index.html', size=(1400, 900)) as b:
     b.eval("location.hash = '#setup=precursors'")
     b.wait("__app.state.pulse.shape === 'step'", timeout=20)
     check(b.eval('__app.state.pulse.shape') == 'step', 'typing #setup=precursors into the address opens that experiment')
-    b.eval("location.reload()"); b.wait('window.__app && __app.ready', timeout=60)
+    b.eval("window.__app = undefined; location.reload()"); b.wait('window.__app && __app.ready', timeout=60)
     check(b.eval('__app.state.pulse.shape') == 'step' and b.eval('__app.state.medium') == 'brillouin', 'and so does loading it')
+    # A hand-edited address with impossible values: a negative depth, range and length, a carrier of 0.
+    b.eval("location.hash = '#v=pulse&m=one&pz=-5&W=-4&pT=0&pw=0&tv=-1'"); b.wait("__app.state.view === 'pulse'", timeout=20); b.eval('__app.step(0, 1)')
+    s = b.eval('__app.state'); ro = b.eval("document.querySelector('#readout').textContent")
+    check(s['pulse']['z'] >= 0 and s['wmax'] > 0 and s['pulse']['T'] > 0 and s['pulse']['w0'] > 0 and s['tView'] > 0 and 'NaN' not in ro and '−5' not in ro,
+          f"an address with a negative depth, range or length is not taken at its word (z = {s['pulse']['z']}, range {s['wmax']}, T = {s['pulse']['T']})")
 
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions' + ('' if not errors else ': ' + '; '.join(errors[:3])))

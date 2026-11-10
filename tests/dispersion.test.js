@@ -414,6 +414,9 @@ test('a picture in space (the field at one moment at every depth) agrees with th
     }
     // (The picture leaves out frequencies below 1e-6 of the incident spectrum's peak amplitude.)
     assert(err < 1e-5, `${shape}: snapshot against field(): ${err} (largest ${top})`);
+    // Without the local frequency (what the page asks for a front), the same field, to round-off.
+    const bare = P.snapshot(t, z0, dz, M, 0, false);
+    for (let j = 0; j < M; j++) assert(Math.abs(bare.re[j] - snap.re[j]) <= 1e-12 * top && Math.abs(bare.im[j] - snap.im[j]) <= 1e-12 * top && Number.isNaN(bare.w[j]), `${shape}: the field without the local frequency differs at ${j}`);
     notes.push(`${shape} ${err.toExponential(1)}`);
   }
   // Below the line the crests move at c/n and the envelope at c/n_g: the local frequency at the

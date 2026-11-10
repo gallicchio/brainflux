@@ -21,7 +21,7 @@ import { scopeTrace } from '../lib/scope.js';
 // The simulation has c = 1 and works in one frequency unit; each medium says what that unit is.
 // Frequencies are shown as they are; times are multiplied by tS and distances by zS.
 const UNITS = {
-  au: { w: 'ω', t: 't', tu: '', tS: 1, z: 'z', zu: '', zS: 1, note: 'c = 1; t in units of 1/ω, z of c/ω' },
+  au: { w: 'ω', t: 't', tu: '', tS: 1, z: 'z', zu: '', zS: 1, note: 'c = 1; ω in a unit ω_u, t in 1/ω_u, z in c/ω_u' },
   eV: { w: 'ħω (eV)', t: 't (fs)', tu: 'fs', tS: 0.658212, z: 'z (mm)', zu: 'mm', zS: 1.97327e-4, note: 'frequencies are ħω in eV' },
   MHz: { w: 'f (MHz)', t: 't (μs)', tu: 'μs', tS: 0.159155, z: 'z (km)', zu: 'km', zS: 0.0477135, note: 'frequencies are f = ω/2π in MHz' },
   THz: { w: 'ν (THz)', t: 't (ps)', tu: 'ps', tS: 0.159155, z: 'z (μm)', zu: 'μm', zS: 47.7135, note: 'frequencies are ν = ω/2π in THz' },
@@ -99,6 +99,7 @@ const state = {
 // incident peak, or the switch-on, reaches z = 0); the sweep's direction.
 const anim = { phase: 0, t: -1e9, hold: 0, sweepDir: 1, crest: null };
 let resp = oscillatorResponse(state.oscs, state.epsInf);
+let respSerial = 0;          // counts the media made by rebuild(): part of the top plot's key
 let drawn = null;           // { grid, re, im, chiInf } when the medium is drawn by hand
 let kkGridCache = null;
 let typedExpr = null, typedParams = {};
@@ -122,6 +123,7 @@ function rebuild() {
   else if (state.source === 'typed' && typedExpr) resp = functionResponse(typedFn);
   else resp = oscillatorResponse(state.oscs, state.epsInf);
   for (const k of Object.keys(cache)) delete cache[k];
+  respSerial++;
   pulseMediumDirty = true;
   dirty();
   scheduleHash();
@@ -247,8 +249,9 @@ function topHandle(ctx, f, x, label, color, dash = [2, 3]) {
   ctx.fillStyle = colors.panel; ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.rect(x - 6, f.top - 14, 12, 12); ctx.fill(); ctx.stroke();
   ctx.fillStyle = color; ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
-  // Beside the handle, on whichever side it fits (or as near as it can get).
-  const w = ctx.measureText(label).width, cv = ctx.canvas.getBoundingClientRect().width;
+  // Beside the handle, on whichever side it fits (or as near as it can get).  (The canvas's width
+  // from the frame's margins: the picture may be drawn on a canvas that is not on the page.)
+  const w = ctx.measureText(label).width, cv = f.right + f.m.right;
   let lx = x + 10;
   if (lx + w > cv - 4) lx = x - 10 - w;
   if (lx < 4) lx = Math.max(4, Math.min(cv - 4 - w, x + 10));
@@ -287,18 +290,57 @@ function imagAt(oscs, w) {
   return state.display === 'eps' ? o.ei[0] : o.k[0];
 }
 
+// A plot's picture that does not change from frame to frame (its curves, axes and words) is kept
+// in a canvas off the page and copied in, so that a frame draws again only what moves: the light's
+// handle as it sweeps, the "now" line as a pulse runs, nothing of the top plot when the detector
+// moves.  (Thick anti-aliased curves are the slowest thing a canvas draws without a graphics chip.)
+// key: everything the picture depends on, besides the canvas's size and the colours.  draw(ctx,
+// width, height) draws it and returns what the page needs to know of it (its frame, handles...).
+const kept = new Map();
+function keptPicture(cv, key, draw) {
+  const { ctx, width, height, dpr } = fitCanvas(cv);
+  const full = `${key}|${cv.width}x${cv.height}|${dpr}|${colors.ink}${colors.panel}${colors.re}`;
+  let k = kept.get(cv);
+  if (!k) kept.set(cv, k = { canvas: document.createElement('canvas'), key: null, data: null });
+  if (k.key !== full) {
+    if (k.canvas.width !== cv.width || k.canvas.height !== cv.height) { k.canvas.width = cv.width; k.canvas.height = cv.height; }
+    const c2 = k.canvas.getContext('2d');
+    c2.setTransform(1, 0, 0, 1, 0, 0); c2.clearRect(0, 0, cv.width, cv.height); c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    k.data = draw(c2, width, height, dpr);
+    k.key = full;
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(k.canvas, 0, 0); ctx.restore();
+  return { ctx, width, height, data: k.data };
+}
+
 function drawResponse() {
-  const { ctx, width, height } = fitCanvas(respCanvas);
-  ctx.clearRect(0, 0, width, height);
+  if (state.view === 'pulse') ensurePropagator();   // (its key, propKey, names the pulse's spectrum)
+  const key = [respSerial, state.view, state.display, state.showNg, state.sel, state.wmax, state.units, state.medium, state.source,
+    (frozenRange || state.yRange || []).join(','), state.view === 'pulse' ? `${propKey}|${state.pulse.w0}` : ''].join('|');
+  const pic = keptPicture(respCanvas, key, drawResponseKept);
+  ({ f: respFrame, range: respRange } = pic.data);
+  handles = pic.data.handles.slice();
+  // The light's frequency, which sweeps: drawn afresh on every frame.
+  if (state.view !== 'medium') return;
+  const f = respFrame, x = f.X(state.probe), sym = U().w.split(' ')[0];
+  if (x < f.left - 1 || x > f.right + 1) return;
+  // (Shorter on a phone, where the long label fits on neither side of the handle.)
+  const label = !state.sweep ? `the light’s ${sym}: drag` : pic.width < 560 ? `${sym}, sweeping: drag` : `the light’s ${sym} (sweeping: drag to stop)`;
+  topHandle(pic.ctx, f, x, label, colors.ink2);
+  handles.push({ type: 'probe', x, y: f.top - 8, r: 15 });
+}
+
+/** The top plot, all but the light's handle: n and κ (or ε′ and ε″), the bands, the lines' handles
+ *  and, for pulses, the spectrum, n_g and the carrier's handle. */
+function drawResponseKept(ctx, width, height) {
   const f = new Frame(ctx, width, height, { left: 50, right: 14, top: 36, bottom: 34 });
-  respFrame = f;
   f.x0 = 0; f.x1 = state.wmax;
   const ws = columnsFor(f), o = optics(resp, ws);
   const [A, B] = state.display === 'eps' ? [o.er, o.ei] : [o.n, o.k];
   const showNg = state.showNg && state.view === 'pulse';
   const ng = showNg ? groupIndex(resp, ws, state.source === 'drawn' && drawn ? 2 * drawn.grid.dw : 2e-4 * state.wmax) : null;
-  respRange = frozenRange || state.yRange || autorange([A, B], [0, 1], skipColumns(ws.length));
-  [f.y0, f.y1] = respRange;
+  const range = frozenRange || state.yRange || autorange([A, B], [0, 1], skipColumns(ws.length));
+  [f.y0, f.y1] = range;
 
   f.clip();
   drawBands(ctx, f);
@@ -321,18 +363,14 @@ function drawResponse() {
   ctx.strokeStyle = colors.re; polyline(ctx, f, ws, A);
   ctx.restore();
 
-  // Handles: the resonances, then the light's frequency (medium view) or the carrier (pulses).
+  // Handles: the resonances, then the carrier (pulses; the light's frequency is drawResponse's).
   handles = [];
   if (state.source === 'osc') drawHandles(ctx, f);
-  const top = (w, label, type) => {
-    const x = f.X(w);
-    if (x < f.left - 1 || x > f.right + 1) return;
-    topHandle(ctx, f, x, label, colors.ink2);
-    handles.push({ type, x, y: f.top - 8, r: 15 });
-  };
-  const sym = U().w.split(' ')[0];
-  if (state.view === 'medium') top(state.probe, state.sweep ? `the light’s ${sym} (sweeping: drag to stop)` : `the light’s ${sym}: drag`, 'probe');
-  if (state.view === 'pulse') top(state.pulse.w0, 'carrier ω_c: drag', 'carrier');
+  const xc = f.X(state.pulse.w0);
+  if (state.view === 'pulse' && xc >= f.left - 1 && xc <= f.right + 1) {
+    topHandle(ctx, f, xc, 'carrier ω_c: drag', colors.ink2);
+    handles.push({ type: 'carrier', x: xc, y: f.top - 8, r: 15 });
+  }
   f.axes({ xlabel: U().w, colors });
   const items = state.display === 'eps'
     ? [{ label: 'ε′ = Re ε', color: colors.re }, { label: 'ε″ = Im ε (absorption)', color: colors.im }]
@@ -343,6 +381,7 @@ function drawResponse() {
   if (state.yRange) ctx.fillText(width > 640 ? 'zoomed (double-click for automatic)' : 'zoomed', width > 640 ? f.right : f.right - 4, width > 640 ? 6 : f.top + 4);
   else if (state.source === 'osc' && state.oscs.length && width > 760) ctx.fillText('● drag a line about (up: stronger) · ◇ its width', f.right, 6);
   ctx.restore();
+  return { f, range, handles: handles.slice() };
 }
 
 function drawHandles(ctx, f) {
@@ -493,23 +532,25 @@ function stopSweep() { if (state.sweep) { state.sweep = false; sweepToggle.on = 
 const reflCanvas = $('#refl');
 let reflFrame = null;
 function drawReflectance() {
-  const { ctx, width, height } = fitCanvas(reflCanvas);
-  ctx.clearRect(0, 0, width, height);
-  const f = new Frame(ctx, width, height, { left: 50, right: 14, top: 22, bottom: 34 });
-  reflFrame = f;
-  f.x0 = 0; f.x1 = state.wmax; f.y0 = 0; f.y1 = 1.05;
-  const ws = columnsFor(f), { R } = optics(resp, ws);
-  f.clip();
-  drawBands(ctx, f);
-  ctx.fillStyle = colors.refl; ctx.globalAlpha = 0.12;
-  ctx.beginPath(); ctx.moveTo(f.left, f.bottom);
-  for (let i = 0; i < ws.length; i++) ctx.lineTo(f.X(ws[i]), f.Y(R[i]));
-  ctx.lineTo(f.right, f.bottom); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
-  ctx.strokeStyle = colors.refl; ctx.lineWidth = 2.2; polyline(ctx, f, ws, R);
-  if (state.view === 'medium') vline(ctx, f, state.probe, colors.ink2, [2, 3]);
-  ctx.restore();
-  f.axes({ xlabel: U().w, colors });
-  legend(ctx, f, [{ label: width > 640 ? 'R = |(ñ − 1)/(ñ + 1)|², the fraction reflected at normal incidence' : 'R, the fraction reflected', color: colors.refl }], f.left + 4, 2);
+  const pic = keptPicture(reflCanvas, [respSerial, state.wmax, state.units, state.medium].join('|'), (ctx, width, height) => {
+    const f = new Frame(ctx, width, height, { left: 50, right: 14, top: 22, bottom: 34 });
+    f.x0 = 0; f.x1 = state.wmax; f.y0 = 0; f.y1 = 1.05;
+    const ws = columnsFor(f), { R } = optics(resp, ws);
+    f.clip();
+    drawBands(ctx, f);
+    ctx.fillStyle = colors.refl; ctx.globalAlpha = 0.12;
+    ctx.beginPath(); ctx.moveTo(f.left, f.bottom);
+    for (let i = 0; i < ws.length; i++) ctx.lineTo(f.X(ws[i]), f.Y(R[i]));
+    ctx.lineTo(f.right, f.bottom); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = colors.refl; ctx.lineWidth = 2.2; polyline(ctx, f, ws, R);
+    ctx.restore();
+    f.axes({ xlabel: U().w, colors });
+    legend(ctx, f, [{ label: width > 640 ? 'R = |(ñ − 1)/(ñ + 1)|², the fraction reflected at normal incidence' : 'R, the fraction reflected', color: colors.refl }], f.left + 4, 2);
+    return f;
+  });
+  reflFrame = pic.data;
+  // The light's frequency, which sweeps.
+  if (state.view === 'medium') vline(pic.ctx, reflFrame, state.probe, colors.ink2, [2, 3]);
 }
 // The reflectance plot moves the light's frequency too.
 let reflDrag = false;
@@ -800,7 +841,13 @@ function pulseAt(z) {
   // The vacuum pulse is the incident one (as smoothed for the grid), moved by the frame's shift:
   // read off by interpolation, never through the FFT, so that it cannot wrap round the periodic
   // window when the frame moving with the pulse has left it far behind.
-  if (!vacCache || vacCache.P !== P) { const v = P.field(0, 0, true); vacCache = { P, br: Float64Array.from(v.re), bi: Float64Array.from(v.im), tc: NaN }; }
+  if (!vacCache || vacCache.P !== P) {
+    const v = P.field(0, 0, true), br = Float64Array.from(v.re), bi = Float64Array.from(v.im);
+    let vmax = 0;
+    for (let n = 0; n < N; n++) vmax = Math.max(vmax, br[n] * br[n] + bi[n] * bi[n]);
+    // (The incident pulse's peak, energy and moments: the reference for every depth.)
+    vacCache = { P, br, bi, tc: NaN, vmax: Math.sqrt(vmax), m0: moments(P.t, br, bi), pv: peakTime(P.t, br, bi) };
+  }
   if (vacCache.tc !== tc) {
     const { br, bi } = vacCache, vr = new Float64Array(N), vi = new Float64Array(N), shift = tc / P.dt;
     for (let n = 0; n < N; n++) {
@@ -811,7 +858,7 @@ function pulseAt(z) {
     Object.assign(vacCache, { tc, vr, vi, env: null });
   }
   // (br, bi: the incident pulse itself, unshifted: the reference for heights, energies and lengths.)
-  return { P, tc, t: P.t, mr, mi, vr: vacCache.vr, vi: vacCache.vi, br: vacCache.br, bi: vacCache.bi, N };
+  return { P, tc, t: P.t, mr, mi, vr: vacCache.vr, vi: vacCache.vi, br: vacCache.br, bi: vacCache.bi, vmax: vacCache.vmax, m0: vacCache.m0, pv: vacCache.pv, N };
 }
 
 /** The pulse at the detector (depth state.pulse.z), and what is measured of it: kept until
@@ -826,12 +873,12 @@ function trace() {
 }
 
 function measure(d, z) {
-  const { t, mr, mi, br, bi, tc } = d, sh = state.pulse.shape;
-  const m = moments(t, mr, mi), m0 = moments(t, br, bi);
+  const { t, mr, mi, tc } = d, sh = state.pulse.shape;
+  const m = moments(t, mr, mi), m0 = d.m0;
   // Times in the frame shown (peak, predicted) and after z/c (peakVac, predictedVac).
   const out = { energy: m.energy / m0.energy, ng: cache.ng0, predicted: z * (cache.ng0 - 1) - tc, predictedVac: z * (cache.ng0 - 1) };
   if (sh !== 'step') {
-    const pk = peakTime(t, mr, mi), pv = peakTime(t, br, bi);
+    const pk = peakTime(t, mr, mi), pv = d.pv;
     out.peak = pk.t; out.peakVac = pk.t + tc; out.height = pk.peak / pv.peak; out.stretch = m.rms / m0.rms;
   }
   if (sh !== 'gauss') {
@@ -849,8 +896,18 @@ const pulseCanvas = $('#pulse');
 let lastPulse = null;
 
 function drawPulse() {
-  const { ctx, width, height, dpr } = fitCanvas(pulseCanvas);
-  ctx.clearRect(0, 0, width, height);
+  const tr = trace(), P = state.pulse;
+  const key = [tr.id, P.log, P.view.join(','), state.units, P.frame, P.shape, P.z].join('|');
+  const pic = keptPicture(pulseCanvas, key, drawPulseKept), { f, tc } = pic.data;
+  lastPulse = pic.data.lastPulse;
+  // Now, while the pulse runs: the one thing that moves from frame to frame.
+  const now = anim.t - P.z - tc;
+  if (state.playing && now > P.view[0] && now < P.view[1]) vline(pic.ctx, f, now * U().tS, colors.ink2, [1, 2], 'now', 'top', 1);
+}
+
+/** The detector's record, all but the "now" line: the pulse and its envelope, the vacuum pulse,
+ *  the times marked, the legend. */
+function drawPulseKept(ctx, width, height, dpr) {
   const f = new Frame(ctx, width, height, { left: 50, right: 14, top: 24, bottom: 34 });
   const z = state.pulse.z, tr = trace(), d = tr.d, sh = state.pulse.shape, tS = U().tS, log = state.pulse.log;
   const [lo, hi] = state.pulse.view;
@@ -865,10 +922,12 @@ function drawPulse() {
   const causal = !(sh === 'gauss' && !log);
   if (causal && (!tr.envM || tr.win !== win)) { tr.envM = causalEnvelope(mr, win); tr.envV = causalEnvelope(vr, win); tr.win = win; }
   const envM = causal ? tr.envM : null, envV = causal ? tr.envV : null;
-  // Column by column: the envelopes, and the local frequency at the top of the pulse's.
+  // Column by column: the envelopes, and the local frequency at the top of the pulse's.  The samples
+  // in view, and one either side.
   const seen = new Uint8Array(cols), em = new Float64Array(cols), ev = new Float64Array(cols), wloc = new Float64Array(cols).fill(NaN);
-  let vmax = 0, mmax = 0;
-  for (let n = 0; n < t.length; n++) {
+  const ia = Math.max(0, Math.floor((lo - t[0]) / dt)), ib = Math.min(t.length - 1, Math.ceil((hi - t[0]) / dt));
+  let mmax = 0;
+  for (let n = ia; n <= ib; n++) {
     const c = colOf(t[n]);
     if (c < 0 || c >= cols) continue;
     seen[c] = 1;
@@ -885,7 +944,7 @@ function drawPulse() {
     mmax = Math.max(mmax, amp);
   }
   // The scale is the incident pulse's peak, wherever the vacuum pulse is (it may be out of view).
-  for (let n = 0; n < t.length; n++) vmax = Math.max(vmax, Math.sqrt(d.br[n] * d.br[n] + d.bi[n] * d.bi[n]));
+  const vmax = d.vmax;
   // A column no sample fell in borrows from the one before (only on very wide plots).
   for (let c = 1; c < cols; c++) if (!seen[c]) { em[c] = em[c - 1]; ev[c] = ev[c - 1]; wloc[c] = wloc[c - 1]; }
   // Scale the pulse in the medium up if it is small, and say so.
@@ -933,8 +992,7 @@ function drawPulse() {
     ctx.stroke();
   } else {
     // As a digital phosphor scope draws it (lib/scope.js): a carrier of many cycles to a pixel is
-    // a band, brightest at its edges.  The samples in view, and one either side.
-    const ia = Math.max(0, Math.floor((lo - t[0]) / dt)), ib = Math.min(t.length - 1, Math.ceil((hi - t[0]) / dt));
+    // a band, brightest at its edges.
     const x0 = f.X(t[ia] * tS), x1 = f.X(t[ib] * tS), ck = `${ia},${ib},${Math.round((x1 - x0) * dpr)},${sh}`;
     if (tr.carrierKey !== ck) {
       // A Gaussian pulse is a carrier under its envelope: redrawn finely enough to show every crest
@@ -954,7 +1012,7 @@ function drawPulse() {
   vline(ctx, f, at(-tc), colors.accent, [2, 3], 'light through vacuum');
   if (at(-tc) < f.x0) {
     ctx.save(); ctx.fillStyle = colors.accent; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    const { dec, w } = timeSlot();
+    const { dec, w } = timeSlot(tc);
     fillSlots(ctx, ['← light through vacuum arrived ', { v: tc * tS, dec, w }, `${U().tu ? ' ' + U().tu : ''} earlier`], f.left + 4, f.top + 20); ctx.restore();
   }
   if (Number.isFinite(ms.predicted) && z > 0 && sh !== 'step') vline(ctx, f, at(ms.predicted), colors.ng, [6, 3], 'group velocity says', 'bottom');
@@ -962,9 +1020,6 @@ function drawPulse() {
     vline(ctx, f, at(ms.brillouin), colors.im, [6, 3], 'n(0) z/c', 'bottom', 1);
     if (Number.isFinite(ms.predicted) && ms.predicted > 0) vline(ctx, f, at(ms.predicted), colors.ng, [6, 3], 'z/v_g', 'bottom');
   }
-  // Now, while the pulse runs.
-  const now = anim.t - z - tc;
-  if (state.playing && now > lo && now < hi) vline(ctx, f, at(now), colors.ink2, [1, 2], 'now', 'top', 1);
   ctx.restore();
   f.axes({ xlabel: state.pulse.frame === 'group' ? `${U().t} − z/v_g (moving with the pulse)` : `${U().t} − z/c (after light through vacuum would arrive)`, colors, yTicks: log, ylabel: log ? 'log₁₀ |E|' : '' });
   const zz = zSlot();
@@ -981,6 +1036,7 @@ function drawPulse() {
     ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = colors.ink3; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
     ctx.fillText('colour: the local frequency, redder or bluer than ω_c', f.right - 4, f.top + 4); ctx.restore();
   }
+  return { f, tc, lastPulse };
 }
 
 /** A legend whose first item is a title made of parts (with a live number in a fixed slot). */
@@ -995,15 +1051,29 @@ function legendParts(ctx, f, items) {
 /** The envelope of a pulse as a filled band, coloured by its local frequency (or grey). */
 function fillEnvelope(ctx, f, cols, X, em, wloc, scale, vmax, Y, colour) {
   const w0 = state.pulse.w0, dW = (2 * Math.LN2) / state.pulse.T;
-  // One path per colour (the local frequency in 33 steps), so the fill style changes rarely.
-  const paths = new Map();
-  for (let c = 0; c < cols; c++) {
-    if (em[c] * scale < 0.004 * vmax) continue;
-    let key = -1;
-    if (colour && Number.isFinite(wloc[c])) key = Math.round(16 * (1 + clamp((wloc[c] - w0) / (1.5 * dW), -1, 1)));
+  // One path per colour (the local frequency in 33 steps), so the fill style changes rarely.  Each
+  // run of columns of one colour is one shape, its top and bottom through the columns' middles and
+  // its sides on whole device pixels, so that runs side by side neither overlap nor leave a seam.
+  // (A thin rectangle for each column looks the same, but costs a canvas without a graphics chip
+  // several times as much to fill.)
+  const paths = new Map(), dpr = ctx.getTransform().a || 1, h = (0.5 * f.w) / cols, snap = (x) => Math.round(x * dpr) / dpr;
+  const keyOf = (c) => {
+    if (!(em[c] * scale >= 0.004 * vmax)) return null;
+    return colour && Number.isFinite(wloc[c]) ? Math.round(16 * (1 + clamp((wloc[c] - w0) / (1.5 * dW), -1, 1))) : -1;
+  };
+  for (let a = 0; a < cols;) {
+    const key = keyOf(a);
+    if (key === null) { a++; continue; }
+    let b = a;
+    while (b + 1 < cols && keyOf(b + 1) === key) b++;
     if (!paths.has(key)) paths.set(key, new Path2D());
-    const yTop = f.Y(Y(em[c])), yBot = f.Y(-Y(em[c]));
-    paths.get(key).rect(X(c) - 0.5, yTop, 1.2, yBot - yTop);
+    const p = paths.get(key), xa = snap(X(a) - h), xb = snap(X(b) + h);
+    p.moveTo(xa, f.Y(Y(em[a])));
+    for (let c = a; c <= b; c++) p.lineTo(X(c), f.Y(Y(em[c])));
+    p.lineTo(xb, f.Y(Y(em[b]))); p.lineTo(xb, f.Y(-Y(em[b])));
+    for (let c = b; c >= a; c--) p.lineTo(X(c), f.Y(-Y(em[c])));
+    p.lineTo(xa, f.Y(-Y(em[a]))); p.closePath();
+    a = b + 1;
   }
   for (const [key, path] of paths) {
     if (key < 0) ctx.fillStyle = colors.spec;
@@ -1061,7 +1131,7 @@ function drawSnapshot() {
     if (z < 0) { re[j] = ar; im[j] = ai; wl[j] = sh === 'gauss' && vac[j] > 1e-4 ? Pp.w0 : NaN; } else if (first === M) first = j;
   }
   if (first < M) {
-    const s = P.snapshot(t, win.z0 + (first + 0.5) * dz, dz, M - first, sh === 'gauss' ? 0 : 6 * state.wmax + 3 * Pp.w0);
+    const s = P.snapshot(t, win.z0 + (first + 0.5) * dz, dz, M - first, sh === 'gauss' ? 0 : 6 * state.wmax + 3 * Pp.w0, sh === 'gauss');
     re.set(s.re, first); im.set(s.im, first); wl.set(s.w, first);
   }
   // Per column: the envelope, the local frequency at the envelope's top.
@@ -1209,7 +1279,8 @@ function slotFor(scale, sig, w) {
   const ints = Math.max(1, Math.floor(Math.log10(Math.max(scale, 1e-12))) + 1);
   return { dec: Math.max(0, Math.min(5, sig - ints)), w };
 }
-const timeSlot = () => { const v = state.pulse.view; return slotFor(Math.max(Math.abs(v[0]), Math.abs(v[1])) * U().tS, 4, 6); };
+/** Decimals for times: from the time axis, or from the time itself when it lies far beyond the axis. */
+const timeSlot = (t = 0) => { const v = state.pulse.view; return slotFor(Math.max(Math.abs(v[0]), Math.abs(v[1]), Math.abs(t)) * U().tS, 4, 6); };
 const zSlot = () => slotFor(2 * Math.max(state.pulse.z, 1e-9) * U().zS, 4, 6);
 /** Frequencies to about four figures over the plotted range (three decimals from 1 to 100). */
 const wSlot = () => { const W = state.wmax; return { dec: W < 1 ? 4 : W < 100 ? 3 : W < 1000 ? 2 : 1, w: 6 }; };
@@ -1221,7 +1292,7 @@ const bold = (p) => ({ ...p, class: 'b' });
 
 function readout() {
   const box = $('#readout'), u = U(), lines = [];
-  const tt = (t) => [bold(num(t * u.tS, timeSlot().dec, timeSlot().w)), u.tu ? ' ' + u.tu : ''];
+  const tt = (t) => { const s = timeSlot(t); return [bold(num(t * u.tS, s.dec, s.w)), u.tu ? ' ' + u.tu : '']; };
   const ws = wSlot(), wName = u.w.split(' ')[0];
   if (state.view === 'medium') {
     const w = state.probe, o = optics(resp, Float64Array.of(Math.max(w, 1e-9)));
@@ -1229,7 +1300,9 @@ function readout() {
     // the material: glass absorbs far less than its lines' tails would.)
     const fade = 1 / (Math.max(o.k[0], 1e-300) * Math.max(w, 1e-9)), lam = (2 * Math.PI) / Math.max(w, 1e-9);
     const line = [`The light at ${wName} = `, bold(num(w, ws.dec, ws.w)), ': n = ', bold(num(o.n[0], 3, 6)), ', κ = ', bold(num(o.k[0], 3, 6, { tiny: true })),
-      ...(fade < 1e4 * lam ? [' · inside, the crests go at c/n and the wave fades by 1/e in c/κω = ', ...lengthParts(fade)] : [' · inside, the crests go at c/n, and the wave hardly fades (over 10⁴ wavelengths)'])];
+      // (The fading length in wavelengths λ₀ = 2πc/ω too, as the picture of the wave gives it.)
+      ...(fade < 1e4 * lam ? [' · inside, the crests go at c/n and the wave fades by 1/e in c/κω = ', ...lengthParts(fade), '\u00a0=\u00a0', num(fade / lam, 2, 6, { tiny: true }), ' λ₀']
+        : [' · inside, the crests go at c/n, and the wave hardly fades (over 10⁴ wavelengths)'])];
     lines.push(line);
     const lns = media().lines && state.units === MEDIA[state.medium].units ? media().lines : [];
     if (lns.length) {
@@ -1349,12 +1422,17 @@ function loop(now) {
 }
 let testHold = false; // (set by the tests, which move the clocks themselves)
 
+// Milliseconds spent in each part of the last frame drawn (for the tests and for profiling).
+const drawMs = {};
+function timed(k, f) { const t0 = performance.now(); f(); drawMs[k] = performance.now() - t0; }
+
 function drawNow() {
   readColors();
-  if (state.view === 'medium') { drawResponse(); drawPictures(); drawReflectance(); }
-  else if (state.view === 'pulse') { drawResponse(); drawSnapshot(); drawPulse(); }
-  else drawKK();
-  readout();
+  for (const k of Object.keys(drawMs)) delete drawMs[k];
+  if (state.view === 'medium') { timed('response', drawResponse); timed('pictures', drawPictures); timed('reflectance', drawReflectance); }
+  else if (state.view === 'pulse') { timed('response', drawResponse); timed('trace', trace); timed('snapshot', drawSnapshot); timed('pulse', drawPulse); }
+  else timed('kk', drawKK);
+  timed('readout', readout);
 }
 
 // ---------------------------------------------------------------------- controls
@@ -1658,22 +1736,24 @@ function loadHash(h) {
   if (h.o !== undefined) {
     state.oscs = h.o.split('~').map((s) => s.split('_').map(Number)).filter((a) => a.length === 3 && a.every(Number.isFinite)).map(toOsc);
   }
+  // (Only values the page's own controls could give: a hand-edited address may hold anything.)
+  const pos = (s, d) => { const v = num(s, d); return v > 0 ? v : d; };
   state.epsInf = num(h.e, state.epsInf);
-  state.wmax = num(h.W, state.wmax);
+  state.wmax = pos(h.W, state.wmax);
   if (['eps', 'n'].includes(h.d)) state.display = h.d;
   state.showNg = h.ng !== '0';
   state.showSum = h.sum === '1';
   state.broken = h.br === '1';
-  state.probe = num(h.w, state.probe);
+  state.probe = clamp(num(h.w, state.probe), 0.002 * state.wmax, state.wmax);
   if (h.sl === 'off') state.showSliver = false; else { state.showSliver = true; state.sliver = num(h.sl, state.sliver); }
   state.sweep = false;
   const P = state.pulse;
   if (['gauss', 'front', 'step'].includes(h.ps)) P.shape = h.ps;
   // (pz was the largest depth of the old animation; it is now where the detector is.)
-  P.w0 = num(h.pw, P.w0); P.T = num(h.pT, P.T); P.tf = num(h.ptf, P.tf); P.z = num(h.pz, P.z);
+  P.w0 = pos(h.pw, P.w0); P.T = pos(h.pT, P.T); P.tf = Math.min(0, num(h.ptf, P.tf)); P.z = Math.max(0, num(h.pz, P.z));
   P.frame = h.pf === 'group' ? 'group' : 'vac'; P.log = h.lg === '1';
   zRangeBase = 2 * P.z;
-  state.tView = num(h.tv, state.tView);
+  state.tView = pos(h.tv, state.tView);
   const pv = (h.pv || '').split('_').map(Number);
   if (pv.length === 2 && pv.every(Number.isFinite) && pv[1] > pv[0]) P.view = pv;
   if (h.src === 'typed' && h.x) {
@@ -1832,6 +1912,8 @@ window.__app = {
   /** Move the clocks on by dt seconds, n times, drawing each frame. */
   step(dt = 1 / 60, n = 1) { for (let i = 0; i < n; i++) advance(dt); needDraw = false; drawNow(); return { t: anim.t, phase: anim.phase, probe: state.probe }; },
   setView, fitView,
+  /** Milliseconds in each part of the last frame drawn in full. */
+  drawMs: () => ({ ...drawMs }),
   /** Milliseconds spent in each part of a frame, over n frames. */
   profile(n = 20) {
     const parts = { response: drawResponse, pulse: drawPulse, snapshot: drawSnapshot, reflectance: drawReflectance, pictures: drawPictures, kk: drawKK, readout };
