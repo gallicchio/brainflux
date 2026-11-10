@@ -12,7 +12,7 @@ import { sequence, Acquisition, backprojection, projections, readoutBlurPixels }
 import { MAGNETS, MAGNET_IDS, BOARD, magnetOf, larmorHz, signalPerProton, chemicalShiftHz, boardPixelSNR, concomitantShift } from './magnets.js';
 import { el, $, slider, segmented, toggle, setSlots } from '../lib/ui.js';
 import { fitCanvas, themeColors, fillSlots, niceTicks, tickLabel } from '../lib/plot.js';
-import { complexImage, greyImage, arrow, handle, FONT, SMALL, BOLD, haloText } from './draw.js';
+import { complexImage, greyImage, arrow, handle, FONT, SMALL, BOLD, haloText, quantile, kspaceBrightness } from './draw.js';
 
 const SHOWN = ['water', 'fat', 'grey', 'white', 'lesion'], TUBES = ['tap', 'cuso4', 'oil'];
 /** A short name for a tissue in the bars and the readout. */
@@ -78,10 +78,7 @@ export class ContrastView {
     const N = s.N, L = Math.min(s.lines, N), lo = N / 2 - Math.floor(L / 2);
     for (let q = lo; q < lo + L; q++) this.acq.measure(q);
     this.img = this.acq.image();
-    let top = 0;
-    const v = Float64Array.from(this.img.mag).sort();
-    top = v[Math.floor(0.997 * (v.length - 1))] || 1;
-    this.vmax = top;
+    this.vmax = quantile(Float64Array.from(this.img.mag), 0.997) || 1;
     this.kR = kspaceBrightness(this.acq.mre, this.acq.mim);
     this.weights = this.tissueWeights();
     // (At 46 µT the noise slider shows the board's noise, as a percentage of the brightest pixel.)
@@ -644,11 +641,4 @@ export class ContrastView {
     return { s: { ...this.s }, weights: { ...this.weights }, measured: this.acq.measuredCount, folded: this.acq.picture.folded, fatShift: this.acq.fatShift, lb: { ...this.lb }, lay: this.lay,
       trHandle: this.trHandle, teHandle: this.teHandle };
   }
-}
-
-function kspaceBrightness(re, im) {
-  const n = re.length, mags = new Float64Array(n);
-  for (let i = 0; i < n; i++) mags[i] = Math.hypot(re[i], im[i]);
-  mags.sort();
-  return mags[Math.floor(0.97 * (n - 1))] || 1;
 }

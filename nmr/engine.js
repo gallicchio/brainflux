@@ -185,6 +185,10 @@ export class Engine {
           if (ph === 'listen') this.ens.set(toRotating(this.earth.M, this.omegaRef, this.t));
           this.earth.phase = ph;
         }
+        // (A sample the moment the receiver opens, off the grid, so the record holds the FID's
+        // true start there, whatever the sampling interval, not a line up to the next sample.)
+        const e = this.earth;
+        if (!e.opened && this.t >= e.tp + e.ramp + e.tOpen) { e.opened = true; this.sample(); }
       }
       if (this.t >= this.nextSample) { this.sample(); this._grid(); }
       if (this.t >= tEnd || work >= budget) break;

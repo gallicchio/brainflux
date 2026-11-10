@@ -13,7 +13,7 @@ import { headPhantom, disksPhantom, disk, TISSUES, tissueAt } from './phantom.js
 import { sequence, lineOrder, Acquisition, spinsOf, phaseMap, echoTrace, traceTimes } from './scan.js';
 import { el, $, slider, segmented, toggle, setSlots } from '../lib/ui.js';
 import { fitCanvas, themeColors, fillSlots, niceTicks, tickLabel } from '../lib/plot.js';
-import { complexImage, greyImage, arrow, wheel, cssComplex, FONT, SMALL, BOLD, haloText } from './draw.js';
+import { complexImage, greyImage, arrow, wheel, cssComplex, FONT, SMALL, BOLD, haloText, kspaceBrightness } from './draw.js';
 import { colorize } from '../lib/complexcolor.js';
 
 export const FOV = 256;
@@ -635,11 +635,3 @@ export class KspaceView {
   }
 }
 
-/** A brightness for k-space: the magnitude that 3% of its pixels exceed (so the centre's
- *  bright few do not drown the rest), as the FFT demo's transforms are drawn. */
-function kspaceBrightness(re, im) {
-  const n = re.length, mags = new Float64Array(n);
-  for (let i = 0; i < n; i++) mags[i] = Math.hypot(re[i], im[i]);
-  mags.sort();
-  return mags[Math.floor(0.97 * (n - 1))] || 1;
-}

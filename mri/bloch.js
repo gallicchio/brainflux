@@ -32,18 +32,20 @@ export function rotate(v, ux, uy, uz, a) {
 /**
  * A set of isochromats.  Positions x, y, z (mm), equilibrium magnetization m0 (the proton
  * density), T1, T2 (ms), and df: an extra offset of the Larmor frequency (kHz) from the field's
- * unevenness or a chemical shift.  The state is mx, my, mz.
+ * unevenness or a chemical shift.  The state is mx, my, mz.  A T1 or T2 of NO_RELAX (1e9 ms, the
+ * default) means none: the steps skip its exponential, which would be 1 to 1e-11.
  */
+export const NO_RELAX = 1e9;
 export class Spins {
   constructor(n) {
     this.n = n;
     for (const k of ['x', 'y', 'z', 'm0', 'T1', 'T2', 'df', 'mx', 'my', 'mz']) this[k] = new Float64Array(n);
-    this.m0.fill(1); this.T1.fill(1e9); this.T2.fill(1e9);
+    this.m0.fill(1); this.T1.fill(NO_RELAX); this.T2.fill(NO_RELAX);
     this.reset();
   }
 
   /** A row along x: xs (mm) with proton densities rho (or 1). */
-  static row(xs, rho = null, T1 = 1e9, T2 = 1e9) {
+  static row(xs, rho = null, T1 = NO_RELAX, T2 = NO_RELAX) {
     const s = new Spins(xs.length);
     for (let i = 0; i < xs.length; i++) { s.x[i] = xs[i]; s.m0[i] = rho ? rho[i] : 1; s.T1[i] = T1; s.T2[i] = T2; }
     s.reset();
@@ -51,7 +53,7 @@ export class Spins {
   }
 
   /** A column along z. */
-  static column(zs, T1 = 1e9, T2 = 1e9) {
+  static column(zs, T1 = NO_RELAX, T2 = NO_RELAX) {
     const s = new Spins(zs.length);
     for (let i = 0; i < zs.length; i++) { s.z[i] = zs[i]; s.T1[i] = T1; s.T2[i] = T2; }
     s.reset();
@@ -88,10 +90,10 @@ export class Spins {
     const { x, y, z, df, mx, my, mz, m0, T1, T2 } = this;
     for (let i = 0; i < this.n; i++) {
       const phi = TWO_PI * (GB * (Gx * x[i] + Gy * y[i] + Gz * z[i]) + df[i]) * dt;
-      const c = Math.cos(phi), s = Math.sin(phi), a = mx[i], b = my[i], e2 = Math.exp(-dt / T2[i]);
+      const c = Math.cos(phi), s = Math.sin(phi), a = mx[i], b = my[i], e2 = T2[i] >= NO_RELAX ? 1 : Math.exp(-dt / T2[i]);
       mx[i] = (a * c + b * s) * e2;
       my[i] = (b * c - a * s) * e2;
-      mz[i] = m0[i] + (mz[i] - m0[i]) * Math.exp(-dt / T1[i]);
+      if (T1[i] < NO_RELAX) mz[i] = m0[i] + (mz[i] - m0[i]) * Math.exp(-dt / T1[i]);
     }
   }
 
@@ -101,10 +103,10 @@ export class Spins {
    * field (b1x, b1y, fz); the spins turn clockwise about it by 2 pi |f| dt, then relax.
    */
   rfStep(b1x, b1y, dt, Gx = 0, Gy = 0, Gz = 0, dfRF = 0) {
-    const { x, y, z, df, mx, my, mz, m0, T1, T2 } = this;
+    const { x, y, z, df, mx, my, mz, m0, T1, T2 } = this, b2 = b1x * b1x + b1y * b1y;
     for (let i = 0; i < this.n; i++) {
       const fz = GB * (Gx * x[i] + Gy * y[i] + Gz * z[i]) + df[i] - dfRF;
-      const f = Math.hypot(b1x, b1y, fz);
+      const f = Math.sqrt(b2 + fz * fz);
       if (f > 0) {
         const ux = b1x / f, uy = b1y / f, uz = fz / f, a = -TWO_PI * f * dt;
         const c = Math.cos(a), s = Math.sin(a), t = 1 - c;
@@ -113,9 +115,8 @@ export class Spins {
         my[i] = Y * c + (uz * X - ux * Z) * s + uy * d * t;
         mz[i] = Z * c + (ux * Y - uy * X) * s + uz * d * t;
       }
-      const e2 = Math.exp(-dt / T2[i]);
-      mx[i] *= e2; my[i] *= e2;
-      mz[i] = m0[i] + (mz[i] - m0[i]) * Math.exp(-dt / T1[i]);
+      if (T2[i] < NO_RELAX) { const e2 = Math.exp(-dt / T2[i]); mx[i] *= e2; my[i] *= e2; }
+      if (T1[i] < NO_RELAX) mz[i] = m0[i] + (mz[i] - m0[i]) * Math.exp(-dt / T1[i]);
     }
   }
 
@@ -337,12 +338,17 @@ export function sliceMovie({ Gz, bw, T = 3, flip = Math.PI / 2, fc = 0, rephase 
  *  at the frequency offsets fs (kHz) from the pulse's own frequency; 2 pi times it is the tip
  *  angle a spin that far off resonance gets, for small tips. */
 export function pulseSpectrum(p, fs) {
-  const out = new Float64Array(fs.length), tc = p.T / 2;
+  const out = new Float64Array(fs.length), tc = p.T / 2, n = p.b1.length;
   for (let q = 0; q < fs.length; q++) {
-    let re = 0, im = 0;
-    const w = TWO_PI * fs[q];
-    for (let i = 0; i < p.b1.length; i++) { const a = w * (p.t[i] - tc); re += p.b1[i] * Math.cos(a) * p.dt; im += p.b1[i] * Math.sin(a) * p.dt; }
-    out[q] = Math.hypot(re, im);
+    // (The samples are evenly spaced, so e^{iw(t - tc)} is turned on by e^{iw dt} from one to the
+    // next rather than computed afresh: two sines a frequency, not two a sample.)
+    const w = TWO_PI * fs[q], a0 = w * (p.t[0] - tc), sc = Math.cos(w * p.dt), ss = Math.sin(w * p.dt);
+    let c = Math.cos(a0), s = Math.sin(a0), re = 0, im = 0;
+    for (let i = 0; i < n; i++) {
+      re += p.b1[i] * c; im += p.b1[i] * s;
+      const c2 = c * sc - s * ss; s = s * sc + c * ss; c = c2;
+    }
+    out[q] = Math.hypot(re, im) * p.dt;
   }
   return out;
 }

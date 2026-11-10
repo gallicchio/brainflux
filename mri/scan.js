@@ -238,6 +238,37 @@ export function noiseField(N, sigma, seed = 7) {
   return { re, im };
 }
 
+// What an acquisition keeps from one setting to the next.  K-space is linear in the picture, and
+// the picture is each tissue's fill times that tissue's weight (TR, TE, the field), so each
+// tissue's own k-space, the transform of the fraction of each pixel it fills (folded into the
+// field of view), is made once per rasterized object and re-weighted when the sequence changes:
+// a new TR, TE, readout gradient or noise costs a weighted sum, not a 2D FFT per tissue.  And
+// the unit noise is drawn once per matrix and seed, and scaled.
+const TISSUE_K = new WeakMap(), UNIT_NOISE = new Map();
+function tissueKspaces(raster, N) {
+  let K = TISSUE_K.get(raster);
+  if (K) return K;
+  K = {};
+  const ny = raster.ny;
+  for (const [name, f] of Object.entries(raster.fills)) {
+    const re = new Float64Array(N * N), im = new Float64Array(N * N);
+    for (let jb = 0; jb < ny; jb++) {
+      const j = (((jb - ny / 2 + N / 2) % N) + N) % N;
+      for (let i = 0; i < N; i++) re[j * N + i] += f[jb * N + i];
+    }
+    fft2Centered(re, im, N, N, false);
+    K[name] = { re, im };
+  }
+  TISSUE_K.set(raster, K);
+  return K;
+}
+function unitNoise(N, seed) {
+  const key = `${N}|${seed}`;
+  let n = UNIT_NOISE.get(key);
+  if (!n) { n = noiseField(N, 1, seed); UNIT_NOISE.set(key, n); if (UNIT_NOISE.size > 8) UNIT_NOISE.delete(UNIT_NOISE.keys().next().value); }
+  return n;
+}
+
 /** The picture from the rows of k-space that were measured (mask[q] = 1): the inverse FFT with
  *  zeros for the rest.  Returns {re, im, mag}. */
 export function reconstruct(kre, kim, N, mask) {
@@ -281,25 +312,37 @@ export class Acquisition {
       this.mre = new Float64Array(N * N); this.mim = new Float64Array(N * N);
     }
     this.seq = seq; this.B0 = B0; this.sigma = sigma; this.nsa = nsa; this.gain = gain; this.decay = decay;
-    const pic = pictureOf(shapes, seq, B0, N, seq.fov, 4, decay);
+    const pic = pictureOf(shapes, seq, B0, N, seq.fov, 4);
     if (gain !== 1) {
-      for (const a of [pic.total, pic.fat, ...(pic.parts || []).map((p) => p.img)]) for (let i = 0; i < a.length; i++) a[i] *= gain;
+      for (const a of [pic.total, pic.fat]) for (let i = 0; i < a.length; i++) a[i] *= gain;
       for (const k of Object.keys(pic.weights)) pic.weights[k] *= gain;
     }
     this.picture = pic;
     // Fat precesses 3.4 ppm slower than water; under the readout gradient that reads as a
     // shift of -3.4e-6 f0 / (GB Gx) mm along x.
     this.fatShift = chemicalShift ? -(3.4e-6 * 42.577e3 * B0) / (GB * seq.Gx) : 0;   // kHz / (kHz/mm)
-    const k = decay ? kspaceOfParts(pic.parts, N, seq.dk, this.fatShift, (part) => readoutDecay(seq, part.T2))
-      : kspaceOf(pic.total, pic.fat, N, seq.dk, this.fatShift);
-    this.kre = k.re; this.kim = k.im;
+    // K-space: each tissue's own (tissueKspaces) times its weight, times, column by column (each
+    // kx, each moment of the readout), the phase ramp of the fat shift for fat and oil and, if
+    // asked for, what the tissue's decay during the readout leaves (readoutDecay).  The same as
+    // kspaceOf, or kspaceOfParts with the decay, to rounding.
+    const K = tissueKspaces(pic.raster, N), kre = new Float64Array(N * N), kim = new Float64Array(N * N);
+    const cr = new Float64Array(N), ci = new Float64Array(N);
+    for (const [name, w] of Object.entries(pic.weights)) {
+      const T = K[name];
+      if (!T || w === 0) continue;
+      const t = tissueAt(name, B0), D = decay ? readoutDecay(seq, t.T2) : null, shift = t.shift ? this.fatShift : 0;
+      for (let p = 0; p < N; p++) { const phi = -2 * Math.PI * (p - N / 2) * seq.dk * shift, d = w * (D ? D[p] : 1); cr[p] = d * Math.cos(phi); ci[p] = d * Math.sin(phi); }
+      const R = T.re, I = T.im;
+      for (let q = 0, o = 0; q < N; q++) for (let p = 0; p < N; p++, o++) { kre[o] += R[o] * cr[p] - I[o] * ci[p]; kim[o] += R[o] * ci[p] + I[o] * cr[p]; }
+    }
+    this.kre = kre; this.kim = kim;
     let max = 0;
     for (const v of pic.total) max = Math.max(max, v);
     this.peak = max;
     this.noise = (noiseAbs ?? sigma * max) / Math.sqrt(nsa);
-    const noise = noiseField(N, this.noise, seed);
+    const u = this.noise > 0 ? unitNoise(N, seed) : null, s = this.noise;
     this.nre = new Float64Array(N * N); this.nim = new Float64Array(N * N);
-    for (let i = 0; i < N * N; i++) { this.nre[i] = k.re[i] + noise.re[i]; this.nim[i] = k.im[i] + noise.im[i]; }
+    for (let i = 0; i < N * N; i++) { this.nre[i] = kre[i] + (u ? s * u.re[i] : 0); this.nim[i] = kim[i] + (u ? s * u.im[i] : 0); }
     this.stale = true;
     return this;
   }
