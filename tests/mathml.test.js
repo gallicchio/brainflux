@@ -42,3 +42,14 @@ test('every formula in every demo translates without an error', async () => {
   }
   return `${count} formulas`;
 });
+
+test('\\mathrm with exponents and commands inside: upright math, the exponent kept', () => {
+  const a = texToMathML('\\mathrm{fs^2/mm}');
+  assert(a.includes('<msup>') && a.includes('<mi mathvariant="normal">f</mi>') && !a.includes('merror') && !a.includes('^'), a);
+  const b = texToMathML('\\beta_2 = 36.2\\ \\mathrm{fs^2/mm}, \\ \\mathrm{s^{-1}}');
+  assert((b.match(/<msup>/g) || []).length === 2 && b.includes('<mo>−</mo>') || b.includes('<mo>-</mo>'), b);
+  const c = texToMathML('1\\ \\mathrm{\\mu m}');
+  assert(c.includes('μ') && !c.includes('merror'), c);
+  const d = texToMathML('\\mathrm{kg}');
+  assert(d.includes('<mi mathvariant="normal">kg</mi>'), `a plain one is as before: ${d}`);
+});

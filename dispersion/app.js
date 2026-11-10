@@ -12,7 +12,7 @@ import {
 import { incident, planGrid, Propagator, peakTime, moments, maxBefore, causalEnvelope, carrierTrace, cyclesPerSample } from './pulse.js';
 import { drawCharge, drawWave } from './pictures.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, setSlots } from '../lib/ui.js';
-import { fitCanvas, Frame, themeColors, fillSlots } from '../lib/plot.js';
+import { fitCanvas, Frame, themeColors, fillSlots, keptPicture as keptPictureLib } from '../lib/plot.js';
 import { texToMathML } from '../lib/mathml.js';
 import { scopeTrace } from '../lib/scope.js';
 
@@ -296,22 +296,8 @@ function imagAt(oscs, w) {
 // moves.  (Thick anti-aliased curves are the slowest thing a canvas draws without a graphics chip.)
 // key: everything the picture depends on, besides the canvas's size and the colours.  draw(ctx,
 // width, height) draws it and returns what the page needs to know of it (its frame, handles...).
-const kept = new Map();
-function keptPicture(cv, key, draw) {
-  const { ctx, width, height, dpr } = fitCanvas(cv);
-  const full = `${key}|${cv.width}x${cv.height}|${dpr}|${colors.ink}${colors.panel}${colors.re}`;
-  let k = kept.get(cv);
-  if (!k) kept.set(cv, k = { canvas: document.createElement('canvas'), key: null, data: null });
-  if (k.key !== full) {
-    if (k.canvas.width !== cv.width || k.canvas.height !== cv.height) { k.canvas.width = cv.width; k.canvas.height = cv.height; }
-    const c2 = k.canvas.getContext('2d');
-    c2.setTransform(1, 0, 0, 1, 0, 0); c2.clearRect(0, 0, cv.width, cv.height); c2.setTransform(dpr, 0, 0, dpr, 0, 0);
-    k.data = draw(c2, width, height, dpr);
-    k.key = full;
-  }
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(k.canvas, 0, 0); ctx.restore();
-  return { ctx, width, height, data: k.data };
-}
+// (lib/plot.js keeps it; the key here adds the theme's colours.)
+const keptPicture = (cv, key, draw) => keptPictureLib(cv, `${key}|${colors.ink}${colors.panel}${colors.re}`, draw);
 
 function drawResponse() {
   if (state.view === 'pulse') ensurePropagator();   // (its key, propKey, names the pulse's spectrum)

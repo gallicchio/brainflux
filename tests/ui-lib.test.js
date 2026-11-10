@@ -167,3 +167,42 @@ test('Frame.axes: an x label too wide for the margins is drawn inside the canvas
     assert(x0 >= 0 && x0 + c.w <= 300 + 1e-9, `right margin ${right}: the label spans ${x0.toFixed(0)} to ${(x0 + c.w).toFixed(0)} of 300 px`);
   }
 });
+
+test('slider: typed values kept within limits (the track widens only as far as they allow), and onRelease after a typed value', async () => {
+  const { slider } = await import('../lib/ui.js');
+  const got = [], released = [];
+  const s = slider({ label: 'x', min: 0, max: 10, value: 5, limits: [0, 20], onInput: (v) => got.push(v), onRelease: (v) => released.push(v) });
+  document.body.append(s);
+  const type = (t) => { s.box.value = t; s.box.dispatchEvent(new Event('change')); };
+  type('1e9'); eq(got.at(-1), 20); eq(s.value, 20); eq(released.at(-1), 20);
+  type('-3'); eq(got.at(-1), 0);
+  type('15'); eq(got.at(-1), 15); eq(released.length, 3);
+  type('abc'); eq(got.length, 3);                       // not a number: nothing happens
+  s.input.value = '500'; s.input.dispatchEvent(new Event('input')); eq(released.length, 3);
+  s.input.dispatchEvent(new Event('change')); eq(released.length, 4);   // let go of the track
+  eq(s.clamp(-1), 0); eq(s.clamp(99), 20);
+  const g = slider({ label: 'g', min: 1, max: 10, value: 2, log: true, limits: [0.5, 50], onInput: (v) => got.push(v) });
+  g.box.value = '0.01'; g.box.dispatchEvent(new Event('change')); eq(got.at(-1), 0.5);
+  const free = slider({ label: 'f', min: 0, max: 1, value: 0.5, onInput: (v) => got.push(v) });
+  free.box.value = '7'; free.box.dispatchEvent(new Event('change')); eq(got.at(-1), 7);   // no limits: as before
+  s.remove();
+});
+
+test('keptPicture: the kept part drawn once while its key stays, again when the key or the size changes', async () => {
+  const { keptPicture } = await import('../lib/plot.js');
+  const cv = document.createElement('canvas');
+  cv.style.width = '120px'; cv.style.height = '60px';
+  document.body.append(cv);
+  let draws = 0;
+  const draw = (ctx, w, h) => { draws++; ctx.fillStyle = '#f00'; ctx.fillRect(0, 0, w / 2, h); return { half: w / 2 }; };
+  const a = keptPicture(cv, 'one', draw);
+  eq(draws, 1); eq(a.data.half, 60); eq(a.width, 120);
+  const px = (x) => Array.from(cv.getContext('2d').getImageData(Math.round(x * a.dpr), 10, 1, 1).data).join(',');
+  eq(px(10), '255,0,0,255'); eq(px(100), '0,0,0,0');
+  keptPicture(cv, 'one', draw); eq(draws, 1);         // copied, not drawn
+  eq(px(10), '255,0,0,255');
+  keptPicture(cv, 'two', draw); eq(draws, 2);
+  cv.style.width = '200px';
+  const b = keptPicture(cv, 'two', draw); eq(draws, 3); eq(b.data.half, 100);
+  cv.remove();
+});
