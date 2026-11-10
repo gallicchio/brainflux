@@ -133,7 +133,7 @@ export function gridSamples(tr, lambda, n, du, { upto = Infinity, weighting = 'n
 
 /** The dirty beam: the transform of the sampling, real, 1 at the centre pixel (n/2, n/2). */
 export function dirtyBeam(S, n) {
-  const re = Float64Array.from(S), im = new Float64Array(n * n);
+  const re = new Float64Array(S), im = new Float64Array(n * n);
   fft2Centered(re, im, n, n, true);
   const c = re[(n / 2) * n + n / 2];
   if (c > 0) for (let i = 0; i < re.length; i++) re[i] /= c;
@@ -142,7 +142,7 @@ export function dirtyBeam(S, n) {
 
 /** The visibilities of the whole sky on the grid: its centred transform (unnormalised). */
 export function skyTransform(sky, n) {
-  const re = Float64Array.from(sky), im = new Float64Array(n * n);
+  const re = new Float64Array(sky), im = new Float64Array(n * n);
   fft2Centered(re, im, n, n, false);
   for (let i = 0; i < re.length; i++) { re[i] *= n; im[i] *= n; }
   return { re, im };
@@ -168,7 +168,7 @@ export function dirtyImage(S, V, n) {
  *  [i0, j0, i1, j1) (columns i0..i1−1, rows j0..j1−1) where CLEAN looks for peaks and keeps the
  *  residual (the field of view; outside it the residual is left as it was). */
 export function cleanStart(dirty, box = null) {
-  return { residual: Float64Array.from(dirty), model: new Float64Array(dirty.length), iterations: 0, components: 0, done: false, box, log: [] };
+  return { residual: new Float64Array(dirty), model: new Float64Array(dirty.length), iterations: 0, components: 0, done: false, box, log: [] };
 }
 
 /**
@@ -275,12 +275,12 @@ function solve3(A, r) {
   return [m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]];
 }
 
-/** The restored image: the CLEAN components convolved with the clean beam, plus the residual. */
+/** The clean beam as a convolution kernel: the Gaussian with its peak at index (0, 0), wrapped,
+ *  and its transform (unnormalised), kept for the last fit asked for.  Returns {fit, n, gr, gi}. */
 let kernel = null;
-export function restore(cs, fit, n) {
+export function cleanBeamKernel(fit, n) {
   const h = n / 2;
   if (!kernel || kernel.fit !== fit || kernel.n !== n) {
-    // The Gaussian with its peak at index (0, 0), wrapped, and its transform (kept).
     const gr = new Float64Array(n * n), gi = new Float64Array(n * n);
     for (let j = 0; j < n; j++) {
       const y = j < h ? j : j - n;
@@ -293,8 +293,13 @@ export function restore(cs, fit, n) {
     fft2(gr, gi, n, n, -1);
     kernel = { fit, n, gr, gi };
   }
-  const { gr, gi } = kernel;
-  const mr = Float64Array.from(cs.model), mi = new Float64Array(n * n);
+  return kernel;
+}
+
+/** The restored image: the CLEAN components convolved with the clean beam, plus the residual. */
+export function restore(cs, fit, n) {
+  const { gr, gi } = cleanBeamKernel(fit, n);
+  const mr = new Float64Array(cs.model), mi = new Float64Array(n * n);
   fft2(mr, mi, n, n, -1);
   for (let i = 0; i < mr.length; i++) {
     const a = mr[i] * gr[i] - mi[i] * gi[i], b = mr[i] * gi[i] + mi[i] * gr[i];

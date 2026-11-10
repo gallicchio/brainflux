@@ -108,10 +108,12 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     # The time stream: the noise, an envelope, lumps; and the copy τ later sits on it at τ = 0.
     setup(b, 'lag', 400)
     r = b.eval('__app.view1()')
-    ok, miss = says(b, 'lag', 'half a cycle', 'R=-0.99', '20 cycles')
-    # A running average of noise: it scatters about the true -0.99 by ~1/sqrt(N), N ~ 25
-    # independent stretches per chunk x ~60 chunks in the IIR: 0.026.  Allow 4 sigma.
-    check(ok and abs(r['longRun'] + 0.99) < 0.1, f"lag: at τ = ½ cycle the correlator's average is R = {r['longRun']:.3f} (help: −0.99, within its scatter of ~0.03); this stretch's own average {r['mean']:.2f}" + (f' missing {miss}' if miss else ''))
+    ok, miss = says(b, 'lag', 'half a cycle', 'R=-0.999', '20 cycles')
+    # What it should be: cos(π) times the band's coherence half a cycle out.
+    R_true = b.eval('-__app.sim.coherence(0.5)')
+    # A running average of noise: it scatters about that by ~1/sqrt(N), N ~ 25 independent
+    # stretches per chunk x ~60 chunks in the IIR: 0.026.  Allow 4 sigma.
+    check(ok and quoted(R_true, '-0.999') and abs(r['longRun'] - R_true) < 0.1, f"lag: at τ = ½ cycle R = {R_true:.4f} (help: −0.999); the correlator's average {r['longRun']:.3f}, within its scatter of ~0.03; this stretch's own average {r['mean']:.2f}" + (f' missing {miss}' if miss else ''))
     z = b.eval('(() => { const B = __app.bandwidth(); return [__app.sim.coherence(1 / B), __app.sim.coherence(0.9 / B)]; })()')
     check(abs(z[0]) < 1e-9 and z[1] > 0.05, f'lag: the envelope first reaches zero at exactly τ = 1/Δν (coherence {z[0]:.1e} there, {z[1]:.2f} at 0.9/Δν)')
     # Dragging the lag along the autocorrelation; the dot follows the curve.
@@ -147,6 +149,11 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     check(f['spread'] < 1e-9 and abs(f['pB'] - 1.3) < 0.1, f"fringe: the power at B is the same everywhere ({f['spread']:.1e} between the largest and the smallest; measured {f['pB']:.2f}, 1 + the noise 0.3)")
     foot = b.eval("document.querySelector('#fringe-foot').textContent")
     check('0.106 cycles before A' in norm(foot), f'fringe: the read-out says when B hears it ({norm(foot)[-40:]})')
+    # Left from right: at −10° the real part is the same and the phase is +38°.
+    lr = b.eval("""(() => { const s = __app.sim, a = s.ideal(...s.baseline()); __app.state.scene.sources[0].theta = -10; __app.moveScene(); const z = s.ideal(...s.baseline());
+      __app.state.scene.sources[0].theta = 10; __app.moveScene(); return [a[0], z[0], Math.atan2(z[1], z[0]) * 180 / Math.PI]; })()""")
+    ok, miss = says(b, 'fringe', 'to −10°', 'at +38°', 'quarter cycle')
+    check(ok and abs(lr[0] - lr[1]) < 1e-12 and quoted(lr[2], '38'), f"fringe: a source at −10° gives the same real part ({lr[0]:.4f}, {lr[1]:.4f}) and the phase {lr[2]:+.1f}°" + (f' missing {miss}' if miss else ''))
     # Dragging B along the ground winds the phase; dragging on the fringe plot moves B too.
     before = b.eval('__app.state.scene.xB')
     x, y, w, h = b.box('#scene')
@@ -332,6 +339,15 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     snap = b.eval('__app.array().sampled.samples')
     ok, miss = says(b, 'rotation', '8 hours', 'declination 40°')
     check(ok and ro['hours'] == 8 and ro['dec'] == 40 and ro['s'] > 20 * snap, f"rotation: 8 hours at δ = 40° sample {ro['s']} points of the uv plane, a snapshot {snap}" + (f' missing {miss}' if miss else ''))
+    # At δ = 5° the Y's beam stays round; an east-west line's becomes a north-south streak.
+    beams = {}
+    for lay in ('y', 'line'):
+        setup(b, 'rotation', 0)
+        b.eval(f"(() => {{ __app.state.dec = 5; __app.state.layout = '{lay}'; return __app.setView('array'); }})()"); b.eval('__app.draw()')
+        beams[lay] = b.eval('(() => { const f = __app.imaging().fit; return [f.major, f.minor, f.angle * 180 / Math.PI]; })()')
+    ok, miss = says(b, 'rotation', 'to 85°', '5°', 'the beam stays round', 'Line of 8', '16 times longer than it is wide')
+    ry, rl = beams['y'][0] / beams['y'][1], beams['line'][0] / beams['line'][1]
+    check(ok and ry < 1.2 and quoted(rl, '16') and abs(abs(beams['line'][2] % 180) - 90) < 5, f"rotation: at δ = 5° the Y's clean beam is {beams['y'][0]:.2f} × {beams['y'][1]:.2f} pixels, the line's {beams['line'][0]:.2f} × {beams['line'][1]:.2f}, {rl:.1f} times longer, north-south" + (f' missing {miss}' if miss else ''))
     res = []
     for arm in (0.065, 0.1, 0.2):
         setup(b, 'resolution', 0)

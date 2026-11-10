@@ -111,7 +111,8 @@ export async function pictureSky(id, size = 1, image = null) {
 }
 
 export function normalise(re) {
-  const sky = Float64Array.from(re, (v) => (v > 0 ? v : 0));
+  const sky = new Float64Array(re.length);
+  for (let i = 0; i < re.length; i++) sky[i] = re[i] > 0 ? re[i] : 0;
   let total = 0;
   for (let i = 0; i < sky.length; i++) total += sky[i];
   if (total > 0) for (let i = 0; i < sky.length; i++) sky[i] /= total;
