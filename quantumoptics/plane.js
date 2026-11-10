@@ -150,18 +150,31 @@ export class Plane {
     ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.stroke(); ctx.setLineDash([]);
   }
 
-  /** The phase-noise wedge: two lines from the origin tangent to the 1σ cloud (for a round cloud). */
+  /**
+   * The phase-noise wedge: the two lines from the origin tangent to the 1σ ellipse, round or
+   * squeezed (the extreme angles of its outline as seen from the origin); none if the origin is
+   * inside it.  For a round cloud of radius ΔX at |α| the half-angle is arcsin(ΔX/|α|) ≈ ΔX/|α|.
+   */
   wedge(ctx, st, c) {
     const f = this.frame, a = Math.hypot(st.x1, st.x2);
     if (a < 1e-6) return;
-    const sp = principalSpreads(st), dir = Math.atan2(st.x2, st.x1);
-    const r = Math.sqrt(st.s11 * Math.sin(dir) ** 2 - 2 * st.s12 * Math.sin(dir) * Math.cos(dir) + st.s22 * Math.cos(dir) ** 2);  // ΔX across the mean
-    const dphi = Math.atan2(r, a), R = this.extent * 1.6;
+    const dir = Math.atan2(st.x2, st.x1);
+    // The outline μ + L (cos s, sin s), L L^T = Σ; its angles relative to the mean's direction.
+    const l11 = Math.sqrt(st.s11), l21 = st.s12 / l11, l22 = Math.sqrt(Math.max(0, st.s22 - l21 * l21));
+    let lo = 0, hi = 0;
+    for (let k = 0; k < 720; k++) {
+      const s = (2 * Math.PI * k) / 720, u = Math.cos(s), v = Math.sin(s);
+      const x = st.x1 + l11 * u, y = st.x2 + l21 * u + l22 * v;
+      let d = Math.atan2(y, x) - dir;
+      d -= 2 * Math.PI * Math.round(d / (2 * Math.PI));
+      lo = Math.min(lo, d); hi = Math.max(hi, d);
+    }
+    if (hi - lo > 0.99 * Math.PI) return;     // the origin is inside the cloud: no phase to speak of
+    const R = this.extent * 1.6;
     ctx.strokeStyle = c.ink2; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
     ctx.beginPath();
-    for (const s of [-1, 1]) { ctx.moveTo(f.X(0), f.Y(0)); ctx.lineTo(f.X(R * Math.cos(dir + s * dphi)), f.Y(R * Math.sin(dir + s * dphi))); }
+    for (const d of [lo, hi]) { ctx.moveTo(f.X(0), f.Y(0)); ctx.lineTo(f.X(R * Math.cos(dir + d)), f.Y(R * Math.sin(dir + d))); }
     ctx.stroke(); ctx.setLineDash([]);
-    void sp;
   }
 
   /** The measurement axis at angle deg, through the origin, with the histogram of samples laid along it. */
