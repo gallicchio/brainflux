@@ -134,7 +134,7 @@ export function drawHomodyne(ctx, w, h, p, c) {
   text(ctx, 'phase θ', bx + 18, py, c, { align: 'left', base: 'middle' });
   text(ctx, `θ = ${Math.round(p.theta)}°`, bx + 18, py + 13, c, { align: 'left', base: 'middle', color: c.ink, font: F });
   text(ctx, 'local oscillator', bx - 18, h * 0.95, c, { align: 'right', base: 'bottom', color: c.lo, font: F });
-  text(ctx, 'β = |β| e^{iθ}, strong', bx - 18, h * 0.95 - 14, c, { align: 'right', base: 'bottom' });
+  text(ctx, 'β = |β| eⁱᶿ, strong', bx - 18, h * 0.95 - 14, c, { align: 'right', base: 'bottom' });
   // The dial on the phase shifter.
   ctx.save(); ctx.strokeStyle = c.lo; ctx.lineWidth = 2; const th = (p.theta * Math.PI) / 180;
   ctx.beginPath(); ctx.moveTo(bx, py); ctx.lineTo(bx + 7 * Math.cos(th), py - 7 * Math.sin(th)); ctx.stroke(); ctx.restore();
