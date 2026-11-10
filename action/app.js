@@ -2,7 +2,7 @@
 // watch its action against the true path's.  Every set-up starts on the true path, so any change
 // shows what it costs.
 
-import { Path, action, knotQuadrature, truePaths, closedOrbits, truthAt, stationaryKnots, freeKnots, knotDerivatives, knotTimeDerivatives, knotPhasors, momentum, energy, hamiltonianGrid } from './physics.js';
+import { Path, action, knotQuadrature, truePaths, followPaths, closedOrbits, truthAt, stationaryKnots, freeKnots, knotDerivatives, knotTimeDerivatives, knotPhasors, momentum, energy, hamiltonianGrid } from './physics.js';
 import { SYSTEMS, typedSystem } from './systems.js';
 import { el, $, slider, segmented, toggle, exprField, drawer, readHash, writeHash, fmt, fixedNum } from '../lib/ui.js';
 import { fitCanvas, Frame, themeColors, contour, fillSlots, slotsWidth } from '../lib/plot.js';
@@ -51,7 +51,9 @@ const uniformTimes = (n) => Float64Array.from({ length: n }, (_, i) => state.s0 
 // The knots keep their order in time, at least this far apart.
 const gap = () => (0.2 * (state.s1 - state.s0)) / (state.knots.length - 1);
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-const busy = () => !!dragging || state.rolling;
+// Something is moving (a knot, a roll, or a slider whose full search or nudge is still to come):
+// the plots' ranges and the phase-space contours hold still meanwhile.
+const busy = () => !!dragging || state.rolling || !!settleTimer || !!nudgeTimer;
 
 function buildL() {
   const d = state.sys;
@@ -193,16 +195,51 @@ function sameTruth(old) {
   return best;
 }
 
-let truthTimer = 0, truthPending = false;
-/** Find the true paths again; snap: put the path on the one of least action. */
-function recomputeTruth(delay = 0, { snap = false } = {}) {
+/**
+ * While a slider or an end point moves, the true paths are followed from where they were
+ * (followPaths: a few trajectories, cheap) rather than searched for afresh (hundreds), and the
+ * full search waits until nothing has changed for a moment (SETTLE_MS).  Not for closed orbits
+ * or closed forms, which are cheap already.
+ */
+function followTruths() {
+  const d = state.sys;
+  if (periodic() || d.truePaths || truths.some((t) => t.closed)) return null;
+  // (None to follow: none until the search, a moment after the last change.)
+  // Steps of about 0.1 in s (at least 50): enough to draw the paths, and their actions to 4
+  // figures, meanwhile.
+  const steps = 2 * clamp(Math.round(5 * (state.s1 - state.s0)), 25, 200);
+  return truths.length ? followPaths(L, state.s0, state.q0, state.s1, state.q1, truths.map((t) => t.v0), { steps, max: 6, tol: 1e-6 }) : [];
+}
+
+let truthTimer = 0, truthPending = false, settleTimer = 0;
+const SETTLE_MS = 250;
+/**
+ * Find the true paths again; snap: put the path on the one of least action; quick: follow the
+ * known ones now, and search in full once things have been still for SETTLE_MS.
+ */
+function recomputeTruth(delay = 0, { snap = false, quick = false } = {}) {
   clearTimeout(truthTimer);
+  clearTimeout(settleTimer); settleTimer = 0;
   const run = () => {
     truthPending = false;
     if (!L) { truths = []; ref = null; return; }
-    try { truths = computeTruths().map(withKinetic); } catch { truths = []; }
+    let followed = null;
+    if (quick && !snap) { try { followed = followTruths(); } catch { followed = null; } }
+    if (followed) {
+      truths = followed.map(withKinetic);
+      truthPending = true;
+      settleTimer = setTimeout(() => recomputeTruth(0), SETTLE_MS);
+    } else {
+      try { truths = computeTruths().map(withKinetic); } catch { truths = []; }
+    }
     ref = snap ? truths[0] || null : sameTruth(ref);
-    if ((snap || state.onTrue) && ref) snapTo(ref);
+    // (While things move, the knots go onto the true path without the nudge to stationary, which
+    // comes when they stop: with the full search, or on its own.)
+    if ((snap || state.onTrue) && ref) {
+      const later = quick && !snap;
+      snapTo(ref, !later);
+      if (later && !followed) nudgeSoon();
+    }
     evaluate();
     if (snap) {
       slots = null;
@@ -213,11 +250,24 @@ function recomputeTruth(delay = 0, { snap = false } = {}) {
       record('start');
     }
     if (!dragging) pathView = null;
-    computePhaseGrid();
+    // (A typed L's phase-space contours wait for the full search too: its p = dL/dv must be
+    // inverted numerically at every point of the grid, through the typed expression.)
+    if (!followed || !phaseGrid || L.vOfP || !state.sys.typed) computePhaseGrid();
     showTruthList();
     draw();
   };
   if (delay) { truthPending = true; truthTimer = setTimeout(run, delay); } else run();
+}
+
+/** The nudge to stationary that snapTo(ref, false) left out, once the knots slider stops. */
+let nudgeTimer = 0;
+function nudgeSoon() {
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => {
+    nudgeTimer = 0;
+    if (!state.onTrue || !ref || dragging || morph) return;
+    snapTo(ref); evaluate(); draw();
+  }, SETTLE_MS);
 }
 
 /**
@@ -225,7 +275,7 @@ function recomputeTruth(delay = 0, { snap = false } = {}) {
  * far less than a pixel, as a rule) to where the action of the path drawn through them is
  * stationary, so that every drag changes S at second order only.
  */
-function snapTo(t) {
+function snapTo(t, nudge = true) {
   if (!t || !L) return;
   const n = state.knots.length;
   state.times = uniformTimes(n);
@@ -233,7 +283,7 @@ function snapTo(t) {
   if (periodic()) { state.q0 = state.q1 = t.q[0]; q[0] = q[n - 1] = t.q[0]; }
   else { q[0] = state.q0; q[n - 1] = state.q1; }
   let p = new Path(state.s0, state.s1, q, state.mode, { s: state.times, periodic: periodic() });
-  if (!t.family) {
+  if (!t.family && nudge) {
     // The ends stay put (a closed orbit's start too: it fixes where on the loop the trip begins).
     try {
       const r = stationaryKnots(L, p, { ...qopt(), free: freeKnots(p).filter((k) => k > 0) });
@@ -277,11 +327,11 @@ function setKey() {
 /** The one-line hint under the path plot: what to drag, and what to watch. */
 function setHint() {
   const d = state.sys, t = ref || truths[0];
-  const saddle = t && (t.closed || t.index > 0);
+  const saddle = t && (t.closed || t.index > 0 || t.legendre === -1);
   const text = d.vertical ? `Drag an event ○ sideways and watch S go up (the traveller's clock runs slower)`
     : d.id === 'brachistochrone' ? 'Drag a point ○ up or down and watch the time grow'
       : d.s === 'x' ? 'Drag a point ○ up or down and watch the optical path grow'
-        : saddle ? `Drag a knot ○ up or down and watch S change: this ${t.closed ? 'orbit' : 'true path'} is a saddle, not a minimum`
+        : saddle ? `Drag a knot ○ up or down and watch S change: this ${t.closed ? 'orbit' : 'true path'} is ${kindOf(t) === 'a maximum' ? 'a maximum' : 'a saddle'}, not a minimum`
           : 'Drag a knot ○ up or down and watch S go up';
   const e = $('#path-hint');
   if (e.textContent !== text) e.textContent = text;
@@ -327,7 +377,8 @@ function setSystem(d, { knots, T, params, ends = 'fixed' } = {}) {
         : '<math><mi>L</mi><mo>(</mo><mi>x</mi><mo>,</mo><mi>v</mi><mo>,</mo><mi>t</mi><mo>)</mo><mo>=</mo></math>',
       value: d.source, variables: d.typed === 'V' ? ['x', 't'] : ['x', 'v', 't'], reserved: ['m'],
       hints: { gamma: { min: -1, max: 1, value: 0.3 }, a: { min: 0, max: 3, value: 1 }, k: { min: 0, max: 5, value: 1 } },
-      onChange: (expr) => { typedExpr = expr; rebuild(); },
+      // A parameter's slider (the same expression): follow the true paths; a new expression: search.
+      onChange: (expr) => { const same = typedExpr?.source === expr.source; typedExpr = expr; rebuild({ quick: same }); },
     });
     typedExpr = typedField.expr;
     typedBox.append(typedField);
@@ -341,13 +392,13 @@ function setSystem(d, { knots, T, params, ends = 'fixed' } = {}) {
       n0: '<math><msub><mi>n</mi><mn>0</mn></msub></math>', alpha: '<math><mi>α</mi></math>',
       n1: '<math><msub><mi>n</mi><mn>1</mn></msub></math>', n2: '<math><msub><mi>n</mi><mn>2</mn></msub></math>' }[k] || k;
     const s = slider({ label, labelHTML: true, min: p.min, max: p.max, value: state.params[k],
-      onInput: (v) => { state.params[k] = v; rebuild(); } });
+      onInput: (v) => { state.params[k] = v; rebuild({ quick: true }); } });
     box.append(s);
     paramSliders[k] = s;
   }
   if (d.tmax) {
     const s = slider({ label: `<math><mi>${d.s === 't' ? 'T' : 'X'}</mi></math>`, labelHTML: true, min: 0.3, max: d.tmax, value: state.s1 - state.s0,
-      title: 'How long the trip takes', onInput: (v) => { setDuration(v); rebuild(); } });
+      title: 'How long the trip takes', onInput: (v) => { setDuration(v); rebuild({ quick: true }); } });
     box.append(s);
     paramSliders.T = s;
   }
@@ -377,7 +428,7 @@ function lockDuration() {
   if (paramSliders.T) for (const i of paramSliders.T.querySelectorAll('input')) i.disabled = locked;
 }
 
-function rebuild({ snap = false } = {}) {
+function rebuild({ snap = false, quick = false } = {}) {
   buildL();
   if (!L) return;
   if (periodic() && state.sys.periodic?.period) {
@@ -385,9 +436,10 @@ function rebuild({ snap = false } = {}) {
     if (Math.abs(state.s1 - state.s0 - T) > 1e-12) setDuration(T);
   }
   evaluate();
-  if (!snap) record();
   setCaption();
-  recomputeTruth(0, { snap });
+  recomputeTruth(0, { snap, quick });
+  // (After the path has followed the true path, if it was on it: the record shows the path drawn.)
+  if (!snap) record();
 }
 
 // ----------------------------------------------------------------- path controls
@@ -401,8 +453,10 @@ function setKnotCount(n) {
   setRolling(false);
   stopMorph();
   if (state.onTrue && ref) {
+    // On the true path at once; nudged to stationary when the slider stops.
     state.knots = new Float64Array(n);
-    snapTo(ref);
+    snapTo(ref, false);
+    nudgeSoon();
   } else {
     // Keep the shape: resample the current path at evenly spaced new knots.
     const p = path(), ss = uniformTimes(n);
@@ -420,7 +474,7 @@ const modeSeg = segmented([
 ], state.mode, (v) => {
   state.mode = v;
   if (state.onTrue && ref) snapTo(ref);
-  evaluate(); record(v === 'segments' ? 'segments' : 'smooth'); draw();
+  evaluate(); record(v === 'segments' ? 'segments' : 'smooth'); setCaption(); draw();
 }, { label: 'Path shape' });
 $('#mode-box').append(modeSeg);
 
@@ -621,15 +675,30 @@ function setCaption() {
     phase: timeDependent()
       ? `The path in phase space, (${x}, p), p = ∂L/∂${dot}.  L depends on ${d.s}: no conserved energy, so no contours.`
       : `The path in phase space, (${x}, p), p = ∂L/∂${dot}, over contours of the energy.  The true path keeps to one${periodic() ? ' (a loop, if closed)' : ''}; a wrong one crosses them.`,
-    energy: timeDependent()
+    energy: (timeDependent()
       ? `E = ${dot} ∂L/∂${dot} − L along the path.  L depends on ${d.s}, so E changes even on the true path.`
-      : `E = ${dot} ∂L/∂${dot} − L along the path: constant on the true path (L has no ${d.s} in it); a wrong one's wanders.`,
+      : `E = ${dot} ∂L/∂${dot} − L along the path: constant on the true path (L has no ${d.s} in it); a wrong one's wanders.`)
+      + (state.mode === 'segments' ? '  Bold: each straight segment\'s E, averaged over it.' : ''),
     phasor: `Each height of the ringed knot makes a path with an arrow ${texToMathML('e^{iS/\\hbar}')}, added here head to tail.  Near the stationary height they line up and add (green: the band on the path plot); elsewhere they curl up and cancel.  Yours: the blue dot.`,
   }[state.view];
   $('#view-cap').innerHTML = text;
 }
 hbarSlider.hidden = state.view !== 'phasor';
 $('#view-foot').hidden = state.view !== 'phasor';
+
+/**
+ * What kind of stationary point a true path is.  Its Morse index (conjugate points) says how
+ * many independent ways S goes down from it when L is convex in the velocity (Legendre's
+ * condition, true of every L = T - V); when L is concave in it, the conjugate points count the
+ * ways S goes up instead; when neither, they say nothing.
+ */
+function kindOf(t) {
+  if (t.closed) return 'closed orbit';
+  const k = t.index, conc = t.legendre === -1;
+  if (t.legendre === 0) return 'stationary: L is neither convex nor concave in the velocity along it';
+  if (conc) return k === 0 ? 'a maximum' : `a saddle, ${k} way${k > 1 ? 's' : ''} up`;
+  return k === 0 ? 'a minimum' : `a saddle, index ${k}`;
+}
 
 function truthWord(t) {
   if (t?.closed) return 'true orbit';
@@ -643,23 +712,30 @@ function showTruthList() {
   if (!state.show.truth) return;
   const d = state.sys;
   if (!truths.length) {
-    const T = state.s1 - state.s0;
-    box.append(el('div', {}, periodic()
-      ? (d.id === 'pendulum' && T <= 2 * Math.PI ? 'No closed orbit: a pendulum takes at least 2π for a swing.  Make T longer.' : 'No closed orbit of this period.')
-      : d.s === 'x' && d.id !== 'brachistochrone' ? 'No ray joins these two points (none leaves the first at a slope below ±' + d.vmax + ' and reaches the second).'
-        : 'No true path found between these end points.'));
+    const T = state.s1 - state.s0, w = state.params.omega, near = d.id === 'harmonic' && Math.abs(T * w / Math.PI - Math.round(T * w / Math.PI)) < 0.02 && Math.round(T * w / Math.PI) > 0;
+    box.append(el('div', {}, settleTimer ? 'Looking for the true paths…'
+      : periodic()
+        ? (d.id === 'pendulum' && T <= 2 * Math.PI ? 'No closed orbit: a pendulum takes at least 2π for a swing.  Make T longer.' : 'No closed orbit of this period.')
+        : d.s === 'x' && d.id !== 'brachistochrone' ? 'No ray joins these two points (none leaves the first at a slope below ±' + d.vmax + ' and reaches the second).'
+          : near ? `No true path: T is a whole number of half periods, π/ω, where every path from x = ${fmt(state.q0, 3)} arrives at ${fmt(Math.round(T * w / Math.PI) % 2 ? -state.q0 : state.q0, 3)} whatever its speed (a conjugate point).  Close to it, reaching x = ${fmt(state.q1, 3)} takes a speed beyond ±${d.vmax}.`
+            : `No true path found between these end points (none starting with a speed below ±${d.vmax}).`));
     return;
   }
   if (periodic() && d.family) box.append(el('div', { class: 'muted' }, 'Every swing takes one period: each of these loops is a true orbit, all with S = 0.  Shown: the one nearest your path.'));
   else if (periodic() && !truths[0].through) box.append(el('div', { class: 'muted' }, `The closed orbit of period ${fmt(state.s1 - state.s0, 3)} never reaches ${d.q} = ${fmt(state.q0, 3)}; it starts here at its turning point.`));
   if (truths.length > 1) box.append(el('div', { class: 'muted' }, `${truths.length} true paths join these ends.  Click one to put your path on it:`));
   truths.forEach((t, i) => {
-    const kind = t.closed ? 'closed orbit' : t.index === 0 ? 'a minimum' : `a saddle, index ${t.index}`;
+    const kind = kindOf(t);
     const way = t.closed && !t.family && truths.length > 1 && Math.abs(t.v0) > 1e-9 ? (t.v0 > 0 ? ', moving up first' : ', moving down first') : '';
     box.append(el('button', { type: 'button', class: 'path', title: 'Put your path on this true path', onclick: () => backToTrue(t) },
       el('span', { class: 'swatch', style: { borderColor: truthColor(i) } }),
       `${actionWord()} ${fmt(t.S, 5)} (${kind}${way})`, t === ref ? el('span', { class: 'mark' }, ' ◂ yours') : null));
   });
+  // The homework answer, where there is one, beside what the shooting found.
+  if (d.exactText && !periodic() && truths.length === 1) {
+    const S = d.exact(paramValues(), state.s0, state.q0, state.s1, state.q1);
+    if (Number.isFinite(S)) box.append(el('div', { class: 'muted' }, `The formula, ${d.exactText}, gives ${fmt(S, 5)}.`));
+  }
 }
 
 // ------------------------------------------------------------------- drawing
@@ -1058,7 +1134,7 @@ function drawView() {
   else drawPhase(ctx, width, height, c);
 }
 
-const timeDependent = () => state.sys.typed === 'L' || (state.sys.typed === 'V' && typedExpr?.uses('t'));
+const timeDependent = () => !!(state.sys.typed && typedExpr?.uses('t'));
 
 function computePhaseGrid() {
   phaseGrid = null;
@@ -1153,12 +1229,41 @@ function drawPhase(ctx, width, height, c) {
   f.axes({ xlabel: d.qlabel || d.q, ylabel: 'p' });
 }
 
+/**
+ * The energy of each straight segment: E averaged over it (for L = T - V, the segment's ½mv²
+ * plus V averaged along it), by the action's own quadrature, whose points fall knot interval by
+ * knot interval.  This is the energy that ∂S/∂h = -E is about, and that the knots' times balance.
+ */
+function segmentEnergies() {
+  if (!current || !quad) return null;
+  const E = energy(L, current.samples.q, current.samples.v, quad.s), n = state.times.length - 1, per = quad.s.length / n, out = [];
+  for (let i = 0; i < n; i++) {
+    let sum = 0, w = 0;
+    for (let j = i * per; j < (i + 1) * per; j++) { sum += E[j] * quad.w[j]; w += quad.w[j]; }
+    out.push(sum / w);
+  }
+  return out;
+}
+
 function drawEnergy(ctx, width, height, c) {
-  const d = state.sys;
-  const f = new Frame(ctx, width, height, { left: 52, right: 12, top: 8, bottom: 32 });
+  const d = state.sys, segs = state.mode === 'segments' ? segmentEnergies() : null;
   const tr = path().trace(30), E = energy(L, tr.q, tr.v, tr.s);
-  const all = Array.from(E).filter(Number.isFinite);
   const tE = state.show.truth ? truths.map((t) => energy(L, t.q, t.v, t.s)) : [];
+  // The numbers, above the plot: the true path's energy (or its range, when L depends on time),
+  // and the range of yours (of its segments' energies, for straight segments); on two lines if
+  // the plot is narrow.
+  const range = (e) => { let a = Infinity, b = -Infinity; for (const x of e) if (Number.isFinite(x)) { a = Math.min(a, x); b = Math.max(b, x); } return a <= b ? [a, b] : null; };
+  const t = ref || truths[0], ti = Math.max(0, truths.indexOf(t)), rt = state.show.truth && t ? range(tE[ti] || energy(L, t.q, t.v, t.s)) : null, ry = range(segs || E);
+  // Decimals for the size of the true path's energy (fixed for the set-up, so the line holds still).
+  const big = Math.max(...(rt || ry || [1]).map(Math.abs), 1e-3), digits = Math.max(1, Math.floor(Math.log10(big)) + 1);
+  const dec = clamp(4 - digits, 1, 4), w = digits + 1 + dec + 1, num = (v) => ({ v, dec, w });
+  const lines = [];
+  if (rt) lines.push([truthColor(ti), rt[1] - rt[0] <= 1e-6 * (1 + Math.abs(rt[0])) ? [`${truthWord(t)}: E = `, num(rt[0])] : [`${truthWord(t)}: E from `, num(rt[0]), ' to ', num(rt[1])]]);
+  if (ry) lines.push([c.accent, [segs ? 'your segments: ' : 'yours: ', 'from ', num(ry[0]), ' to ', num(ry[1])]]);
+  ctx.font = '12px system-ui, sans-serif';
+  const oneLine = lines.reduce((a, [, p]) => a + slotsWidth(ctx, p) + 18, 0) < width - 60;
+  const f = new Frame(ctx, width, height, { left: 52, right: 12, top: oneLine || lines.length < 2 ? 24 : 40, bottom: 32 });
+  const all = Array.from(E).filter(Number.isFinite);
   for (const e of tE) for (const x of e) if (Number.isFinite(x)) all.push(x);
   if (!all.length) return;
   const sorted = all.sort((a, b) => a - b);
@@ -1179,7 +1284,11 @@ function drawEnergy(ctx, width, height, c) {
     ctx.stroke(); ctx.setLineDash([]);
   };
   tE.forEach((e, i) => line(truths[i].s, e, truthColor(i), [6, 4], 1.8));
-  line(tr.s, E, c.accent, [], 2);
+  if (segs) {
+    // Straight segments: E along each (thin), and its average over the segment (bold).
+    ctx.globalAlpha = 0.45; line(tr.s, E, c.accent, [], 1.2); ctx.globalAlpha = 1;
+    segs.forEach((e, i) => { if (Number.isFinite(e)) line([state.times[i], state.times[i + 1]], [e, e], c.accent, [], 3); });
+  } else line(tr.s, E, c.accent, [], 2);
   // The knot times, faintly: a straight-segment path's energy jumps there.
   ctx.strokeStyle = c.line; ctx.lineWidth = 1;
   for (let k = 1; k < state.times.length - 1; k++) { const x = Math.round(f.X(state.times[k])) + 0.5; ctx.beginPath(); ctx.moveTo(x, f.top); ctx.lineTo(x, f.bottom); ctx.stroke(); }
@@ -1190,6 +1299,12 @@ function drawEnergy(ctx, width, height, c) {
   }
   ctx.restore();
   f.axes({ xlabel: d.s, ylabel: 'E' });
+  ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  let x = 8, y = 16;
+  for (const [colour, parts] of lines) {
+    ctx.fillStyle = colour; fillSlots(ctx, parts, x, y);
+    if (oneLine) x += slotsWidth(ctx, parts) + 18; else y += 16;
+  }
 }
 
 /**
@@ -1299,10 +1414,11 @@ function updateScore() {
   } else if (t) {
     const diff = S - t.S, tol = 2e-4 * (1 + Math.abs(t.S)), what = truthWord(t);
     const more = { twin: 'more action, less proper time, than the true world line', mirage: 'a longer optical path than the true ray', refraction: 'a longer optical path than the true ray', brachistochrone: 'slower than the cycloid' }[d.id] || `more action than the ${what}`;
-    if (diff < -tol) { note = `less than the ${what}: it is a saddle, not a minimum!`; cls = 'warn'; }
-    else if (state.onTrue && state.mode === 'segments' && diff > tol) note = `the best straight segments through these knots: just above the ${what}`;
-    else if (state.onTrue && diff > tol) { note = `on the ${what}, as near as ${state.knots.length} knots can draw it`; cls = 'good'; }
+    // (On the true path, the knots can only approximate it: S is a little off, either way.)
+    if (state.onTrue && state.mode === 'segments' && diff > tol) note = `the best straight segments through these knots: just above the ${what}`;
+    else if (state.onTrue && Math.abs(diff) > tol) { note = `on the ${what}, as near as ${state.knots.length} knots can draw it`; cls = 'good'; }
     else if (state.onTrue || Math.abs(diff) <= tol) { note = `on the ${what}`; cls = 'good'; }
+    else if (diff < -tol) { note = `less than the ${what}: it is ${kindOf(t) === 'a maximum' ? 'a maximum' : 'a saddle'}, not a minimum!`; cls = 'warn'; }
     else if (t.family && Math.abs(S - familyS) <= tol) { note = `on a true orbit, as near as ${state.knots.length} knots can draw it`; cls = 'good'; }
     else note = more;
   } else note = 'no true path to compare with';
@@ -1408,7 +1524,7 @@ function moveKnotTo(k, s, q) {
   else if (k === 0) state.q0 = q;
   else if (k === n - 1) state.q1 = q;
   state.onTrue = false;
-  if (end) recomputeTruth(120);
+  if (end) recomputeTruth(30, { quick: true });
 }
 
 // One evaluation and one history point per animation frame, however fast the pointer.
@@ -1480,8 +1596,8 @@ const setups = {
   hints: () => go('gravity', { show: { hints: true }, knots: 7, then: () => bend(-1) }),
   energy: () => go('gravity', { knots: 6, view: 'energy' }),
   phase: () => go('harmonic'),
-  orbit: () => go('pendulum', { ends: 'periodic', T: 8, knots: 12 }),
   saddle: () => go('harmonic', { T: 4 }),
+  orbit: () => go('pendulum', { ends: 'periodic', T: 8, knots: 12 }),
   pendulum: () => go('pendulum'),
   twin: () => go('twin', { mode: 'segments' }),
   light: () => go('refraction'),
@@ -1509,8 +1625,8 @@ window.__app = {
   rollToEnd(max = 3000) { setRolling(true); for (let i = 0; i < max && rollStep(); i++); setRolling(false); draw(); return rollFrames; },
   get truths() { return truths; }, get ref() { return ref; }, get current() { return current; }, get history() { return history; },
   get frame() { return frame; }, get hover() { return hover; }, get phasor() { return phasor; }, get ranges() { return ranges; },
-  get idle() { return !frameDue && !truthPending && !dragging && !state.rolling && !morph; },
-  get truthPending() { return truthPending; },
+  get idle() { return !frameDue && !truthPending && !nudgeTimer && !dragging && !state.rolling && !morph; },
+  get truthPending() { return truthPending; }, segmentEnergies,
   toPx: (s, q) => toPx(s, q),
   ready: true,
 };

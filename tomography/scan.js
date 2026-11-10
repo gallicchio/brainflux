@@ -227,8 +227,8 @@ export class Scanner {
   }
 
   /** The direct Fourier (gridding) reconstruction from the measured slices. */
-  directFourier() {
-    return directFourier(this.spec, this.nA, this.L, this.ds, this.opts.range, this.measured, this.N);
+  directFourier(K = 2 * this.N) {
+    return directFourier(this.spec, this.nA, this.L, this.ds, this.opts.range, this.measured, this.N, K);
   }
 
   /** RMS of (picture - object) over the pixels within `radius` of the centre. */

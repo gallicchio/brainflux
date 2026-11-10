@@ -404,6 +404,20 @@ with Browser('tomography/index.html', size=(1400, 900)) as b:
     b.eval("__app.setObject('formula')"); settle(b)
     b.eval("document.querySelector('.formula-presets button').click()"); settle(b)
     check(b.eval("document.querySelectorAll('#object-options .params .slider').length") == 2, 'the stripes formula has sliders for k and a')
+    # While k's slider moves, the object is the formula sampled once a pixel; when it stops, 2 x 2
+    # (its edge antialiased): the scan circle's edge pixels then take fractional values.
+    fine0 = b.eval('__app.sc.truth.slice()')
+    b.eval("""(() => { const r = document.querySelectorAll('#object-options .params .slider')[1].querySelector('input[type=range]'); r.value = String(+r.value + 15); r.dispatchEvent(new Event('input')); })()""")
+    coarse = b.eval('[__app.idle, __app.state.fp.k]')
+    settle(b)
+    fine = b.eval('[__app.idle, __app.state.fp.k, __app.sc.truth.length]')
+    check(not coarse[0] and fine[0] and coarse[1] == fine[1] != 40, f'moving k ({coarse[1]}): a coarse object while it moves, the fine one 200 ms after')
+    # Values that would overflow the line integrals are cut off, and the pictures stay numbers.
+    b.eval("""(() => { const f = document.querySelector('#object-options .expr input'); f.value = 'exp(1000 r)'; f.dispatchEvent(new Event('change')); f.dispatchEvent(new Event('input')); })()""")
+    b.eval('__app.finishScan()'); settle(b)
+    fin = b.eval('[__app.sc.meas.every(Number.isFinite), __app.sc.fbp.every(Number.isFinite), Math.max(...__app.sc.truth)]')
+    check(fin[0] and fin[1] and fin[2] <= 1e4, f'a formula that overflows (exp(1000 r)) is cut off at 1e4: the sinogram and the reconstruction stay finite ({fin})')
+    b.eval("document.querySelector('.formula-presets button').click()"); settle(b)
 
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'no exceptions or console errors' + ('' if not errors else ': ' + '; '.join(errors[:3])))
@@ -418,6 +432,20 @@ for address, want in (('#na=24&nd=128&filter=hann&obj=disk', {'nA': 24, 'M': 128
         check(o == want, f'{address} is restored ({o})')
         if want['panels'] == 'all':
             check(b.eval(HIDDEN) == [1, 1, 1], 'and the second row of panels is shown')
+
+# A small laptop: the scanner, the sinogram and the reconstruction side by side on the first
+# screen, with every readout and note whole (in two lines if need be), nothing sticking out.
+with Browser('tomography/index.html#setup=slice', size=(1100, 800)) as b:
+    b.wait('window.__app && __app.ready', timeout=60); settle(b)
+    b.eval("document.querySelector('#help').classList.remove('open')"); frames(b)
+    boxes = b.eval("['#cell-scan', '#cell-sino', '#cell-fbp'].map((s) => { const r = document.querySelector(s + ' .sq').getBoundingClientRect(); return [Math.round(r.top), Math.round(r.bottom), Math.round(r.width)]; })")
+    wide = b.eval('document.documentElement.scrollWidth')
+    check(len({t for t, _, _ in boxes}) == 1 and all(bt <= 800 and w >= 200 for _, bt, w in boxes) and wide <= 1100,
+          f'1100 x 800: the three pictures in one row on the first screen ({boxes}), the page {wide} px wide')
+    for js in ('', "__app.setView('direct')", "__app.setView('projection')"):
+        if js: b.eval(js); frames(b)
+        cut = b.eval(CUT)
+    check(not cut, 'every readout and note fits its panel at 1100 x 800' + (f': {cut[:3]}' if cut else ''))
 
 # The phone: the hint under the picture without scrolling, the panels in the order of the story,
 # nothing sticking out; the hint and the Start-here block readable in both themes.

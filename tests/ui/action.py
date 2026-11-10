@@ -232,6 +232,13 @@ with Browser('action/index.html', size=(1400, 900)) as b:
     free = [score_after('find', js)['S'] for js in ('__app.move(2, 1, 3)', '__app.move(2, 1.3, 2)', '__app.rush()', '__app.move(2, 1.25, 2.5)')]
     check(near(free[0], 8.13, 0.005) and near(free[1], 8.08, 0.005) and near(free[2], 4.32, 0.005) and near(free[3], 4, 1e-9),
           f'free particle: middle knot to x = 3 {free[0]:.3f}, to t = 1.3 {free[1]:.3f}, rush {free[2]:.3f}, along the line {free[3]:.4f} (the help: 8.13, 8.08, 4.32, 4.000)')
+    # The closed form beside what the shooting found, where there is one.
+    forms = {}
+    for name in ('find', 'throw', 'phase', 'saddle', 'twin'):
+        run(b, f'__app.setups.{name}()')
+        txt = b.eval("document.querySelector('#truth').textContent")
+        forms[name] = (txt.split('(')[0].replace('S =', '').strip(), txt.split('gives ')[-1].rstrip('.') if 'The formula' in txt else None)
+    check(all(f[1] is not None and f[0] == f[1] for f in forms.values()), f'the true path found by shooting has the closed form\'s action, to 5 figures: {forms}')
 
     # ---- rolling downhill
     run(b, '__app.setups.hints()')
@@ -287,8 +294,8 @@ with Browser('action/index.html', size=(1400, 900)) as b:
       for (let i = 0; i + 1 < q.length; i++) { const v = (q[i+1]-q[i])/(s[i+1]-s[i]); E.push(0.5*v*v + 10*(q[i]+q[i+1])/2); } return E; })()'''
     run(b, '__app.setups.energy()')
     run(b, "[...document.querySelectorAll('#mode-box button')].find((x) => x.textContent === 'Straight segments').click()")
-    E = b.eval(SEG)
-    check(all(near(e, 48.0, 1e-6) for e in E), f'6 knots, straight segments: every segment has E = 48.0 ({[round(e, 4) for e in E]})')
+    E, Ev = b.eval(SEG), b.eval('__app.segmentEnergies()')
+    check(all(near(e, 48.0, 1e-6) for e in E) and all(near(e, 48.0, 1e-6) for e in Ev), f'6 knots, straight segments: every segment has E = 48.0 ({[round(e, 4) for e in E]}), as the Energy view draws them ({[round(e, 4) for e in Ev]})')
     run(b, '__app.move(1, 0.55, __app.state.knots[1])')
     E, g = b.eval(SEG), b.eval('Array.from(__app.downhill(__app.path()).gs)')
     check(near(g[1], E[1] - E[0], 1e-4 * (1 + abs(g[1]))) and abs(g[1]) > 1, f'... a knot moved in time: dS/dt = {g[1]:.4f} = E_after - E_before = {E[1] - E[0]:.4f}')
@@ -392,6 +399,25 @@ with Browser('action/index.html', size=(1400, 900)) as b:
     tp = b.eval('__app.truths.map((t) => [t.S, t.index])')
     want = [(1.368, 0), (4.360, 1), (4.360, 1), (11.02, 2), (30.40, 2), (67.92, 3)]
     check(len(tp) == 6 and all(near(a[0], w[0], 0.005) and a[1] == w[1] for a, w in zip(tp, want)), f'double well: six true paths {[(round(a, 3), i) for a, i in tp]} (the help: {want})')
+    # While a slider moves, the true paths are followed at once (a few trajectories), and the full
+    # search comes when it stops: both find the same paths.
+    MOVE_M = '''(() => { const r = document.querySelector('#params .slider input[type=range]'); r.value = String(+r.value + 20); r.dispatchEvent(new Event('input')); })()'''
+    b.eval(MOVE_M)
+    moving = b.eval('[__app.truthPending, __app.truths.map((t) => [t.S, t.index]), __app.state.onTrue, __app.state.params.m]')
+    settle(b)
+    still = b.eval('__app.truths.map((t) => [t.S, t.index])')
+    check(moving[0] and moving[2] and len(moving[1]) == len(still) == 6 and all(near(a[0], c[0], 1e-3 * (1 + abs(c[0]))) and a[1] == c[1] for a, c in zip(moving[1], still)),
+          f"m to {moving[3]}: the six true paths follow while the slider moves, and the full search agrees when it stops ({[round(a[0], 4) for a in moving[1]]} -> {[round(c[0], 4) for c in still]})")
+    # An L concave in the velocity (V - T): the true path is a maximum, not a minimum.
+    run(b, '__app.setups.damped()')
+    b.eval('''(() => { const box = [...document.querySelectorAll('#params .slider')].pop().querySelector('input[type=number]'); box.value = 2; box.dispatchEvent(new Event('change')); })()''')
+    settle(b)
+    b.eval("""(() => { const f = document.querySelector('#typed input'); f.value = '-(v^2/2 - x^2/2)'; f.dispatchEvent(new Event('change')); })()""")
+    settle(b)
+    kinds = b.eval("[...document.querySelectorAll('#truth button.path')].map((e) => e.textContent)")
+    run(b, '__app.bend(1)')
+    note = b.eval(SCORE)['note']
+    check(len(kinds) == 1 and 'a maximum' in kinds[0] and 'maximum' in note, f"L = -(v^2/2 - x^2/2), T = 2: the true path is listed as a maximum ({kinds}), and a bend lowers S ('{note}')")
 
     # ---- a link carries the knot times and the view
     run(b, '__app.setups.throw()')

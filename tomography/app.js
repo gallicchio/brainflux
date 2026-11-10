@@ -91,32 +91,63 @@ const FORMULA_HINTS = {
 };
 
 // Pictures are kept inside the scan circle, with an edge softened over two pixels.
+const CIRCLE = new Float64Array(N * N);
+for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+  const r = Math.hypot((i - N / 2) * H, (N / 2 - j) * H);
+  CIRCLE[j * N + i] = r > 0.975 ? 0 : r > 0.96 ? 0.5 * (1 + Math.cos((Math.PI * (r - 0.96)) / 0.015)) : 1;
+}
 function maskToCircle(f) {
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const r = Math.hypot((i - N / 2) * H, (N / 2 - j) * H), o = j * N + i;
-    if (r > 0.975) f[o] = 0; else if (r > 0.96) f[o] *= 0.5 * (1 + Math.cos((Math.PI * (r - 0.96)) / 0.015));
-  }
+  for (let o = 0; o < N * N; o++) { const c = CIRCLE[o]; if (c === 0) f[o] = 0; else if (c !== 1) f[o] *= c; }
   return f;
 }
 
 let formulaExpr = null;
-function formulaPicture() {
-  if (!formulaExpr) return new Float64Array(N * N);
-  // Two by two samples per pixel, averaged.
-  const S = 2, n = N * S, xs = new Float64Array(n * n), ys = new Float64Array(n * n), rs = new Float64Array(n * n), ts = new Float64Array(n * n);
+// The points where a formula is evaluated, S x S of them in each pixel: x, y, r and theta.  They
+// depend on nothing, so they are made once (they took a sixth of a slider's step).
+const formulaGrids = {};
+function formulaGrid(S) {
+  if (formulaGrids[S]) return formulaGrids[S];
+  const n = N * S, xs = new Float64Array(n * n), ys = new Float64Array(n * n), rs = new Float64Array(n * n), ts = new Float64Array(n * n);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = (i / S - N / 2 + 0.5 / S - 0.5) * H, y = (N / 2 - j / S - 0.5 / S + 0.5) * H, o = j * n + i;
     xs[o] = x; ys[o] = y; rs[o] = Math.hypot(x, y); ts[o] = Math.atan2(y, x);
   }
+  return (formulaGrids[S] = { n, xs, ys, rs, ts });
+}
+/** The typed object, S x S samples per pixel averaged (2: edges anti-aliased; 1, a quarter of
+ *  the work, while a parameter's slider moves). */
+function formulaPicture(S = 2) {
+  if (!formulaExpr) return new Float64Array(N * N);
+  const { n, xs, ys, rs, ts } = formulaGrid(S);
   let v;
   try { v = formulaExpr.evaluate({ ...state.fp, x: xs, y: ys, r: rs, theta: ts }, n * n).re; }
   catch (e) { toast(e.message); return new Float64Array(N * N); }
-  const f = new Float64Array(N * N);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const val = v[j * n + i];
-    if (Number.isFinite(val)) f[Math.floor(j / S) * N + Math.floor(i / S)] += val / (S * S);
+  // Values that are not numbers count as 0, and huge ones are cut off at ±10⁴ times water's
+  // attenuation (beyond that the line integrals overflow, and nothing is that opaque).
+  const f = new Float64Array(N * N), w = 1 / (S * S), CAP = 1e4;
+  let clipped = false;
+  for (let j = 0; j < n; j++) {
+    const row = ((j / S) | 0) * N;
+    for (let i = 0; i < n; i++) {
+      let val = v[j * n + i];
+      if (!Number.isFinite(val)) continue;
+      if (val > CAP || val < -CAP) { val = val > 0 ? CAP : -CAP; clipped = true; }
+      f[row + ((i / S) | 0)] += val * w;
+    }
   }
+  if (clipped && S > 1) toast('The formula’s values are cut off at ±10⁴ (in units of water’s attenuation).');
   return maskToCircle(f);
+}
+// After a coarse picture, the fine one once the slider has been still for a moment.
+let formulaTimer = 0;
+function formulaSoon() {
+  clearTimeout(formulaTimer);
+  formulaTimer = setTimeout(() => {
+    formulaTimer = 0;
+    if (state.obj !== 'formula') return;
+    sc.setPicture(formulaPicture(2));
+    objectEdited();
+  }, 200);
 }
 
 async function picturePreset(id) {
@@ -399,7 +430,7 @@ function drawPicture(v, img) {
 }
 
 // What each cached picture was last drawn from: redraw it only when that changes.
-const drawn = { obj: '', recon: '', sino: '' };
+const drawn = { obj: '', recon: '', bp: '', sino: '' };
 let objVersion = 0;
 
 function draw() {
@@ -411,11 +442,15 @@ function draw() {
   }
   if (drawn.recon !== `${data}:${lo}:${hi}`) {
     greyInto(off.fbp, sc.fbp, lo, hi);
-    // Back-projection has no natural scale (it is the object blurred by 1/r): its own.
-    const bpLo = quantile(sc.bp, 0.002), bpHi = quantile(sc.bp, 0.998);
+    drawn.recon = `${data}:${lo}:${hi}`;
+  }
+  // The plain back-projection, only while its panel is unfolded.  It has no natural scale (it
+  // is the object blurred by 1/r): its own.
+  if (state.panels === 'all' && drawn.bp !== data) {
+    const [bpLo, bpHi] = quantiles(sc.bp, 0.002, 0.998);
     state.bpScale = [bpLo, bpHi > bpLo ? bpHi : bpLo + 1];
     greyInto(off.bp, sc.bp, ...state.bpScale);
-    drawn.recon = `${data}:${lo}:${hi}`;
+    drawn.bp = data;
   }
   drawScanner();
   drawSinogram(data);
@@ -445,15 +480,19 @@ morePanels.addEventListener('toggle', () => {
 });
 morePlot.addEventListener('toggle', () => { filterPlotStale = true; dirty = true; schedule(); });
 
-function quantile(arr, q) {
-  // An estimate from a sample of the pixels inside the circle (fast enough for every frame).
-  const vals = [];
-  for (let j = 2; j < N; j += 3) for (let i = 1; i < N; i += 3) {
-    const x = (i - N / 2) * H, y = (N / 2 - j) * H;
-    if (x * x + y * y < 0.98) vals.push(arr[j * N + i]);
-  }
-  vals.sort((a, b) => a - b);
-  return vals[Math.min(vals.length - 1, Math.floor(q * vals.length))];
+// The pixels the quantiles are estimated from: every third, inside the circle.
+const QUANTILE_PIXELS = [];
+for (let j = 2; j < N; j += 3) for (let i = 1; i < N; i += 3) {
+  const x = (i - N / 2) * H, y = (N / 2 - j) * H;
+  if (x * x + y * y < 0.98) QUANTILE_PIXELS.push(j * N + i);
+}
+const quantileValues = new Float64Array(QUANTILE_PIXELS.length);
+/** Quantiles of a picture, estimated from a sample of its pixels (one sort for all of them). */
+function quantiles(arr, ...qs) {
+  const vals = quantileValues;
+  for (let k = 0; k < vals.length; k++) vals[k] = arr[QUANTILE_PIXELS[k]];
+  vals.sort();
+  return qs.map((q) => vals[Math.min(vals.length - 1, Math.floor(q * vals.length))]);
 }
 
 // The ray of the sinogram pointed at (under the pointer, else the one clicked), or the slice of
@@ -675,11 +714,18 @@ let sliceRGBA = new Uint8ClampedArray(0);
 function updateSpectrum() {
   // The object's 2D transform: for the brightness, and to draw faintly under the slices.
   objSpec = objectSpectrum(sc.truth, N, KS);
-  const mags = new Float64Array(KS * KS);
-  for (let i = 0; i < mags.length; i++) mags[i] = Math.hypot(objSpec.re[i], objSpec.im[i]);
-  const sorted = mags.slice().sort();
-  kR = Math.max(sorted[Math.floor(0.985 * (mags.length - 1))], 1e-2 * sorted[mags.length - 1]) || 1;
-  kBase = new Uint8ClampedArray(KS * KS * 4);
+  // The brightness: the 98.5th percentile of |F|, from every seventh value (sorting all 262144
+  // took as long as the transform), but not below a hundredth of the largest.
+  const { re, im } = objSpec, sample = new Float64Array(Math.ceil((KS * KS) / 7));
+  let big = 0;
+  for (let i = 0, k = 0; i < KS * KS; i++) {
+    const m2 = re[i] * re[i] + im[i] * im[i];
+    if (m2 > big) big = m2;
+    if (i % 7 === 0) sample[k++] = m2;
+  }
+  sample.sort();
+  kR = Math.max(Math.sqrt(sample[Math.floor(0.985 * (sample.length - 1))]), 1e-2 * Math.sqrt(big)) || 1;
+  if (!kBase) kBase = new Uint8ClampedArray(KS * KS * 4);
   colorize(objSpec.re, objSpec.im, kBase, kR, 'complex');
   for (let i = 0; i < kBase.length; i += 4) { kBase[i] *= 0.38; kBase[i + 1] *= 0.38; kBase[i + 2] *= 0.38; }
   spectrumStale = false;
@@ -835,10 +881,12 @@ function overlays(v, which) {
 // The sixth panel.
 let directCache = { key: '', img: null, time: 0 };
 function directImage() {
-  const key = `${dataVersion()}`;
+  // While the scan runs, a quarter of the work: the slices gridded onto N x N points of Fourier
+  // space rather than 2N x 2N (no zero padding), a few times a second; the fine one once it stops.
+  const K = state.playing ? N : 2 * N, key = `${dataVersion()}:${K}`;
   const now = performance.now();
   if (directCache.key !== key && (!state.playing || now - directCache.time > 400)) {
-    directCache = { key, img: sc.directFourier(), time: now };
+    directCache = { key, img: sc.directFourier(K), time: now };
   }
   return directCache.img;
 }
@@ -1294,9 +1342,12 @@ const formulaField = exprField({
   label: '<math><mi>f</mi><mo>(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo>)</mo><mo>=</mo></math>',
   value: state.f, params: state.fp, variables: ['x', 'y', 'r', 'theta'], hints: FORMULA_HINTS,
   onChange: (expr, params) => {
+    // A parameter's slider (the same formula): a coarse picture now, the fine one when it stops.
+    const moving = formulaExpr?.source === expr.source;
     formulaExpr = expr; state.f = expr.source; state.fp = params;
     if (state.obj !== 'formula') return;
-    sc.setPicture(formulaPicture());
+    sc.setPicture(formulaPicture(moving ? 1 : 2));
+    if (moving) formulaSoon(); else clearTimeout(formulaTimer);
     objectEdited();
     updateHash();
   },
@@ -1601,7 +1652,7 @@ const ready = setups[hash.setup] ? setups[hash.setup]().then(() => help.open()) 
 window.__app = {
   Scanner, state, sc, setups, setObject, reconfigure, finishScan, restartScan, stepScan, setView, setWindow, setTool, setPanels,
   get nowIndex() { return nowIndex(); }, get hardwareIndex() { return hardwareIndex(); },
-  get idle() { return !jobs.flight && !jobs.target && !rescanSoon; }, get workers() { return workers ? workers.length : 0; },
+  get idle() { return !jobs.flight && !jobs.target && !rescanSoon && !formulaTimer; }, get workers() { return workers ? workers.length : 0; },
   get rms() { return state.rms; }, get rmsSmooth() { return state.rmsSmooth; }, get rmsDirect() { return state.rmsDirect; }, directImage, draw, ready: false,
 };
 ready.then(() => { window.__app.ready = true; });

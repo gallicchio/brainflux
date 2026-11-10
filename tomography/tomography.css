@@ -77,10 +77,18 @@ details .stack { margin-top: 6px; }
 #filter-box .seg button { flex: 1 1 auto; padding: 4px 3px; font-size: 12.5px; white-space: nowrap; }
 
 @media (max-width: 1180px) {
+  /* Still three pictures a row, so that the scanner, the sinogram and the reconstruction are all
+     on the first screen of a small laptop. */
   .tomo { grid-template-columns: minmax(0, 1fr) 270px; }
-  .stage, .more-panels .row3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stage { position: static; }
-  .sq, .readout { max-width: 100%; }
+  #scan-buttons button { padding: 4px 6px; }
+  #play { min-width: 4.2em; }
+  /* The lines of numbers under the pictures take two lines in a narrow column (always two, so
+     that nothing below moves as they change). */
+  .readout.mono { height: 38px; line-height: 19px; white-space: normal; }
+  /* And the words under each picture's name, two lines in every cell, so the pictures line up. */
+  .cell-head { min-height: 58px; }
+  .cell-head .note { white-space: normal; height: 32px; }
 }
 @media (max-width: 900px) {
   /* One column: the pictures and the panels of controls are all items of one grid, so that the
@@ -88,6 +96,9 @@ details .stack { margin-top: 6px; }
   .tomo { grid-template-columns: minmax(0, 1fr); padding: 8px; gap: 10px; }
   .stage, .controls { display: contents; }
   .sq, .readout { max-width: min(100%, 560px); }
+  .readout.mono { height: 20px; line-height: 20px; white-space: nowrap; }
+  .cell-head { min-height: 42px; }
+  .cell-head .note { white-space: nowrap; height: auto; }
   .more-panels .row3 { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .more-panels > summary { white-space: normal; }
   /* The pictures in the order of the story: object, sinogram, reconstruction, then the rest. */

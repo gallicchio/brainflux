@@ -4,17 +4,31 @@
 
 import { parse } from '../lib/expr.js';
 
-const fill = (n, v) => new Float64Array(n).fill(v);
 const map3 = (q, v, s, f) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) out[i] = f(q[i], v[i], s[i]); return out; };
 
 /** L = (m/2) v^2 - V(q, s) from a function V. */
 function mechanical(m, V, dVdq) {
   return {
-    L: (q, v, s) => map3(q, v, s, (x, u, t) => 0.5 * m * u * u - V(x, t)),
-    accel: dVdq ? (q, v, s) => map3(q, v, s, (x, u, t) => -dVdq(x, t) / m) : undefined,
-    p: (q, v) => Float64Array.from(v, (u) => m * u),
-    vOfP: (q, p) => Float64Array.from(p, (x) => x / m),
-    kinetic: (q, v) => Float64Array.from(v, (u) => 0.5 * m * u * u),
+    L: (q, v, s) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - V(q[i], s[i]); return out; },
+    accel: dVdq ? (q, v, s) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) out[i] = -dVdq(q[i], s[i]) / m; return out; } : undefined,
+    p: (q, v) => { const out = new Float64Array(v.length); for (let i = 0; i < v.length; i++) out[i] = m * v[i]; return out; },
+    vOfP: (q, p) => { const out = new Float64Array(p.length); for (let i = 0; i < p.length; i++) out[i] = p[i] / m; return out; },
+    kinetic: (q, v) => { const out = new Float64Array(v.length); for (let i = 0; i < v.length; i++) out[i] = 0.5 * m * v[i] * v[i]; return out; },
+  };
+}
+
+/**
+ * Light in a medium of index n(y), "time" x: L = n sqrt(1 + y'^2), whose Euler-Lagrange equation
+ * d/dx (n y' / sqrt(1 + y'^2)) = n'(y) sqrt(1 + y'^2) is y'' = (1 + y'^2) n'(y) / n(y).
+ */
+function optical(n, dn) {
+  return {
+    L: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? ni * Math.sqrt(1 + v[i] * v[i]) : NaN; } return out; },
+    accel: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? ((1 + v[i] * v[i]) * dn(q[i])) / ni : NaN; } return out; },
+    // The momentum p = n y' / sqrt(1 + y'^2) (n times the sine of the ray's angle to the x axis),
+    // and back: y' = p / sqrt(n^2 - p^2), for |p| < n only.
+    p: (q, v) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = ni > 0 ? (ni * v[i]) / Math.sqrt(1 + v[i] * v[i]) : NaN; } return out; },
+    vOfP: (q, p) => { const out = new Float64Array(q.length); for (let i = 0; i < q.length; i++) { const ni = n(q[i]); out[i] = Math.abs(p[i]) < ni ? p[i] / Math.sqrt(ni * ni - p[i] * p[i]) : NaN; } return out; },
   };
 }
 
@@ -26,6 +40,7 @@ export const SYSTEMS = [
     formula: 'L = \\tfrac12 m\\dot x^2',
     make: ({ m }) => mechanical(m, () => 0, () => 0),
     exact: ({ m }, s0, q0, s1, q1) => (m * (q1 - q0) ** 2) / (2 * (s1 - s0)),
+    exactText: 'S = m(x₂ − x₁)²/2T',
     blurb: 'The true path is a straight line at constant speed.  Any detour costs action.',
   },
   {
@@ -34,6 +49,7 @@ export const SYSTEMS = [
     params: { m: { value: 1, min: 0.1, max: 5 }, g: { value: 10, min: 0, max: 20 } },
     formula: 'L = \\tfrac12 m\\dot x^2 - mgx',
     make: ({ m, g }) => mechanical(m, (x) => m * g * x, () => m * g),
+    exactText: 'S = m(x₂ − x₁)²/2T − mg(x₁ + x₂)T/2 − mg²T³/24',
     exact: ({ m, g }, s0, q0, s1, q1) => {
       const T = s1 - s0;
       // x(t) = q0 + (q1 - q0) t/T + g t (T - t)/2: S = m (q1-q0)^2/2T - m g (q0+q1) T/2 - m g^2 T^3/24.
@@ -47,6 +63,7 @@ export const SYSTEMS = [
     params: { m: { value: 1, min: 0.1, max: 5 }, omega: { value: 1, min: 0.1, max: 3 } },
     formula: 'L = \\tfrac12 m\\dot x^2 - \\tfrac12 m\\omega^2x^2',
     make: ({ m, omega }) => mechanical(m, (x) => 0.5 * m * omega * omega * x * x, (x) => m * omega * omega * x),
+    exactText: 'S = mω[(x₁² + x₂²) cos ωT − 2x₁x₂] / (2 sin ωT)',
     exact: ({ m, omega }, s0, q0, s1, q1) => {
       const w = omega, T = s1 - s0;
       return ((m * w) / (2 * Math.sin(w * T))) * ((q0 * q0 + q1 * q1) * Math.cos(w * T) - 2 * q0 * q1);
@@ -81,6 +98,7 @@ export const SYSTEMS = [
       vOfP: (q, p) => Float64Array.from(p, (x) => x / Math.sqrt(x * x + m * m)),
     }),
     exact: ({ m }, s0, q0, s1, q1) => -m * Math.sqrt((s1 - s0) ** 2 - (q1 - q0) ** 2),
+    exactText: 'S = −m√(T² − (x₂ − x₁)²)',
     blurb: 'A free particle in special relativity (c = 1).  Its action is −m times its proper time, the time its own clock shows.  The twin who stays home (the straight world line) ages the most: the action is least, the proper time greatest.',
   },
   {
@@ -88,9 +106,7 @@ export const SYSTEMS = [
     s: 'x', q: 'y', s0: 0, s1: 10, q0: 0, q1: 0, qrange: [-1.5, 4], knots: 5, vmax: 3,
     params: { n0: { value: 1, min: 1, max: 2 }, alpha: { value: 0.05, min: -0.2, max: 0.2 } },
     formula: 'L = n(y)\\sqrt{1+y\'^2},\\quad n = n_0+\\alpha y',
-    make: ({ n0, alpha }) => ({
-      L: (q, v) => map3(q, v, q, (y, u) => { const n = n0 + alpha * y; return n > 0 ? n * Math.sqrt(1 + u * u) : NaN; }),
-    }),
+    make: ({ n0, alpha }) => optical((y) => n0 + alpha * y, () => alpha),
     blurb: 'Fermat\'s principle: light takes the path of least optical length ∫n ds.  Over a hot road the air near the ground is thinner (lower n, α > 0), so the quickest path dips down into it and curves back up, towards the higher index: light from the sky reaches you from below, and the road looks wet.',
   },
   {
@@ -98,10 +114,9 @@ export const SYSTEMS = [
     s: 'x', q: 'y', s0: 0, s1: 10, q0: 3, q1: -3, qrange: [-5, 5], knots: 9, vmax: 4,
     params: { n1: { value: 1, min: 1, max: 2 }, n2: { value: 1.5, min: 1, max: 2.5 } },
     formula: 'L = n(y)\\sqrt{1+y\'^2}',
-    make: ({ n1, n2 }) => ({
-      // Air (n1) above y = 0, glass (n2) below, with a thin smooth interface.
-      L: (q, v) => map3(q, v, q, (y, u) => ((n1 + n2) / 2 + ((n1 - n2) / 2) * Math.tanh(y / 0.15)) * Math.sqrt(1 + u * u)),
-    }),
+    // Air (n1) above y = 0, glass (n2) below, with a thin smooth interface.
+    make: ({ n1, n2 }) => optical((y) => (n1 + n2) / 2 + ((n1 - n2) / 2) * Math.tanh(y / 0.15),
+      (y) => { const c = Math.cosh(y / 0.15); return (n1 - n2) / (2 * 0.15 * c * c); }),
     blurb: 'From air into glass.  The least-time path bends at the surface so that n₁ sin θ₁ = n₂ sin θ₂ (θ from the normal): Snell\'s law is the conserved "energy" in the phase-space picture.',
   },
   {
@@ -111,6 +126,9 @@ export const SYSTEMS = [
     formula: 'L = \\frac{\\sqrt{1+y\'^2}}{\\sqrt{2gy}}',
     make: ({ g }) => ({
       L: (q, v) => map3(q, v, q, (y, u) => (y > 0 ? Math.sqrt(1 + u * u) / Math.sqrt(2 * g * y) : NaN)),
+      // p = c y' / sqrt(1 + y'^2) with c = 1 / sqrt(2 g y), and back: y' = p / sqrt(c^2 - p^2).
+      p: (q, v) => map3(q, v, q, (y, u) => (y > 0 ? u / (Math.sqrt(1 + u * u) * Math.sqrt(2 * g * y)) : NaN)),
+      vOfP: (q, p) => map3(q, p, q, (y, x) => { const c = y > 0 ? 1 / Math.sqrt(2 * g * y) : 0; return Math.abs(x) < c ? x / Math.sqrt(c * c - x * x) : NaN; }),
       // Exact derivatives: differences would step above the start, where L is undefined.
       derivatives: (q, v) => {
         const n = q.length, c = 1 / Math.sqrt(2 * g), out = { Lq: new Float64Array(n), Lv: new Float64Array(n), Lqq: new Float64Array(n), Lqv: new Float64Array(n), Lvv: new Float64Array(n) };
@@ -148,7 +166,11 @@ export function typedSystem(kind, expr, params, m = 1) {
   const env = (q, v, s) => ({ x: q, v, t: s, m, ...params });
   if (kind === 'V') {
     const V = (q, s) => expr.evaluate(env(q, q, s), q.length).re;
+    // The points x + h and x - h of every trajectory in one array, so that the expression is
+    // evaluated once a step for both (and the arrays are kept from call to call).
+    let X = new Float64Array(0), T = X, H = X;
     return {
+      ...mechanical(m, null, null),
       L: (q, v, s) => {
         const Vq = V(q, s), out = new Float64Array(q.length);
         for (let i = 0; i < q.length; i++) out[i] = 0.5 * m * v[i] * v[i] - Vq[i];
@@ -156,13 +178,16 @@ export function typedSystem(kind, expr, params, m = 1) {
       },
       // Newton: m x'' = -dV/dx, by a central difference of V alone.
       accel: (q, v, s) => {
-        const n = q.length, h = Float64Array.from(q, (x) => 1e-5 * (1 + Math.abs(x)));
-        const a = V(Float64Array.from(q, (x, i) => x + h[i]), s), b = V(Float64Array.from(q, (x, i) => x - h[i]), s);
-        return Float64Array.from({ length: n }, (_, i) => -(a[i] - b[i]) / (2 * h[i] * m));
+        const n = q.length;
+        if (X.length !== 2 * n) { X = new Float64Array(2 * n); T = new Float64Array(2 * n); H = new Float64Array(n); }
+        for (let i = 0; i < n; i++) {
+          const h = 1e-5 * (1 + Math.abs(q[i]));
+          H[i] = h; X[i] = q[i] + h; X[n + i] = q[i] - h; T[i] = T[n + i] = s[i];
+        }
+        const Vx = V(X, T), out = new Float64Array(n);
+        for (let i = 0; i < n; i++) out[i] = -(Vx[i] - Vx[n + i]) / (2 * H[i] * m);
+        return out;
       },
-      p: (q, v) => Float64Array.from(v, (u) => m * u),
-      vOfP: (q, p) => Float64Array.from(p, (x) => x / m),
-      kinetic: (q, v) => Float64Array.from(v, (u) => 0.5 * m * u * u),
     };
   }
   return { L: (q, v, s) => expr.evaluate(env(q, v, s), q.length).re };
