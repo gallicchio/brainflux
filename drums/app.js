@@ -367,12 +367,14 @@ function exactField(k) {
  * the modes they label: the circle's Bessel zeros take a while to find, and the list is drawn
  * again on every step of the wave-speed slider.
  */
-let labels = { modes: null, geo: null, list: null };
+let labels = { modes: null, list: null };
 function analyticLabels() {
   if (!modes || !geo.exact) return null;
-  if (labels.modes !== modes || labels.geo !== geo) {
+  // (The solver's results are cached by shape, so the same shape set up again brings the same
+  // modes object, and its labels with it.)
+  if (labels.modes !== modes) {
     const lmax = modes.values[modes.values.length - 1] * 1.25 + 50;
-    labels = { modes, geo, list: geo.exactInGridOrder ? geo.exactInGridOrder(Math.min(modes.values.length, modes.nvec), modeFunction, modes.values) : geo.exact(lmax) };
+    labels = { modes, list: geo.exactInGridOrder ? geo.exactInGridOrder(Math.min(modes.values.length, modes.nvec), modeFunction, modes.values) : geo.exact(lmax) };
   }
   return labels.list;
 }
