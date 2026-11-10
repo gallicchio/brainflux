@@ -133,6 +133,7 @@ const METAL = { pec: true };
  *  those for which skip(col, row) is true. */
 function rods(a, r, x0, x1, y0, y1, mat, skip = () => false) {
   const ops = [];
+  if (!(a >= 0.05)) return ops;   // (a tiny lattice would be millions of rods; the demo keeps a >= 0.1)
   const c0 = Math.ceil(x0 / a - 1e-9), c1 = Math.floor(x1 / a + 1e-9), r0 = Math.ceil(y0 / a - 1e-9), r1 = Math.floor(y1 / a + 1e-9);
   for (let c = c0; c <= c1; c++) for (let q = r0; q <= r1; q++) if (!skip(c, q)) ops.push({ k: 'disk', x: c * a, y: q * a, r, mat });
   return ops;
@@ -187,10 +188,10 @@ export const SHAPES = {
       for (let q = 0; q < edges.length; q += 2) ops.push({ k: 'rect', x0, x1, y0: edges[q], y1: edges[q + 1], mat: METAL });
       return ops;
     } },
-  crystal: { label: 'Crystal', p: [0.15, 1, 0.37], pLabel: 'lattice constant (λ)', n: 3,
+  crystal: { label: 'Crystal', p: [0.15, 1, 0.37], pMin: 0.1, pLabel: 'lattice constant (λ)', n: 3,
     // A block of rods (radius a/5) on a square lattice.
     build: (a, n, W, H) => rods(a, a / 5, -0.5, 3.2, -H / 2 + 0.6, H / 2 - 0.6, glassOf(n)) },
-  pcbend: { label: 'Crystal bend', p: [0.15, 1, 0.37], pLabel: 'lattice constant (λ)', n: 3,
+  pcbend: { label: 'Crystal bend', p: [0.15, 1, 0.37], pMin: 0.1, pLabel: 'lattice constant (λ)', n: 3,
     // The same crystal over the whole box, with an L-shaped channel: one row missing from the
     // left up to the column nearest x = 1, then that column missing up to the top.
     build: (a, n, W, H) => {

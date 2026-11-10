@@ -63,7 +63,7 @@
       <div class="stack" id="more-box">
         <div class="label">Polarisation</div>
         <div class="row" id="show-pol"></div>
-        <div class="note">Light in the plane comes in two kinds that do not mix.  TM: the electric field points out of the screen (the picture shows it as E<sub>z</sub>).  TE: the electric field lies in the picture and the magnetic field points out of it (shown as H<sub>z</sub>); only TE has a Brewster angle.</div>
+        <div class="note">Light in the plane comes in two kinds that do not mix.  s: the electric field points out of the screen (the picture shows it as E<sub>z</sub>).  p: the electric field lies in the picture and the magnetic field points out of it (shown as H<sub>z</sub>); only p has a Brewster angle.  The screen is the plane of incidence of every reflection here, so these are Fresnel's s and p (Hecht's TE and TM).  Books on this method name them after the z axis instead, the other way round: TM<sub>z</sub> for s, TE<sub>z</sub> for p.</div>
         <div class="label">Measure</div>
         <div class="row" id="show-toggles"></div>
         <div class="note">A meter is a green line on the picture that reads the power crossing it (in the direction of its small arrow) as a share of the beam's; drag its ends.  The probe is a yellow cross that records the field where it is, on a chart under the picture.</div>
@@ -126,12 +126,28 @@
     shorter, and to keep in step with the waves outside all along the surface they must turn
     towards the normal: $\sin\theta_1=n\sin\theta_2$.  The dashed lines are the directions
     Snell's law and the law of reflection give; drag the beam's arrow and they follow.  A little
-    light is reflected: Fresnel's formula gives 5.8% of the power at $30^\circ$.  Turn on
-    <em>Energy flow</em> (under <em>Show</em>) to see where the energy goes.</p>
+    light is reflected: Fresnel's formula gives 5.8% of the power at $30^\circ$ for this
+    polarisation, s, whose $\vec E$ points out of the screen (2.5% for the other, p: next
+    experiment).  Turn on <em>Energy flow</em> (under <em>Show</em>) to see where the energy
+    goes.</p>
+  </article>
+
+  <article class="exp" data-setup="brewster" data-frame="720x449">
+    <h3>4. Brewster's angle</h3>
+    <p>Now the other polarisation, p: $\vec E$ lies in the picture, which is the plane of
+    incidence (so the picture shows $H_z$, which points out of the screen).  At Brewster's
+    angle, $\tan\theta_B=n$ ($56.3^\circ$ for glass), Fresnel's $r_p$ is zero: nothing is
+    reflected, and there is no reflected beam to see.  Meter A, in the glass, reads 98.8%.  Not
+    quite all: a beam is a spread of angles around $56.3^\circ$, and the notes give the 0.8% it
+    should reflect (the last few tenths of a per cent of the beam spread past the meter's ends).
+    The charges in the glass oscillate along $\vec E$, across the refracted ray, and at this
+    angle the reflected ray would be at right angles to the refracted one, along $\vec E$: the
+    direction in which oscillating charges do not radiate.  Switch to s ($\vec E$ out of the
+    screen, under <em>More</em>): the reflected beam appears, and meter A drops to 83.4%.</p>
   </article>
 
   <article class="exp" data-setup="tir" data-frame="720x514">
-    <h3>4. Total internal reflection</h3>
+    <h3>5. Total internal reflection</h3>
     <p>Now the beam is inside the glass and meets the surface at $55^\circ$, beyond the critical
     angle $\sin\theta_c=1/n$ ($41.8^\circ$).  It is reflected: meter A (the green line above
     the surface, which reads the power crossing it) catches
@@ -146,30 +162,19 @@
   </article>
 
   <article class="exp" data-setup="ftir" data-frame="720x565">
-    <h3>5. Frustrated total internal reflection</h3>
+    <h3>6. Frustrated total internal reflection</h3>
     <p>Two blocks of glass with a gap of $0.3\lambda$ between them.  The beam meets the gap at
     $50^\circ$, beyond the critical angle, so one surface alone would reflect nearly all of it; but the evanescent
     wave reaches across the gap and starts a beam on the other side.  Meter A (the green line
     above the gap) reads the power
     that gets through, 32%; meter B, most of the rest, reflected.  Widen the gap (the slider
-    under <em>Set-ups</em>) and the
-    transmission falls off nearly exponentially, as $e^{-2\kappa d}$, from 84% at $0.1\lambda$
-    to 10% at $0.5\lambda$: this is tunnelling, as for a particle through a barrier.  The notes
-    under the picture give the exact plane-wave answer averaged over the beam's spread of
-    angles; meter A agrees with it to within 1%.</p>
-  </article>
-
-  <article class="exp" data-setup="brewster" data-frame="720x449">
-    <h3>6. Brewster's angle</h3>
-    <p>This is TE: $\vec E$ lies in the picture, in the plane of incidence (p polarisation).  At
-    Brewster's angle, $\tan\theta_B=n$ ($56.3^\circ$ for glass), nothing is reflected, and
-    there is no reflected beam to see.  Meter A, in the glass, reads 98.8%.  Not quite all: a
-    beam is a spread of angles around $56.3^\circ$, and the notes give the 0.8% it should
-    reflect (the last few tenths of a per cent of the beam spread past the meter's ends).  The charges in
-    the glass oscillate along $\vec E$, and at this angle that is the direction the reflected
-    beam would take, in which they do not radiate.  Switch to TM ($E_z$, s polarisation, under
-    <em>More</em>): the
-    reflected beam appears, and meter A drops to 83.4%.</p>
+    under <em>Set-ups</em>) and less gets through: 84% at $0.1\lambda$, 32% at $0.3\lambda$, 10%
+    at $0.5\lambda$.  Once the gap is wider than the evanescent wave's reach ($1/\kappa=0.28\lambda$
+    at $50^\circ$), the transmission falls exponentially, as $e^{-2\kappa d}$: by a factor of
+    about 4 for every $0.2\lambda$ more.  This is tunnelling, as for a particle through a
+    barrier.  (The beam's numbers fall a little more slowly: its directions nearer the critical
+    angle reach further across.)  The notes under the picture give the exact plane-wave answer
+    averaged over the beam's spread of angles; meter A agrees with it to within 1%.</p>
   </article>
 
   <article class="exp" data-setup="guide" data-frame="720x514">
@@ -178,7 +183,9 @@
     light can only travel along it in a few patterns across it, its modes; this one has two (the
     notes count them), one with a single hump in the middle and one that changes sign there.  A
     beam is sent straight into the middle of its end, so it starts only the first, which has a
-    tail outside the glass, in the vacuum: meter A finds 84% of the beam in the guide.  Round a bend
+    tail outside the glass, in the vacuum, that travels along with it.  Meter A, across the guide
+    and its tails, finds 84% of the beam's power going along it (the rest was reflected at the
+    end, or spread out from it without being caught).  Round a bend
     of radius $2.5\lambda$, meter B finds 75% (wait for it: the light takes about 40 periods to
     get there).  Tighten the bend (the radius, under <em>Set-ups</em>): the tail on the outside of the bend
     would have to go faster than light in vacuum to keep up, and it is shed.  At $1\lambda$
@@ -187,18 +194,18 @@
 
   <article class="exp" data-setup="cutoff" data-frame="720x360">
     <h3>8. A metal waveguide below cutoff</h3>
-    <p>A channel $0.4\lambda$ wide through a metal wall.  In TM the electric field runs along the
-    walls and must vanish on them, so across the channel it has to fit at least half a
-    wavelength: nothing narrower than $\lambda/2$ carries a wave.  Here the field decays along
-    the channel as $e^{-\kappa x}$.  At first a trickle gets out (meter A): switching the source
-    on makes some higher frequencies, above cutoff, which crawl through; then meter A falls
-    below 0.01%.  Widen the channel past $0.5\lambda$: about 40% gets through.  Switch to TE
-    (under <em>More</em>):
+    <p>A channel $0.4\lambda$ wide through a metal wall.  In s light the electric field points out
+    of the screen, along the walls, and must vanish on them, so across the channel it has to fit
+    at least half a wavelength: nothing narrower than $\lambda/2$ carries a wave.  Here the field
+    decays along the channel as $e^{-\kappa x}$.  At first a trickle gets out (meter A): switching
+    the source on makes some higher frequencies, above cutoff, which crawl through; then meter A
+    falls below 0.01%.  Widen the channel past $0.5\lambda$: about 40% gets through.  Switch to p
+    ($\vec E$ in the picture, under <em>More</em>):
     now $\vec E$ points across the channel, can be the same all the way across, and passes at
     any width (17% at $0.4\lambda$; most of the rest is reflected at the entrance).  (Waveguide
-    books name the modes by the direction the wave travels along the guide instead: to them the
-    TM wave here is the TE<sub>1</sub> mode, whose $\vec E$ is across its travel, and the TE wave
-    is the TEM mode, both fields across it.)</p>
+    books, Griffiths's among them, name the modes by the direction the wave travels along the
+    guide instead: to them the s wave here is the TE<sub>1</sub> mode, whose $\vec E$ is across
+    its travel, and the p wave is the TEM mode, both fields across it.)</p>
   </article>
 
   <article class="exp" data-setup="lens" data-frame="720x449">
@@ -273,10 +280,14 @@
   <section class="theory">
   <h3>How it works</h3>
   <p>Maxwell's equations are solved on a grid of cells in the plane, with everything uniform
-  along $z$, out of the picture.  Light then comes in two separate polarisations, named for
-  the field that lies flat in the picture, transverse to $z$.  In TM ($\vec H$ in the plane)
-  the electric field points out of the picture, and the picture shows $E_z$: red positive,
-  blue negative.  In TE ($\vec E$ in the plane) it shows $H_z$.  The colours are compressed, so
+  along $z$, out of the picture.  Light then comes in two separate polarisations.  In one the
+  electric field points out of the picture ($\vec H$ lies in it), and the picture shows $E_z$:
+  red positive, blue negative.  In the other $\vec E$ lies in the picture, and it shows $H_z$.
+  The picture is the plane of incidence of every reflection in it, so these are the s and p of
+  Fresnel's formulas: s has $\vec E$ perpendicular to the plane of incidence (Hecht's TE), p has
+  it in the plane (Hecht's TM), and this page calls them s and p.  (Books on this numerical
+  method name the two after the $z$ axis instead, the other way round: TM<sub>z</sub>, with
+  $\vec H$ transverse to $z$, is s; TE<sub>z</sub> is p.)  The colours are compressed, so
   that weak waves show beside strong ones: point at the picture to read the field there, under
   it.  Lengths are in vacuum wavelengths $\lambda$ of the source (the bar at the bottom right
   of the picture is one), time is in its periods, and $c=1$.  Around the picture is a layer
@@ -290,9 +301,14 @@
   <h3>How it is computed</h3>
   <p>The finite-difference time-domain method (Yee, 1966): $\vec E$ and $\vec H$ on interleaved
   grids, stepped alternately, with $c\,\Delta t=\Delta x/2$.  It conserves energy exactly, but
-  waves on a grid travel a little slower than they should, more so the fewer cells per
-  wavelength (0.3% slower at 20 cells): the readout warns when there are fewer than 15 cells
-  per wavelength in the highest index.  A cell that an interface cuts gets the average
+  waves on a grid travel a little slower than they should (numerical dispersion), more so the
+  fewer cells per wavelength, and more along the grid's axes than along its diagonals: at 20
+  cells a wavelength, 0.3% slow along the axes and 0.1% along the diagonals.  The glass of the
+  opening prism, at 16 cells a wavelength, is 0.6% slow and the vacuum around it 0.2%, so it
+  bends light as if its index were 1.505 instead of 1.5: the prism turns the beam about
+  $0.6^\circ$ more than the dashed ray, too little to see.  The readout warns when there are fewer than 15 cells per wavelength in
+  the highest index.  (The beams are launched with the grid's own wavelength, so they leave
+  their source line cleanly.)  A cell that an interface cuts gets the average
   permittivity of its parts.  At 20 cells per wavelength in the glass, a glass surface reflects
   within 2% of Fresnel's value ($r=0.203$ for $0.200$).  The metal is a perfect conductor,
   placed to within half a cell.  The absorber is a lossy material matched to vacuum: it
