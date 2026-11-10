@@ -61,7 +61,7 @@
     <div class="panel" id="state-panel">
       <div class="label" id="state-label">The state of the mode</div>
       <div class="row" id="kind-row"></div>
-      <div class="note" id="kind-note">A laser makes a coherent state: the vacuum's cloud displaced to the mean field α.</div>
+      <div class="note" id="kind-note">The vacuum: no light, only its noise.  A laser makes a coherent state: the vacuum's round cloud displaced to the mean field α.</div>
       <div id="state-box" class="stack"></div>
     </div>
     <div class="panel" id="squeeze-panel">
@@ -138,7 +138,9 @@
     drawn as in the <a href="../phasespace/">phase-space demo</a>, full red at its largest value, $2/\pi$.  On the right is
     what a detector would see.  Each period a point of the cloud is drawn (the ring on the stick)
     and its shadow on the $X_1$ axis is traced as the cloud turns: a sine wave of random size and
-    phase, inside the grey band $\pm\tfrac12$.  That band is the vacuum's noise, the zero-point
+    phase.  The grey band $\pm\tfrac12$ is the field's standard deviation at every moment (a
+    point is often farther out than that, so many of the waves overshoot it).  That band is the
+    vacuum's noise, the zero-point
     motion of the field's oscillator, and when light falls on a photodiode this is what it
     records as shot noise.  The uncertainty product $\Delta X_1\Delta X_2=0.250$ is the least the
     commutator $[X_1,X_2]=i/2$ allows: the vacuum is a minimum-uncertainty state.  Its photon
@@ -237,8 +239,8 @@
     $$\Delta X_\theta^2=\tfrac14\left(e^{-2r}\cos^2\theta+e^{2r}\sin^2\theta\right),$$
     which dips below the vacuum's 0 dB to $-6.0$ dB and rises to $+6.0$ dB.  This is the trace
     by which squeezed light was first recognised (Slusher et al. 1985; Wu, Kimble, Hall and Wu
-    1986): noise below the shot-noise level, in one direction only.  Add loss ($\eta=0.5$ in the
-    signal panel): the dips fill in to $-2.0$ dB.</p>
+    1986): noise below the shot-noise level, in one direction only.  Set the loss to 50% under
+    <em>Squeezing</em> ($\eta=0.5$): the dips fill in to $-2.0$ dB, and the peaks fall to $+4.0$ dB.</p>
   </article>
 
   <article class="exp" data-setup="phaseshift" data-frame="412x356">
@@ -250,8 +252,8 @@
     with a signal-to-noise ratio of 0.60 per sample, and the smallest shift seen at ratio 1 is
     $$\Delta\varphi_\mathrm{min}=\frac{\Delta X_2}{|\alpha|}=\frac1{2|\alpha|}=0.167\ \mathrm{rad},$$
     the standard quantum limit for this much light (averaging $M$ samples, or using $M$ times
-    the photons, improves it as $1/\sqrt M$).  Now press <em>Phase-squeezed</em> in the signal
-    panel: with 6 dB the noise is 0.268 (the turned ellipse shows a sliver of its wide side; it
+    the photons, improves it as $1/\sqrt M$).  Now press <em>Across it</em> under
+    <em>Squeezing</em> (phase squeezing, 6 dB): the noise is 0.268 (the turned ellipse shows a sliver of its wide side; it
     would be 0.250 for a tiny shift), the histogram thins, and the same shift is seen at a ratio
     of 1.12: $\Delta\varphi_\mathrm{min}=0.083$ rad, twice as good with the same light, or as
     good with a quarter of it.  Turn the LO to $\theta=0$ to see the price: the amplitude
@@ -265,7 +267,9 @@
     a few hundred watts).  Its output port is kept dark, the two arms' light interfering
     destructively there, so that a gravitational wave shows up as the difference of the arm
     lengths, read as a phase: a strain $h=10^{-21}$ changes the difference by
-    $hL=4\times10^{-18}$ m and the dark port's phase by $4\pi hL/\lambda=4.7\times10^{-11}$ rad.
+    $hL=4\times10^{-18}$ m and the phase of each round trip of the light by
+    $4\pi hL/\lambda=4.7\times10^{-11}$ rad (the arm cavities keep the light going back and forth,
+    which adds up many round trips' worth).
     What limits reading so small a phase?  Not the laser's own noise, which the beam splitter
     sends back out of the bright port.  The dark port is dark, which means the vacuum enters it
     from outside (the dashed arrow and the round cloud), and that vacuum, beating against the
@@ -295,8 +299,9 @@
     <p>...and look below 50 Hz: the purple curve has gone up by the same 10 dB.  The squeezed
     vacuum's phase quadrature is quiet, so its amplitude quadrature is ten times louder, and the
     amplitude quadrature is what pushes the mirrors: radiation-pressure noise grows by the factor
-    the shot noise shrank, and below the frequency where the two cross (48 Hz) the detector is
-    worse than with no squeezing at all.  Drag the angle from 90° to 0°: amplitude squeezing,
+    the shot noise shrank.  Below 85 Hz the quantum noise is now worse than with no squeezing at
+    all (the faint blue curve is the unsqueezed one), and the two curves now cross at 145 Hz
+    instead of 48 Hz.  Drag the angle from 90° to 0°: amplitude squeezing,
     which quietens the mirrors and spoils the readout, the opposite trade.  No single angle helps
     everywhere, because at low frequency the readout sees the mirrors' motion, driven by the
     amplitude quadrature, and at high frequency it sees the phase quadrature directly.</p>
@@ -311,8 +316,8 @@
     different amounts.  With the angle following the readout's own combination at every
     frequency, the whole quantum-noise curve drops by the full factor: 10 dB everywhere,
     radiation pressure included.  LIGO and Virgo installed filter cavities for their fourth
-    observing run (2023).  Turn the loss up to a realistic 20%: the gain is 5.5 dB at high
-    frequency, and still a gain at low.</p>
+    observing run (2023).  Turn the loss up to a realistic 20%: the quantum noise still drops at
+    every frequency, but by 5.5 dB, not 10 ($\eta e^{-2r}+1-\eta=0.28$).</p>
   </article>
 
   <article class="exp" data-setup="chirp" data-frame="720x518">
@@ -320,13 +325,17 @@
     <p>The plot under the noise curve is $h(t)$ from two neutron stars of 1.4 solar masses spiralling together
     40 Mpc away (GW170817's distance), seen face on and overhead: the Newtonian chirp, from
     70 Hz up to the innermost stable orbit at 1570 Hz in 5.6 s, louder and faster as it goes.
-    Its spectrum is the green band on the sensitivity plot, falling as $f^{-7/6}$; the
-    signal-to-noise ratio a matched filter achieves is the area between it and the noise,
-    $\rho^2=4\int|\tilde h(f)|^2/S_n(f)\,df$.  Without squeezing $\rho=72$; with 6 dB of
+    Its spectrum is the green band on the sensitivity plot, drawn as $2|\tilde h(f)|\sqrt f$
+    so that it can be compared with $\sqrt{S_h}$ (it falls as $f^{-2/3}$, since
+    $|\tilde h|\propto f^{-7/6}$): the higher the band stands above the noise curve, and over the
+    more octaves, the louder the signal, because the signal-to-noise ratio a matched filter
+    achieves is $\rho^2=4\int|\tilde h(f)|^2/S_h(f)\,df=\int\left(2|\tilde h|\sqrt f\right)^2/S_h\;d\ln f$.  Without squeezing $\rho=72$; with 6 dB of
     frequency-dependent squeezing through 20% loss, $\rho=104$: the same event 1.44 times as
     loud, or heard 1.44 times as far, which is a volume of space 3.0 times as big, that many
     times more events a year.  Drag the distance out until $\rho$ falls to 8, the usual
-    threshold: 360 Mpc without squeezing, 520 Mpc with.  Try the two black holes: heavier, so
+    threshold: 360 Mpc without squeezing, 520 Mpc with.  (This reach is for the best case, a
+    binary overhead and face on.  The "range" LIGO quotes is averaged over every direction and
+    orientation, 2.26 times smaller.)  Try the two black holes: heavier, so
     louder, and over in 6 s from 20 Hz.</p>
   </article>
 
@@ -442,9 +451,12 @@
   h(t)=\frac{4}{d}\left(\frac{G\mathcal M}{c^2}\right)^{5/3}\left(\frac{\pi f}{c}\right)^{2/3}\cos\Phi(t),$$
   $\tau$ the time to merger and $d$ the distance, stopped at the innermost stable orbit,
   $f_\mathrm{ISCO}=c^3/(6^{3/2}\pi GM)$.  Its spectrum $|\tilde h(f)|\propto f^{-7/6}$ is taken by
-  an FFT of the sampled $h(t)$ (the one FFT on this page), and the optimal signal-to-noise ratio
-  is $\rho^2=4\int|\tilde h|^2/S_n\,df$; the distance at which $\rho=8$ is the horizon for a
-  face-on binary, and the volume inside it grows as its cube.</p>
+  an FFT of the sampled $h(t)$, and the optimal signal-to-noise ratio
+  is $\rho^2=4\int|\tilde h|^2/S_h\,df$.  The sensitivity plot draws the chirp as $2|\tilde h|\sqrt f$
+  against $\sqrt{S_h}$, so that $\rho^2$ is the integral over $\ln f$ of the squared ratio of the
+  two.  The distance at which $\rho=8$ is the horizon for a binary overhead and face on (the
+  range LIGO quotes, averaged over directions and orientations, is 2.26 times smaller), and the
+  volume inside it grows as its cube.</p>
   <p><b>The detector's output and the matched filter.</b>  A stretch of $T=8$ s at 4096 samples
   a second, with frequency bins $f_k=k\,\Delta f$, $\Delta f=1/T$, and
   $\tilde x_k=\Delta t\sum_jx_je^{-2\pi ijk/N}$.  The noise is made in the frequency domain: a

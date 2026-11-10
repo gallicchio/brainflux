@@ -73,6 +73,37 @@ export function noiseBudget(f, p = DEFAULTS, sq = NO_SQUEEZE) {
   return { ...q, ...c, total: q.quantum + c.seismic + c.thermal };
 }
 
+/**
+ * The total noise noiseBudget(f).total at many frequencies at once (fs[i] in Hz, into out), the
+ * same numbers by the same formulas with everything that does not depend on f worked out once:
+ * the injected covariance (unless the squeezing follows the frequency, when the angle
+ * λ = 90° + arctan K gives cos λ = −K/√(1 + K²) and sin λ = 1/√(1 + K²), no trigonometry), and
+ * the classical power laws as products.  For the detector's 16 000 frequency bins.
+ */
+export function totalNoise(fs, p = DEFAULTS, sq = NO_SQUEEZE, out = new Float64Array(fs.length)) {
+  const gam = 2 * Math.PI * p.fc, w0 = (2 * Math.PI * C) / p.lambda;
+  const kNum = (16 * w0 * gam * p.P) / (p.M * p.L * C), hNum = (8 * HBAR) / (p.M * p.L * p.L);
+  const on = sq.on && sq.dB > 0, fd = on && sq.fd;
+  let V1 = 1, V2 = 1, C12 = 0, a = 1, b = 1, eta = 1;
+  if (on) {
+    const r = (sq.dB * Math.LN10) / 20;
+    a = Math.exp(-2 * r); b = Math.exp(2 * r); eta = sq.eta ?? 1;
+    if (!fd) ({ V1, V2, C12 } = injectedCovariance(sq, sq.angle));
+  }
+  for (let i = 0; i < fs.length; i++) {
+    const f = fs[i], Om = 2 * Math.PI * f, Om2 = Om * Om;
+    const K = kNum / (Om2 * (gam * gam + Om2)), hSQL2 = hNum / Om2;
+    if (fd) {
+      const n = 1 / Math.sqrt(1 + K * K), c = -K * n, s = n;
+      V1 = eta * (a * c * c + b * s * s) + 1 - eta; V2 = eta * (a * s * s + b * c * c) + 1 - eta; C12 = eta * (a - b) * s * c;
+    }
+    const x = 10 / f, x2 = x * x, x4 = x2 * x2, x5 = x4 * x, x10 = x5 * x5;
+    const seismic = 9e-48 * x10 * x10, thermal = 1e-44 * x5 + 1.44e-48 * (100 / f);
+    out[i] = (hSQL2 / 2) * (V2 / K) + (hSQL2 / 2) * K * V1 - hSQL2 * C12 + seismic + thermal;
+  }
+  return out;
+}
+
 /** The frequency where shot noise and radiation pressure are equal (K = 1), where the curve touches the SQL, by bisection. */
 export function sqlFrequency(p = DEFAULTS) {
   let lo = 1, hi = 1e4;

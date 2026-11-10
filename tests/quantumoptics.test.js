@@ -6,7 +6,7 @@ import {
 } from '../quantumoptics/states.js';
 import { Rng, sample, photocurrent, VarianceRecord, noiseDb, phaseMeasurement } from '../quantumoptics/homodyne.js';
 import {
-  DEFAULTS, NO_SQUEEZE, quantumNoise, noiseBudget, sqlFrequency, darkPortPhase, shotNoisePhase, chirpMass, iscoFrequency,
+  DEFAULTS, NO_SQUEEZE, quantumNoise, noiseBudget, totalNoise, sqlFrequency, darkPortPhase, shotNoisePhase, chirpMass, iscoFrequency,
   timeToMerger, chirpFrequency, chirpSignal, chirpSpectrum, matchedFilterSnr, spaSnr, MPC, C, HBAR, G, MSUN,
 } from '../quantumoptics/ligo.js';
 import { Detector, meanVariance } from '../quantumoptics/detector.js';
@@ -237,6 +237,21 @@ test('LIGO: a phase-squeezed vacuum at the dark port lowers shot noise by e^{−
   const huge = -10 * Math.log10(quantumNoise(f, DEFAULTS, { ...lossy, dB: 30 }).shot / quantumNoise(f).shot);
   close(huge, -10 * Math.log10(0.35), 0.1, '30 dB through 35% loss gives only −10 log(1 − η)');
   return `6 dB through 35% loss: ${gain.toFixed(2)} dB of shot noise; the SQL touch is at ${fs.toFixed(0)} Hz`;
+});
+
+test('LIGO: totalNoise (all the detector\'s bins at once) gives noiseBudget\'s total, squeezed or not', () => {
+  const fs = Float64Array.from({ length: 3000 }, (_, i) => 5 * 10 ** (i / 1000));
+  let worst = 0;
+  const cases = [NO_SQUEEZE, { on: true, dB: 6, angle: 90, eta: 0.65, fd: false }, { on: true, dB: 10, angle: 37, eta: 1, fd: false },
+    { on: true, dB: 6, angle: 90, eta: 0.8, fd: true }, { on: true, dB: 0, angle: 90, eta: 0.8, fd: true }];
+  for (const p of [DEFAULTS, { ...DEFAULTS, P: 3e4, M: 12, fc: 60 }]) {
+    for (const sq of cases) {
+      const out = totalNoise(fs, p, sq);
+      for (let i = 0; i < fs.length; i++) worst = Math.max(worst, Math.abs(out[i] / noiseBudget(fs[i], p, sq).total - 1));
+    }
+  }
+  assert(worst < 1e-12, `largest relative difference ${worst}`);
+  return `largest relative difference ${worst.toExponential(1)}`;
 });
 
 test('LIGO: the budget adds in power, the seismic wall is below 10 Hz, and a strain of 1e−21 is 4.7e−11 rad at the dark port', () => {

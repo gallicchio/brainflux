@@ -9,7 +9,7 @@ import {
 } from './states.js';
 import { Rng, sample, VarianceRecord, noiseDb, phaseMeasurement } from './homodyne.js';
 import {
-  DEFAULTS, noiseBudget, quantumNoise, sqlFrequency, darkPortPhase, chirpMass, iscoFrequency, chirpSignal, amplitudeSpectrum, MPC,
+  DEFAULTS, noiseBudget, totalNoise, sqlFrequency, darkPortPhase, chirpMass, iscoFrequency, chirpSignal, amplitudeSpectrum, MPC,
 } from './ligo.js';
 import { Detector } from './detector.js';
 import { Plane, drawColorbar } from './plane.js';
@@ -556,6 +556,8 @@ function drawChirp() {
 const detector = new Detector({ fs: DET_FS, T: DET_T });
 const detectorVac = new Detector({ fs: DET_FS, T: DET_T });     // the same noise without squeezing, for the ghost
 let detectorSource = null;
+// The detector's frequency bins k/T, and S_h at them (all 16 000 at once, by totalNoise).
+const detBins = Float64Array.from({ length: (DET_FS * DET_T) / 2 + 1 }, (_, k) => k / DET_T), detS = new Float64Array(detBins.length);
 
 function ensureDetector() {
   if (detectorSource !== state.source) {
@@ -565,18 +567,28 @@ function ensureDetector() {
     detectorSource = state.source;
   }
   const p = ligoParams(), sq = squeezeParams(), vac = { ...sq, on: false };
-  const spectrum = (det, s) => { det.setSeed(state.seed); det.setSpectrum((f) => noiseBudget(f, p, s).total, JSON.stringify([p, s.on ? s : 0])); };
+  const spectrum = (det, s) => {
+    det.setSeed(state.seed);
+    const key = JSON.stringify([p, s.on ? s : 0]);
+    if (det.fresh && det.spectrumKey === key) return;
+    totalNoise(detBins, p, s, detS);
+    det.setSpectrum((f) => detS[Math.round(f * DET_T)], key);
+  };
   spectrum(detector, sq);
   if (sq.on) spectrum(detectorVac, vac);
   return detector;
 }
 
-/** The numbers the detector strip shows, at the chosen distance (also for the tests). */
-function detectorFindings() {
+/** The numbers the detector strip shows, at the chosen distance (also for the tests); raw: those of the raw data too. */
+function detectorFindings({ raw = state.data === 'raw' } = {}) {
   const det = ensureDetector(), g = 1 / state.distance, F = det.findings(state.distance);
   const lagIndex = clamp(Math.round(state.lag * DET_FS), 0, det.N - 1);
   let whitePeak = 0, rawPeak = 0, rawVar = 0;
-  for (let j = 0; j < det.N; j++) { whitePeak = Math.max(whitePeak, Math.abs(g * det.whiteSignal1[j])); rawPeak = Math.max(rawPeak, Math.abs(g * det.signal1[j])); rawVar += det.rawNoise[j] ** 2; }
+  for (let j = 0; j < det.N; j++) whitePeak = Math.max(whitePeak, Math.abs(g * det.whiteSignal1[j]));
+  if (raw) {
+    const rn = det.rawNoise;
+    for (let j = 0; j < det.N; j++) { rawPeak = Math.max(rawPeak, Math.abs(g * det.signal1[j])); rawVar += rn[j] ** 2; }
+  }
   const out = { ...F, zAtLag: det.mfNoise[lagIndex] + g * det.mfSignal1[lagIndex], lag: state.lag, whitePeak, rawPeak, rawRms: Math.sqrt(rawVar / det.N), sigma1: det.sigma1 };
   if (state.sq.on) { const v = detectorVac.findings(state.distance); out.without = { rho: v.rho, atMerger: v.atMerger, noisePeak: v.noisePeak }; }
   else out.without = null;
@@ -753,7 +765,7 @@ function readoutLigo(box) {
   if (sq.on) groups.push(['With squeezing', 'total ', bold(num(e24(s100.total), 2, 5)), ' × 10⁻²⁴ /√Hz at 100 Hz; shot noise at 1 kHz down by ', bold(num(-10 * Math.log10(s1k.shot / v1k.shot), 1, 5)), ' dB; radiation pressure at 10 Hz changed by ', num(10 * Math.log10(s10.rp / v10.rp), 1, 5, { plus: '+' }), ' dB']);
   groups.push(['Signal-to-noise ratio', 'ρ = ', bold(num(r.without, 1, 6)), ' without squeezing', ...(sq.on ? [', ', bold(num(r.with, 1, 6)), ' with: ', bold(num(r.ratio, 2, 5)), ' times as far, a volume ', bold(num(r.ratio ** 3, 2, 5)), ' times as big; '] : ['; ']),
     'reach (ρ = 8): ', bold(num(r.rangeWithout, 0, 5)), ' Mpc', ...(sq.on ? [' without, ', bold(num(r.rangeWith, 0, 5)), ' Mpc with'] : [])]);
-  groups.push(['Scale', 'a strain of 10⁻²¹ changes the arms\' difference by ', num(1e-21 * p.L / 1e-18, 1, 4), ' × 10⁻¹⁸ m and the dark port\'s phase by ', num(darkPortPhase(1e-21, p) / 1e-11, 1, 4), ' × 10⁻¹¹ rad']);
+  groups.push(['Scale', 'a strain of 10⁻²¹ changes the arms\' difference by ', num(1e-21 * p.L / 1e-18, 1, 4), ' × 10⁻¹⁸ m and the phase of each round trip of the light by ', num(darkPortPhase(1e-21, p) / 1e-11, 1, 4), ' × 10⁻¹¹ rad']);
   setGroupsKeyed(box, groups);
 }
 
@@ -772,7 +784,9 @@ function updateLegend() {
   }
   $('#lg-point').hidden = state.view === 'homodyne';
   $('#lg-axis').hidden = state.view !== 'homodyne';
-  drawColorbar($('#colorbar'));
+  // The colour bar changes only with the theme (and its size): not drawn again every frame.
+  const cb = $('#colorbar'), key = `${colors.panel}|${cb.clientWidth}|${devicePixelRatio}`;
+  if (lg._cbKey !== key) { lg._cbKey = key; drawColorbar(cb); }
 }
 
 // ---------------------------------------------------------------------- the loop
@@ -861,7 +875,7 @@ function setView(v) {
   $('#run').textContent = state.running ? 'Pause' : 'Run';
   if (v === 'homodyne') { $('#kind-note').textContent = 'What is measured: the vacuum, a laser\'s coherent state, or either one squeezed (the panel below).'; }
   else if (v === 'squeeze') { $('#kind-note').textContent = 'The crystal squeezes whatever comes in: the vacuum, or a laser\'s field (which it also keeps).'; }
-  else $('#kind-note').textContent = 'A laser makes a coherent state: the vacuum\'s round cloud displaced to the mean field α.';
+  else $('#kind-note').textContent = 'The vacuum: no light, only its noise.  A laser makes a coherent state: the vacuum\'s round cloud displaced to the mean field α.';
   lastT = 0;
   dirty(); scheduleHash();
 }
@@ -894,7 +908,7 @@ $('#sq-box').append(rSlider, psiSlider, lossSlider);
 function syncSqPresets() {
   const rel = ((state.psi - (state.kind === 'vacuum' ? 0 : state.phase)) % 180 + 180) % 180;
   sqPresets.value = state.r === 0 ? 'off' : Math.abs(rel) < 1 || Math.abs(rel - 180) < 1 ? 'amp' : Math.abs(rel - 90) < 1 ? 'phase' : 'custom';
-  setSlots($('#sq-note'), state.r > 0 ? ['r = ', { v: state.r, dec: 2, w: 4 }, ' is ', { v: squeezeDb(state.r), dec: 1, w: 4 }, ' dB of squeezing: ΔX = e⁻ʳ/2 = ', { v: Math.exp(-state.r) / 2, dec: 3, w: 5 }, ' along ψ, e^r/2 = ', { v: Math.exp(state.r) / 2, dec: 3, w: 5 }, ' across'] : ['r = 0: no squeezing, the cloud is round']);
+  setSlots($('#sq-note'), state.r > 0 ? ['r = ', { v: state.r, dec: 2, w: 4 }, ' is ', { v: squeezeDb(state.r), dec: 1, w: 4 }, ' dB of squeezing: ΔX = e⁻ʳ/2 = ', { v: Math.exp(-state.r) / 2, dec: 3, w: 5 }, ' along ψ, eʳ/2 = ', { v: Math.exp(state.r) / 2, dec: 3, w: 5 }, ' across'] : ['r = 0: no squeezing, the cloud is round']);
 }
 
 // The local oscillator.
@@ -1158,7 +1172,7 @@ window.__app = {
   chirp: () => { const ch = ensureChirp(); return { tc: ch.sig.tc, fisco: ch.fisco, mc: ch.mc, hmax: ch.hmax / state.distance, n: ch.sig.n, fmin: ch.src.fmin }; },
   /** The detector strip's numbers; white: the first whitened-noise samples (the realisation), mfVar: the filter noise's sample variance. */
   detector: () => {
-    const F = detectorFindings(), det = detector;
+    const F = detectorFindings({ raw: true }), det = detector;
     let s2 = 0;
     for (let j = 0; j < det.N; j++) s2 += det.mfNoise[j] ** 2;
     return { ...F, white: Array.from(det.whiteNoise.slice(0, 64)), mfVar: s2 / det.N, seed: state.seed, sliding: anim.sliding, N: det.N };

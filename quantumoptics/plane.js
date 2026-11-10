@@ -37,10 +37,10 @@ export function colorAt(v) {
   const i = Math.round(((Math.max(-1, Math.min(1, v)) + 1) / 2) * 1023) * 4;
   return `rgb(${lut[i]},${lut[i + 1]},${lut[i + 2]})`;
 }
-/** The colour bar's canvas, from −2/π to +2/π. */
+/** The colour bar's canvas, from 0 to +2/π (a Gaussian state's W is never negative, so the map's blue half is left out). */
 export function drawColorbar(cv) {
   const { ctx, width, height } = fitCanvas(cv);
-  for (let i = 0; i < width; i++) { ctx.fillStyle = colorAt(-1 + (2 * (i + 0.5)) / width); ctx.fillRect(i, 0, 1, height); }
+  for (let i = 0; i < width; i++) { ctx.fillStyle = colorAt((i + 0.5) / width); ctx.fillRect(i, 0, 1, height); }
   ctx.strokeStyle = themeColors().line; ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
 }
 

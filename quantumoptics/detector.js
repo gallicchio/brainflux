@@ -40,7 +40,11 @@ export class Detector {
     this.tRe = new Float64Array(H); this.tIm = new Float64Array(H);       // the template's spectrum (merger at 0)
     this.S = new Float64Array(H);                                         // S_n at the bins
     this.re = new Float64Array(N); this.im = new Float64Array(N);         // workspace
-    this.seed = null; this.spectrumKey = null;
+    // The series, made again in place for each new spectrum (the raw noise only when asked for).
+    this.whiteNoise = new Float64Array(N); this.mfNoise = new Float64Array(N);
+    this.whiteSignal1 = new Float64Array(N); this.mfSignal1 = new Float64Array(N);
+    this._raw = new Float64Array(N); this._rawFresh = false;
+    this.seed = null; this.spectrumKey = null; this.fresh = false;
     this.band = [20, 1000]; this.rawLow = 10;
   }
 
@@ -63,7 +67,7 @@ export class Detector {
     for (let k = 0; k <= N / 2; k++) { this.tRe[k] = this.re[k] * this.dt; this.tIm[k] = this.im[k] * this.dt; }
     this.k0 = Math.max(1, Math.ceil(band[0] / this.df)); this.k1 = Math.min(N / 2 - 1, Math.floor(band[1] / this.df));
     this.kRaw = Math.max(1, Math.ceil(rawLow / this.df));
-    this.whiteNoise = null; this.spectrumKey = null;
+    this.fresh = false; this.spectrumKey = null;
   }
 
   /** A fresh white spectrum from the seed (the noise realisation). */
@@ -74,12 +78,12 @@ export class Detector {
     this.wRe[0] = this.wIm[0] = 0;
     for (let k = 1; k < this.N / 2; k++) { this.wRe[k] = s * rng.gauss(); this.wIm[k] = s * rng.gauss(); }
     this.wRe[this.N / 2] = this.wIm[this.N / 2] = 0;
-    this.whiteNoise = null; this.spectrumKey = null;
+    this.fresh = false; this.spectrumKey = null;
   }
 
   /** The noise curve: Sn(f), the one-sided PSD; key: anything that changes when it does. */
   setSpectrum(Sn, key) {
-    if (key !== undefined && key === this.spectrumKey && this.whiteNoise) return false;
+    if (key !== undefined && key === this.spectrumKey && this.fresh) return false;
     const N = this.N, lo = Math.min(this.kRaw, this.k0);
     for (let k = 0; k <= N / 2; k++) this.S[k] = k >= lo && k < N / 2 ? Sn(this.f[k]) : Infinity;
     this.spectrumKey = key;
@@ -87,9 +91,9 @@ export class Detector {
     return true;
   }
 
-  /** Every series that depends on the seed, the signal and the spectrum. */
+  /** Every series that depends on the seed, the signal and the spectrum (the raw noise when first asked for). */
   compute() {
-    const N = this.N, df = this.df, { k0, k1, kRaw, S, wRe, wIm, tRe, tIm } = this;
+    const N = this.N, df = this.df, { k0, k1, S, wRe, wIm, tRe, tIm } = this;
     const nBand = k1 - k0 + 1, uScale = 1 / Math.sqrt(2 * nBand);
     let s2 = 0;
     for (let k = k0; k <= k1; k++) s2 += (tRe[k] * tRe[k] + tIm[k] * tIm[k]) / S[k];
@@ -97,32 +101,46 @@ export class Detector {
     const m = this.mergeIndex;
     // Series are paired for the inverse transforms by size (each pair's round-off leaks into
     // the other at 1e-16 of its size, so the strain-sized raw noise goes alone).
-    // 1. The whitened noise (the seed and the band only) and the matched filter's output for it.
+    // 1. The matched filter's output for the noise and for the chirp at 1 Mpc.
     const mf = (4 * df) / this.sigma1;
-    this.whiteNoise = new Float64Array(N); this.mfNoise = new Float64Array(N);
+    // The data's chirp: the template moved to merge at m, e^{−2πi k m/N} by a recurrence.
+    const ca = Math.cos((2 * Math.PI * m) / N), sa = -Math.sin((2 * Math.PI * m) / N);
+    let cr = Math.cos((2 * Math.PI * k0 * m) / N), ci = -Math.sin((2 * Math.PI * k0 * m) / N);
+    const hR = new Float64Array(k1 + 1), hI = new Float64Array(k1 + 1);
+    for (let k = k0; k <= k1; k++) {
+      hR[k] = tRe[k] * cr - tIm[k] * ci; hI[k] = tRe[k] * ci + tIm[k] * cr;
+      if ((k - k0) % 64 === 63) { const a = (-2 * Math.PI * (k + 1) * m) / N; cr = Math.cos(a); ci = Math.sin(a); }
+      else { const t = cr * ca - ci * sa; ci = cr * sa + ci * ca; cr = t; }
+    }
     this.twoReal((k, out) => {
       if (k < k0 || k > k1) { out.fill(0); return; }
-      const amp = Math.sqrt(S[k] / (2 * df)), nr = wRe[k] * amp, ni = wIm[k] * amp;
-      out[0] = wRe[k] * uScale; out[1] = wIm[k] * uScale;
-      // ñ T̃* / S, with the 1/2 because twoReal makes 2 Re Σ.
-      out[2] = (0.5 * mf * (nr * tRe[k] + ni * tIm[k])) / S[k]; out[3] = (0.5 * mf * (ni * tRe[k] - nr * tIm[k])) / S[k];
-    }, this.whiteNoise, this.mfNoise);
-    // 2. The whitened chirp at 1 Mpc, and the matched filter's output for it.
-    this.whiteSignal1 = new Float64Array(N); this.mfSignal1 = new Float64Array(N);
+      const amp = Math.sqrt(S[k] / (2 * df)), nr = wRe[k] * amp, ni = wIm[k] * amp, hr = hR[k], hi = hI[k], g = (0.5 * mf) / S[k];
+      // ñ T̃* / S and h̃ T̃* / S, with the 1/2 because twoReal makes 2 Re Σ.
+      out[0] = g * (nr * tRe[k] + ni * tIm[k]); out[1] = g * (ni * tRe[k] - nr * tIm[k]);
+      out[2] = g * (hr * tRe[k] + hi * tIm[k]); out[3] = g * (hi * tRe[k] - hr * tIm[k]);
+    }, this.mfNoise, this.mfSignal1);
+    // 2. The whitened noise (the seed and the band only: w itself) and the whitened chirp.
     this.twoReal((k, out) => {
       if (k < k0 || k > k1) { out.fill(0); return; }
-      const a = (-2 * Math.PI * k * m) / N, c = Math.cos(a), s = Math.sin(a);
-      const hr = tRe[k] * c - tIm[k] * s, hi = tRe[k] * s + tIm[k] * c;   // the data's chirp: the template moved to merge at m
       const w = uScale / Math.sqrt(S[k] / (2 * df));
-      out[0] = hr * w; out[1] = hi * w;
-      out[2] = (0.5 * mf * (hr * tRe[k] + hi * tIm[k])) / S[k]; out[3] = (0.5 * mf * (hi * tRe[k] - hr * tIm[k])) / S[k];
-    }, this.whiteSignal1, this.mfSignal1);
-    // 3. The raw noise, high-passed at rawLow.
-    this.rawNoise = new Float64Array(N);
-    this.twoReal((k, out) => {
-      const amp = k >= kRaw ? Math.sqrt(S[k] / (2 * df)) * df : 0;
-      out[0] = wRe[k] * amp; out[1] = wIm[k] * amp; out[2] = out[3] = 0;
-    }, this.rawNoise, null);
+      out[0] = wRe[k] * uScale; out[1] = wIm[k] * uScale;
+      out[2] = hR[k] * w; out[3] = hI[k] * w;
+    }, this.whiteNoise, this.whiteSignal1);
+    this._rawFresh = false;
+    this.fresh = true;
+  }
+
+  /** The raw noise, high-passed at rawLow: made when first asked for after a new spectrum. */
+  get rawNoise() {
+    if (!this._rawFresh) {
+      const { kRaw, S, wRe, wIm, df } = this;
+      this.twoReal((k, out) => {
+        const amp = k >= kRaw ? Math.sqrt(S[k] / (2 * df)) * df : 0;
+        out[0] = wRe[k] * amp; out[1] = wIm[k] * amp; out[2] = out[3] = 0;
+      }, this._raw, null);
+      this._rawFresh = true;
+    }
+    return this._raw;
   }
 
   /**
