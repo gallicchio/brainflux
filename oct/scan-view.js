@@ -763,11 +763,12 @@ export function init(shared) {
   lesionT = toggle('Cyst / lump', state.lesion, (on) => { state.lesion = on; rebuildScene(); }, 'Put the lesion in the sample, or take it out');
   $('#s-toggles').append(speckleT, lesionT);
   $('#s-reseed').addEventListener('click', () => { state.seed++; rebuildScene(); });
-  tiltS = slider({ label: 'tilt (°)', min: -15, max: 15, step: 0.1, value: state.tilt, title: 'Tilt the sample about the y axis', onInput: (v) => { state.tilt = v; rebuildScene(true); } });
+  tiltS = slider({ label: 'tilt (°)', min: -15, max: 15, step: 0.1, value: state.tilt, title: 'Tilt the sample about the y axis', onInput: (v) => { state.tilt = Math.max(-45, Math.min(45, v)); if (state.tilt !== v) tiltS.value = state.tilt; rebuildScene(true); } });
   roughS = slider({ label: 'roughness (μm)', min: 0, max: 30, step: 0.5, value: state.rough, title: 'How far the top surface wanders up and down', onInput: (v) => { state.rough = v; rebuildScene(true); } });
   $('#s-shape-box').append(tiltS, roughS);
   naS = slider({ label: 'aperture NA', min: 0.01, max: 0.2, log: true, value: state.NA, title: 'The numerical aperture: the sine of the half-angle of the cone of light the lens focuses',
-    onInput: (v) => { state.NA = v; beam = sceneBeam(scene, S.src, state.NA, state.focus); rescan(); } });
+    // (Typed: kept within 0.005 to 0.5; a beam far wider than the scatterers' cells would take minutes a column.)
+    onInput: (v) => { state.NA = Math.max(0.005, Math.min(0.5, v)); if (state.NA !== v) naS.value = state.NA; beam = sceneBeam(scene, S.src, state.NA, state.focus); rescan(); } });
   focusS = slider({ label: 'focus depth (μm)', min: 0, max: 700, step: 1, value: state.focus, title: 'How deep in the sample the beam is focused',
     onInput: (v) => { state.focus = v; beam = sceneBeam(scene, S.src, state.NA, state.focus); rescan(); } });
   $('#s-beam-box').append(naS, focusS);
@@ -858,9 +859,11 @@ export function toHash() {
 }
 export function fromHash(h, num) {
   configure({ mode: h.mode === 'volume' ? 'volume' : 'bscan', scene: SCENES[h.scene] ? h.scene : 'retina', speckle: h.speckle !== '0', lesion: h.lesion !== '0',
-    tilt: num('tilt', 0), rough: num('rough', 0), seed: num('seed', 1), NA: num('NA', (SCENES[h.scene] || SCENES.retina).NA), focus: num('focus', (SCENES[h.scene] || SCENES.retina).focus),
-    noise: num('noise', -72), range: num('range', 38), rate: num('rate', 128), ix: num('ix', 32), iy: num('iy', 32), m: num('m', 120),
-    avg: num('avg', 1), how: h.how === 'beam' ? 'beam' : 'tissue', step: num('step', 9), follow: h.follow === '1', layer: num('layer', 7), below: num('below', 11) });
+    tilt: num('tilt', 0, -15, 15), rough: num('rough', 0, 0, 30), seed: Math.round(num('seed', 1, 1, 1e6)),
+    NA: num('NA', (SCENES[h.scene] || SCENES.retina).NA, 0.01, 0.2), focus: num('focus', (SCENES[h.scene] || SCENES.retina).focus, 0, 700),
+    noise: num('noise', -72, -120, -20), range: num('range', 38, 10, 70), rate: num('rate', 128, 4, 2000),
+    ix: Math.round(num('ix', 32, 0, VOL.nx - 1)), iy: Math.round(num('iy', 32, 0, VOL.ny - 1)), m: Math.round(num('m', 120, 0, VOL.nz - 1)),
+    avg: num('avg', 1), how: h.how === 'beam' ? 'beam' : 'tissue', step: num('step', 9, 0, 30), follow: h.follow === '1', layer: Math.round(num('layer', 7, 0, 9)), below: num('below', 11, -300, 450) });
 }
 
 /** For the tests. */

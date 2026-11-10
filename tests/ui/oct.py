@@ -428,6 +428,10 @@ with Browser('oct/index.html', size=(1400, 900)) as b:
     b.eval("location.hash = '#view=fringes&lam=1300&bw=80&z=70&two=1&t=50&n=1.4'"); b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
     st = b.eval('[__app.view, __app.src.lamNm, __app.src.fwhmNm, __app.F.state.z, __app.F.state.two, __app.F.state.t, __app.F.state.n]')
     check(st == ['fringes', 1300, 80, 70, True, 50, 1.4], f'an address with the light and a plate opens them ({st})')
+    # A hand-typed address out of range: NA = 0 asked for an infinitely wide beam and hung the page.
+    b.eval("location.hash = '#view=scan&NA=0&focus=-5&ix=999&bw=0'"); b.eval('__app.ready = false; location.reload()'); b.wait('window.__app && __app.ready', timeout=60)
+    st = b.eval('[__app.view, __app.B.state.NA, __app.B.state.focus, __app.B.state.ix, __app.src.fwhmNm]')
+    check(st == ['scan', 0.01, 0, 63, 0.05], f'an address out of range opens, its numbers kept within their sliders\' ranges ({st})')
     # Averaging and the flattened slab are kept in the address too.
     b.eval('__app.hold(true)'); run(b, 'average'); b.eval("document.querySelector('#s-avg-more').open = true"); press_button(b, '#s-how-box', 'The beam'); set_num(b, '#s-how-box', 'beam step', 4.5)
     b.wait("location.hash.includes('avg=16') && location.hash.includes('how=beam') && location.hash.includes('step=4.5')", timeout=20)

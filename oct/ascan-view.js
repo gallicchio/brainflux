@@ -355,8 +355,8 @@ export function toHash() {
   return { smp: s.sample, gap: s.sample === 'pair' ? s.gap : undefined, noise: s.noise, motor: s.motor, v: s.speed, scale: s.scale, d: +s.d.toFixed(2) };
 }
 export function fromHash(h, num) {
-  configure({ sample: STACKS[h.smp] && !STACKS[h.smp].fdOnly ? h.smp : 'slide', gap: num('gap', 8), noise: num('noise', -60), motor: ['stop', 'fwd', 'sweep'].includes(h.motor) ? h.motor : 'sweep',
-    speed: num('v', undefined), scale: h.scale === 'lin' ? 'lin' : 'db', d: num('d', 0) });
+  configure({ sample: STACKS[h.smp] && !STACKS[h.smp].fdOnly ? h.smp : 'slide', gap: num('gap', 8, 0.5, 30), noise: num('noise', -60, -120, -10), motor: ['stop', 'fwd', 'sweep'].includes(h.motor) ? h.motor : 'sweep',
+    speed: h.v === undefined ? undefined : num('v', 50, 2, 1000), scale: h.scale === 'lin' ? 'lin' : 'db', d: num('d', 0, 0, 3000) });
 }
 
 /** For the tests. */

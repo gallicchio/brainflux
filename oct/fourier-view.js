@@ -454,9 +454,9 @@ export function toHash() {
     td: s.td ? undefined : 0, scale: s.scale, noise: s.noise, motor: s.motor ? 1 : 0, pick: s.pick, scene: s.mode === 'bscan' ? s.scene : undefined, shift: s.mode === 'bscan' ? +s.shift.toFixed(0) : undefined };
 }
 export function fromHash(h, num) {
-  configure({ mode: h.qmode === 'bscan' ? 'bscan' : 'ascan', sample: STACKS[h.smp] ? h.smp : 'one', offset: num('off', 40), N: NS.includes(num('N', 1024)) ? num('N', 1024) : 1024,
-    subtract: h.sub !== '0', both: h.both === '1', td: h.td !== '0', scale: h.scale === 'lin' ? 'lin' : 'db', noise: num('noise', -80), motor: h.motor !== '0', pick: num('pick', 0),
-    scene: h.scene === 'onion' ? 'onion' : 'retina', shift: num('shift', 120) });
+  configure({ mode: h.qmode === 'bscan' ? 'bscan' : 'ascan', sample: STACKS[h.smp] ? h.smp : 'one', offset: num('off', 40, -600, 2400), N: NS.includes(num('N', 1024)) ? num('N', 1024) : 1024,
+    subtract: h.sub !== '0', both: h.both === '1', td: h.td !== '0', scale: h.scale === 'lin' ? 'lin' : 'db', noise: num('noise', -80, -120, -20), motor: h.motor !== '0', pick: Math.round(num('pick', 0, 0, 8)),
+    scene: h.scene === 'onion' ? 'onion' : 'retina', shift: num('shift', 120, -900, 2400) });
 }
 
 /** For the tests. */

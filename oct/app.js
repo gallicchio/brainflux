@@ -35,8 +35,11 @@ let bwSlider = null, lamSeg = null;
 // (a hidden view's work, a few to a hundred milliseconds for each step of the slider, shows nothing).
 const stale = new Set();
 function setSource(lam, fwhm) {
+  // (A typed bandwidth may leave the slider's track, but not by so far that the coherence length
+  // outgrows every window: 0.05 nm is already a laser's 6 mm.)
+  fwhm = Math.max(0.05, Math.min(400, fwhm));
   shared.src.set(lam, fwhm);
-  if (bwSlider && Math.abs(bwSlider.value - fwhm) > 1e-9 * fwhm) bwSlider.value = +fwhm.toPrecision(4);
+  if (bwSlider && !(Math.abs(bwSlider.value - fwhm) <= 1e-9 * fwhm)) bwSlider.value = +fwhm.toPrecision(4);
   if (lamSeg) lamSeg.value = lam;
   for (const [k, v] of Object.entries(VIEWS)) if (k === app.view) v.sourceChanged(); else stale.add(k);
   lightReadout();
@@ -82,8 +85,10 @@ function scheduleHash() {
 }
 
 function fromHash(h) {
-  const num = (k, d) => (h[k] !== undefined && Number.isFinite(+h[k]) ? +h[k] : d);
-  setSource(num('lam', 840) === 1300 ? 1300 : 840, Math.max(0.05, Math.min(250, num('bw', 50))));
+  // A number from the address, kept within [lo, hi] (its slider's range): a hand-typed or garbled
+  // address cannot ask for an aperture of 0 (an infinitely wide beam) or a negative speed.
+  const num = (k, d, lo = -Infinity, hi = Infinity) => Math.max(lo, Math.min(hi, h[k] !== undefined && Number.isFinite(+h[k]) ? +h[k] : d));
+  setSource(num('lam', 840) === 1300 ? 1300 : 840, num('bw', 50, 0.05, 250));
   const v = VIEWS[h.view] ? h.view : 'fringes';
   setView(v);
   VIEWS[v].fromHash(h, num);

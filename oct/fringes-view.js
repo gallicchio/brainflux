@@ -396,9 +396,9 @@ export function init(shared) {
     onInput: (v) => { state.z = v; sampleChanged(); } });
   twoToggle = toggle('Add the back face: a glass plate', state.two, (on) => { state.two = on; $('#f-plate-box').hidden = !on; sampleChanged(); },
     'Make the surface the front of a plate of glass, and let its back face reflect too');
-  tSlider = slider({ label: 'thickness t (μm)', min: 5, max: 500, step: 0.5, value: state.t, onInput: (v) => { state.t = v; sampleChanged(); } });
+  tSlider = slider({ label: 'thickness t (μm)', min: 5, max: 500, step: 0.5, value: state.t, onInput: (v) => { state.t = Math.max(0, v); sampleChanged(); } });
   nSlider = slider({ label: 'index n', min: 1, max: 2.4, step: 0.01, value: state.n, title: 'The glass\'s refractive index (taken the same for every wavelength here)',
-    onInput: (v) => { state.n = v; sampleChanged(); } });
+    onInput: (v) => { state.n = Math.max(1, v); if (state.n !== v) nSlider.value = state.n; sampleChanged(); } });
   glassSlider = slider({ label: 'BK7 glass (mm)', min: 0, max: 10, step: 0.05, value: state.glass,
     title: 'A block of BK7 glass in the sample arm, with no twin in the reference arm', onInput: (v) => { state.glass = v; sampleChanged(); } });
   $('#f-sample-box').append(zSlider, twoToggle);
@@ -455,9 +455,9 @@ export function toHash() {
     motor: s.motor, v: s.speed, w0: +s.win[0].toPrecision(6), w1: +s.win[1].toPrecision(6) };
 }
 export function fromHash(h, num) {
-  configure({ d: num('d', 32), z: num('z', 50), two: h.two === '1', t: num('t', 100), n: num('n', 1.5), glass: num('glass', 0),
-    motor: ['fwd', 'back', 'stop', 'sweep'].includes(h.motor) ? h.motor : 'sweep', speed: num('v', 8),
-    win: num('w1', NaN) > num('w0', NaN) ? [num('w0'), num('w1')] : [20, 80] });
+  configure({ d: num('d', 32, D_LIM[0], D_LIM[1]), z: num('z', 50, 0, 300), two: h.two === '1', t: num('t', 100, 5, 500), n: num('n', 1.5, 1, 2.4), glass: num('glass', 0, 0, 10),
+    motor: ['fwd', 'back', 'stop', 'sweep'].includes(h.motor) ? h.motor : 'sweep', speed: num('v', 8, 0.2, 200),
+    win: num('w1', NaN) > num('w0', NaN) ? [num('w0', 0, -1000, 4000), num('w1', 0, -1000, 4000)] : [20, 80] });
 }
 
 /** For the tests. */
