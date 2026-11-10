@@ -146,32 +146,47 @@ function viewHalfDiagonal() { return Math.hypot(view.W, view.H) / 2 / view.s; }
 // ------------------------------------------------------------------ the field picture
 
 const mapCanvas = document.createElement('canvas');
-let mapCell = 4, mapMs = [], mapVals = new Float32Array(0), mapImg = null;
+let mapCell = 4, mapMs = [], mapVals = new Float32Array(0), mapImg = null, samples = new Float32Array(0);
 
-/** The radiation field on a coarse grid over the view. */
+/**
+ * The radiation field on a coarse grid over the view.  The signed field is sampled at the centre
+ * of each cell.  The energy flux is sampled at the cells' corners and averaged over each cell's
+ * four: a sharp pulse (a synchrotron's flash) changes sign within a cell, and the zero of
+ * |E_rad|² between its lobes, a line much thinner than a cell, would otherwise show as scattered
+ * dark cells wherever a centre happened to fall near it.
+ */
 function computeMap(t) {
   const gw = Math.max(8, Math.ceil(view.W / mapCell)), gh = Math.max(8, Math.ceil(view.H / mapCell));
   if (mapVals.length !== gw * gh) { mapVals = new Float32Array(gw * gh); mapImg = new ImageData(gw, gh); mapCanvas.width = gw; mapCanvas.height = gh; }
+  const flux = state.map === 'flux', sw = flux ? gw + 1 : gw, sh = flux ? gh + 1 : gh, off = flux ? 0 : 0.5;
+  const S = flux ? (samples.length === sw * sh ? samples : (samples = new Float32Array(sw * sh))) : mapVals;
   const [x0, x1, y0, y1] = viewBox(), dx = (x1 - x0) / gw, dy = (y1 - y0) / gh;
   let rowGuess = NaN;
   const t0 = performance.now();
   // If the charge never accelerated in all its stored past, there is no radiation anywhere.
   const quiet = traj.activity(traj.tStart, t)[0] <= 1e-6 * state.c * state.c;
-  if (quiet) mapVals.fill(0);
+  if (quiet) S.fill(0);
   // The retarded time to within a time in which light goes a tenth of a pixel (the field lines
-  // ask for far more); each guess carried on from the cell before (to first order).
+  // ask for far more); each guess carried on from the point before (to first order).
   mapLW.c = state.c; mapLW.atol = 0.1 / (view.s * state.c);
   const f = mapLW;
-  for (let j = 0; j < (quiet ? 0 : gh); j++) {
-    const y = y1 - (j + 0.5) * dy;
+  for (let j = 0; j < (quiet ? 0 : sh); j++) {
+    const y = y1 - (j + off) * dy;
     let guess = rowGuess;
-    for (let i = 0; i < gw; i++) {
-      const x = x0 + (i + 0.5) * dx;
+    for (let i = 0; i < sw; i++) {
+      const x = x0 + (i + off) * dx;
       f.field(x, y, 0, t, guess);
       guess = f.predict(x + dx, y);
       if (i === 0) rowGuess = f.predict(x, y - dy);
       // E_rad is perpendicular to n: in the plane, E_rad = E⊥ (ẑ × n).  E⊥ > 0 is anticlockwise.
-      mapVals[j * gw + i] = f.eay * f.nx - f.eax * f.ny;
+      S[j * sw + i] = f.eay * f.nx - f.eax * f.ny;
+    }
+  }
+  // The flux: the root mean square of the four corners (the colour squares it again).
+  if (flux) {
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+      const a = S[j * sw + i], b = S[j * sw + i + 1], c = S[(j + 1) * sw + i], e = S[(j + 1) * sw + i + 1];
+      mapVals[j * gw + i] = Math.sqrt(0.25 * (a * a + b * b + c * c + e * e));
     }
   }
   // Keep this under about 10 ms a frame: coarser cells if it is slow, finer if fast.
@@ -187,7 +202,7 @@ function computeMap(t) {
   for (let o = 0; o < gw * gh; o++) {
     const v = mapVals[o] * gain;
     let r, g, b;
-    if (state.map === 'flux') {
+    if (flux) {
       const a = Math.tanh(v * v);
       r = 255 * Math.min(1, 1.6 * a); g = 255 * Math.max(0, Math.min(1, 1.6 * a - 0.55)); b = 255 * Math.max(0, 2.2 * a - 1.6);
       r *= 0.85; g *= 0.85; b *= 0.85;
@@ -672,6 +687,11 @@ for (const id of ORDER) {
   presetButtons[id] = b;
 }
 
+/** A typed value may go past a slider's end, but not where the motion makes no sense: a speed
+ *  at or over c, a time or a length of zero or less. */
+const LIMITS = { beta: [0, BETA_MAX], tau: [0.005, 20], dist: [0.1, 200], rest: [0, 60], period: [0.05, 60], radius: [0.05, 100], angle: [0, 360], alpha: [0.01, 100] };
+function clampParam(k, v) { const L = LIMITS[k]; return L ? Math.max(L[0], Math.min(L[1], v)) : v; }
+
 let shownParams;
 function showParams(id) {
   shownParams = id;
@@ -680,11 +700,16 @@ function showParams(id) {
   $('#typed').hidden = id !== 'typed';
   if (!id || id === 'typed') return;
   for (const [k, p] of Object.entries(PRESETS[id].params)) {
-    box.append(slider({
+    const s = slider({
       label: p.label, min: p.min, max: p.max, log: p.log, value: values[id][k], title: p.title,
       // A one-shot motion starts again with the new value; a steady one carries on.
-      onInput: (v) => { values[id][k] = v; startMotion(id, { restart: motion.end !== undefined }); },
-    }));
+      onInput: (v) => {
+        values[id][k] = clampParam(k, v);
+        if (values[id][k] !== v) s.value = values[id][k];
+        startMotion(id, { restart: motion.end !== undefined });
+      },
+    });
+    box.append(s);
   }
 }
 
@@ -734,7 +759,7 @@ const cSlider = slider({
   label: 'c (units/s)', min: 1, max: 30, log: true, value: state.c,
   title: 'The speed of light, in units per second (the view is 20 units across its shorter side)',
   onInput: (v) => {
-    state.c = v;
+    state.c = v = Math.max(0.05, Math.min(1000, v));
     if (mode !== 'hand') startMotion(state.preset);
     else {
       // Slower light might now be slower than the charge: start again from rest.
@@ -754,7 +779,7 @@ const linesSeg = segmented([
   { value: 'off', label: 'None' },
 ], state.lines, (v) => { state.lines = v; dirty = true; saveHash(); }, { label: 'Field lines' });
 $('#lines-box').append(linesSeg);
-const countSlider = slider({ label: 'lines', min: 4, max: 64, step: 1, value: state.count, onInput: (v) => { state.count = Math.round(v); dirty = true; saveHash(); } });
+const countSlider = slider({ label: 'lines', min: 4, max: 64, step: 1, value: state.count, onInput: (v) => { state.count = Math.max(1, Math.min(200, Math.round(v))); dirty = true; saveHash(); } });
 $('#count-box').append(countSlider);
 const mapSeg = segmented([
   { value: 'off', label: 'No colour' },
@@ -762,7 +787,7 @@ const mapSeg = segmented([
   { value: 'flux', label: 'Energy flux', title: '|E_rad|², proportional to the radiated energy flowing past' },
 ], state.map, (v) => { state.map = v; dirty = true; saveHash(); }, { label: 'Colour' });
 $('#map-box').append(mapSeg);
-const brightSlider = slider({ label: 'brightness', min: -2, max: 2, step: 0.01, value: state.bright, title: 'The colour map\'s gain, in powers of ten', onInput: (v) => { state.bright = v; dirty = true; saveHash(); } });
+const brightSlider = slider({ label: 'brightness', min: -2, max: 2, step: 0.01, value: state.bright, title: 'The colour map\'s gain, in powers of ten', onInput: (v) => { state.bright = Math.max(-6, Math.min(6, v)); dirty = true; saveHash(); } });
 $('#bright-box').append(brightSlider);
 const extras = {
   trail: toggle('Path', state.trail, (on) => { state.trail = on; dirty = true; saveHash(); }, 'The charge\'s path over the last 4 seconds'),
@@ -789,11 +814,11 @@ function saveHash() {
 
 function fromHash(h) {
   if (!PRESETS[h.m] && h.m !== 'typed') return false;
-  if (+h.c > 0) { state.c = +h.c; cSlider.value = state.c; }
+  if (+h.c > 0) { state.c = Math.max(0.05, Math.min(1000, +h.c)); cSlider.value = state.c; }
   if (['total', 'velocity', 'off'].includes(h.lines)) { state.lines = h.lines; linesSeg.value = h.lines; }
-  if (+h.n >= 1) { state.count = Math.round(+h.n); countSlider.value = state.count; }
+  if (+h.n >= 1) { state.count = Math.min(200, Math.round(+h.n)); countSlider.value = state.count; }
   if (['off', 'field', 'flux'].includes(h.map)) { state.map = h.map; mapSeg.value = h.map; }
-  if (Number.isFinite(+h.b)) { state.bright = +h.b; brightSlider.value = state.bright; }
+  if (Number.isFinite(+h.b)) { state.bright = Math.max(-6, Math.min(6, +h.b)); brightSlider.value = state.bright; }
   setExtras({ trail: h.trail !== '0', fronts: h.fronts === '1', probe: !!h.probe });
   if (h.probe) { const p = h.probe.split(',').map(Number); if (p.length === 2 && p.every(Number.isFinite)) state.probeAt = p; }
   if (h.m === 'typed') {
@@ -802,7 +827,7 @@ function fromHash(h) {
     yOpts.reserved = ['c', ...typedX.expr.parameters];
     typedY.set(h.y ?? TYPED.y, p, false);
   } else {
-    for (const k of Object.keys(values[h.m])) if (Number.isFinite(+h['p_' + k]) && h['p_' + k] !== undefined) values[h.m][k] = +h['p_' + k];
+    for (const k of Object.keys(values[h.m])) if (Number.isFinite(+h['p_' + k]) && h['p_' + k] !== undefined) values[h.m][k] = clampParam(k, +h['p_' + k]);
   }
   shownParams = undefined;   // the values changed under the sliders
   startMotion(h.m);
@@ -869,7 +894,7 @@ requestAnimationFrame(frame);
 window.__app = {
   state, setups, traj, values,
   get mode() { return mode; }, get lines() { return lines; }, get lineEvals() { return lineEvals; },
-  get frameMs() { return lastFrameMs; }, timing, get mapCell() { return mapCell; }, get probe() { return probeInfo; },
+  get frameMs() { return lastFrameMs; }, timing, get mapCell() { return mapCell; }, get mapVals() { return mapVals; }, get probe() { return probeInfo; },
   get powerLog() { return powerLog; }, canvasLabels,
   startMotion, setRunning, grab,
   setProbe(x, y) { state.probeAt = [x, y]; probeHist.length = 0; dirty = true; },

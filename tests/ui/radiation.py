@@ -214,6 +214,22 @@ def circles(b):
         lo, hi = (mid, hi) if f(mid) > 0 else (lo, mid)
     check(abs(half - lo) < 2e-4 and abs(zero - math.acos(be)) < 2e-4,
           f'synchrotron beam: half power {half:.4f} rad either side of v (exact {lo:.4f}), none at {zero:.4f} = arccos β (1/γ = {1 / gamma(be):.3f})')
+    # The energy flux of the flash, drawn on cells: no cell inside the bright spiral is dark (the
+    # zero of |E_rad|² between the flash's lobes is far thinner than a cell; sampled at the
+    # cells' centres it showed as scattered black cells).
+    b.eval("__app.state.lines = 'off'"); run_for(b, 0.3); b.eval('__app.setRunning(false)'); b.sleep(0.3)
+    spots = b.eval("""(() => { const cv = document.querySelector('#field'), W = cv.width, H = cv.height, d = cv.getContext('2d').getImageData(0, 0, W, H).data;
+        const lum = (x, y) => { const o = 4 * (y * W + x); return d[o] + d[o + 1] + d[o + 2]; };
+        let n = 0, bright = 0; for (let y = 8; y < H - 40; y++) for (let x = 8; x < W - 8; x++) { if (lum(x, y) > 500) bright++;
+          if (lum(x, y) < 150 && lum(x - 6, y) > 500 && lum(x + 6, y) > 500 && lum(x, y - 6) > 500 && lum(x, y + 6) > 500) n++; }
+        return [n, bright]; })()""")
+    check(spots[0] == 0 and spots[1] > 1000, f'synchrotron flux: no dark spots inside the bright spiral ({spots[0]} pixels; {spots[1]} bright)')
+    b.eval("__app.state.lines = 'total'; __app.setRunning(true)")
+    # A typed speed past the slider's end, even past c: the charge stays below c.
+    b.eval("(() => { const s = document.querySelector('#params input[type=number]'); s.value = 1.5; s.dispatchEvent(new Event('change')); })()")
+    run_for(b, 0.4)
+    q = charge(b)
+    check(b.eval('__app.values.circle.beta') == 0.98 and math.hypot(q['vx'], q['vy']) / q['c'] < 0.981, f"typing β = 1.5 gives β = {b.eval('__app.values.circle.beta')}, below c")
 
 def hyperbolic(b):
     # Constant Liénard power (2/3) g²/c³ while the proper acceleration lasts (t = 2.9 to 5 s).
