@@ -332,9 +332,13 @@ test('the switch-off: sudden when A = γBE²τ/Bp ≪ 1 (M left across the Earth
   const A = adiabaticity(Bp, BE, 0.4e-3);
   close(A, 0.0289, 5e-4, 'the board\'s 0.4 ms');
   // The spins follow the field while it turns slower than they precess about it, until the
-  // ramp is nearly over, and are left tilted a little towards BE: 8.7° at the board's 0.4 ms (98.9%).
+  // ramp is nearly over, and are left tilted a little towards BE: 8.6° at the board's 0.4 ms (98.9%),
+  // 2.9° at a tenth of it (the tilt goes roughly as √A).
   const sudden = leftAcross(Bp, BE, 0.4e-3);
   assert(sudden.across > 0.985 && sudden.along > 0.1 && sudden.along < 0.2, `0.4 ms: across ${sudden.across}, along ${sudden.along}`);
+  const tilt = (r) => (Math.atan2(r.along, r.across) * 180) / Math.PI;
+  close(tilt(sudden), 8.6, 0.05, 'the tilt after the board\'s 0.4 ms');
+  close(tilt(leftAcross(Bp, BE, 0.04e-3)), 2.9, 0.05, 'the tilt after 0.04 ms');
   const fine = switchOff([1, 0, 0], Bp, BE, 0.4e-3, { perPeriod: 96 });
   close(fine[2], sudden.along, 1e-3, 'converged in the step');
   const instant = leftAcross(Bp, BE, 4e-6);
@@ -573,8 +577,8 @@ test('the coil\'s angle α to the Earth\'s field: sin α of M precesses, the coi
   for (const deg of [90, 58.89, 31.11, 10]) {
     const a = (deg * Math.PI) / 180;
     // A sudden switch-off (0.1 μs) leaves M where it was: sin α of it across the field.  (While
-    // Bp is still many times BE the spins follow its slight turning a little: by 1° at 10 μs,
-    // 8.7° at the board's 0.4 ms, which costs cos 8.7° across a coil square to the field, but
+    // Bp is still many times BE the spins follow its slight turning a little: by 1.5° at 10 μs,
+    // 8.6° at the board's 0.4 ms, which costs cos 8.6° across a coil square to the field, but
     // more, to first order, across a coil at a slant.)
     close(leftAcross(Bp, BE, 0.1e-6, 1, a).across, Math.sin(a), 2e-3, `${deg}°: left across`);
     // The board's cycle: polarize along the coil, switch off in 0.1 μs, listen.

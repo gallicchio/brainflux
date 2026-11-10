@@ -101,7 +101,9 @@
   <article class="exp" data-setup="larmor" data-frame="720x419">
     <h3>1. The spin goes round the field at the Larmor frequency</h3>
     <p>One spin, tipped 45° from the field $B_0$, seen in the lab.  It goes round $B_0$ at the
-    Larmor frequency $f_0=\gamma B_0/2\pi$, with $\gamma/2\pi=42.577$ MHz/T for a proton:
+    Larmor frequency $f_0=\gamma B_0/2\pi$, clockwise seen from above (from the tip of $B_0$),
+    as $d\mathbf M/dt=\gamma\,\mathbf M\times\mathbf B$ turns it for a proton's positive
+    $\gamma$, with $\gamma/2\pi=42.577$ MHz/T:
     5.000 MHz in the TeachSpin's 117.4 mT, slowed here so that one turn takes a second.  Drag
     the tip to another angle: a turn takes the same time at any angle, because only the field
     sets the rate.  Under <em>More</em>, set $B_0$ to 234.9 mT: twice as fast.  The coil lies
@@ -198,9 +200,11 @@
   <article class="exp" data-setup="mg" data-frame="720x531">
     <h3>9. Why Meiboom and Gill: pulses that are slightly wrong</h3>
     <p>The same train with the π pulses about $x'$ (Carr–Purcell), and every pulse 10% too
-    long: a π that is really 198°, as a width set by hand can be.  About $x'$ each pulse's error
-    adds to the last, the echoes alternate in sign, and they die in half the time: the fit says
-    $T_2=10.6$ ms.  Press <em>CPMG</em>, keep the error at 10%: about $y'$, along the spins,
+    long: a π that is really 198°, as a width set by hand can be.  About $x'$ the echoes alternate
+    in sign (each π turns $-y'$ into $+y'$ and back), and each pulse's extra 18° adds to the last
+    one's, turning the refocused spins out of the plane: by the seventh echo, at 28 ms, nothing
+    is left, and then a little comes back with its signs the other way round.  That is not
+    $T_2$, though an exponential fitted to it says $T_2=10.6$ ms, half the truth.  Press <em>CPMG</em>, keep the error at 10%: about $y'$, along the spins,
     an error in one pulse is undone by the next, and the fit gives 20.3 ms again.  A short
     pulse, −10%, fails the same way about $x'$ (10.6 ms).</p>
   </article>
@@ -223,8 +227,9 @@
     <p>An FID with thermal noise: a signal-to-noise ratio of 5, so the noise is 0.20 of the full
     signal, r.m.s.  Repeat and average: the signal is the same each time and adds up, the noise
     does not, and the average of $N$ runs has $1/\sqrt N$ of the noise: 0.050 after 16, 0.012
-    after 256.  Watch the fit of $T_2^*$ beside the sphere: from one run it says 0.545 ms, 12%
-    short of the true 0.617; from 16, 0.606; from 256, 0.618.  It fits the mixer's output in
+    after 256.  Watch the fit of $T_2^*$ beside the sphere as the runs repeat: from one run it
+    scatters by 10% or more round the true 0.617 ms (the first runs give 0.614, 0.545, 0.642 and
+    0.730 ms); average 16 and it stays within a few percent; 256, within about 1%.  It fits the mixer's output in
     phase with the FID, which noise leaves at zero on average.  The envelope $|M_{xy}|$ does
     not go to zero: noise alone has a mean length $\sigma\sqrt{\pi/2}$, 0.25 here, which would
     make the FID look longer.</p>
@@ -238,10 +243,15 @@
     $1-e^{-t/T_1}$: 0.699 of all of it by 3 s for tap water ($T_1=2.5$ s).  Then the current is
     switched off in 0.4 ms, before the protons can follow, so $M$ is left across the Earth's
     field: 98.9% of it.  That is the π/2 pulse.  It goes round $B_E$ at 1960 Hz and makes
-    0.78 μV in the same coil, dying away with $T_2^*=0.86$ s.  The coil and its capacitors are
-    a tank tuned to the protons, which multiplies it by 36.6: 28.6 μV.  The receiver's gain
-    and filters take that to 0.56 V at OUT (the plot under the board's cycle), 45 times the
-    receiver's noise.  Press <em>Hear it</em>: OUT, as the board's headphones give it.</p>
+    0.79 μV in the same coil, dying away with $T_2^*=0.86$ s.  (The page reads the FID's start
+    as its mean over the first 50 ms after the receiver opens, 19 ms after the switch-off.)  The
+    coil and its capacitors are a tank tuned to the protons, which multiplies it by 36.6:
+    28.8 μV.  The receiver's gain and filters take that to 0.57 V at OUT (the plot under the
+    board's cycle), 45 times the receiver's noise.  The handbook (§5.4) says "about 0.8 V at the
+    start": that is the water <em>fully</em> polarized, 0.81 V here.  In 3 s, with tap water's
+    $T_1$ of 2.5 s, only 70% of that is built, so a scope shows about 0.57 V; the timer's longest,
+    4.7 s, gives 0.69 V, and it takes $3T_1$, 7.5 s, to come within 5% of 0.81 V (experiment 18
+    measures $T_1$ this way).  Press <em>Hear it</em>: OUT, as the board's headphones give it.</p>
   </article>
 
   <article class="exp" data-setup="adiabatic" data-frame="720x201">
@@ -249,7 +259,7 @@
     <p>The same, with the current switched off in 300 ms instead of 0.4.  As it falls, the
     total field turns from the coil's axis to the Earth's; slowly enough, the spins follow it
     round, and $M$ ends up along $B_E$, with nothing across it to ring: 4.5% is left, an FID of
-    0.034 μV, 25 mV at OUT, twice the receiver's noise.  The field turns only at the very end of
+    0.035 μV, 25 mV at OUT, twice the receiver's noise.  The field turns only at the very end of
     the ramp, through its last 1/170, so what
     matters is $A=\gamma B_E^2\tau/B_p$: 0.029 for the board's 0.4 ms (sudden), 1 at 13.8 ms
     (69% left across), 22 at 300 ms (adiabatic).  The plainer $\gamma B_E\tau$ would say 4.9 at
@@ -263,11 +273,11 @@
     current builds $M$ along the coil; switched off suddenly, only its part across the field,
     $M\sin\alpha$, goes round $B_E$: the tip sweeps a cone about the field, not its equator.  And
     the coil picks up only the part of that turning $M$ along its own axis, $\sin\alpha$ of it
-    again: the EMF goes as $\sin^2\alpha$, 0.733 here.  The FID at OUT is 0.384 V against 0.56 V
+    again: the EMF goes as $\sin^2\alpha$, 0.733 here.  The FID at OUT is 0.387 V against 0.57 V
     east–west: 0.68 of it, a little less than $\sin^2\alpha$, because during the 0.4 ms
     switch-off the spins follow the field's first turning towards $B_E$ by a few degrees, and at
     a slant that comes straight off the part across (78.5% of $M$ is left across, not
-    $\sin\alpha$ = 85.6%).  Press <em>Upright</em> (31.1°): 0.133 V.  Drag the coil's end on the
+    $\sin\alpha$ = 85.6%).  Press <em>Upright</em> (31.1°): 0.134 V.  Drag the coil's end on the
     sphere along $B_E$: nothing rings.  The handbook says lay it level and east–west (magnetic):
     square to the field anywhere on Earth.  North–south is nearly as good only where the field
     dips steeply, upright only near the magnetic equator, where the field lies nearly level.  East
@@ -283,13 +293,13 @@
     circuit, a tank: it multiplies the FID by $|H|$, up to $Q=\omega L/R=37$ at its resonance
     $f_T=1/2\pi\sqrt{LC}$, in a band 52.6 Hz wide.  Here every switch is OFF, as a new board
     comes: only the clamp's 0.39 nF is across the coil, the tank rings at 49 kHz, far above the
-    band, and the FID passes at ×1.00: 17 mV at OUT, 1.3 times the receiver's noise.  The
+    band, and the FID passes at ×1.00: 16 mV at OUT, 1.3 times the receiver's noise.  The
     handbook's recipe (§4): the protons here are at 42.577 Hz/μT × 46.03 μT = 1959.8 Hz; the
     coil's 26.8 mH resonates there with $C=1/4\pi^2f^2L$ = 246.2 nF; of the switches' 3.3, 6.8,
     13.3, 26.8, 53.8, 106.8, 210 and 420 nF, 210 + 26.8 + 6.8 + 3.3 come nearest, switches
     1 2 4 7, and with the clamp's that makes 247.29 nF: the tank at 1955.6 Hz, 4.3 Hz below the
     protons.  Click those four switches, or drag the tank's peak, or press <em>Tune to the
-    protons</em>: ×36.6, 0.56 V at OUT.  One step either side is still ×35.6 (switches 2 4 7) or
+    protons</em>: ×36.6, 0.57 V at OUT.  One step either side is still ×35.6 (switches 2 4 7) or
     ×30.9 (3 4 7): each step of 3.3 nF moves the tank 13 Hz.</p>
   </article>
 
@@ -298,8 +308,8 @@
     <p>The board, tuned in Claremont, taken where the Earth's field is 50.0 μT, as further north.
     The protons are now at 2129 Hz, 173 Hz above the tank, more than three of its widths: on the
     tank's plot the red line stands out on the tail.  The gain there is ×5.34, not ×36.6, and the
-    FID at OUT is 0.090 V instead of 0.56, though the EMF in the coil is a little larger,
-    0.86 μV, as it grows with the frequency.  Press <em>Tune to the protons</em>: the recipe asks
+    FID at OUT is 0.089 V instead of 0.57, though the EMF in the coil is a little larger,
+    0.85 μV, as it grows with the frequency.  Press <em>Tune to the protons</em>: the recipe asks
     for 208.7 nF, switches 2 3 4 5 6 give 207.89 nF with the clamp's, the tank is at 2132.8 Hz and
     the gain ×40.2: 0.67 V.  Another day needs nothing: the field drifts through a day by a few
     tens of nanotesla, about a hertz, and the tank is 52.6 Hz, 1240 nT, wide.  It is a new place
@@ -328,7 +338,9 @@
     <h3>18. T₁ from the polarizing time</h3>
     <p>The FID's start is the magnetization built while the current flowed, $1-e^{-t_p/T_1}$.
     <em>Measure T₁</em> runs the cycle polarizing for 0.2 to 4.7 s, the board's range, and fits
-    the starts: $T_1=2.49$ s for tap water's 2.5.  Each cycle you run adds its own point.  Try
+    the starts: $T_1=2.49$ s for tap water's 2.5.  The fit's height, 1.12 μV in the coil (the
+    dashed line), is the FID's start with the water fully polarized: 0.81 V at OUT, the
+    handbook's "about 0.8 V" (experiment 12).  Each cycle you run adds its own point.  Try
     <em>Copper sulphate</em>: its ions take the protons' energy far faster, and $T_1$ falls to
     0.3 s, so the FID reaches full size within a second of polarizing.</p>
   </article>
@@ -388,7 +400,8 @@
   of full width $\Delta f$, taken at its quantiles, not at random, so that their sum decays as
   $e^{-t/T_2'}$ with $T_2'=1/(\pi\Delta f)$, and with $T_2$ as $e^{-t/T_2^*}$,
   $1/T_2^*=1/T_2+1/T_2'$.  The sphere draws a few of them, evenly spread through the line.  A
-  finite ensemble never quite cancels: a floor of about 1.5% is left after the FID has gone.
+  finite ensemble never quite cancels: after the FID has gone a residue of about 0.3% is left,
+  now and then up to 1.5%.
   The power spectrum $|S(f)|^2$ of $A\,e^{-t/T_2^*}$ is a Lorentzian $1/(\pi T_2^*)$ wide at half
   height.  The pulses act on the spins far out in the Lorentzian's tails less well than on the
   rest: with 2.5 μs pulses an echo is 0.4% lower than $e^{-2\tau/T_2}$.</p>
@@ -418,8 +431,8 @@
   axis to $B_E$, fastest at the end, through its last radian in $\tau B_E/B_p$.  The spins follow
   while the field turns slower than they precess, $A=\gamma B_E^2\tau/B_p\gg1$ (adiabatic); when
   $A\ll1$ (sudden) they follow only the field's first, slow turning and are left almost where
-  they were: tilted 8.7° towards $B_E$ at the board's 0.4 ms, 98.9% across, and 2.5° at a tenth
-  of that time.  The FID's EMF is the board's design value, 1.199 μV for a litre of water
+  they were: tilted 8.6° towards $B_E$ at the board's 0.4 ms, 98.9% across, and 2.9° at a tenth
+  of that time (the tilt goes roughly as $\sqrt A$).  The FID's EMF is the board's design value, 1.199 μV for a litre of water
   fully polarized at 1.5 A and precessing at 1960 Hz, scaled by the current and the field.</p>
   <p><b>The coil's angle.</b>  With the coil's axis $\hat n$ at the angle $\alpha$ to $B_E$
   (along $\hat z$), $\hat n=\hat z\cos\alpha+\hat e\sin\alpha$, the polarizing field and so

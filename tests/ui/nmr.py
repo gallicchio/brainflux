@@ -239,7 +239,7 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     ys = b.eval('[4e-3, 8e-3].map((t) => __app.eng.record.at(t)[1])')
     b.eval("__app.setPreset('cpmg'); __app.seq.error = 0.1; __app.runSeq(); __app.runTo(0.0659)")
     mg = b.eval('__app.trainEchoes().fit.T2')
-    check(near(cp, 0.0106, 0.0002) and near(mg, 0.0203, 0.0003) and ys[0] * ys[1] < 0 and quotes(b, 'mg', '10.6 ms', '20.3 ms', '198°'),
+    check(near(cp, 0.0106, 0.0002) and near(mg, 0.0203, 0.0003) and ys[0] * ys[1] < 0 and quotes(b, 'mg', '10.6 ms', '20.3 ms', '198°', 'seventh echo, at 28 ms', '18°'),
           f'9: π pulses 10% long: Carr–Purcell T2 = {cp * 1e3:.2f} ms, its echoes alternating ({ys[0]:+.2f}, {ys[1]:+.2f}); CPMG {mg * 1e3:.2f} ms')
 
     # ---- the timeline: choose a pulse, drag it
@@ -276,13 +276,24 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     # ---- 11. noise and averaging
     rows = []
     for av in (1, 16, 256):
-        b.eval(f'__app.setups.noise(); __app.state.averages = {av}; __app.eng.configure({{averages: {av}}}); __app.runSeq(); __app.runTo(__app.seq.span)')
+        b.eval(f'__app.setups.noise(); __app.state.averages = {av}; __app.eng.configure({{averages: {av}}}); __app.runTo(__app.seq.span)')
         rms = b.eval('(() => { const R = __app.eng.record; let s = 0, n = 0; for (let i = 0; i < R.length; i++) { s += R.nx[i] ** 2 + R.ny[i] ** 2; n += 2; } return __app.sigma() * Math.sqrt(s / n); })()')
-        rows.append((av, rms, b.eval('__app.fidFit().tau')))
+        fits = []
+        for k in range(6):
+            if k: b.eval('__app.runSeq(); __app.runTo(__app.seq.span)')
+            fits.append(b.eval('__app.fidFit().tau') / 0.617e-3 - 1)
+        rows.append((av, rms, fits))
+    # (The set-up's first run and its repeats, as the student sees them: one run's fit scatters by
+    # about 10%, 16 averaged by a few percent, 256 by under 1%.)
+    b.eval('__app.setups.noise(); __app.runTo(__app.seq.span)'); first = [b.eval('__app.fidFit().tau')]
+    for k in range(3):
+        b.eval('__app.runSeq(); __app.runTo(__app.seq.span)'); first.append(b.eval('__app.fidFit().tau'))
+    spread = [max(abs(x) for x in r_[2]) for r_ in rows]
     check(near(rows[0][1], 0.2, 0.01) and near(rows[1][1], 0.05, 0.003) and near(rows[2][1], 0.0125, 0.001)
-          and near(rows[0][2], 0.545e-3, 0.5e-6) and near(rows[1][2], 0.606e-3, 0.5e-6) and near(rows[2][2], 0.618e-3, 0.5e-6)
-          and quotes(b, 'noise', '0.20', '0.050', '0.012', '0.25', '0.545 ms', '0.606', '0.618'),
-          '11: the noise, r.m.s. ' + ', '.join(f'{r_[1]:.4f} after {r_[0]}' for r_ in rows) + '; T2* fitted ' + ', '.join(f'{r_[2] * 1e3:.3f}' for r_ in rows) + ' ms (0.617)')
+          and all(near(x * 1e3, y, 0.0005) for x, y in zip(first, (0.614, 0.545, 0.642, 0.730))) and 0.08 < spread[0] < 0.25 and spread[1] < 0.05 and spread[2] < 0.015
+          and quotes(b, 'noise', '0.20', '0.050', '0.012', '0.25', '0.614, 0.545, 0.642 and 0.730 ms', '10% or more', 'within about 1%'),
+          '11: the noise, r.m.s. ' + ', '.join(f'{r_[1]:.4f} after {r_[0]}' for r_ in rows) + "; one run's T2* fits " + ', '.join(f'{x * 1e3:.3f}' for x in first)
+          + ' ms; the largest miss of six runs ' + ', '.join(f'{x * 100:.1f}% ({r_[0]})' for x, r_ in zip(spread, rows)) + ' (0.617)')
     b.screenshot('build/nmr-noise.png')
 
     # ---- 12-16. the Earth's-field board
@@ -315,13 +326,22 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     b.eval('__app.hold(true)')
     check(playing0 and not playing1 and playing2 and text_of(b, '#earth-panel').count('Pause') == 1, 'the space bar pauses and plays, and the board has its own Pause button')
     b.eval('__app.runBoard()')
-    ar = b.eval('__app.board.afterRamp'); fs = b.eval('__app.fidStart() * 1.199e-6 * 1e6 * 46.03 / 46.028')
-    t11 = b.eval('__app.tank'); out11 = b.eval('__app.fidStart() * __app.outPerM()'); tank11 = b.eval('__app.fidStart() * __app.Vfull() * __app.tank.gain * 1e6')
-    check(near(ar['across'], 0.989, 0.001) and near(ar['size'], 0.699, 0.001) and near(fs, 0.78, 0.005) and quotes(b, 'board', '0.699', '98.9%', '0.78 μV', '0.86 s', '7.84 mT', '170'),
-          f"12: M = {ar['size']:.3f} after 3 s, {ar['across'] * 100:.1f}% of it across BE after the 0.4 ms switch-off; the FID starts at {fs:.3f} μV")
-    check(t11['code'] == 75 and near(t11['gain'], 36.6, 0.05) and near(tank11, 28.6, 0.1) and near(out11, 0.56, 0.006) and near(out11 / t11['outNoise'], 45, 0.6)
-          and quotes(b, 'board', '36.6', '28.6 μV', '0.56 V', '45 times'),
+    ar = b.eval('__app.board.afterRamp'); fs = b.eval('__app.fidStart(__app.eng.record, 0) * 1.199e-6 * 1e6 * 46.03 / 46.028')
+    t11 = b.eval('__app.tank'); out11 = b.eval('__app.fidStart(__app.eng.record, 0) * __app.outPerM()'); tank11 = b.eval('__app.fidStart(__app.eng.record, 0) * __app.Vfull() * __app.tank.gain * 1e6')
+    ro11 = re.sub(r'\s+', ' ', text_of(b, '#readout'))
+    check(near(ar['across'], 0.989, 0.001) and near(ar['size'], 0.699, 0.001) and near(fs, 0.787, 0.005) and quotes(b, 'board', '0.699', '98.9%', '0.79 μV', '0.86 s', '7.84 mT', '170')
+          and f'{out11:.3f} V at OUT' in ro11,
+          f"12: M = {ar['size']:.3f} after 3 s, {ar['across'] * 100:.1f}% of it across BE after the 0.4 ms switch-off; the FID starts at {fs:.3f} μV (the read-out, without the noise, says so)")
+    check(t11['code'] == 75 and near(t11['gain'], 36.6, 0.05) and near(tank11, 28.8, 0.1) and near(out11, 0.57, 0.006) and near(out11 / t11['outNoise'], 45, 0.6)
+          and quotes(b, 'board', '36.6', '28.8 μV', '0.57 V', '45 times'),
           f"12: the tank (switches {t11['switches']}) gives ×{t11['gain']:.2f}: {tank11:.2f} μV on it, {out11:.3f} V at OUT, {out11 / t11['outNoise']:.1f} times the receiver's {t11['outNoise'] * 1e3:.2f} mV of noise")
+    # The handbook's "about 0.8 V at the start" is the water fully polarized; 3 s builds 70% of it.
+    full = out11 / ar['size']
+    b.eval('__app.board.tp = 4.7; __app.startBoard(); __app.runBoard()'); out47 = b.eval('__app.fidStart(__app.eng.record, 0) * __app.outPerM()')
+    check(near(full, 0.81, 0.005) and near(out47, 0.69, 0.005) and near(1 - math.exp(-3), 0.95, 0.001)
+          and quotes(b, 'board', '"about 0.8 V at the start"', '0.81 V here', '70%', 'about 0.57 V', '4.7 s, gives 0.69 V', '7.5 s'),
+          f"12: fully polarized the FID would start at {full:.3f} V at OUT (the handbook's 0.8 V); 3 s gives {out11:.3f} V, the timer's 4.7 s {out47:.3f} V")
+    run(b, 'board'); b.eval('__app.runBoard()')
     b.screenshot('build/nmr-board.png')
     b.eval('__app.hearIt()')
     heard = b.eval('__app.board.heard')
@@ -332,15 +352,15 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
         b.eval(f'__app.setups.adiabatic(); __app.board.ramp = {ramp}; __app.startBoard(); __app.runBoard()')
         rows.append((ramp, b.eval('__app.board.afterRamp.across'), b.eval('__app.fidStart(__app.eng.record, 0) * 1.199e-6 * 1e6'), b.eval('__app.fidStart(__app.eng.record, 0) * __app.outPerM()'), b.eval('__app.tank.outNoise')))
     A = b.eval('(() => { const g = 2 * Math.PI * 42.577e6; return g * 46.03e-6 ** 2 * 0.3 / (5.2249e-3 * 1.5); })()')
-    check(near(rows[0][1], 0.989, 0.001) and near(rows[1][1], 0.689, 0.005) and near(rows[2][1], 0.045, 0.001) and near(rows[2][2], 0.034, 0.0005) and near(rows[2][3], 0.025, 0.001)
+    check(near(rows[0][1], 0.989, 0.001) and near(rows[1][1], 0.689, 0.005) and near(rows[2][1], 0.045, 0.001) and near(rows[2][2], 0.035, 0.0005) and near(rows[2][3], 0.025, 0.001)
           and near(rows[2][3] / rows[2][4], 2, 0.1) and near(A, 21.7, 0.1)
-          and quotes(b, 'adiabatic', '4.5%', '0.034 μV', '25 mV', 'twice', '0.029', '13.8 ms', '69%', '22', '4.9'),
+          and quotes(b, 'adiabatic', '4.5%', '0.035 μV', '25 mV', 'twice', '0.029', '13.8 ms', '69%', '22', '4.9'),
           '13: left across after ' + ', '.join(f'{r_[0] * 1e3:g} ms: {r_[1] * 100:.1f}% (FID {r_[2]:.4f} μV)' for r_ in rows) + f'; at 300 ms {rows[2][3] * 1e3:.1f} mV at OUT, {rows[2][3] / rows[2][4]:.2f} times the noise; A = {A:.1f}')
     run(b, 'adiabatic'); b.eval('__app.runBoard()')
     b.screenshot('build/nmr-adiabatic.png')
 
     # ---- 14. the coil's angle: sin² α
-    out_ = lambda: b.eval('__app.fidStart() * __app.outPerM()')
+    out_ = lambda: b.eval('__app.fidStart(__app.eng.record, 0) * __app.outPerM()')
     orient = lambda i: b.eval(f"[...document.querySelectorAll('#earth-panel .orient button')][{i}].click(); __app.runBoard()")
     run(b, 'angle'); b.eval('__app.runBoard()')
     a13, acr13, ang13 = out_(), b.eval('__app.board.afterRamp.across'), b.eval('__app.board.angle')
@@ -348,10 +368,10 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     orient(0); e13, ang_e = out_(), b.eval('__app.board.angle')
     b.eval('__app.setAngle(84.2); __app.runBoard()'); g13 = out_()
     s2 = math.sin(58.89 * math.pi / 180) ** 2
-    check(near(ang13, 58.89, 1e-9) and near(a13, 0.384, 0.003) and near(acr13, 0.785, 0.002) and near(math.sin(58.89 * math.pi / 180), 0.856, 0.0005)
-          and near(ang_up, 31.11, 0.01) and near(up13, 0.133, 0.003) and near(ang_e, 90, 0) and near(e13, 0.56, 0.006) and near(a13 / e13, 0.68, 0.01) and a13 / e13 < s2
+    check(near(ang13, 58.89, 1e-9) and near(a13, 0.387, 0.0006) and near(acr13, 0.785, 0.002) and near(math.sin(58.89 * math.pi / 180), 0.856, 0.0005)
+          and near(ang_up, 31.11, 0.01) and near(up13, 0.134, 0.0006) and near(ang_e, 90, 0) and near(e13, 0.57, 0.006) and near(a13 / e13, 0.68, 0.01) and a13 / e13 < s2
           and 0.965 < g13 / e13 < 0.982 and near(s2, 0.733, 0.0005) and near(math.sin(84.2 * math.pi / 180) ** 2, 0.99, 0.001)
-          and quotes(b, 'angle', '58.9°', '0.733', '0.384 V', '0.56 V', '0.68', '78.5%', '85.6%', '0.133 V', '84.2°', '2 to 3%', '1% by'),
+          and quotes(b, 'angle', '58.9°', '0.733', '0.387 V', '0.57 V', '0.68', '78.5%', '85.6%', '0.134 V', '84.2°', '2 to 3%', '1% by'),
           f'14: the FID at OUT with the coil north–south (58.89°) {a13:.3f} V, upright {up13:.3f} V, east–west {e13:.3f} V: {a13 / e13:.3f} and {up13 / e13:.3f} of it (sin² {s2:.3f}, {math.cos(58.89 * math.pi / 180) ** 2:.3f}); {acr13 * 100:.1f}% left across; at 84.2° {g13 / e13:.3f}')
     # Dragging the coil's end along the field: nothing to ring.
     end, top = b.eval('__app.view.coilEnds([1, 0, 0])[0]'), b.eval('__app.view.P([0, 0, 1.3])')
@@ -365,20 +385,20 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
     run(b, 'tune'); b.eval('__app.runBoard()')
     t14, out14 = b.eval('__app.tank'), out_()
     rc = t14['recipe']
-    check(t14['code'] == 0 and near(t14['fT'], 49243, 1) and near(t14['gain'], 1.00, 0.005) and near(out14, 0.017, 0.0007) and near(out14 / t14['outNoise'], 1.3, 0.06)
+    check(t14['code'] == 0 and near(t14['fT'], 49243, 1) and near(t14['gain'], 1.00, 0.005) and near(out14, 0.016, 0.0006) and near(out14 / t14['outNoise'], 1.3, 0.06)
           and near(rc['f'], 1959.8, 0.05) and near(rc['C'] * 1e9, 246.2, 0.05) and rc['switches'] == [1, 2, 4, 7] and near(rc['Cset'] * 1e9, 247.29, 0.005) and near(rc['fT'], 1955.6, 0.05)
           and near(rc['f'] - rc['fT'], 4.3, 0.05) and near(t14['width'], 52.6, 0.05)
-          and quotes(b, 'tune', '52.6 Hz', '0.39 nF', '49 kHz', '×1.00', '17 mV', '1.3 times', '1959.8 Hz', '26.8 mH', '246.2 nF', '1 2 4 7', '247.29 nF', '1955.6 Hz', '4.3 Hz'),
+          and quotes(b, 'tune', '52.6 Hz', '0.39 nF', '49 kHz', '×1.00', '16 mV', '1.3 times', '1959.8 Hz', '26.8 mH', '246.2 nF', '1 2 4 7', '247.29 nF', '1955.6 Hz', '4.3 Hz'),
           f"15: all off, the tank at {t14['fT']:.0f} Hz: ×{t14['gain']:.3f}, {out14 * 1e3:.1f} mV at OUT ({out14 / t14['outNoise']:.2f} × the noise); the recipe: {rc['f']:.2f} Hz, {rc['C'] * 1e9:.2f} nF, switches {rc['switches']} = {rc['Cset'] * 1e9:.2f} nF, {rc['fT']:.2f} Hz")
     for i in (0, 1, 3, 6): b.eval(f"document.querySelectorAll('#tank-panel .dip button')[{i}].click()")
     b.eval('__app.step(0, 1)')
     t14b, out14b = b.eval('__app.tank'), out_()
     pressed = b.eval("[...document.querySelectorAll('#tank-panel .dip button')].map((e) => e.getAttribute('aria-pressed') === 'true')")
     steps = b.eval('[74, 76].map((c) => { __app.setCode(c); const t = __app.tank; return [t.gain, t.fT, t.switches]; })')
-    check(t14b['code'] == 75 and pressed == [True, True, False, True, False, False, True, False] and near(t14b['gain'], 36.6, 0.05) and near(out14b, 0.56, 0.006)
+    check(t14b['code'] == 75 and pressed == [True, True, False, True, False, False, True, False] and near(t14b['gain'], 36.6, 0.05) and near(out14b, 0.57, 0.006)
           and near(steps[0][0], 35.6, 0.05) and steps[0][2] == [2, 4, 7] and near(steps[1][0], 30.9, 0.05) and steps[1][2] == [3, 4, 7]
           and 12 < abs(steps[0][1] - t14b['fT']) < 14 and 12 < abs(steps[1][1] - t14b['fT']) < 14
-          and quotes(b, 'tune', '×36.6', '0.56 V', '×35.6', '2 4 7', '×30.9', '3 4 7', '13 Hz'),
+          and quotes(b, 'tune', '×36.6', '0.57 V', '×35.6', '2 4 7', '×30.9', '3 4 7', '13 Hz'),
           f"15: switches 1 2 4 7 clicked: ×{t14b['gain']:.2f}, {out14b:.3f} V at OUT; a step either side ×{steps[0][0]:.2f}, ×{steps[1][0]:.2f}, the tank moving {steps[0][1] - t14b['fT']:+.1f} and {steps[1][1] - t14b['fT']:+.1f} Hz")
     b.eval('__app.setCode(0)'); b.eval("document.querySelector('#tank-panel button.primary').click()")
     tuned = b.eval('__app.tank.code')
@@ -394,14 +414,14 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
 
     # ---- 16. another place: the protons off the tank, and retuned
     run(b, 'elsewhere'); b.eval('__app.runBoard()')
-    t15, out15, uv15 = b.eval('__app.tank'), out_(), b.eval('__app.fidStart() * __app.Vfull() * 1e6')
+    t15, out15, uv15 = b.eval('__app.tank'), out_(), b.eval('__app.fidStart(__app.eng.record, 0) * __app.Vfull() * 1e6')
     rc = t15['recipe']
     b.eval("document.querySelector('#tank-panel button.primary').click(); __app.step(0, 1)")
     t15b, out15b = b.eval('__app.tank'), out_()
-    check(near(t15['fL'], 2128.85, 0.01) and near(t15['fL'] - t15['fT'], 173, 0.5) and (t15['fL'] - t15['fT']) / t15['width'] > 3 and near(t15['gain'], 5.34, 0.005) and near(out15, 0.090, 0.0015) and near(uv15, 0.86, 0.005)
+    check(near(t15['fL'], 2128.85, 0.01) and near(t15['fL'] - t15['fT'], 173, 0.5) and (t15['fL'] - t15['fT']) / t15['width'] > 3 and near(t15['gain'], 5.34, 0.005) and near(out15, 0.089, 0.0005) and near(uv15, 0.85, 0.005)
           and near(rc['C'] * 1e9, 208.7, 0.05) and rc['switches'] == [2, 3, 4, 5, 6] and near(rc['Cset'] * 1e9, 207.89, 0.005) and near(rc['fT'], 2132.8, 0.05)
           and t15b['code'] == rc['code'] and near(t15b['gain'], 40.2, 0.05) and near(out15b, 0.67, 0.006) and near(t15['width'] / 42.577e-3, 1240, 5)
-          and quotes(b, 'elsewhere', '50.0 μT', '2129 Hz', '173 Hz', '×5.34', '×36.6', '0.090 V', '0.56', '0.86 μV', '208.7 nF', '2 3 4 5 6', '207.89 nF', '2132.8 Hz', '×40.2', '0.67 V', '52.6 Hz', '1240 nT'),
+          and quotes(b, 'elsewhere', '50.0 μT', '2129 Hz', '173 Hz', '×5.34', '×36.6', '0.089 V', '0.57', '0.85 μV', '208.7 nF', '2 3 4 5 6', '207.89 nF', '2132.8 Hz', '×40.2', '0.67 V', '52.6 Hz', '1240 nT'),
           f"16: at 50 μT the protons at {t15['fL']:.2f} Hz, {t15['fL'] - t15['fT']:.1f} Hz above the tank: ×{t15['gain']:.3f}, {out15:.4f} V at OUT ({uv15:.3f} μV in the coil); retuned to {t15b['fT']:.1f} Hz: ×{t15b['gain']:.2f}, {out15b:.3f} V")
     b.screenshot('build/nmr-elsewhere.png')
 
@@ -426,7 +446,9 @@ with Browser('nmr/index.html', size=(1400, 900)) as b:
 
     run(b, 't1board')
     f13 = b.eval('__app.finishBoardScan()')
-    check(near(f13['T1'], 2.49, 0.005) and quotes(b, 't1board', '2.49 s', '0.3 s'), f"18: T1 = {f13['T1']:.3f} s from twelve polarizing times (tap water's 2.5)")
+    A13 = f13['A'] * b.eval('__app.Vfull()') * 1e6; out13 = f13['A'] * b.eval('__app.outPerM()')
+    check(near(f13['T1'], 2.49, 0.005) and near(A13, 1.12, 0.005) and near(out13, 0.81, 0.005) and quotes(b, 't1board', '2.49 s', '0.3 s', '1.12 μV', '0.81 V'),
+          f"18: T1 = {f13['T1']:.3f} s from twelve polarizing times (tap water's 2.5); fully polarized {A13:.3f} μV, {out13:.3f} V at OUT")
     run(b, 'field'); b.eval('__app.runBoard()')
     B14 = b.eval('(__app.eng.f0 + __app.board.spec.peak.f) / 42.577e6 * 1e9'); w14 = b.eval('__app.board.spec.fwhm'); fp = b.eval('__app.eng.f0 + __app.board.spec.peak.f')
     b.eval('__app.board.BE = 50e-6; __app.startBoard(); __app.runBoard()')

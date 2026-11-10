@@ -424,7 +424,8 @@ function drawSpec(t0, t1, acq = null) {
   drawSpectrum(ctx, width, height, {
     spec, fmin: -span, fmax: span, unit: fu, colors: C, mark: true,
     title: 'Its spectrum (power)', xlabel: `frequency − f₀ (${fu.u})`,
-    note: spec && spec.fwhm > 0 ? ['width at half power ', { v: spec.fwhm * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u} · 1/(πT₂*) = `, { v: line * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u}`] : null,
+    // (An FID's line is 1/(πT₂*) wide; an echo's, or a train's, is not: the note says which.)
+    note: spec && spec.fwhm > 0 ? ['width at half power ', { v: spec.fwhm * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u} · an FID's, 1/(πT₂*): `, { v: line * fu.s, dec: fu.dec, w: 6 }, ` ${fu.u}`] : null,
   });
 }
 
@@ -528,9 +529,12 @@ function loop(now) {
   raf = 0;
   const dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0;
   lastT = now;
-  if (state.playing && !testHold && !document.hidden) tick(dt);
-  draw();
-  if (!document.hidden) { if (!raf) raf = requestAnimationFrame(loop); } else lastT = 0;
+  // (Paused, the page draws only when something has changed, and asks for no more frames until
+  // then: dirty() asks for one.)
+  const running = state.playing && !testHold && !document.hidden;
+  if (running) tick(dt);
+  if (running || needDraw) draw();
+  if (running) { if (!raf) raf = requestAnimationFrame(loop); } else lastT = 0;
 }
 
 function draw() {
@@ -654,6 +658,7 @@ const clockPanel = $('#clock-panel');
 const playButton = el('button', { type: 'button', id: 'play', title: 'Stop or start the clock (space)', onclick: () => {
   state.playing = !state.playing; playButton.textContent = state.playing ? 'Pause' : 'Play'; lastT = 0;
   if (typeof boardPause !== 'undefined') boardPause.textContent = playButton.textContent;
+  kick();
 } }, 'Pause');
 const speedSlider = slider({ label: 'time ×', min: 1e-9, max: 1, log: true, value: state.speed, title: 'Slow motion: seconds of the real thing per second on screen',
   onInput: (v) => { state.speed = v; if (!run) resample(); trail = []; scheduleHash(); dirty(); } });
@@ -978,6 +983,7 @@ function fidFit() {
 }
 
 function drawSeqCurve() {
+  kept.delete($('#curve'));
   const { ctx, width, height } = fitCanvas($('#curve'));
   ctx.clearRect(0, 0, width, height);
   const S = seq.scan;
@@ -1248,6 +1254,17 @@ function niceUp(x) {
 }
 
 let zoomKept = { key: null, y: null };
+
+// The board's tank and T₁ plots change only with the switches, the field, a cycle's new point:
+// each is drawn again only when what it shows (or its size, or the theme) has changed, and the
+// canvas keeps its picture in between.  (A canvas drawn by another view forgets its key.)
+const kept = new WeakMap();
+function unchanged(canvas, what) {
+  const r = canvas.getBoundingClientRect(), key = [...what, r.width, r.height, window.devicePixelRatio, C.ink, C.panel, C.coil, C.fit].join('|');
+  if (kept.get(canvas) === key) return true;
+  kept.set(canvas, key);
+  return false;
+}
 function drawBoardPlots() {
   drawBoardStrip();
   drawTankPlot();
@@ -1289,12 +1306,14 @@ function drawBoardPlots() {
       title: 'Its spectrum', xlabel: 'frequency (Hz)',
       note: spec ? ['peak at ', { v: f0 + spec.peak.f, dec: 2, w: 7 }, ' Hz: B = ', { v: (f0 + spec.peak.f) / GAMMA_HZ * 1e9, dec: 1, w: 7 }, ' nT'] : null });
   }
-  {
+  const P = board.scan ? board.scan.points : board.points, fit = board.fit;
+  if (!unchanged($('#curve'), ['board', P.length, P.length && P[0].amp, P.length && P[P.length - 1].amp, fit?.A, fit?.T1, board.tp, V, outPerM()])) {
     const { ctx, width, height } = fitCanvas($('#curve'));
     ctx.clearRect(0, 0, width, height);
-    const P = board.scan ? board.scan.points : board.points, fit = board.fit;
     drawCurve(ctx, width, height, {
       x: P.map((p) => p.tp), y: P.map((p) => p.amp * V), fit: fit ? (x) => fit.A * V * (1 - Math.exp(-x / fit.T1)) : null,
+      // (The fit's height: the FID of the water fully polarized, the handbook's "about 0.8 V".)
+      levels: fit ? [{ y: fit.A * V, label: `fully polarized: ${(fit.A * outPerM()).toFixed(2)} V at OUT` }] : [],
       xmax: 5, ymin: 0, ymax: 1.1 * V, colors: C, xunit: { s: 1, u: 's' },
       title: 'FID\'s start (μV)', xlabel: 'polarizing time (s)', current: board.tp,
       note: fit ? ['fit: T₁ = ', { v: fit.T1, dec: 2, w: 5 }, ' s'] : ['each cycle adds a point'],
@@ -1315,9 +1334,10 @@ function tankRangeNow() {
   return [mid - span / 2, mid + span / 2];
 }
 function drawTankPlot() {
+  if (!tankDrag || !tankRange) tankRange = tankRangeNow();
+  if (unchanged($('#tank'), ['tank', board.code, board.BE, tankRange[0], tankRange[1]])) return;
   const { ctx, width, height } = fitCanvas($('#tank'));
   ctx.clearRect(0, 0, width, height);
-  if (!tankDrag || !tankRange) tankRange = tankRangeNow();
   const C0 = tankC(), fT = resonance(C0), fL = fLarmor(), d = noiseDensity(fL, C0);
   tankFrame = drawTank(ctx, width, height, {
     f0: tankRange[0], f1: tankRange[1], fT, fL, Q: quality(fT), width: tankWidth(),
@@ -1362,7 +1382,9 @@ function boardReadout(lines) {
   lines.push(['Switch-off in', [...time3(board.ramp), ':'], ['A = γB_E²τ/B_p = ', { v: A, dec: A < 0.01 ? 4 : A < 10 ? 3 : 1, w: 6, class: 'b' }],
     A < 0.3 ? '(≪ 1: sudden, M is left behind)' : A > 3 ? '(≫ 1: adiabatic, M follows the field)' : '(near 1: M partly follows)',
     '· after it,', [ar ? { v: 100 * ar.across, dec: 1, w: 5, class: 'b' } : dash(5), '%'], 'of M is across B_E']);
-  const fs = eng.t > tOpenAbs() + 0.05 ? fidStart() : NaN, ok = Number.isFinite(fs), H = tankNow(), G = filterH(fLarmor()).mag * RECEIVER.gain.high;
+  // (The FID itself, without the noise: the chain of gains the help multiplies through.  The
+  // T₁ plot's points are read with the noise, as a measurement.)
+  const fs = eng.t > tOpenAbs() + 0.05 ? fidStart(eng.record, 0) : NaN, ok = Number.isFinite(fs), H = tankNow(), G = filterH(fLarmor()).mag * RECEIVER.gain.high;
   lines.push(['Listening: the FID starts at', [ok ? { v: fs * Vfull() * 1e6, dec: 3, w: 5, class: 'b' } : dash(5), ' μV'], 'in the coil, × the tank\'s', [{ v: H.mag, dec: 1, w: 4, class: 'b' }, ':'],
     [ok ? { v: fs * Vfull() * H.mag * 1e6, dec: 1, w: 5, class: 'b' } : dash(5), ' μV'], 'on the tank, × the receiver\'s', [{ v: G, dec: 0, w: 6 }, ':'], [ok ? { v: fs * outPerM(), dec: 3, w: 5, class: 'b' } : dash(5), ' V'], 'at OUT']);
   const t2s = T2star(T2eff(), state.ensemble ? state.spreadHz : 0), sp = board.spec, nOut = rxNoise().total * RECEIVER.gain.high;
@@ -1705,7 +1727,9 @@ function setup(o) {
   const smp = inst().samples[state.sample] || inst().samples[inst().sample];
   state.T1 = typeof o.T1 === 'number' ? o.T1 : smp.T1; state.T2 = typeof o.T2 === 'number' ? o.T2 : smp.T2;
   state.noiseOn = !!o.snr; state.snr = o.snr || 20; state.averages = o.averages || 1;
-  state.speed = o.speed ?? inst().speedLab;
+  // (To two figures, so that the slider and the read-out show 5×10⁻⁴, not 0.00049975; the three
+  // clocks' speed sets their decade every 3 s exactly.)
+  state.speed = o.clocks ? o.speed : +(o.speed ?? inst().speedLab).toPrecision(2);
   state.custom = { angle: o.angle ?? 45, phase: o.phase ?? 0 };
   state.playing = true; playButton.textContent = 'Pause';
   clocks.on = !!o.clocks; clocks.cpmg = o.cpmg ?? true;
