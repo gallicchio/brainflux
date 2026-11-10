@@ -239,7 +239,15 @@ export class LW {
     this.ex = this.evx + this.eax; this.ey = this.evy + this.eay; this.ez = this.evz + this.eaz;
     this.tr = tr; this.R = R; this.nx = nx; this.ny = ny; this.nz = nz; this.kappa = kappa;
     this.px = wx; this.py = wy; this.bx = bx; this.by = by; this.ax = ax; this.ay = ay;
+    this.qx = x; this.qy = y; this.qz = z;
     return this;
+  }
+
+  /** A guess at the retarded time at (x, y, z), at the same time t, from the last field(): to
+   *  first order, moving by Δr moves t_r by −n·Δr/(cκ).  (A neighbour's t_r alone is a guess
+   *  of zeroth order, which costs a Newton step more.) */
+  predict(x, y, z = 0) {
+    return this.tr - (this.nx * (x - this.qx) + this.ny * (y - this.qy) + this.nz * (z - this.qz)) / (this.c * this.kappa);
   }
 
   /** B = n × E after field(): [bx, by, bz]. */

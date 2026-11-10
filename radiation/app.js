@@ -34,6 +34,7 @@ const traj = new Trajectory(H, CAP);
 const lw = new LW(traj, state.c);
 lw.tol = 1e-12; lw.atol = 2e-6;   // 2 µs: c times that is far below a pixel
 const probeLW = new LW(traj, state.c);
+const mapLW = new LW(traj, state.c);   // the colour map's (looser: see computeMap)
 const follower = new Follower();
 const pointer = new PointerPath(0.03);
 
@@ -157,15 +158,20 @@ function computeMap(t) {
   // If the charge never accelerated in all its stored past, there is no radiation anywhere.
   const quiet = traj.activity(traj.tStart, t)[0] <= 1e-6 * state.c * state.c;
   if (quiet) mapVals.fill(0);
+  // The retarded time to within a time in which light goes a tenth of a pixel (the field lines
+  // ask for far more); each guess carried on from the cell before (to first order).
+  mapLW.c = state.c; mapLW.atol = 0.1 / (view.s * state.c);
+  const f = mapLW;
   for (let j = 0; j < (quiet ? 0 : gh); j++) {
     const y = y1 - (j + 0.5) * dy;
     let guess = rowGuess;
     for (let i = 0; i < gw; i++) {
-      lw.field(x0 + (i + 0.5) * dx, y, 0, t, guess);
-      guess = lw.tr;
-      if (i === 0) rowGuess = guess;
+      const x = x0 + (i + 0.5) * dx;
+      f.field(x, y, 0, t, guess);
+      guess = f.predict(x + dx, y);
+      if (i === 0) rowGuess = f.predict(x, y - dy);
       // E_rad is perpendicular to n: in the plane, E_rad = E⊥ (ẑ × n).  E⊥ > 0 is anticlockwise.
-      mapVals[j * gw + i] = lw.eay * lw.nx - lw.eax * lw.ny;
+      mapVals[j * gw + i] = f.eay * f.nx - f.eax * f.ny;
     }
   }
   // Keep this under about 10 ms a frame: coarser cells if it is slow, finer if fast.
@@ -594,11 +600,14 @@ function frame(now) {
   if (state.running) { advance(dt); dirty = true; }
   if (dirty) {
     dirty = false;
+    const t0 = performance.now();
     drawField();
     logPower();
+    const t1 = performance.now();
     drawPolar();
     drawPower();
     updateReadout();
+    timing.plots = performance.now() - t1; timing.frame = performance.now() - t0;
   }
   requestAnimationFrame(frame);
 }

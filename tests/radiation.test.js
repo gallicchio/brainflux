@@ -109,7 +109,7 @@ test('radiation: the retarded time solves |r − w(t_r)| = c(t − t_r), quickly
   const c = 2;
   const { path } = presetPath('circle', { beta: 0.95, radius: 1 }, c);
   const lw = new LW(path, c);
-  let worst = 0, iters = 0, n = 0;
+  let worst = 0, iters = 0, itersP = 0, n = 0;
   for (let k = 0; k < 200; k++) {
     const x = 6 * Math.sin(1.3 * k), y = 5 * Math.cos(0.7 * k), z = (k % 5) - 2, t = 0.37 * k;
     const tr = lw.retarded(x, y, z, t);
@@ -127,10 +127,15 @@ test('radiation: the retarded time solves |r − w(t_r)| = c(t − t_r), quickly
     // A neighbour's answer as a guess: two or three Newton steps.
     lw.retarded(x + 0.01, y, z, t, tr);
     iters += lw.iterations; n++;
+    // Carried on from the neighbour to first order (predict), it is closer still, and as exact.
+    const tn = lw.field(x, y, z, t, tr).predict(x + 0.01, y, z), t2 = lw.retarded(x + 0.01, y, z, t, tn);
+    itersP += lw.iterations;
+    close(t2, lw.retarded(x + 0.01, y, z, t), 1e-11 * (1 + Math.abs(t)));
   }
   assert(worst < 1e-12, `residual ${worst}`);
   assert(iters / n <= 4, `warm-started solves take ${iters / n} iterations`);
-  return `residual ${worst.toExponential(1)}, ${(iters / n).toFixed(1)} iterations from a neighbour's guess`;
+  assert(itersP < iters, `predicted guesses take ${itersP / n} iterations, a neighbour's ${iters / n}`);
+  return `residual ${worst.toExponential(1)}, ${(iters / n).toFixed(1)} iterations from a neighbour's guess, ${(itersP / n).toFixed(1)} from one carried on to first order`;
 });
 
 test('radiation: E = −∇φ − ∂A/c∂t and B = ∇×A from the Liénard–Wiechert potentials', () => {

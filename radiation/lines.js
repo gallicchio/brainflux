@@ -124,7 +124,8 @@ export function fieldLines(lw, t, part, count, box, opts = {}) {
   let guess = NaN, evaluations = 0;
   const velocityOnly = part === 'velocity';
   const dir = (x, y, out) => {
-    lw.field(x, y, 0, t, guess);
+    // The guess at the retarded time: carried on from the last point evaluated (to first order).
+    lw.field(x, y, 0, t, guess === guess ? lw.predict(x, y) : NaN);
     evaluations++;
     guess = lw.tr;
     const ex = velocityOnly ? lw.evx : lw.ex, ey = velocityOnly ? lw.evy : lw.ey;
