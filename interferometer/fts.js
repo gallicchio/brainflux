@@ -9,7 +9,9 @@
 // (k = 0 ... K, with F_−k = F_k), and a_k = 1, or 1 − |k|/(K + 1) to apodize (a triangle).
 // Two things limit it:
 //   - the scan's reach Δmax = Kδ: S_est is S convolved with the transform of the window, a sinc
-//     of first zero 1/(2Δmax) (or sinc² of first zero 1/Δmax with the triangle): the resolution;
+//     of first zero 1/(2Δmax) (or sinc² of first zero 1/Δmax with the triangle): the resolution,
+//     δσ ≈ 1/Δmax as usually quoted (two lines show a dip between them from about 0.7/Δmax apart,
+//     0.9/Δmax with the triangle);
 //   - the step δ: samples cannot tell σ from σ ± m/δ, so light above the Nyquist wavenumber
 //     σ_N = 1/(2δ) is folded back below it: aliasing.
 //

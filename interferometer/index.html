@@ -186,14 +186,19 @@
 
   <article class="exp" data-setup="coherence" data-frame="621x396">
     <h3>5. Coherence length</h3>
-    <p>A line of width $\Delta\lambda$ (a Gaussian), with the motor sweeping through equal paths.
-    Its fringes fade as the path difference grows, on either side of zero, because the wavelengths
-    in the line get out of step.  The envelope of the interferogram is the Fourier transform of the
-    line's shape, here a Gaussian whose visibility falls to one half at
+    <p>A line of width $\Delta\lambda$ (a Gaussian, $\Delta\lambda$ its full width at half
+    maximum), with the motor sweeping through equal paths.  Its fringes fade as the path difference
+    grows, on either side of zero, because the wavelengths in the line get out of step.  The
+    envelope of the interferogram, the visibility, is the Fourier transform of the line's shape
+    (the Wiener–Khinchin theorem: see How it works), here a Gaussian that falls to one half at
     $$\Delta=\pm\frac{2\ln 2}{\pi}\frac{\lambda^2}{\Delta\lambda}\approx\pm0.44\frac{\lambda^2}{\Delta\lambda},$$
-    ±13.3 μm for 550 nm and 10 nm; $\lambda^2/\Delta\lambda=30$ μm is called the coherence length.
-    Change $\Delta\lambda$ (under Light source) and watch the envelope stretch and shrink: a ten
-    times narrower line has fringes ten times further.</p>
+    ±13.3 μm for 550 nm and 10 nm, and to $1/e$ at $\pm0.53\,\lambda^2/\Delta\lambda=\pm16.0$ μm.
+    The coherence length $\ell_c\approx\lambda^2/\Delta\lambda=30$ μm (Hecht's) is the order of
+    magnitude of these; the factor in front depends on the line's shape and on where you call the
+    fringes gone, and books differ.  (The <a href="../oct/">OCT demo</a> quotes the
+    half-visibility point, $0.44\,\lambda^2/\Delta\lambda$, as its coherence length.)  Change
+    $\Delta\lambda$ (under Light source) and watch the envelope stretch and shrink: a ten times
+    narrower line has fringes ten times further.</p>
   </article>
 
   <article class="exp" data-setup="led" data-frame="720x268">
@@ -230,8 +235,8 @@
     the scan reaches further out.  The ripples beside each line come from the scan's abrupt ends;
     Apodize weights the samples down to zero at the ends, which removes them at the cost of wider
     lines.  The yellow pair, 577.0 and 579.1 nm, is $\Delta\sigma=0.0063$ μm⁻¹ apart: with
-    $\Delta_\text{max}=60$ μm it is one bump.  Raise $\Delta_\text{max}$ to about 120 μm to see two
-    (140 μm with Apodize).</p>
+    $\Delta_\text{max}=60$ μm it is one bump.  Raise $\Delta_\text{max}$ past about 110 μm to see two
+    (140 μm with Apodize), most of the way to $1/\Delta\sigma=159$ μm (experiment 10).</p>
   </article>
 
   <article class="exp" data-setup="sides" data-frame="621x415">
@@ -255,15 +260,19 @@
 
   <article class="exp" data-setup="resolution" data-frame="621x415">
     <h3>10. Resolution comes from the scan's reach</h3>
-    <p>Two lines $\Delta\sigma$ apart only show as two when the scan covers a good part of their beat,
-    whose period is $1/\Delta\sigma$: the resolution is about $1/(2\Delta_\text{max})$.  For sodium,
-    $\Delta\sigma=0.0017$ μm⁻¹ and $1/\Delta\sigma=0.58$ mm.  Press Scan: the scan runs from
-    −1.2 mm to +1.2 mm, and once it is past zero path the single line splits in two when the scan
-    passes 0.41 mm: a little more than $1/(2\Delta\sigma)=0.29$ mm, because each line is smeared
-    into a sinc and the weaker one hides in the shoulder of the stronger.  (With Apodize the lines
-    are wider and need 0.57 mm.)  The resolving power $\sigma/\delta\sigma=2\sigma\Delta_\text{max}$
-    is twice the number of wavelengths in $\Delta_\text{max}$: about 4000 at the end, where sodium
-    needs 1000.</p>
+    <p>Two lines $\Delta\sigma$ apart make fringes that beat with period $1/\Delta\sigma$ in path
+    difference (experiment 4), and they only show as two when the scan covers most of a beat: the
+    resolution is $\delta\sigma\approx1/\Delta_\text{max}$.  For sodium, $\Delta\sigma=0.0017$ μm⁻¹
+    and $1/\Delta\sigma=0.58$ mm.  Press Scan: the scan runs from −1.2 mm to +1.2 mm, and once it
+    is past zero path the single line splits in two when the scan passes 0.41 mm, 0.7 of a beat.
+    The scan's abrupt end smears each line into a sinc whose first zeros are $1/(2\Delta_\text{max})$
+    either side of it; two such sincs show a dip between them once they are about
+    $0.7/\Delta_\text{max}$ apart (with the weaker line hiding a little longer in the shoulder of the
+    stronger).  With Apodize the lines are wider and need 0.57 mm, a whole beat.  The resolving
+    power $\sigma/\delta\sigma=\sigma\Delta_\text{max}=\Delta_\text{max}/\lambda$ is the number of
+    wavelengths in the longest path difference, just as a grating's $mN$ is the number of
+    wavelengths between the paths of its two outermost slits: about 2000 at the end of this scan,
+    where sodium needs $\sigma/\Delta\sigma=1000$.</p>
   </article>
 
   <article class="exp" data-setup="aliasing" data-frame="621x821">
@@ -347,6 +356,17 @@
   $(I_\text{max}-I_\text{min})/(I_\text{max}+I_\text{min})$ of the fringes around the present
   $\Delta$: 1 for a laser, smaller where the wavelengths in the light have got out of step.  Scroll
   over the spectrum or the interferogram to zoom; the buttons above them set their ranges.</p>
+  <p><em>Coherence.</em>  Written with complex exponentials,
+  $I(\Delta)=I_0\left[1+\mathrm{Re}\,\gamma(\tau)\right]$, with $I_0=\int S\,d\sigma$, the delay
+  $\tau=\Delta/c$ and
+  $$\gamma(\tau)=\frac{1}{I_0}\int S(\sigma)\,e^{2\pi i\sigma c\tau}\,d\sigma ,$$
+  the complex degree of (temporal) coherence: how alike the light's field is to itself a time
+  $\tau$ later.  The fringes' visibility is its modulus, $V=|\gamma|$.  The detector, as the mirror
+  moves, measures the field's autocorrelation, and that it is the Fourier transform of the power
+  spectrum is the Wiener–Khinchin theorem; the interferogram is the experiment that shows it.
+  A line of width $\Delta\sigma=\Delta\lambda/\lambda^2$ keeps its fringes over path differences
+  of about $1/\Delta\sigma=\lambda^2/\Delta\lambda$, the coherence length: a coherence time
+  $\tau_c\approx1/\Delta\nu$.</p>
   <p><em>The stellar interferometer.</em>  Light from a single point far away arrives as plane waves, and two mirrors anywhere in it
   give perfect fringes.  A star of angular size $\theta$ is many points, each making its own
   fringes, shifted according to its direction; with the mirrors a distance $B$ apart these get

@@ -219,13 +219,18 @@ function recovered(colWidth) {
   const two = twoSided(), step = state.fts.step, z = fts.z;
   const m = Math.min(fts.K, fts.last - z);       // samples beyond zero path on the side being scanned
   if (m < 0) return null;
-  const need = Math.min(fts.scanning ? 1 << 17 : 1 << 18, nextPow2(2 / (Math.max(colWidth, 1e-7) * step)));
+  // Zero-filled to two points a column at least; while the scan runs and this is done again every
+  // frame, only to four points across each half of the main lobe of the scan's sinc, 1/(2mδ) wide
+  // (with straight lines between them on the plot); in full once it stops.
+  const need = Math.min(fts.scanning ? Math.max(1 << 14, 4 * nextPow2(2 * (m + 1))) : 1 << 18, nextPow2(2 / (Math.max(colWidth, 1e-7) * step)));
   const L = Math.max(nextPow2(2 * (m + 1)), need);
   const key = `${version},${m},${L},${state.fts.apodize},${fts.drawn ? fts.drawnVersion : 0},${step},${two},${state.fts.zero}`;
   if (fts.rec && fts.recKey === key) return fts.rec;
   const I = fts.samples.subarray(two ? z - m : 0, z + m + 1);
+  // Phase correction only with a zero error: with none, the two sides are equal sample for
+  // sample and the transform is real already (its phase is 0), so a second transform is saved.
   const r = recoverSpectrum(I, step, { apodize: state.fts.apodize, length: L, sides: two ? 2 : 1, zero: two ? m : 0,
-    ref: fts.drawn ? undefined : fts.ref, correct: !fts.drawn });
+    ref: fts.drawn ? undefined : fts.ref, correct: !fts.drawn && state.fts.zero !== 0 });
   const cum = new Float64Array(r.v.length + 1);
   for (let i = 0; i < r.v.length; i++) cum[i + 1] = cum[i] + r.v[i];
   r.cum = cum; r.m = m;
@@ -994,7 +999,8 @@ const ftsLines = [0, 1, 2, 3].map(() => el('div'));
 $('#fts-readout').replaceChildren(...ftsLines);
 function updateReadouts() {
   const d = state.dc + state.df;
-  setGroups($('#mirror-readout'), [['Mirror M2 is d = ', ...pathParts(d), ' from equal paths;'], ['path difference Δ = 2d = ', ...pathParts(2 * d)]]);
+  // (The words between the numbers may wrap: the column is narrow on a laptop.)
+  setGroups($('#mirror-readout'), [['Mirror M2 is d = ', ...pathParts(d)], 'from equal paths;', ['path difference Δ = 2d = ', ...pathParts(2 * d)]]);
   const travel = (D() - counter.start) / 2;
   setGroups($('#counter-readout'), counter.lost ? ['Lost count (the mirror moved too fast): press Reset']
     : [['Fringes counted: ', { v: counter.count, dec: 0, w: 6 }, ';'], ['mirror moved ', ...pathParts(travel)]]);
@@ -1002,8 +1008,10 @@ function updateReadouts() {
   setGroups($('#motor-note'), state.motor === 'stop' ? ['stopped'] : ['fringes pass the detector at about', ['2v/λ = ', { v: rate, dec: 2, w: 7 }, ' per second']]);
   const V = spec.visibility(D());
   setGroups($('#screen-note'), [['at Δ = ', ...pathParts(D()), ','], ['fringe contrast (visibility) ', { v: V, dec: 3, w: 5 }]]);
-  // The spectrometer.
-  const K = ftsK(), step = state.fts.step, Lm = K * step, res = 1 / (2 * Lm), sN = 1 / (2 * step), two = twoSided();
+  // The spectrometer.  (Short groups: the panel is 300 px wide, and each group keeps together.)
+  // The resolution: lines δσ ≈ 1/Δmax apart, the usual convention (two lines show apart once the
+  // scan reaches about 0.7 of their beat period 1/δσ, nearly all of it with apodizing; experiment 10).
+  const K = ftsK(), step = state.fts.step, Lm = K * step, res = 1 / Lm, sN = 1 / (2 * step), two = twoSided();
   const nm = 1000 / s, resNm = (res * nm * nm) / 1000, eps = state.fts.zero;
   const alias = spec.range()[1] > sN;
   const reach = Lm < 1000 ? [{ v: Lm, dec: 3, w: 7 }, ' μm'] : [{ v: Lm / 1000, dec: 4, w: 7 }, ' mm'];
@@ -1012,10 +1020,10 @@ function updateReadouts() {
   // What the zero error does: nothing to a two-sided scan (its phase is taken out); a one-sided one goes wrong.
   setGroups(ftsLines[3], !eps ? [] : two ? ['zero error ε: harmless with both sides scanned (its phase is taken out)'] : ['zero error ε: one side only, so the spectrum comes out wrong']);
   ftsLines[3].className = !two && eps ? 'warn-text' : '';
-  setGroups(ftsLines[1], [['tells apart lines ', { html: '1/(2Δ<sub>max</sub>)' }, ' = ', { v: res, dec: 5, w: 7 }, ' μm⁻¹ apart'],
+  setGroups(ftsLines[1], [['resolution ', { html: 'δσ ≈ 1/Δ<sub>max</sub>' }], ['= ', { v: res, dec: 5, w: 7 }, ' μm⁻¹'],
     ['(', { v: resNm, dec: 3, w: 7 }, ' nm at ', { v: nm, dec: 0, w: 4 }, ' nm)']]);
-  setGroups(ftsLines[2], [['follows fringes up to ', { html: 'σ<sub>N</sub>' }, ' = 1/(2δ) = ', { v: sN, dec: 2, w: 5 }, ' μm⁻¹'],
-    ['(λ > ', { v: 1000 / sN, dec: 0, w: 4 }, ` nm; the Nyquist limit)${alias ? ':' : ''}`], ...(alias ? ['light beyond it folds back'] : [])]);
+  setGroups(ftsLines[2], [['follows fringes up to', { html: ' σ<sub>N</sub>' }], ['= 1/(2δ) = ', { v: sN, dec: 2, w: 5 }, ' μm⁻¹'],
+    ['(λ > ', { v: 1000 / sN, dec: 0, w: 4 }, ' nm:'], [`the Nyquist limit)${alias ? ':' : ''}`], ...(alias ? ['light beyond it folds back'] : [])]);
   ftsLines[2].className = alias ? 'warn-text' : '';
   $('#undraw').hidden = !fts.drawn;
   $('#scan').textContent = fts.scanning ? 'Scanning...' : 'Scan';

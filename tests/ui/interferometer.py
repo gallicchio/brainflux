@@ -355,6 +355,20 @@ with Browser('interferometer/index.html', size=(1400, 900)) as b:
     errors = [x for x in b.console if x.startswith(('EXCEPTION', 'error'))]
     check(not errors, 'dark theme: no exceptions')
 
+# Desktop and laptop windows: nothing runs out of its column (the readouts wrap between their
+# numbers; the spectrometer's lines once ran 45 px out of the window at 1400 px, the mirror's
+# 30 px out of its column at 1100).
+for size in ((1400, 900), (1100, 800)):
+    with Browser('interferometer/index.html', size=size) as b:
+        b.wait('window.__app && __app.ready'); b.sleep(0.5)
+        for setup in ('white', 'resolution', 'sides'):
+            b.eval(f'__app.setups.{setup}()'); b.sleep(0.6)
+            over = b.eval('document.documentElement.scrollWidth > window.innerWidth + 1')
+            cut = b.eval("""[...document.querySelectorAll('#mirror-readout .nobr, #counter-readout .nobr, #fts-readout .nobr, #screen-note .nobr')]
+              .filter((e) => { const r = e.getBoundingClientRect(), p = e.closest('.cell, .panel').getBoundingClientRect();
+                return r.width > 0 && (r.right > p.right + 1 || r.left < p.left - 1); }).map((e) => e.textContent)""")
+            check(not over and not cut, f'{size[0]} x {size[1]}, {setup}: no sideways scrolling, every readout inside its box' + (f' (cut: {cut[:2]})' if cut else ''))
+
 # The phone layout: everything stacks under the stage, the hint on the first screen.
 with Browser('interferometer/index.html', size=(390, 844)) as b:
     b.wait('window.__app && __app.ready'); b.sleep(1.2)
