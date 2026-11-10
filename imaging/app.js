@@ -43,6 +43,35 @@ const DEFAULTS = {
   formula: 'exp(i a (r < R))',
 };
 const state = { ...DEFAULTS, objTool: 'add', objBrush: 8, fpTool: 'block', fpBrush: 3, fpMirror: false };
+let coarse = false, settleTimer = 0;   // a shell drawn coarsely while a slider moves (the diatom's spacing)
+
+// What the state may hold, whatever an address or a typed number says: numbers within these
+// limits (a typed number may go past its slider's ends, but not to a wavelength of zero, a
+// negative NA, or a condenser so wide that summing its directions would take minutes), and
+// choices among these.
+const LIMITS = {
+  d: [0.2, 25.6], spacing: [0.2, 5], sep: [0.1, 25], absorb: [0, 1], NA: [0.01, 5], lambda: [0.1, 10],
+  z: [-1000, 1000], stopNA: [0, 5], dotNA: [0, 5], dotAmp: [0, 1], knifeNA: [-5, 5], condNA: [0.01, 2],
+  tiltNA: [0, 2], fpBright: [-6, 6], imgBright: [-6, 6], row: [0, N - 1],
+};
+const CHOICES = {
+  profile: ['bars', 'cosine'], enc: ['amplitude', 'phase', 'both'], filter: ['open', 'stop', 'dot', 'knife'],
+  illum: ['coherent', 'condenser', 'incoherent'], fpView: ['light', 'pupil', 'otf'], objView: ['amplitude', 'phase'],
+  exposure: ['auto', 'fixed', 'stretch'], zoom: [1, 2, 4], xzoom: [1, 2, 4],
+};
+/** Bring the state within its limits; true if anything changed. */
+function sanitize() {
+  let changed = false;
+  const put = (k, v) => { if (state[k] !== v) { state[k] = v; changed = true; } };
+  for (const k of Object.keys(DEFAULTS)) {
+    if (typeof DEFAULTS[k] === 'number' && !Number.isFinite(state[k])) put(k, DEFAULTS[k]);
+  }
+  for (const [k, [lo, hi]] of Object.entries(LIMITS)) put(k, Math.min(hi, Math.max(lo, state[k])));
+  put('row', Math.round(state.row));
+  for (const [k, list] of Object.entries(CHOICES)) if (!list.includes(state[k])) put(k, DEFAULTS[k]);
+  if (!Object.hasOwn(PRESETS, state.preset)) put('preset', DEFAULTS.preset);
+  return changed;
+}
 
 const kappa = () => pxPerNA(N, DX, state.lambda);       // frequency pixels per unit of NA
 const deg = Math.PI / 180;
@@ -87,9 +116,14 @@ function formulaField() {
   const re = new Float64Array(N * N), im = new Float64Array(N * N);
   if (!formulaExpr) { re.fill(1); return { re, im }; }
   const v = formulaExpr.evaluate({ ...formulaParams, x: xs, y: ys, r: rs }, N * N);
+  // Where the formula is not a number, the screen is opaque; where it is huge, it is held to
+  // |t| = 1e6 (no glass amplifies the light, and squares of numbers beyond that overflow).
   for (let o = 0; o < N * N; o++) {
-    const a = v.re[o], b = v.im ? v.im[o] : 0;
-    if (Number.isFinite(a) && Number.isFinite(b)) { re[o] = a; im[o] = b; }
+    let a = v.re[o], b = v.im ? v.im[o] : 0;
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    const m = Math.hypot(a, b);
+    if (m > 1e6) { a *= 1e6 / m; b *= 1e6 / m; }
+    re[o] = a; im[o] = b;
   }
   return { re, im };
 }
@@ -100,7 +134,7 @@ const PRESETS = {
   grating: { label: 'Grating', enc: 'amplitude', title: 'Lines of one period: its light leaves in a few directions only (the orders)',
     make: () => grating(N, snapPeriod(state.d, N, DX).m, state.profile) },
   diatom: { label: 'Diatom', enc: 'amplitude', absorb: 0.7, title: 'A silica shell pierced by a lattice of pores, the classic test of a microscope objective',
-    make: () => diatom(N, DX, state.spacing) },
+    make: () => diatom(N, DX, state.spacing, coarse ? 2 : 4) },
   bars: { label: 'Bars', enc: 'amplitude', rowY: 8.5, title: 'A bar target: groups of three bars, periods from 2 µm down to 0.4 µm',
     make: () => { const b = barTarget(N, DX); groups = b.groups; return b.g; } },
   star: { label: 'Star', enc: 'amplitude', rowY: 2.5, title: 'A Siemens star: 18 dark spokes (and 18 clear) whose period shrinks towards the centre',
@@ -115,8 +149,10 @@ const PRESETS = {
 
 let loadToken = 0, loading = 0;   // (loading: objects still being made, for __app.busy)
 async function loadPreset(id, opts = {}) {
-  const token = ++loadToken, p = PRESETS[id] || PRESETS[DEFAULTS.preset];
-  state.preset = PRESETS[id] ? id : DEFAULTS.preset;
+  if (!Object.hasOwn(PRESETS, id)) id = DEFAULTS.preset;
+  state.preset = id;
+  sanitize();
+  const token = ++loadToken, p = PRESETS[id];
   groups = null;
   loading++;
   let made;
@@ -254,6 +290,7 @@ const timed = (name, f) => { const t = performance.now(); f(); timing[name] = pe
 function frame() {
   raf = 0;
   if (!ready) return;
+  if (sanitize()) syncControls();   // (a number typed past what makes sense)
   const t0 = performance.now();
   for (const k in timing) delete timing[k];
   if (dirty.object) { timed('object', buildT); dirty.object = false; dirty.image = true; need.obj = need.fp = true; }
@@ -957,7 +994,7 @@ function readouts() {
   // The limit.
   const c = cutoff();
   const rayleigh = state.illum === 'incoherent';
-  const lim = ['Finest period in the image:', [{ html: `<b>${c.name} =</b> ` }, { v: 1 / c.f, dec: 3, w: 6, class: 'b' }, { html: `<b> µm</b>${rayleigh ? ';' : ''}` }]];
+  const lim = ['Finest period of the object that shows:', [{ html: `<b>${c.name} =</b> ` }, { v: 1 / c.f, dec: 3, w: 6, class: 'b' }, { html: `<b> µm</b>${rayleigh ? ';' : ''}` }]];
   if (state.illum === 'coherent') {
     if (!(sx || sy)) lim.push('(light along the axis)');
     else if (state.tiltNA <= state.NA) lim.push('with the light straight; tilted, down to', ['λ/(NA + sin θ) = ', n3(state.lambda / (state.NA + state.tiltNA), 6), ' µm'], 'across the tilt');
@@ -981,16 +1018,24 @@ function notes() {
   }[state.illum];
   $('#illum-note').textContent = ill;
   const a = state.dotPhase, phase = isPhaseObject(), zeroIn = state.illum === 'incoherent' || !side || side.zero.amp > 1e-6;
+  // Tilted light puts its zero order off the middle, where the stop or the dot is not.
+  const [sx, sy] = tiltPx(), tilted = state.illum !== 'incoherent' && !!(sx || sy) && side;
+  const missed = tilted && zeroIn && Math.hypot(sx, sy) > (state.filter === 'stop' ? state.stopNA : state.dotNA) * kappa() + 1e-9;
   const dotWord = a === -90 ? 'advances the zero order a quarter period (−90°)' : a === 90 ? 'delays the zero order a quarter period (+90°)'
     : `shifts the zero order’s phase by ${a > 0 ? '+' : a < 0 ? '−' : ''}${Math.abs(a)}°`;
+  // A dot that also absorbs, transmitting amplitude t: I ≈ t² ∓ 2t(φ − ⟨φ⟩).
+  const ta = state.dotAmp, t2 = ta === 1 ? '1' : fmt(ta * ta, 2), twoT = ta === 1 ? '2' : fmt(2 * ta, 2);
   const fil = {
     open: !zeroIn ? 'Just the aperture, but the tilted light’s zero order lands outside it: only diffracted light makes the image (dark field).'
       : 'Just the aperture: directions up to sin θ = NA reach the image.' + (phase ? ' A transparent object barely shows: |e<sup>iφ</sup>|² = 1.' : ''),
-    stop: 'A disk blocks the zero order, the light that went straight through: only diffracted light makes the image.',
-    dot: `The dot ${dotWord}: ` + (a === -90 ? 'parts that delay the light look dark, I ≈ 1 − 2(φ − ⟨φ⟩) (positive phase contrast).'
-      : a === 90 ? 'parts that delay the light look bright, I ≈ 1 + 2(φ − ⟨φ⟩) (negative phase contrast).'
-        : 'for a weak phase, I ≈ a² + 2a sin α (φ − ⟨φ⟩).'),
-    knife: 'The edge blocks one side of the plane but keeps the zero order: slopes of the phase become brightness, as if lit from the side.',
+    stop: missed ? 'A disk in the middle of the plane, but the tilted light’s zero order lands beside it and gets through: set the tilt to 0.'
+      : 'A disk blocks the zero order, the light that went straight through: only diffracted light makes the image.',
+    dot: missed ? 'A phase dot in the middle of the plane, but the tilted light’s zero order lands beside it and is not shifted: set the tilt to 0.'
+      : `The dot ${dotWord}: ` + (a === -90 ? `parts that delay the light look dark, I ≈ ${t2} − ${twoT}(φ − ⟨φ⟩) (positive phase contrast).`
+        : a === 90 ? `parts that delay the light look bright, I ≈ ${t2} + ${twoT}(φ − ⟨φ⟩) (negative phase contrast).`
+          : 'for a weak phase, I ≈ t² + 2t sin α (φ − ⟨φ⟩), t the dot’s transmission.'),
+    knife: !zeroIn ? 'The edge blocks the half of the plane where the tilted light’s zero order lands: only diffracted light makes the image.'
+      : 'The edge blocks one side of the plane but keeps the zero order: slopes of the phase become brightness, as if lit from the side.',
   }[state.filter];
   $('#filter-note').innerHTML = fil;
   // The hint under the Fourier plane: what a drag there does with the tool chosen.
@@ -1176,7 +1221,13 @@ ctl.d = slider({ label: 'period d (µm)', min: 0.3, max: 4, log: true, value: st
   onInput: (v) => { state.d = snapPeriod(v, N, DX).d; reload(); } });
 ctl.profile = segmented([{ value: 'bars', label: 'Bars', title: 'Equal bars and gaps: odd orders only' }, { value: 'cosine', label: 'Sinusoid', title: 'A sinusoidal transmission: orders 0 and ±1 only' }],
   state.profile, (v) => { state.profile = v; reload(); }, { label: 'Grating profile' });
-ctl.spacing = slider({ label: 'pore spacing (µm)', min: 0.3, max: 1.2, step: 0.01, value: state.spacing, onInput: (v) => { state.spacing = v; reload(); } });
+// The diatom's shell is drawn with 16 samples a pixel: while its pore spacing slides, with 4
+// (coarse), and with 16 again once the slider has been still for a moment.
+ctl.spacing = slider({ label: 'pore spacing (µm)', min: 0.3, max: 1.2, step: 0.01, value: state.spacing, onInput: (v) => {
+  state.spacing = v; coarse = true; reload();
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => { settleTimer = 0; coarse = false; reload(); }, 200);
+} });
 ctl.sep = slider({ label: 'separation (µm)', min: 0.1, max: 3, step: 0.1, value: state.sep, onInput: (v) => { state.sep = v; reload(); } });
 ctl.pphase = slider({ label: 'phase (°)', min: -180, max: 180, step: 1, value: state.pphase, title: 'The phase of the right pinhole relative to the left (matters only in coherent light)',
   onInput: (v) => { state.pphase = v; reload(); } });
@@ -1248,9 +1299,11 @@ $('#filter').append(ctl.filter, note('filter-note'), ...Object.values(filterPara
 const objView = segmented([{ value: 'amplitude', label: '|t|²', title: 'Show the transmitted intensity |t|² in grey' }, { value: 'phase', label: 'phase', title: 'Show the phase delay φ in colour' }],
   state.objView, (v) => { state.objView = v; changed('obj'); if (ready) readouts(); }, { label: 'Show the object as' });
 $('#obj-view').append(objView);
+/** A brush's size in pixels: a typed number held between one pixel and the whole grid. */
+const brushSize = (v) => (Number.isFinite(v) ? Math.min(N, Math.max(1, Math.round(v))) : 1);
 const objTool = segmented([{ value: 'add', label: 'Add ink', title: 'Paint ink onto the object' }, { value: 'remove', label: 'Remove ink', title: 'Paint clear glass' }],
   state.objTool, (v) => { state.objTool = v; }, { label: 'Object brush' });
-ctl.objBrush = slider({ label: 'size', min: 1, max: 40, step: 1, value: state.objBrush, title: 'Brush size (pixels of 0.1 µm)', onInput: (v) => { state.objBrush = Math.round(v); } });
+ctl.objBrush = slider({ label: 'size', min: 1, max: 40, step: 1, value: state.objBrush, title: 'Brush size (pixels of 0.1 µm)', onInput: (v) => { state.objBrush = brushSize(v); } });
 $('#obj-tools').append(objTool, ctl.objBrush);
 
 const fpView = el('select', { 'aria-label': 'What to show in the Fourier plane', title: 'What to show in the Fourier plane: the light from the object, the pupil alone, or the transfer function of incoherent light' },
@@ -1275,7 +1328,7 @@ const fpTool = segmented([
   { value: 'plus', label: '+90°', title: 'Paint a quarter-period delay' },
   { value: 'erase', label: 'Unpaint', title: 'Remove paint: back to the pupil the panel sets' },
 ], state.fpTool, setFpTool, { label: 'Paint the pupil' });
-ctl.fpBrush = slider({ label: 'size', min: 1, max: 30, step: 1, value: state.fpBrush, title: 'Brush size (frequency pixels)', onInput: (v) => { state.fpBrush = Math.round(v); } });
+ctl.fpBrush = slider({ label: 'size', min: 1, max: 30, step: 1, value: state.fpBrush, title: 'Brush size (frequency pixels)', onInput: (v) => { state.fpBrush = brushSize(v); } });
 const mirrorToggle = toggle('Mirror', state.fpMirror, (on) => { state.fpMirror = on; }, 'Paint the point opposite through the centre too');
 const clearPaintButton = el('button', { type: 'button', title: 'Remove all paint from the pupil', disabled: true, onclick: () => { clearPaint(); clearPaintButton.disabled = true; changed('pupil'); } }, 'Remove paint');
 ctl.fpBright = slider({ label: 'brightness', min: -3, max: 3, step: 0.01, value: 0, title: 'How bright to draw the Fourier plane (factors of 10)', onInput: (v) => { state.fpBright = v; changed('fp'); } });
@@ -1348,7 +1401,7 @@ function fromHash(h) {
     const d = DEFAULTS[k];
     state[k] = typeof d === 'number' ? (Number.isFinite(+h[k]) ? +h[k] : d) : typeof d === 'boolean' ? h[k] === 'true' : h[k];
   }
-  if (!PRESETS[state.preset]) state.preset = DEFAULTS.preset;
+  sanitize();
   if (h.formula) {
     const params = {};
     for (const [k, v] of Object.entries(h)) if (k.startsWith('p_') && Number.isFinite(+v)) params[k.slice(2)] = +v;
@@ -1399,7 +1452,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', (
 
 const hash = readHash();
 const started = (async () => {
-  if (setups[hash.setup]) await setups[hash.setup]();
+  if (Object.hasOwn(setups, hash.setup)) await setups[hash.setup]();
   else if (Object.keys(hash).length) {
     fromHash(hash);
     syncControls();
@@ -1418,7 +1471,7 @@ window.__app = {
   sketchX: () => sketchLayout($('#sketch').getBoundingClientRect().width),
   get partialDone() { return state.illum !== 'condenser' || partial.done; },
   /** Work still to do before the page shows the present state: for tests to wait on, not on time. */
-  get busy() { return loading > 0 || raf !== 0 || dirty.object || dirty.pupil || dirty.image || (state.illum === 'condenser' && !partial.done); },
+  get busy() { return loading > 0 || raf !== 0 || settleTimer !== 0 || dirty.object || dirty.pupil || dirty.image || (state.illum === 'condenser' && !partial.done); },
   get profilePeriod() { return profilePeriod; },
   orders: () => gratingOrders(),
   /** Where a grating's order q is drawn on the Fourier plane, as fractions of its width (for a test to paint there). */

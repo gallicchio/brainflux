@@ -104,14 +104,16 @@
     $\sin\theta=m\lambda/d$: the <em>orders</em>, single points in the Fourier plane, ringed
     and numbered (white ones get through the aperture, red ones are blocked; the sketch shows
     the same).  The zero order, $m=0$, is the light that went straight through; the orders
-    $\pm1$ get in too, and the image is a sinusoid of period $d$, which the profile shows
-    against the square bars of the object.  Slide the NA (panel 3) down past $\lambda/d=0.43$:
+    $\pm1$ get in too, and the three make a smooth wave of period $d$,
+    $E=c_0+2c_1\cos(2\pi x/d)$, which the profile shows (as $I=|E|^2$) against the square bars
+    of the object.  Slide the NA (panel 3) down past $\lambda/d=0.43$:
     the $\pm1$ orders turn red, and the image is an even grey, $I=0.250$ everywhere, the square
-    of the grating's average transmission, ½.  The light is all there; the grating is not.
+    of the grating's average transmission, ½.  Light gets through (the zero order carries more
+    than half of it, says the sketch's legend), but the grating does not.
     Slide it up past $3\lambda/d=1.29$ and the $\pm3$ orders come in too (equal bars and gaps
-    have no even orders): the bars get sharper edges.  This is Abbe's rule (1873): with the
+    have no even orders): the bars get sharper edges.  This is Abbe's argument (1873): with the
     light along the axis, a period shows only if its first orders get in,
-    $d\ge\lambda/\mathrm{NA}$.</p>
+    $d\ge\lambda/\mathrm{NA}$.  (Light from the side does twice as well: experiment 3.)</p>
   </article>
 
   <article class="exp" data-setup="zero" data-frame="720x234">
@@ -121,7 +123,10 @@
     $E\propto\cos(2\pi x/d)$, whose intensity $\cos^2(2\pi x/d)=\frac12\left[1+\cos(4\pi
     x/d)\right]$ repeats every $d/2$: the image has twice as many lines as the grating (the
     profile reads 0.640 µm).  The image is made by the orders interfering; it is not a copy
-    of the object.  Choose <em>Open</em> to compare.</p>
+    of the object.  Choose <em>Open</em> to compare.  Its lines are finer than the limit in
+    panel 3, $\lambda/\mathrm{NA}=0.92~\mu\mathrm{m}$, and that is no contradiction: the limit
+    says which periods of the <em>object</em> can show, and these lines are not the
+    object's.</p>
   </article>
 
   <article class="exp" data-setup="oblique" data-frame="705x346">
@@ -133,11 +138,12 @@
     in the Fourier plane slides over.  The zero order moves to one side of the aperture and
     the $+1$ order to the other, both inside, and the two make fringes of period $d$.  Drag in
     the Fourier plane with <em>Tilt the light</em> and watch the grating come and go.  With the
-    tilt at $\sin\theta=\mathrm{NA}$, the finest period is $d=\lambda/2\mathrm{NA}$, half of
-    Abbe's limit.  A condenser lights the object from every side at once: set the tilt to 0,
-    choose <em>Condenser</em> with NA 0.4, and the grating shows again, with less contrast (0.08,
-    against 0.85 here), because only the directions on one side bring an order in with
-    them.</p>
+    tilt at $\sin\theta=\mathrm{NA}$, the finest period is $d=\lambda/2\mathrm{NA}$, half the
+    limit for light along the axis.  This is the limit usually named after Abbe (on his
+    memorial in Jena it reads $\lambda/2n\sin\alpha$, and $n\sin\alpha$ is the NA).  A condenser lights the
+    object from every side at once: set the tilt to 0, choose <em>Condenser</em> with NA 0.4,
+    and the grating shows again, with less contrast (0.08, against 0.85 here), because only
+    the directions near the edge of its cone bring an order in with them.</p>
   </article>
 
   <article class="exp" data-setup="diatom" data-frame="720x234">
@@ -152,8 +158,56 @@
     Then make the <em>pore spacing</em> smaller and find where the pores disappear again.</p>
   </article>
 
+  <article class="exp" data-setup="coherence" data-frame="705x346">
+    <h3>5. Coherent or incoherent light</h3>
+    <p>The bar target in coherent light at NA 0.5.  Periods finer than
+    $\lambda/\mathrm{NA}=1.1~\mu\mathrm{m}$ should vanish, and from the 0.79 µm group on they
+    do: grey blocks (the 0.79 and 0.63 µm groups keep 5% and 4% of their bars' contrast).  The
+    1 µm group, just past the limit,
+    keeps 44%: three bars are not an endless grating, and some of their spread of directions
+    gets into the aperture.  Edges ring.  Beside a single straight edge the light overshoots
+    by 19% (try <em>Edge</em>: $I$ peaks at 1.190); between close bars the ripples add, and
+    the image reaches $I=1.664$ (see the readout), though nothing in the object transmits more
+    than 1.  Choose <em>Incoherent</em>: now intensities add, not fields, and the transfer
+    function is the pupil's autocorrelation (the OTF, the optical transfer function: choose
+    <em>show the OTF</em> over the Fourier plane), reaching twice as far, to
+    $\lambda/2\mathrm{NA}=0.55~\mu\mathrm{m}$, but falling off gradually.  The 0.79 and 0.63 µm
+    groups come back, with 16.5% and 11.8% of their contrast; the 0.5 µm group, finer than that,
+    stays grey.  Nothing overshoots ($I$ peaks at 0.997): an incoherent image is never
+    brighter than the brightest part of the object.  A condenser is in between: with NA 0.25
+    the image still rings a little ($I$ peaks at 1.27), and periods down to
+    $\lambda/(\mathrm{NA}+\mathrm{NA}_\mathrm{c})=0.73~\mu\mathrm{m}$ get through.</p>
+  </article>
+
+  <article class="exp" data-setup="star" data-frame="705x346">
+    <h3>6. Where resolution runs out: the Siemens star</h3>
+    <p>The star's 18 dark spokes are a grating whose period shrinks towards the centre, as
+    $2\pi r/18$.  Inside the dashed circle,
+    $r=\frac{18\lambda}{2\pi\,\mathrm{NA}}=3.15~\mu\mathrm{m}$, it is finer than
+    $\lambda/\mathrm{NA}$ and the star turns grey.  In <em>Incoherent</em> light the circle
+    shrinks by half.  Then set the defocus to 4 µm: between $r\approx3$ and 6 µm the spokes
+    come back faintly, with black and white swapped (choose <em>Stretch contrast</em> to see
+    them).  The OTF view shows why: defocus makes the transfer function negative in a ring
+    (cyan).  This is "spurious resolution", and a reason to focus on something with sharp
+    edges.</p>
+  </article>
+
+  <article class="exp" data-setup="rayleigh" data-frame="720x367">
+    <h3>7. Two points and Rayleigh's criterion</h3>
+    <p>Two pinholes $0.6~\mu\mathrm{m}$ apart at NA 0.56: Rayleigh's limit,
+    $0.61\lambda/\mathrm{NA}=0.599~\mu\mathrm{m}$, where the first dark ring of one point's
+    image falls on the other.  (One point's image is the Airy pattern,
+    $I\propto\left[2J_1(v)/v\right]^2$ with $v=2\pi\,\mathrm{NA}\,r/\lambda$, whose first dark ring
+    is at $v=3.83$, $r=0.61\lambda/\mathrm{NA}$: a microscope's form of a telescope's
+    $1.22\lambda/D$.)  In incoherent light (two stars, two fluorescent molecules) the
+    profile dips by 26.6% between them (26.5% for ideal points): just resolved.  In coherent
+    light the amplitudes add first: in step, the two make one blob, brightest in the middle;
+    set the <em>phase</em> to 180° and a dark line separates them however close they are.
+    Coherent resolution depends on the object's phase.</p>
+  </article>
+
   <article class="exp" data-setup="invisible" data-frame="720x234">
-    <h3>5. A transparent cell is invisible</h3>
+    <h3>8. A transparent cell is invisible</h3>
     <p>These cells only delay the light, by up to 0.3 rad; $|t|=1$ everywhere.  With the
     aperture wide open (NA 1.4) the image is even to 0.15%: $I=|e^{i\varphi}|^2=1$, nothing to
     see, though the object's colours (its phase) show the cells plainly.  Close the aperture
@@ -164,9 +218,10 @@
   </article>
 
   <article class="exp" data-setup="defocus" data-frame="720x234">
-    <h3>6. Defocus makes it faintly visible</h3>
+    <h3>9. Defocus makes it faintly visible</h3>
     <p>The same cells, with the microscope focused $z=1~\mu\mathrm{m}$ beyond them (the pupil
-    gains the phase $e^{-i\pi\lambda zf^2}$: each direction travels a little further).  A cell
+    gains the phase $e^{-i\pi\lambda zf^2}$: along the axis a tilted wave's phase grows as
+    $k\cos\theta$, a little slower than the straight-through light's $k$).  A cell
     is thicker in the middle, so it delays the light most there, like a weak converging lens:
     just past it, the light bunches into its middle.  Its nucleus is 3% brighter than the
     background and its rim darker.  For small $z$ (the transport-of-intensity equation)
@@ -177,7 +232,7 @@
   </article>
 
   <article class="exp" data-setup="darkfield" data-frame="720x234">
-    <h3>7. Dark field</h3>
+    <h3>10. Dark field</h3>
     <p>A stop of radius 0.08 NA in the middle of the Fourier plane removes the zero order (the
     light that went straight through) and the lowest frequencies.  Only 0.73% of the light
     gets through, but these letters, written in phase alone, now glow on black at their edges,
@@ -189,7 +244,7 @@
   </article>
 
   <article class="exp" data-setup="zernike" data-frame="720x234">
-    <h3>8. Zernike's phase contrast</h3>
+    <h3>11. Zernike's phase contrast</h3>
     <p>A transparent object, $t=e^{i\varphi}\approx1+i\varphi$, is two waves.  The 1 is the
     light that goes straight through, the zero order, bright in the middle of the Fourier
     plane.  $i\varphi$ is the weak light the object diffracts, and the factor $i=e^{i\pi/2}$
@@ -212,7 +267,7 @@
   </article>
 
   <article class="exp" data-setup="halo" data-frame="720x234">
-    <h3>9. The halo</h3>
+    <h3>12. The halo</h3>
     <p>A real phase dot has a size (here 0.1 NA), and it shifts not only the zero order but
     the lowest frequencies of the object too: the ones that make up a large cell's broad,
     smooth inside.  Those are then imaged as in bright field, invisibly, so the middle of a
@@ -224,7 +279,7 @@
   </article>
 
   <article class="exp" data-setup="schlieren" data-frame="705x346">
-    <h3>10. Schlieren: a knife edge</h3>
+    <h3>13. Schlieren: a knife edge</h3>
     <p>Foucault's knife edge blocks one half of the Fourier plane and keeps the zero order.
     For a weak phase grating, $\varphi=\epsilon\cos kx$,
     $t\approx1+\frac{i\epsilon}{2}\left(e^{ikx}+e^{-ikx}\right)$; the knife removes the
@@ -238,56 +293,11 @@
   </article>
 
   <article class="exp" data-setup="portrait" data-frame="720x234">
-    <h3>11. The hidden portrait</h3>
+    <h3>14. The hidden portrait</h3>
     <p>Fourier's portrait written in phase alone, 0.3 rad at the darkest ink: the image shows
     almost nothing (a contrast of 1.5%).  Choose <em>Phase dot</em> in the Fourier plane and he
     appears (contrast 0.32).  The $-90°$ dot shows him as engraved, dark ink dark; $+90°$ as a
     negative.</p>
-  </article>
-
-  <article class="exp" data-setup="coherence" data-frame="705x346">
-    <h3>12. Coherent or incoherent light</h3>
-    <p>The bar target in coherent light at NA 0.5.  Periods finer than
-    $\lambda/\mathrm{NA}=1.1~\mu\mathrm{m}$ should vanish, and from the 0.79 µm group on they
-    do: grey blocks (the 0.79 and 0.63 µm groups keep 5% and 4% of their bars' contrast).  The
-    1 µm group, just past the limit,
-    keeps 44%: three bars are not an endless grating, and some of their spread of directions
-    gets into the aperture.  Edges ring.  Beside a single straight edge the light overshoots
-    by 19% (try <em>Edge</em>: $I$ peaks at 1.190); between close bars the ripples add, and
-    the image reaches $I=1.664$ (see the readout), though nothing in the object transmits more
-    than 1.  Choose <em>Incoherent</em>: now intensities add, not fields, and the transfer
-    function is the pupil's autocorrelation (the OTF, the optical transfer function: choose
-    <em>show the OTF</em> over the Fourier plane), reaching twice as far, to
-    $\lambda/2\mathrm{NA}=0.55~\mu\mathrm{m}$, but falling off gradually.  The 0.79 and 0.63 µm
-    groups come back, with 16.5% and 11.8% of their contrast; the 0.5 µm group, finer than that,
-    stays grey.  Nothing overshoots ($I$ peaks at 0.997): an incoherent image is never
-    brighter than the brightest part of the object.  A condenser is in between: with NA 0.25
-    the image still rings a little ($I$ peaks at 1.27), and periods down to
-    $\lambda/(\mathrm{NA}+\mathrm{NA_c})=0.73~\mu\mathrm{m}$ get through.</p>
-  </article>
-
-  <article class="exp" data-setup="star" data-frame="705x346">
-    <h3>13. Where resolution runs out: the Siemens star</h3>
-    <p>The star's 18 dark spokes are a grating whose period shrinks towards the centre, as
-    $2\pi r/18$.  Inside the dashed circle,
-    $r=\frac{18\lambda}{2\pi\,\mathrm{NA}}=3.15~\mu\mathrm{m}$, it is finer than
-    $\lambda/\mathrm{NA}$ and the star turns grey.  In <em>Incoherent</em> light the circle
-    shrinks by half.  Then set the defocus to 4 µm: between $r\approx3$ and 6 µm the spokes
-    come back faintly, with black and white swapped (choose <em>Stretch contrast</em> to see
-    them).  The OTF view shows why: defocus makes the transfer function negative in a ring
-    (cyan).  This is "spurious resolution", and a reason to focus on something with sharp
-    edges.</p>
-  </article>
-
-  <article class="exp" data-setup="rayleigh" data-frame="720x367">
-    <h3>14. Two points and Rayleigh's criterion</h3>
-    <p>Two pinholes $0.6~\mu\mathrm{m}$ apart at NA 0.56: Rayleigh's limit,
-    $0.61\lambda/\mathrm{NA}=0.599~\mu\mathrm{m}$, where the first dark ring of one point's
-    image falls on the other.  In incoherent light (two stars, two fluorescent molecules) the
-    profile dips by 26.6% between them (26.5% for ideal points): just resolved.  In coherent
-    light the amplitudes add first: in step, the two make one blob, brightest in the middle;
-    set the <em>phase</em> to 180° and a dark line separates them however close they are.
-    Coherent resolution depends on the object's phase.</p>
   </article>
 
   <section class="theory">
@@ -306,7 +316,23 @@
   light outside it never reaches the image.  The tube lens transforms back:
   $$E(x,y)=\mathcal{F}^{-1}\left[P(f)\,T(f)\right],\qquad I=|E|^2,$$
   where the <em>pupil</em> $P$ (the aperture and whatever is in it) is 1 inside the aperture
-  and 0 outside, times whatever you put in the plane (panel 4) or paint on it.</p>
+  and 0 outside, times whatever you put in the plane (panel 4) or paint on it.  So coherent
+  light passes the object's frequencies up to $\mathrm{NA}/\lambda$, all of them in full, and
+  none beyond: a period finer than $\lambda/\mathrm{NA}$ does not show.</p>
+  <p>In <em>incoherent</em> light (fluorescence, or a condenser much wider than the objective)
+  each point of the object shines on its own, so intensities add, not fields: the image is the
+  object's $|t|^2$ blurred by $|h|^2$, the image of one point, with
+  $h=\mathcal{F}^{-1}[P]$.  In the Fourier plane the blur is a product, by the <em>optical
+  transfer function</em>, the transform of $|h|^2$, which is the pupil's autocorrelation:
+  $$\mathcal{F}[I](f)=\mathrm{OTF}(f)\,\mathcal{F}\left[|t|^2\right](f),\qquad
+  \mathrm{OTF}(f)=\frac{\int P(g)\,P^*(g-f)\,d^2g}{\int|P(g)|^2\,d^2g}.$$
+  It is the overlap of the aperture's circle with a copy of itself shifted by $f$ (choose
+  <em>show the OTF</em>).  The two circles, of radius $\mathrm{NA}/\lambda$, overlap until
+  their centres are $2\mathrm{NA}/\lambda$ apart: incoherent light carries periods down to
+  $\lambda/2\mathrm{NA}$, half the coherent limit, but with less and less contrast as they
+  approach it.  A condenser of numerical aperture $\mathrm{NA}_\mathrm{c}$ is in between: it adds the
+  coherent images made by light from every direction in its cone, and passes periods down to
+  $\lambda/(\mathrm{NA}+\mathrm{NA}_\mathrm{c})$.</p>
   <p>In the Fourier plane the colour is the phase of $T$ (red real and positive, yellow-green
   $+i$, cyan negative, violet $-i$) and the brightness its size; what the pupil blocks is
   dimmed.  The object is drawn as its transmitted intensity $|t|^2$ in grey, or as its phase

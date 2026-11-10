@@ -10,11 +10,15 @@
 
 const TAU = 2 * Math.PI;
 
-/** The ink of f(x, y) (0 or 1) averaged over s x s points in each pixel. */
-export function supersample(n, dx, f, s = 4) {
+/**
+ * The ink of f(x, y) (0 or 1) averaged over s x s points in each pixel.  empty(x, y), if given,
+ * says (conservatively) that the pixel centred on (x, y) holds no ink, so its samples are skipped.
+ */
+export function supersample(n, dx, f, s = 4, empty = null) {
   const g = new Float64Array(n * n);
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
+      if (empty && empty((i - n / 2) * dx, (n / 2 - j) * dx)) continue;
       let sum = 0;
       for (let b = 0; b < s; b++) {
         const y = (n / 2 - j - (b + 0.5) / s + 0.5) * dx;
@@ -105,15 +109,16 @@ export function siemensStar(n, dx, spokes = 18, R = 11) {
 
 /**
  * A diatom-like valve: a lanceolate shell of silica, its rim and midrib (the raphe) thick, the
- * rest pierced by a hexagonal lattice of pores `spacing` um apart (rows spacing sqrt(3)/2 apart).
+ * rest pierced by a hexagonal lattice of pores `spacing` um apart (rows spacing sqrt(3)/2 apart),
+ * drawn with samples x samples points a pixel.
  */
-export function diatom(n, dx, spacing = 0.6) {
+export function diatom(n, dx, spacing = 0.6, samples = 4) {
   const rot = (25 * Math.PI) / 180, c = Math.cos(rot), s = Math.sin(rot);
   const half = 10.5, W = 3.1;
   const a = spacing, h = (a * Math.sqrt(3)) / 2, pore = 0.3 * a;
   return supersample(n, dx, (x, y) => {
     const u = x * c + y * s, v = -x * s + y * c;   // along the valve, across it
-    if (Math.abs(u) >= half) return 0;
+    if (Math.abs(u) >= half || Math.abs(v) > W) return 0;   // (outside: most samples, decided cheaply)
     const w = W * (1 - (u / half) ** 2) ** 0.8;   // half-width at u
     if (Math.abs(v) > w) return 0;
     if (Math.abs(v) > w - 0.35) return 1;          // the rim
@@ -126,7 +131,7 @@ export function diatom(n, dx, spacing = 0.6) {
       best = Math.min(best, (u2 - k2 * a) ** 2 + (v - r2 * h) ** 2);
     }
     return best < pore * pore ? 0.1 : 0.75;
-  });
+  }, samples, (x, y) => Math.abs(x * c + y * s) >= half + dx || Math.abs(-x * s + y * c) > W + dx);
 }
 
 /**
