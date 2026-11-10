@@ -181,6 +181,12 @@ function initialPsi() {
     if (peak > 0) for (let j = 0; j < n; j++) { re[j] /= peak; im[j] /= peak; }
   }
   if (state.pot.boundary === 'walls') { re[0] = 0; im[0] = 0; }
+  if (it.kind === 'cat') {
+    // |α⟩ − |−α⟩ at α = 0 is no state at all: only rounding errors would be left to normalise.
+    let s2 = 0;
+    for (let j = 0; j < n; j++) s2 += re[j] * re[j] + im[j] * im[j];
+    if (!(s2 * sim.dx > 1e-20)) throw new Error('The two coherent states cancel: move the blobs apart (or change φ).');
+  }
   if (!normalize(re, im, sim.dx)) throw new Error('The initial wave function is zero everywhere in the domain.');
   return { re, im };
 }
