@@ -21,7 +21,7 @@ import { scopeTrace } from '../lib/scope.js';
 // The simulation has c = 1 and works in one frequency unit; each medium says what that unit is.
 // Frequencies are shown as they are; times are multiplied by tS and distances by zS.
 const UNITS = {
-  au: { w: 'ω', t: 't', tu: '', tS: 1, z: 'z', zu: '', zS: 1, note: 'c = 1; t in units of 1/ω, z of c/ω' },
+  au: { w: 'ω', t: 't', tu: '', tS: 1, z: 'z', zu: '', zS: 1, note: 'c = 1; ω in a unit ω_u, t in 1/ω_u, z in c/ω_u' },
   eV: { w: 'ħω (eV)', t: 't (fs)', tu: 'fs', tS: 0.658212, z: 'z (mm)', zu: 'mm', zS: 1.97327e-4, note: 'frequencies are ħω in eV' },
   MHz: { w: 'f (MHz)', t: 't (μs)', tu: 'μs', tS: 0.159155, z: 'z (km)', zu: 'km', zS: 0.0477135, note: 'frequencies are f = ω/2π in MHz' },
   THz: { w: 'ν (THz)', t: 't (ps)', tu: 'ps', tS: 0.159155, z: 'z (μm)', zu: 'μm', zS: 47.7135, note: 'frequencies are ν = ω/2π in THz' },
@@ -324,7 +324,9 @@ function drawResponse() {
   if (state.view !== 'medium') return;
   const f = respFrame, x = f.X(state.probe), sym = U().w.split(' ')[0];
   if (x < f.left - 1 || x > f.right + 1) return;
-  topHandle(pic.ctx, f, x, state.sweep ? `the light’s ${sym} (sweeping: drag to stop)` : `the light’s ${sym}: drag`, colors.ink2);
+  // (Shorter on a phone, where the long label fits on neither side of the handle.)
+  const label = !state.sweep ? `the light’s ${sym}: drag` : pic.width < 560 ? `${sym}, sweeping: drag` : `the light’s ${sym} (sweeping: drag to stop)`;
+  topHandle(pic.ctx, f, x, label, colors.ink2);
   handles.push({ type: 'probe', x, y: f.top - 8, r: 15 });
 }
 
@@ -1299,7 +1301,7 @@ function readout() {
     const fade = 1 / (Math.max(o.k[0], 1e-300) * Math.max(w, 1e-9)), lam = (2 * Math.PI) / Math.max(w, 1e-9);
     const line = [`The light at ${wName} = `, bold(num(w, ws.dec, ws.w)), ': n = ', bold(num(o.n[0], 3, 6)), ', κ = ', bold(num(o.k[0], 3, 6, { tiny: true })),
       // (The fading length in wavelengths λ₀ = 2πc/ω too, as the picture of the wave gives it.)
-      ...(fade < 1e4 * lam ? [' · inside, the crests go at c/n and the wave fades by 1/e in c/κω = ', ...lengthParts(fade), ' = ', num(fade / lam, 2, 6, { tiny: true }), ' λ₀']
+      ...(fade < 1e4 * lam ? [' · inside, the crests go at c/n and the wave fades by 1/e in c/κω = ', ...lengthParts(fade), '\u00a0=\u00a0', num(fade / lam, 2, 6, { tiny: true }), ' λ₀']
         : [' · inside, the crests go at c/n, and the wave hardly fades (over 10⁴ wavelengths)'])];
     lines.push(line);
     const lns = media().lines && state.units === MEDIA[state.medium].units ? media().lines : [];

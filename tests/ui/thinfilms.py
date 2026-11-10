@@ -248,6 +248,11 @@ with Browser('thinfilms/index.html', size=(1400, 900)) as b:
         phases.append(readout().split('differ in phase by ')[1].split('°')[0])
     typed_number(b, '#light-box .slider:nth-child(2) input[type=number]', 45); b.sleep(0.25)
     check(phases == ['45.0', '45.0'] and '224 nm' in readout(), f'help, TIR: s-p phase {phases} at 47.7 and 55.3 deg; decay 224 nm at 45 deg')
+    setup(b, 'soap'); Rsoap = []
+    for d in (10, 103):
+        typed_number(b, '#thick-box input[type=number]', d); b.sleep(0.25)
+        Rsoap.append(round(point(b)['Rs'] * 100, 1))
+    check(Rsoap == [0.2, 7.9], f'help, soap film: R = {Rsoap} % at 10 and 103 nm')
     setup(b, 'oil'); typed_number(b, '#thick-box input[type=number]', 0.5); b.sleep(0.3)
     check(re.search(r'reflected R\s+2\.06%', readout()) is not None, 'help, oil: the thinnest oil reflects 2.1% (' + readout()[:70] + ')')
     setup(b, 'bragg'); Rs = []

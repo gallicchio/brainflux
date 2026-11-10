@@ -60,6 +60,11 @@ test('one interface at an angle: the Fresnel amplitudes r_s and r_p, phases incl
     const s = rt(n1, [], [n2, 0], 500, th, 's'), p = rt(n1, [], [n2, 0], 500, th, 'p');
     close(s.rr, rs, 1e-14, `r_s at ${th}`); close(s.ri, 0, 1e-14);
     close(p.rr, rp, 1e-14, `r_p at ${th}`); close(p.ri, 0, 1e-14);
+    // T is Hecht's (n2 cos t2 / n1 cos t1) t^2 with his t_s and t_par (the field's own amplitude;
+    // the page's t for p is the tangential field's, t_par cos t2 / cos t1).
+    const ts = (2 * n1 * c1) / (n1 * c1 + n2 * c2), tpar = (2 * n1 * c1) / (n1 * c2 + n2 * c1), f = (n2 * c2) / (n1 * c1);
+    close(s.T, f * ts * ts, 1e-14, `T_s at ${th}`); close(p.T, f * tpar * tpar, 1e-14, `T_p at ${th}`);
+    close(p.tr, (tpar * c2) / c1, 1e-14, `t_p (tangential) at ${th}`);
   }
 });
 
@@ -107,6 +112,9 @@ test('Bragg mirror: peak R of N quarter-wave pairs, and the width of the stop ba
     const a = n0 * nL ** (2 * N), b = ns * nH ** (2 * N);
     close(R, ((a - b) / (a + b)) ** 2, 1e-13, `N = ${N}`);
     if (N === 3 || N === 6 || N === 12) lines.push(`N=${N}: R=${R.toFixed(6)}`);
+    // The page's Bragg mirror, (HL)^N H (experiment 8's formula): Y = nH^(2N+2) / (nL^(2N) ns).
+    const RH = rt(n0, [...layers, H], [ns, 0], lam0, 0, 's').R, c = n0 * ns * nL ** (2 * N), d = nH ** (2 * N + 2);
+    close(RH, ((c - d) / (c + d)) ** 2, 1e-13, `(HL)^${N} H`);
   }
   // Stop band: edges at lambda0 / (1 +- dg), dg = (2/pi) arcsin((nH - nL)/(nH + nL)).  Deep in a
   // long stack R is 1; just outside the edges it is not.
