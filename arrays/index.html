@@ -196,10 +196,15 @@
     again past it.  This is time reversal: record what a source at the cross would send to each
     element, and play it backwards.  Drag the cross.  The spot is about
     $\lambda/(\sin\alpha_1+\sin\alpha_2)$ from its middle to its first dark points, where
-    $\alpha_1$ and $\alpha_2$ are the angles out to the array's two ends: never much less than
-    $\lambda/2$.  Its brightest point is half a wavelength nearer the array than the cross,
-    because the nearer waves are stronger (the focal shift).  Move the focus beyond about
-    $D^2/\lambda$ and it fades into an ordinary beam.  Ultrasound scanners focus like this.</p>
+    $\alpha_1$ and $\alpha_2$ are the angles out to the array's two ends: the wider the array
+    looks from the focus, the smaller the spot.  The read-out measures it: 0.70λ here, a little
+    less than the formula's 0.79λ, because elements evenly spaced along a line send more of
+    their waves in at the steeper angles.  The brightest point is half a wavelength nearer the
+    array than the cross, because the nearer waves are stronger (the focal shift).  Drag the
+    cross away and the shift grows; beyond about $L^2/4\lambda$, $L$ the array's length (33λ for
+    these 24 elements), there is no focus left, only a beam.  Try $N$ = 12: $L^2/4\lambda$ is
+    7.6λ, and the brightest point is already 2.6λ short of the cross.  Ultrasound scanners focus
+    like this.</p>
   </article>
 
   <section class="related" id="radio">
@@ -221,7 +226,10 @@
     the Fourier transform of the layout, on the wavevectors of length $k$.</p>
     <p>The picture is the field at one instant, $\mathrm{Re}\,\psi
     e^{-i\omega t}$, where $\psi$ adds up the elements' complex waves (for isotropic ones,
-    $a_n e^{ik|\vec r-\vec r_n|}/k|\vec r-\vec r_n|$): crests red, troughs cyan.  The polar plot
+    $a_n e^{ik|\vec r-\vec r_n|}/k|\vec r-\vec r_n|$): crests red, troughs cyan.  The dashed
+    circle, when it fits, is $2L^2/\lambda$ from the array's middle, $L$ the array's length: the
+    usual mark for where the far field begins, the paths from the ends of the array to a point
+    there differing from parallel ones by less than $\lambda/16$.  The polar plot
     is the far-field power pattern, in decibels down to −40 dB (or in plain power).  Below it are
     the beam's direction, its width between the half-power points, the highest sidelobe, and the
     directivity $D=4\pi U/P$: the power per solid angle towards the beam, compared with the

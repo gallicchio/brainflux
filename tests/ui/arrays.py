@@ -101,7 +101,7 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
     hint_check(b, '#field-hint', ['#field'], 'Drag an element', 'arrays')
     contrast_check(b, '#field-hint', 'light', 'the hint')
     words = b.eval("document.querySelector('#polar-note').textContent + ' | ' + document.querySelector('#readouts').textContent").replace('\xa0', ' ')
-    check('−10 dB is a tenth' in words and 'the black line' in words and 'the red dot' in words and 'isotropic antenna' in words and '13.6° between the half-power' in words,
+    check('−10 dB is a tenth' in words and 'the line from the centre' in words and 'the red dot' in words and 'isotropic antenna' in words and '13.6° between the half-power' in words,
           f'the dB rings, the beam line, the sidelobe dot and the directivity are explained in words: "{words[:100]}..."')
     # The drawer: "Start here" first (plain words, no equations), experiment 1 the opening state, the theory last.
     d = b.eval("""(() => { const h = document.querySelector('#help'), start = h.querySelector('section.start');
@@ -193,6 +193,20 @@ with Browser('arrays/index.html', size=(1400, 900)) as b:
         const [a, c] = m.fieldAt(els, { kind: 'iso' }, fx, fy); const inStep = els.reduce((s, e) => s + e.amp / (m.K * Math.hypot(fx - e.x, fy - e.y)), 0);
         return [Math.hypot(a, c), inStep]; })()""")
     check(abs(f[0] - f[1]) < 1e-12 * f[1], f'focus: every wave arrives in step ({f[0]:.6f} = {f[1]:.6f})')
+    # The spot and the focal shift the help quotes, measured by the read-outs from the field.
+    def focus_rows():
+        rows = b.eval("Object.fromEntries([...document.querySelectorAll('#readouts dt')].map((dt) => [dt.textContent, dt.nextElementSibling.textContent.replace(/\\s+/g, ' ')]))")
+        num = lambda k: float(rows[k].replace('−', '-').split('λ')[0].split()[-1]) if k in rows else None
+        return rows, num('Spot'), num('Brightest')
+    rows, dark, shift = focus_rows()
+    helptext = b.eval("document.querySelector('.exp[data-setup=focus]').textContent.replace(/\\s+/g, ' ')")
+    check(dark is not None and round(dark, 2) == 0.70 and '0.79 λ' in rows['Spot'] and round(shift, 2) == 0.50 and 'nearer the array' in rows['Brightest']
+          and '0.70λ here' in helptext and 'formula’s 0.79λ' in helptext.replace("'", '’') and '33λ for these 24' in helptext,
+          f"focus: the spot's dark points {dark} λ either side (formula {rows.get('Spot', '')[-12:]}), the brightest point {shift} λ nearer the array (help: 0.70λ, 0.79λ, half a wavelength; L²/4λ = {11.5 ** 2 / 4:.1f}λ)")
+    setslider(b, 'N', 12); b.sleep(0.3)
+    rows, dark, shift = focus_rows()
+    check(shift is not None and round(shift, 1) == 2.6 and '7.6λ' in helptext and '2.6λ short' in helptext, f"focus with 12 elements: the brightest point is {shift} λ short of the cross (help: 2.6λ; L²/4λ = {5.5 ** 2 / 4:.2f}λ)")
+    setup(b, 'focus', 1.0)
     b.drag('#field', (0.5, 0.5), (0.65, 0.4), steps=8); b.sleep(0.4)
     fx, fy = b.eval('__app.A.focus')
     check(abs(fx - 3) < 0.3 and abs(fy - 2) < 0.3, f'dragging the cross moves the focus to ({fx:.2f}, {fy:.2f})')
@@ -289,6 +303,9 @@ with Browser('arrays/index.html', size=(390, 844)) as b:
 # ignore), and replaces itself in the history, so that Back still works.  (The new demo is a folder
 # of its own; whether it exists here does not matter, only where the address goes.)
 with Browser('about:blank', size=(1400, 900)) as b:
+    # (The address each page arrived at, kept before its own scripts run: the new demo soon
+    # writes its state into the address, and a busy machine can read it after that.)
+    b.call('Page.addScriptToEvaluateOnNewDocument', source='window.__arrived = location.pathname + location.hash;')
     for h, want in (('#setup=eht', '#setup=eht'), ('#setup=rotation', '#setup=rotation'), ('#setup=resolution', '#setup=resolution'), ('#setup=clean', '#setup=clean'),
                     ('#mode=synth&hours=12&dec=50&sky=double', '#hours=12&dec=50&sky=double'), ('#view=synthesis', '')):
         b.call('Page.navigate', url='about:blank'); b.sleep(0.3)
@@ -298,7 +315,7 @@ with Browser('about:blank', size=(1400, 900)) as b:
             b.wait("location.pathname.endsWith('/radiointerferometer/')", timeout=20); gone = True
         except TimeoutError:
             gone = False
-        loc, n1 = b.eval('location.pathname + location.hash'), b.eval('history.length')
+        loc, n1 = b.eval('window.__arrived || location.pathname + location.hash'), b.eval('history.length')
         check(gone and loc.endswith('/radiointerferometer/' + want) and n1 == n0 + 1,
               f'arrays/index.html{h} goes to {loc} ({"replacing itself in the history" if n1 == n0 + 1 else f"history {n0} -> {n1}"})')
     # And a phased-array address stays, with no detour.
