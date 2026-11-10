@@ -256,6 +256,21 @@ test('Husimi: a coherent state gives Q = exp(-((x-x0)^2 + (p-p0)^2)/2) / 2 pi; Q
   return `coherent: max error ${(err / peak).toExponential(1)} of the peak; cat: min W ${(sw.min * Math.PI).toFixed(3)}/pi, min Q ${sq.min.toExponential(1)}`;
 });
 
+test('Husimi, coarse (for drawing points while a drag is in progress): within 1.5% of the peak', () => {
+  const L = line(1024, -12, 12), peak = 1 / (2 * Math.PI);
+  const g = new PhaseGrid(L, { x0: -9, x1: 9, p0: -5.5, p1: 5.5 }, { cols: 251, rows: 253 });
+  const cat = catState(L.x, { x0: 3, p0: 0.5, phi: 1 });
+  normalize(cat.re, cat.im, L.dx);
+  const b = g.prepare(cat.re, cat.im);
+  const fine = Float64Array.from(g.husimi(b.re, b.im, Math.SQRT1_2));
+  const coarse = g.husimi(b.re, b.im, Math.SQRT1_2, new Float64Array(fine.length), { coarse: true });
+  let err = 0, min = Infinity;
+  for (let i = 0; i < fine.length; i++) { err = Math.max(err, Math.abs(coarse[i] - fine[i])); min = Math.min(min, coarse[i]); }
+  assert(err < 0.015 * peak && min > -1e-12, `max difference ${err / peak} of the peak, min ${min}`);
+  close(g.stats(coarse).total, g.stats(fine).total, 5e-3, 'integral');
+  return `max difference ${(err / peak).toExponential(1)} of the peak`;
+});
+
 // ----------------------------------------------------------------------------- quadratures
 
 test('quadratures: X_theta of a squeezed state has the variance of its rotated covariance', () => {

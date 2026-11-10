@@ -21,7 +21,7 @@
   <section class="stage">
     <div class="readouts mono small" id="readouts" aria-live="off"></div>
     <div class="plot-wrap main-wrap"><canvas id="plot" tabindex="0" aria-label="Phase space: the Wigner function W(x, p) in colour, red where positive and blue where negative, with classical points as dots, energy contours, and the probability densities of x and p along the edges. Drag the state's centre; arrow keys move it too."></canvas></div>
-    <div class="hint" id="hint">Drag the blob by its ⊕ centre</div>
+    <div class="hint" id="hint">Drag the blob's starting point ⊕, or click anywhere to start it there</div>
     <div class="legend small">
       <span class="cbar"><span id="cb-name">W(x, p)</span> <span id="cb-lo">−1/πħ</span><canvas id="colorbar" aria-hidden="true"></canvas><span id="cb-hi">+1/πħ</span></span>
       <span id="neg" title="W is not a probability density: wherever the state has no classical picture it goes negative, in blue.  Least: the lowest value of W in the window, in units of 1/πħ (W ≥ −1/πħ, always).  Volume: the integral of |W| over the region where W < 0; it is 0 for a coherent or squeezed state and grows as a state becomes more quantum."></span>
@@ -72,10 +72,10 @@
     <h3>Start here</h3>
     <p>The picture is phase space: position <i>x</i> across, momentum <i>p</i> up.  The red
     blob is a quantum state drawn as a cloud of "where, and how fast" (its <em>Wigner
-    function</em>); the black dots are classical particles started in the same cloud.  In this
+    function</em>); the small dots are classical particles started in the same cloud.  In this
     harmonic well the two circle together, once per period.</p>
-    <p>Drag the blob by its ⊕ centre (or click where you want it) and it circles from there.
-    The strips above and at the right are the blob's shadows on the two axes: the probability
+    <p>Drag the blob's starting point, the ⊕, or click anywhere: the blob starts again from
+    there and circles round the well.  The strips above and at the right are the blob's shadows on the two axes: the probability
     distributions of <i>x</i> and of <i>p</i>, what a measurement would find.</p>
     <p>Then press <b>Quartic</b> under Potential (or <b>Set it up</b> in experiment 2): the outer
     dots now run ahead of the inner ones and the cloud winds into a spiral.  The quantum blob
@@ -128,7 +128,9 @@
     the same area.  It turns rigidly, so its shadow on the $x$ axis, $|\psi(x)|^2$, narrows and
     widens twice per period: $\sigma_x$ goes from 0.32 up to 1.57 and back.  $\sigma_x\sigma_p$
     is $\hbar/2$ only when the ellipse lies along the axes.  Try other angles and squeezes
-    ($r<0$ squeezes $p$ instead).</p>
+    ($r<0$ squeezes $p$ instead).  In decibels, as quantum optics counts squeezing,
+    $r=0.8$ is $10\log_{10}e^{2r}=6.9$ dB: the narrow quadrature's variance is $e^{-2r}=0.20$ of
+    the coherent state's.</p>
   </article>
 
   <article class="exp" data-setup="number" data-frame="720x489">
@@ -185,7 +187,7 @@
     it is a cat state of the two wells, with fringes between them.  It reaches the right well at
     $t=\pi\hbar/(E_1-E_0)=28.1$ and is back at 56.2.  (Here the points come from
     $|\psi(x)|^2|\phi(p)|^2$, which has the state's own mean energy.  The Husimi $Q$, the
-    stand-in elsewhere, would raise their mean energy to 2.78 and send a third of them over the
+    stand-in elsewhere, would raise their mean energy to about 2.8 and send a third of them over the
     barrier: try it under <em>Points, colours and grid</em>.)</p>
   </article>
 
@@ -223,7 +225,10 @@
     every shadow is a probability distribution that can be measured.  A homodyne detector
     measures $X_\theta$ for a light field, with $\theta$ set by the phase of a reference laser;
     recording the shadows at all angles and inverting them gives $W$ itself.  This is how the
-    Wigner functions of cat states of light have been measured.  The inversion is the one a CT
+    Wigner functions of cat states of light have been measured.  (The <a
+    href="../quantumoptics/#setup=quadrature">quantum optics demo</a> does it for light; its
+    quadratures are $X_1=x/\sqrt2$ and $X_2=p/\sqrt2$ in this page's units, so its vacuum has
+    variance $\tfrac14$ where this page's ground state has $\sigma_x^2=\hbar/2=\tfrac12$.)  The inversion is the one a CT
     scanner does with X-ray shadows: see the <a href="../tomography/#setup=slice">tomography
     demo</a> (the projection-slice theorem and filtered back-projection), with $W$ in place of
     the patient.</p>
@@ -249,8 +254,8 @@
     and over $x$ gives $|\phi(p)|^2$, the strips along the top and the right.  But it can be
     negative, which no probability can; the line under the plot says how negative, and over how
     much of phase space.</p>
-    <p>The black dots are classical particles, each moving by Hamilton's equations under the same
-    $H$; their histograms are the black lines in the strips.  At $t=0$ they are drawn from $W$
+    <p>The small dots (black, or white on a dark page) are classical particles, each moving by
+    Hamilton's equations under the same $H$; their histograms are the stepped lines in the strips.  At $t=0$ they are drawn from $W$
     when $W$ is positive; when it is not, from a positive stand-in (the note under the plot says
     which).  The thin grey curves are contours of $H$ at the stationary states' energies; the
     dashed one is at $\langle E\rangle$.  Units: $\hbar=m=1$.</p>

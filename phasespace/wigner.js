@@ -139,16 +139,17 @@ export class PhaseGrid {
    * spacing hq (fine enough for the window's own spread of momenta), transformed.  Q is smooth
    * on the scales sigma and 1/2 sigma, so it is computed on a coarser grid (a sixth of those
    * scales) and interpolated linearly to the grid of W; the interpolation error is a few
-   * parts in a thousand of the peak.
+   * parts in a thousand of the peak.  coarse: a third of those scales, about six times less
+   * work and within about 1% of the peak (for drawing points from Q, not for showing it).
    */
-  husimi(re, im, sigma, out = this.Q) {
+  husimi(re, im, sigma, out = this.Q, { coarse = false } = {}) {
     const { n, dx, cols, rows, q, j0 } = this;
-    const sp = 1 / (2 * sigma);
+    const sp = 1 / (2 * sigma), fine = coarse ? 3 : 6;
     const sq = Math.max(1, Math.min(this.s, Math.floor(Math.PI / ((this.pmax + 6 * sp) * dx))));
     const hq = sq * dx;
     const kq = Math.ceil((7 * sigma) / hq);
     let L = 16;
-    while (L < 2 * kq + 1 || (2 * Math.PI) / (L * hq) > sp / 6) L *= 2;
+    while (L < 2 * kq + 1 || (2 * Math.PI) / (L * hq) > sp / fine) L *= 2;
     const dpq = (2 * Math.PI) / (L * hq);
     if (!this._qr || this._qr.length !== L) { this._qr = new Float64Array(L); this._qi = new Float64Array(L); }
     const zr = this._qr, zi = this._qi;
@@ -161,7 +162,7 @@ export class PhaseGrid {
       const f = this.p[r] / dpq, m = Math.floor(f);
       lo[r] = m; wt[r] = f - m;
     }
-    const stride = Math.max(1, Math.floor(sigma / 6 / this.cellX));
+    const stride = Math.max(1, Math.floor(sigma / fine / this.cellX));
     const column = (c) => {
       zr.fill(0); zi.fill(0);
       const j = j0 + c * q;

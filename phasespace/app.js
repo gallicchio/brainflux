@@ -72,7 +72,13 @@ function evalVOnGrid() {
 }
 const clean = (y) => (Number.isFinite(y) ? Math.max(-1e6, Math.min(1e6, y)) : Number.isNaN(y) ? 0 : Math.sign(y) * 1e6);
 
-function applyPotential() {
+/**
+ * V from the typed formula onto the simulation's grid, the classical force table, and the
+ * stationary states.  quick (a slider moving): the stationary states, which only the contours
+ * need (unless the state is one of them), wait until the slider stops (settleLevels); the
+ * contours are hidden until then rather than drawn at the old potential's energies.
+ */
+function applyPotential({ quick = false } = {}) {
   if (!sim || !Vexpr) return;
   shownV = evalVOnGrid();
   // Only a V with jumps is softened for the split-operator method (see schrodinger1d/sim.js).
@@ -91,8 +97,20 @@ function applyPotential() {
     table = new PotentialTable((xs) => Vexpr.evaluate({ x: xs, ...Vparams }, xs.length).re, sim.xmin, sim.xmax, 4096);
   }
   omegaRef = referenceOmega();
-  computeLevels(V);
+  if (quick && !needsLevels()) { levelsPending = levelsHidden = true; }
+  else computeLevels(V);
   Vversion++;
+}
+
+const needsLevels = () => state.init.kind === 'eigen' || state.init.kind === 'two';
+// The stationary states: to be found again when a slider stops (pending), and not to be drawn
+// meanwhile (hidden: they belong to another potential).
+let levelsPending = false, levelsHidden = false, levelsVersion = 0;
+function settleLevels() {
+  if (!levelsPending || !sim) return;
+  computeLevels(sim.V);
+  syncKindControls();
+  dirty = true;
 }
 
 /** The frequency of small oscillations about the potential's lowest point in the window. */
@@ -115,6 +133,8 @@ function referenceOmega() {
 
 function computeLevels(V) {
   levels = [];
+  levelsPending = levelsHidden = false;
+  levelsVersion++;
   if (state.pot.noLevels) return;
   const n = sim.n, walls = state.pot.boundary === 'walls';
   const edge = Math.min(V[walls ? 1 : 0], V[n - 1]);
@@ -142,6 +162,7 @@ function initialPsi() {
   else if (it.kind === 'squeezed') addGaussian(x, re, im, { x0: it.x0, p0: it.p0, r: it.r, theta: it.theta * deg, omega: omegaRef });
   else if (it.kind === 'cat') ({ re, im } = catState(x, { x0: it.x0, p0: it.p0, phi: it.phi * deg, omega: omegaRef }));
   else if (it.kind === 'eigen' || it.kind === 'two') {
+    settleLevels();
     const need = Math.max(it.n, it.kind === 'two' ? it.m : 0) + 1;
     if (!levels.length) throw new Error('This potential has no bound states: choose another kind of state.');
     if (need > levels.length) throw new Error(`Only ${levels.length} stationary states fit in this window (n = 0…${levels.length - 1}).`);
@@ -176,6 +197,7 @@ function restart({ quick = false } = {}) {
     sim.setPsi(new Float64Array(sim.n), null);
   }
   sim.normalize();
+  psiVersion++;
   const o = sim.observables();
   E0 = o.E;
   sim.absorbSpeed = Math.max(1.5, Math.abs(o.p) + 3 * o.sp);
@@ -185,7 +207,7 @@ function restart({ quick = false } = {}) {
   if (!quick) measureSpeed();
   scaleX = 0; scaleP = 0;
   energyPath = null;
-  if (ensureGrid()) { computePhase(); sampleDots(); }
+  if (ensureGrid()) { ensurePhase(); sampleDots({ coarse: quick }); }
   dirty = true;
   updateReadouts();
   if (!quick) updateHash();
@@ -194,22 +216,23 @@ function restart({ quick = false } = {}) {
 /**
  * For sliders: at most one restart per animation frame, a quick one (no trial run for the
  * time step), with the trial once the input has paused for 300 ms.  before(): work to do first
- * (a new potential), also once per frame.
+ * (a new potential), also once per frame.  The animation loop does it at the start of its next
+ * frame (runLive), so that the frame shows the new state, and the state is shown as it starts.
  */
-let livePending = 0, liveBefore = null, calTimer = 0;
+let livePending = false, liveBefore = null, calTimer = 0;
 function restartLive(before) {
   if (before) liveBefore = before;
-  if (livePending) return;
-  livePending = requestAnimationFrame(() => {
-    livePending = 0;
-    if (liveBefore) { const f = liveBefore; liveBefore = null; f(); }
-    restart({ quick: true });
-    kick();
-    clearTimeout(calTimer);
-    calTimer = setTimeout(calibrate, 300);
-  });
+  livePending = true;
+}
+function runLive() {
+  livePending = false;
+  if (liveBefore) { const f = liveBefore; liveBefore = null; f(); }
+  restart({ quick: true });
+  clearTimeout(calTimer);
+  calTimer = setTimeout(calibrate, 300);
 }
 function calibrate() {
+  settleLevels();
   if (!sim || errorText) return;
   dtCal = sim.calibrateStep(sim.suggestedStep(E0));
   dtMax = Math.min(dtCal, sim.suggestedStep(E0));
@@ -235,6 +258,7 @@ function advance(T) {
   if (steps > maxSteps) { steps = maxSteps; T = steps * dtMax; slowFrames++; }
   const h = T / steps;
   sim.step(h, steps);
+  psiVersion++;
   // The classical points take steps of at most 0.01 (more of them when h is larger).
   const sub = Math.max(1, Math.ceil(h / 0.01));
   if (ens.N) ens.step(table, h / sub, steps * sub, 1, state.pot.boundary === 'walls' ? [sim.xmin, sim.xmax] : null);
@@ -271,6 +295,7 @@ function ensureGrid() {
     // psi is band-limited at twice the window's largest momentum: a state that reaches a
     // little beyond the window keeps its true W inside it.
     grid = new PhaseGrid({ n: sim.n, dx: sim.dx, xmin: sim.xmin }, win, { cols, rows, margin: 2 });
+    gridVersion++;
     gridKey = key;
     contourKey = '';
     energyPath = null;
@@ -282,6 +307,13 @@ function ensureGrid() {
 
 const sigmaQ = () => Math.sqrt(1 / (2 * omegaRef));
 
+// W (and Q) are computed once for each psi, grid and view: a slider step restarts the state and
+// computes W to draw the classical points from it, and the frame that follows draws that W
+// rather than computing it again.
+let psiVersion = 0, gridVersion = 0, phaseOf = '';
+const phaseKey = () => `${psiVersion}|${gridVersion}|${state.view}`;
+function ensurePhase() { if (grid && phaseOf !== phaseKey()) computePhase(); }
+
 function computePhase() {
   const n = sim.n;
   grid.prepare(sim.re.subarray(0, n), sim.im.subarray(0, n), bl);
@@ -289,14 +321,17 @@ function computePhase() {
   if (state.view === 'Q') grid.husimi(bl.re, bl.im, sigmaQ());
   Wstats = grid.stats(grid.W);
   momentumDensity();
+  phaseOf = phaseKey();
 }
 
 /**
  * Classical points drawn from W where it is a probability density (no negative part to speak
  * of), else from a positive stand-in: the Husimi Q, or |psi(x)|^2 |phi(p)|^2.  The same seed
- * every time, so a set-up always gets the same points.
+ * every time, so a set-up always gets the same points.  coarse (a drag in progress): Q on a
+ * coarser grid, a few times faster and within about 1% of its peak, which a few thousand
+ * points cannot tell apart; the full one when the drag ends.
  */
-function sampleDots() {
+function sampleDots({ coarse = false } = {}) {
   if (!grid || errorText) { ens.resize(0); return; }
   const rng = rng32(20261027), N = state.dots;
   if (Wstats.negative <= 2e-3) {
@@ -305,7 +340,9 @@ function sampleDots() {
     if (s) ens.set(s.x, s.p); else ens.resize(0);
   } else if (state.proxy === 'Q') {
     dotsFrom = 'Q';
-    grid.husimi(bl.re, bl.im, sigmaQ());
+    // In the Husimi view computePhase has just made Q; otherwise Q is not on show, and its
+    // array is free to hold the stand-in.
+    if (state.view !== 'Q') grid.husimi(bl.re, bl.im, sigmaQ(), grid.Q, { coarse });
     const s = grid.sample(grid.Q, N, rng);
     if (s) ens.set(s.x, s.p); else ens.resize(0);
   } else {
@@ -408,7 +445,7 @@ function draw() {
   const lay = computeLayout(width, height);
   const sizeChanged = !layout || layout.width !== width || layout.height !== height || layout.main.top !== lay.main.top || layout.main.right !== lay.main.right;
   layout = lay;
-  if (sizeChanged || !grid) { if (ensureGrid()) { computePhase(); if (!ens.N) sampleDots(); } }
+  if (sizeChanged || !grid) { if (ensureGrid()) { ensurePhase(); if (!ens.N) sampleDots(); } }
   ctx.clearRect(0, 0, width, height);
   if (!grid || !win) return;
   const m = layout.main;
@@ -478,13 +515,13 @@ function contourPathOf(H, nx, ny, lvls, f) {
 
 function drawContours(ctx, f, c) {
   const nx = 160, ny = 160;
-  const key = [gridKey, Vversion, f.left, f.top, f.w, f.h, levels.length].join('|');
+  const key = [gridKey, Vversion, levelsVersion, levelsHidden, f.left, f.top, f.w, f.h].join('|');
   if (key !== contourKey) {
     const H = energyGrid(nx, ny);
     // The stationary states' energies when there are some: each contour then encloses an
     // area close to 2 pi hbar (n + 1/2).  Otherwise evenly spaced energies.
-    let lv = levels.map((s) => s.E);
-    if (!lv.length) {
+    let lv = levelsHidden ? [] : levels.map((s) => s.E);
+    if (!lv.length && !levelsHidden) {
       let lo = Infinity, hi = -Infinity;
       for (const v of H) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
       hi = Math.min(hi, lo + 40);
@@ -710,7 +747,7 @@ function updateLegend() {
     name === 'W' ? 'Blue is W < 0, which no probability can be: least W ' : 'Q is never negative; W, hidden by the blur, is: least W ',
     { v: Math.abs(m) < 1e-4 ? 0 : m, dec: 3, w: 6, class: 'v' }, '/πħ, volume ', { v: vol < 1e-4 ? 0 : vol, dec: 3, w: 5, class: 'v' },
   ]);
-  setSlots($('#dots-note'), !state.show.dots || !ens.N ? [] : ['• ', { v: ens.N, dec: 0, w: 5 }, ' classical points (black; their histograms are the black steps in the strips), started at t = 0 from ' + {
+  setSlots($('#dots-note'), !state.show.dots || !ens.N ? [] : ['• ', { v: ens.N, dec: 0, w: 5 }, ' classical points (the dots; their histograms are the stepped lines in the strips), started at t = 0 from ' + {
     W: 'W',
     Q: 'the Husimi Q (W < 0 in places, so it is not a probability density)',
     product: '|ψ(x)|² |φ(p)|² (W < 0 in places, so it is not a probability density)',
@@ -751,9 +788,18 @@ function loop(now) {
   const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
   last = now;
   const t0 = performance.now();
-  if (state.running && !dragging && sim && !errorText) advance(state.speed * dt);
+  // A drag or a slider's step: the new initial state, shown in this frame as it starts.
+  let restarted = false;
+  if (pendingMove) {
+    pendingMove = false;
+    x0Slider.value = state.init.x0; p0Slider.value = state.init.p0;
+    restart({ quick: true });
+    restarted = true;
+  }
+  if (livePending) { runLive(); restarted = true; }
+  if (state.running && !dragging && !restarted && sim && !errorText) advance(state.speed * dt);
   if (dirty) {
-    if (grid) computePhase();
+    ensurePhase();
     draw();
     updateLegend();
     if (frameCount++ % 4 === 0 || !state.running) updateReadouts();
@@ -818,7 +864,7 @@ const vField = exprField({
   hints: { omega: { min: 0.2, max: 3, value: 1 }, lambda: { min: 0, max: 0.5, value: 0.05 }, D: { min: 1, max: 20, value: 8 }, a: { min: 0.2, max: 3, value: 1 }, V0: { min: 0, max: 10, value: 3 } },
   onChange: (expr, params) => restartLive(() => {
     Vexpr = expr; Vparams = params;
-    applyPotential();
+    applyPotential({ quick: true });
     syncKindControls();
   }),
 });
@@ -887,9 +933,9 @@ function syncKindControls() {
     typed: 'Any formula in x; each new symbol gets a slider.  It is normalised for you.',
   }[k];
   $('#hint').textContent = {
-    coherent: 'Drag the blob by its ⊕ centre (or click where you want it); the arrow keys nudge it, space pauses',
-    squeezed: 'Drag the blob by its ⊕ centre (or click where you want it); the arrow keys nudge it, space pauses',
-    cat: 'Drag either blob by its ⊕ centre (the other goes opposite); the arrow keys nudge it, space pauses',
+    coherent: 'Drag the blob\'s starting point ⊕, or click anywhere to start it there; the arrow keys nudge it, space pauses',
+    squeezed: 'Drag the blob\'s starting point ⊕, or click anywhere to start it there; the arrow keys nudge it, space pauses',
+    cat: 'Drag either blob\'s starting point ⊕ (the other goes opposite), or click to start one there; the arrow keys nudge it, space pauses',
   }[k] || 'This kind of state has no centre to drag: watch it (space pauses), or choose Coherent, Squeezed or Cat for a blob to drag';
 }
 
@@ -917,7 +963,12 @@ const scaleSeg = segmented([
   { value: 'fixed', label: 'Colours to ±1/πħ', title: 'Full colour at |W| = 1/πħ, the largest value W can take' },
   { value: 'auto', label: 'Auto', title: 'Full colour at the largest |W| shown' },
 ], state.scale, (v) => { state.scale = v; kick(); updateHash(); }, { label: 'Colour scale' });
-const zoomSlider = slider({ label: 'window', min: 0.4, max: 3, log: true, value: state.zoom, title: 'The size of the window of phase space, relative to the preset', onInput: (v) => { state.zoom = v; restartLive(() => { computeLevels(sim.V); syncKindControls(); }); } });
+const zoomSlider = slider({ label: 'window', min: 0.4, max: 3, log: true, value: state.zoom, title: 'The size of the window of phase space, relative to the preset', onInput: (v) => {
+  state.zoom = v;
+  // The stationary states that fit the window are found again when the slider stops; meanwhile
+  // the ones already found are still right, only fewer or more of them fit.
+  restartLive(() => { if (needsLevels()) computeLevels(sim.V); else levelsPending = true; syncKindControls(); });
+} });
 const proxySeg = segmented([
   { value: 'Q', label: 'Husimi Q', title: 'W smoothed by a coherent state: positive, keeps the shape, but adds about ħω/2 of energy' },
   { value: 'product', label: '|ψ|²|φ|²', title: 'x and p drawn independently from their own distributions: the right marginals and mean energy, but no correlation between x and p' },
@@ -967,7 +1018,7 @@ function inMain(px, py) {
   const m = layout?.main;
   return m && px >= m.left && px <= m.right && py >= m.top && py <= m.bottom;
 }
-let pendingMove = null;
+let pendingMove = false;
 /** Whether the pointer at (px, py) is on a handle (within 14 px). */
 const onHandle = (px, py) => !!frame && handles().some(([x, p]) => Math.hypot(frame.X(x) - px, frame.Y(p) - py) < 14);
 function setHot(on) {
@@ -1008,6 +1059,7 @@ plot.addEventListener('pointerleave', () => { hover = null; setHot(false); updat
 const endDrag = () => {
   if (!dragging) return;
   dragging = null; plot.classList.remove('dragging');
+  if (pendingMove) { pendingMove = false; x0Slider.value = state.init.x0; p0Slider.value = state.init.p0; }
   restart(); kick();
 };
 plot.addEventListener('pointerup', endDrag);
@@ -1018,15 +1070,8 @@ function moveTo(x, p) {
   x = Math.max(b.x0, Math.min(b.x1, x)); p = Math.max(b.p0, Math.min(b.p1, p));
   state.init.x0 = dragging?.sign === -1 ? -x : x;
   state.init.p0 = dragging?.sign === -1 ? -p : p;
-  // One restart per animation frame, however fast the pointer moves.
-  if (!pendingMove) {
-    pendingMove = requestAnimationFrame(() => {
-      pendingMove = null;
-      x0Slider.value = state.init.x0; p0Slider.value = state.init.p0;
-      restart({ quick: true });
-      kick();
-    });
-  }
+  // One restart per animation frame, however fast the pointer moves: the loop does it.
+  pendingMove = true;
 }
 
 // Keys: arrows move the centre; space plays and pauses; R restarts.
@@ -1037,7 +1082,7 @@ plot.addEventListener('keydown', (e) => {
   const step = 0.02 * (win.x1 - win.x0) * (e.shiftKey ? 5 : 1);
   state.init.x0 += d[0] * step; state.init.p0 += d[1] * step * (win.p1 - win.p0) / (win.x1 - win.x0);
   x0Slider.value = state.init.x0; p0Slider.value = state.init.p0;
-  restart(); kick();
+  restartLive();
 });
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1064,6 +1109,8 @@ function runTo(t) {
  * t: run to this time straight away (then pause, unless run is true).
  */
 function go(potId, { params, init = {}, view = 'W', show = {}, speed, quad, run = true, t = 0, zoom = 1, scale = 'fixed', proxy = 'Q' } = {}) {
+  // A slider's or a drag's restart still waiting for the next frame belongs to what was there.
+  livePending = false; liveBefore = null; pendingMove = false;
   state.proxy = proxy; proxySeg.value = proxy;
   state.view = view; viewSeg.value = view;
   for (const [k, b] of Object.entries(showToggles)) {
@@ -1179,7 +1226,7 @@ requestAnimationFrame(loop);
 
 window.__app = {
   state, setups, go, restart, advance,
-  get sim() { return sim; }, get grid() { return grid; }, get ens() { return ens; }, get levels() { return levels; },
+  get sim() { return sim; }, get grid() { return grid; }, get ens() { return ens; }, get levels() { settleLevels(); return levels; },
   get Wstats() { return Wstats; }, get dotsFrom() { return dotsFrom; }, get error() { return errorText; }, get table() { return table; }, get omegaRef() { return omegaRef; },
   computePhase, draw, frames: () => frameCount, frame: () => frame, get quality() { return quality; }, get work() { return workAvg; },
   get hot() { return hot; },
