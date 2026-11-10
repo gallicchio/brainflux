@@ -484,9 +484,9 @@ function sturmCount(d, e2, E) {
 }
 
 // The k-th (0-based) eigenvalue, by bisection.
-function bisect(d, e2, k, lo, hi) {
+function bisect(d, e2, k, lo, hi, tol = 1e-13) {
   let a = lo, b = hi;
-  for (let it = 0; it < 200 && b - a > 1e-13 * Math.max(1, Math.abs(a) + Math.abs(b)); it++) {
+  for (let it = 0; it < 200 && b - a > tol * Math.max(1, Math.abs(a) + Math.abs(b)); it++) {
     const mid = (a + b) / 2;
     if (sturmCount(d, e2, mid) > k) b = mid; else a = mid;
   }
@@ -512,10 +512,11 @@ function tridiagSolve(d, e, E, b) {
  * The lowest `count` eigenstates of the finite-difference Hamiltonian for potential V on a grid
  * of spacing dx, with psi = 0 beyond the ends.  first/last: the index range of the grid to use
  * (for walls, the interior points 1..n-1).  It stops at the first above maxE, or above softMaxE
- * once it has atLeast of them.  Returns [{E, psi: Float64Array(n)}] normalised so
+ * once it has atLeast of them.  rough: the energies to 1e-7 and without the extrapolation (for a
+ * picture while something moves).  Returns [{E, psi: Float64Array(n)}] normalised so
  * that sum psi^2 dx = 1, real, with a positive slope at the left.
  */
-export function eigenstates(V, dx, mass, count, { first = 0, last = V.length - 1, maxE = Infinity, softMaxE = Infinity, atLeast = 0 } = {}) {
+export function eigenstates(V, dx, mass, count, { first = 0, last = V.length - 1, maxE = Infinity, softMaxE = Infinity, atLeast = 0, rough = false } = {}) {
   const m = last - first + 1;
   const d = new Float64Array(m);
   const t = 1 / (2 * mass * dx * dx);
@@ -534,10 +535,10 @@ export function eigenstates(V, dx, mass, count, { first = 0, last = V.length - 1
   const out = [];
   const total = Math.min(count, m, mc);
   for (let k = 0; k < total; k++) {
-    const Efine = bisect(d, e2, k, lo - 1, hi + 1);
+    const Efine = bisect(d, e2, k, lo - 1, hi + 1, rough ? 1e-7 : 1e-13);
     if (Efine > maxE || (Efine > softMaxE && k >= atLeast)) break;
-    const Ecoarse = bisect(dc, tc * tc, k, lo - 1, hi + 1);
-    const E = (4 * Efine - Ecoarse) / 3;
+    // (rough: for drawing while a slider moves, the fine grid's energy alone, to 1e-7.)
+    const E = rough ? Efine : (4 * Efine - bisect(dc, tc * tc, k, lo - 1, hi + 1)) / 3;
     // Inverse iteration from a generic start; shifting slightly off E keeps it well posed.
     let y = new Float64Array(m);
     for (let i = 0; i < m; i++) y[i] = 1 + 0.1 * Math.sin(1.7 * i + k);

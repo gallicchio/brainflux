@@ -137,6 +137,10 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
     check(abs(r['longRun']) < 0.1 and cross[0] < 0.15 and cross[1] > 0.85, f"independent: two independent noises' product averages to {r['longRun']:.3f}, their correlation at most {cross[0]:.3f} at any lag (each one's own: {cross[1]:.2f})")
 
     # ---------------------------------------------------------------- 2 · two sources, two antennas
+    # (Seeded: the power at B is a running average of noise; over 20 seeds it averages 1.307 with a
+    # scatter of 0.04, so an unseeded run fails the ±0.1 check about once in 60.  Unseeded after.)
+    b.eval("""(() => { let s = 2654435761; __app.sim.random = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })()""")
     setup(b, 'fringe', 300)
     f = b.eval("""(() => { const s = __app.sim, st = __app.state, L = __app.lambda(), id = s.ideal(...s.baseline()); let lo = 1e9, hi = -1e9;
       for (let i = 0; i <= 160; i++) { const p = s.powerAt({ u: (-4 + i / 20) / L, v: 0 }, 1); lo = Math.min(lo, p); hi = Math.max(hi, p); }
@@ -147,6 +151,7 @@ with Browser('radiointerferometer/index.html', size=(1400, 900)) as b:
           f"fringe: D = {f['D']:.2f} m, B nearer the source by {f['early']:.3f} wavelengths, V's phase {f['ph']:.1f}°, a turn every {f['turn']:.3f} m" + (f' missing {miss}' if miss else ''))
     check(abs(f['mag'] - 1) < 0.12 and abs(f['mph'] - f['ph']) < 10, f"fringe: the dot settles at {f['mag']:.2f}, {f['mph']:.0f}° (V: 1, {f['ph']:.0f}°)")
     check(f['spread'] < 1e-9 and abs(f['pB'] - 1.3) < 0.1, f"fringe: the power at B is the same everywhere ({f['spread']:.1e} between the largest and the smallest; measured {f['pB']:.2f}, 1 + the noise 0.3)")
+    b.eval('__app.sim.random = Math.random')
     foot = b.eval("document.querySelector('#fringe-foot').textContent")
     check('0.106 cycles before A' in norm(foot), f'fringe: the read-out says when B hears it ({norm(foot)[-40:]})')
     # Left from right: at −10° the real part is the same and the phase is +38°.

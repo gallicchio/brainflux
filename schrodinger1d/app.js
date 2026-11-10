@@ -110,12 +110,15 @@ function computeLevels(V, { quick = false } = {}) {
   const [lo, hi] = state.pot.erange || potentialRange();
   const init = state.init || {};
   const need = init.kind === 'eigen' ? init.n + 1 : init.kind === 'two' ? Math.max(init.n, init.m) + 1 : 0;
-  levels = eigenstates(V, sim.dx, state.mass, 60, {
-    first: walls ? 1 : 0, last: n - 1, maxE: hi + 2 * (hi - lo),
-    softMaxE: quick ? energyRange()[1] : Infinity, atLeast: need,     // (quick: the plot's top, and the state's own)
-  });
-  // Between walls every state counts; otherwise only the bound ones (below both ends of V).
+  // Between walls every state counts; otherwise only the bound ones (below both ends of V), so
+  // the search stops there.
   const edge = Math.min(V[0], V[n - 1]);
+  // (While a slider moves, at most 24 besides the state's own: a wide box has dozens below the top.)
+  levels = eigenstates(V, sim.dx, state.mass, quick ? Math.max(24, need) : 60, {
+    first: walls ? 1 : 0, last: n - 1, maxE: walls ? hi + 2 * (hi - lo) : Math.min(hi + 2 * (hi - lo), edge),
+    softMaxE: quick ? energyRange()[1] : Infinity, atLeast: need,     // (quick: the plot's top, and the state's own)
+    rough: quick,
+  });
   shownLevels = state.pot.noLevels ? [] : walls ? levels : levels.filter((s) => s.E < edge - 1e-9);
   levelsKey = key; levelsFull = !quick;
   if (!quick) levelsCount = shownLevels.length;
