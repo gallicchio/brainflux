@@ -214,7 +214,7 @@
     The arrows also wind up 2.5 times as fast, so the record needed for the same detail is shorter,
     1.174 ms instead of 2.936 ms (the page stops listening when neighbouring arrows, 2 mm apart,
     point opposite ways: experiment 5).  Scanners use gradients of tens of mT/m, and a field of
-    1.5 T rises by only $5\times32=0.16$ mT across this sample, about a ten-thousandth of
+    1.5 T changes by only ±0.16 mT across this sample (5 mT/m × 32 mm either side), a ten-thousandth of
     itself; that is enough.</p>
   </article>
 
@@ -226,7 +226,7 @@
     the turns per millimetre (the top axis of the signal's record).  The signal is the sum of the
     arrows, so it is the overlap of the tube with that winding.  At $t=1/(\bar\gamma G w)=0.587$
     ms exactly one turn fits in the tube: its arrows point every way, and the signal is zero.
-    Half a turn more and the signal comes back, upside down, to 21.6% at 0.840 ms (the first lobe
+    Nearly half a turn more (1.43 turns in all) and the signal comes back, upside down, to 21.6% at 0.840 ms (the first lobe
     of a sinc, the transform of a block, is 21.7%; the magnet's slight unevenness takes the
     rest).  So each moment of the record measures one spatial frequency $k$ of the
     sample: its Fourier component $\int\rho(x)\,e^{-2\pi ikx}dx$.  That is why its spectrum is
@@ -500,7 +500,11 @@
     1.6 × 10⁻⁷ of its signal at 1.5 T.  With the board's coil and receiver (0.46 nV/√Hz of
     noise), a 4 mm pixel of water, 1.6 mL through the tubes' height, has a signal-to-noise ratio
     of 5.7 per average; the brightest tube 3.7, and averaging 8 times makes it 10.5 (the noise
-    falls as $1/\sqrt n$), in 32 lines × 8 × 3 s = 12.8 minutes.  Turn the <em>polarizing
+    falls as $1/\sqrt n$), in 32 lines × 8 × 3 s = 12.8 minutes.  (That is the board's noise at
+    its tank's peak.  The tank is only 53 Hz wide, and this picture's frequencies span 545 Hz, so
+    off the peak the preamplifier's noise counts for more: at the tubes' sides, 136 Hz off, the
+    noise is about three times as large (2.9 and 3.3 times).  An imager would tune its coil more broadly; the page leaves
+    this out.)  Turn the <em>polarizing
     coil</em> off and the picture drowns (0.062): making it up would take $170^2=29\,000$ times as
     many averages, 258 days.  Then choose 1.5 T: the same tubes, clean, at 170 Hz per mm and TE
     15 ms, the oil bright (0.788).  (The board itself has no gradient coils or pulses; Earth's-field
@@ -607,7 +611,8 @@
   <p><b>Approximations.</b>  The slice is a plane (no partial volume across its thickness); the
   time between lines is left out, and the decay during a readout unless it is asked for; the
   field's unevenness is a spread of offsets with no shape in space; noise is added to each k-space
-  sample, independent and Gaussian.  The page skips the waiting between lines, which a scanner
+  sample, independent and Gaussian, and at 46 µT it is the board's at its tank's peak, the same
+  at every frequency of the readout.  The page skips the waiting between lines, which a scanner
   spends recovering along $z$: a 64-line spin-echo picture with TR = 500 ms takes 32 s.</p>
   </section>
 

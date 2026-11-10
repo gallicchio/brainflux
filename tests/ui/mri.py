@@ -426,6 +426,14 @@ with Browser('mri/index.html', size=(1400, 900)) as b:
     ratio = 7.84e-3 / 46.03e-6
     check(not off[2] and quoted(off[0] * off[1] * math.sqrt(8), '0.062') and quoted(ratio, '170') and quoted(ratio ** 2 / 1000, '29') and quoted(12.8 * ratio ** 2 / 1440, '258'),
           f'the polarizing coil off: the brightest tube\'s SNR {off[0] * off[1] * math.sqrt(8):.3f}; {ratio ** 2:.0f} times the averages, {12.8 * ratio ** 2 / 1440:.0f} days')
+    # The board's tank (the NMR demo's receiver.js) is narrower than the picture's band: off its
+    # peak the preamplifier's noise, referred to the coil, grows.
+    tk = b.eval("""import('../nmr/receiver.js').then((R) => { const C = R.bankC(75), f0 = 42.577 * 46.03, n = (f) => R.noiseDensity(f, C).total / R.tankH(f, C).mag;
+      return [R.tankWidth(), 4.2577 * 128, 4.2577 * 32, n(f0 + 4.2577 * 32) / n(f0), n(f0 - 4.2577 * 32) / n(f0)]; })""")
+    h22 = b.eval("document.querySelector('#help [data-setup=\"earth\"]').textContent.replace(/\\s+/g, ' ')")
+    check(quoted(tk[0], '53') and quoted(tk[1], '545') and quoted(tk[2], '136') and quoted(tk[3], '3.3') and quoted(tk[4], '2.9')
+          and all(t in h22 for t in ('53 Hz wide', '545 Hz', '136 Hz off', 'about three times as large (2.9 and 3.3 times)')),
+          f"the board's tank is {tk[0]:.1f} Hz wide against the picture's {tk[1]:.0f} Hz: at the tubes' sides, {tk[2]:.0f} Hz off its peak, the noise at the coil is {tk[3]:.2f} ({tk[4]:.2f}) times as large")
     b.screenshot('build/mri-exp-earth-nopol.png')
     setup(b, 'earth'); b.screenshot('build/mri-exp-earth.png')
     b.eval("[...document.querySelectorAll('#v4-mag-row button')][2].click()")

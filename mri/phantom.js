@@ -127,8 +127,10 @@ export function tubesPhantom() {
   return [disk(-18, 18, 14, 'tap'), disk(18, 18, 14, 'cuso4'), disk(-18, -18, 14, 'oil'), disk(9, -18, 5, 'tap'), disk(27, -18, 5, 'tap')];
 }
 
-/** The extent of a list of shapes: [xmin, xmax, ymin, ymax] in mm. */
+/** The extent of a list of shapes: [xmin, xmax, ymin, ymax] in mm ([0, 0, 0, 0] for none: a
+ *  slice above the head holds no shapes, and must still make an (empty) picture). */
 export function shapesExtent(shapes) {
+  if (!shapes.length) return [0, 0, 0, 0];
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const s of shapes) {
     const c = Math.cos(s.phi), sn = Math.sin(s.phi);

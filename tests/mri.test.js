@@ -598,3 +598,17 @@ test('an acquisition re-weights each tissue\'s kept k-space: the same as transfo
   assert(dn < 1e-15, `noise differs by ${dn}`);
   return `largest difference ${Math.max(...out).toExponential(1)} of the largest sample, over four settings (T1- and T2-weighted, fat shifted, decaying)`;
 });
+
+test('a slice above the head (no shapes) makes an empty picture, not an endless one', () => {
+  const shapes = headPhantom(130);
+  assert(shapes.length === 0, `${shapes.length} shapes at z = 130 mm`);
+  const seq = sequence({ type: 'se', TE: 20, TR: 500, N: 32, fov: 256, Gx: 4 });
+  const a = new Acquisition().set({ shapes, seq });
+  a.measureAll();
+  let m = 0;
+  for (const v of a.image().mag) m = Math.max(m, v);
+  assert(m === 0 && a.picture.total.length === 32 * 32 && !a.picture.folded, `largest pixel ${m}`);
+  const sp = spinsOf(shapes, seq, 1.5, 16, 256);
+  assert(sp.m.every((v) => v === 0), 'no spins to see');
+  return 'z = 130 mm: no shapes, a 32 x 32 picture of zeros, and no spins';
+});
