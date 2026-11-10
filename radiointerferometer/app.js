@@ -1560,10 +1560,11 @@ function readoutUV() {
     readoutMethod();
     return;
   }
+  // (Small groups, so that a narrow column wraps the line between them, not past its edge.)
   setGroups($('#uv-foot'), [
-    ['Δx =', { text: lenText(u * L), w: 9 }, ', Δy =', { text: lenText(v * L), w: 9 }, ':'],
-    ['u =', { text: wavesText(u), w: 6 }, ', v =', { text: wavesText(v), w: 6 }, ' wavelengths;'],
-    ['u = Δx/λ: fringes 1/|b| =', { text: angleText(Math.min(1, 1 / Math.max(b, 1e-9))), w: 7 }, ' apart on the sky'],
+    ['Δx =', { text: lenText(u * L), w: 9 }, ','], ['Δy =', { text: lenText(v * L), w: 9 }, ':'],
+    ['u =', { text: wavesText(u), w: 6 }, ', v =', { text: wavesText(v), w: 6 }], 'wavelengths (u = Δx/λ);',
+    'fringes', ['1/|b| =', { text: angleText(Math.min(1, 1 / Math.max(b, 1e-9))), w: 7 }], 'apart on the sky',
   ]);
   const ideal = idealAt(skyModel, pix(), directions, u, v), avg = sim.hbt ? [sim.avgHbt, 0] : sim.avg;
   setGroups($('#plane3-foot'), sim.hbt
