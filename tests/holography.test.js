@@ -373,6 +373,38 @@ test('islands: one point, the image and twin islands part at sin(theta) = L/2z; 
   return `one point at 60 mm: ${deg(s0)} deg; the F (2 mm at 120 mm): twin clear at ${deg(B)} deg, haze at ${deg(B + A)} deg`;
 });
 
+test('how steep: an object spread over +-lambda/8p fits between the middle island and the edge at sin(theta) = 3 lambda/8p, and no wider one does', () => {
+  // A picture much bigger than the plate (so B = (W + L)/2z is nearly W/2z), lit through ground glass.
+  const L = n * p, hl = L / 2, Z = 1e6, sMax = lambda / (2 * p);
+  const fits = (B, s) => {
+    const W = 2 * Z * B - L, c = [[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([a, b]) => pointDescription({ x: a * W / 2, y: b * W / 2, z: Z }));
+    const box = islandBoxes(c, planeDescription(Math.asin(s)), hl);
+    return !overlaps(box.image, box.auto) && !overlaps(box.image, box.twin) && Math.max(...box.image.map(Math.abs)) <= sMax * (1 + 1e-9);
+  };
+  const B0 = lambda / (8 * p);
+  assert(fits(0.999 * B0, 3 * B0), `B = lambda/8p fits at sin(theta) = 3 lambda/8p`);
+  let any = false;
+  for (let s = 0; s <= sMax; s += sMax / 2000) any = any || fits(1.03 * B0, s);
+  assert(!any, 'a 3% wider object fits at no angle');
+  return `lambda/8p = ${(1000 * B0).toFixed(1)} mrad, at sin(theta) = ${(3000 * B0).toFixed(1)} mrad (${(Math.asin(3 * B0) * 180 / Math.PI).toFixed(2)} deg)`;
+});
+
+test('the lens, worked out once for each distance from the middle, is exp(-i sign(d) k (sqrt(r^2 + d^2) - |d|))', () => {
+  const k = 2 * Math.PI / lambda;
+  let worst = 0;
+  for (const d of [60000, -50000, 12000, -3000]) {
+    const L = lens(n, p, lambda, d), s = lambda / (2 * p), rmax = Math.abs(d) * s / Math.sqrt(1 - s * s);
+    for (const [i, j] of [[h, h], [h + 37, h - 5], [3, 250], [0, 0], [255, 128], [h - 90, h + 77]]) {
+      const x = (i - h) * p, y = (h - j) * p, r = Math.hypot(x, y), o = j * n + i;
+      if (r > rmax - 4 * p) { assert(Math.hypot(L.re[o], L.im[o]) <= 1 + 1e-12, 'no gain at the edge'); continue; }
+      const ph = -Math.sign(d) * k * (Math.sqrt(r * r + d * d) - Math.abs(d));
+      worst = Math.max(worst, Math.hypot(L.re[o] - Math.cos(ph), L.im[o] - Math.sin(ph)));
+    }
+  }
+  assert(worst < 1e-5, `${worst}`);
+  return `agrees to ${worst.toExponential(1)}`;
+});
+
 test("the beams of the side view: the rays of an image meet at its focus; a plane wave's rays are parallel", () => {
   const pt = { x: 120, y: -200, z: 60000 }, O = pointDescription(pt), R = planeDescription(Math.asin(0.02)), m = 532 / 633;
   for (const sg of [1, -1]) {

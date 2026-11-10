@@ -206,23 +206,39 @@ export function quantize(H, bits) {
 export function lens(n, p, lambda, d, out = field(n)) {
   const k = TWO_PI / lambda, h = n / 2, ad = Math.abs(d), sg = d < 0 ? -1 : 1;
   const s = Math.min(0.999, lambda / (2 * p)), rmax = (ad * s) / Math.sqrt(1 - s * s), edge = 4 * p;
-  const { re, im } = out;
+  // The lens depends on the distance from the middle alone, so it is worked out once for each
+  // distance a^2 + b^2 (pixels squared) that occurs, about one pixel in eight: the focus is moved
+  // by a drag or a sweep, and this was a sixth of the cost of every view.
+  const lut = lensTable(n), { re, im } = out;
+  lut.done.fill(0);
   for (let j = 0; j < n; j++) {
-    const y = (h - j) * p;
+    const b2 = (h - j) * (h - j);
     for (let i = 0, o = j * n; i < n; i++, o++) {
-      const x = (i - h) * p, r2 = x * x + y * y, u = -sg * k * (Math.sqrt(r2 + ad * ad) - ad) * PER_RAD;
-      let w = 1;
-      if (r2 > (rmax - edge) ** 2) { const r = Math.sqrt(r2); w = r >= rmax ? 0 : 0.5 - 0.5 * Math.cos((Math.PI * (rmax - r)) / edge); }
-      let f = Math.floor(u);
-      const t = u - f;
-      f &= TAB - 1;
-      // Interpolating between two unit phasors shortens them a little (by up to 3e-7): a lens
-      // must not absorb light, so put the length back to exactly 1.
-      const c = TC[f] + (TC[f + 1] - TC[f]) * t, s = TS[f] + (TS[f + 1] - TS[f]) * t, g = w / Math.sqrt(c * c + s * s);
-      re[o] = g * c; im[o] = g * s;
+      const q = (i - h) * (i - h) + b2;
+      if (!lut.done[q]) {
+        const r2 = q * p * p, u = -sg * k * (Math.sqrt(r2 + ad * ad) - ad) * PER_RAD;
+        let w = 1;
+        if (r2 > (rmax - edge) ** 2) { const r = Math.sqrt(r2); w = r >= rmax ? 0 : 0.5 - 0.5 * Math.cos((Math.PI * (rmax - r)) / edge); }
+        let f = Math.floor(u);
+        const t = u - f;
+        f &= TAB - 1;
+        // Interpolating between two unit phasors shortens them a little (by up to 3e-7): a lens
+        // must not absorb light, so put the length back to exactly 1.
+        const c = TC[f] + (TC[f + 1] - TC[f]) * t, sn = TS[f] + (TS[f + 1] - TS[f]) * t, g = w / Math.sqrt(c * c + sn * sn);
+        lut.re[q] = g * c; lut.im[q] = g * sn; lut.done[q] = 1;
+      }
+      re[o] = lut.re[q]; im[o] = lut.im[q];
     }
   }
   return out;
+}
+const lensTables = new Map();
+function lensTable(n) {
+  if (!lensTables.has(n)) {
+    const m = (n / 2) * (n / 2) * 2 + 1;
+    lensTables.set(n, { re: new Float64Array(m), im: new Float64Array(m), done: new Uint8Array(m) });
+  }
+  return lensTables.get(n);
 }
 
 /**
@@ -264,9 +280,12 @@ export function viewImage(eye, n, d, scale = 1, out = new Float32Array(n * n)) {
   const { re, im } = eye;
   const I = (i, j) => { const o = j * n + i; return re[o] * re[o] + im[o] * im[o]; };
   if (scale === 1) {
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const a = (h + sgn * (i - h) + n) % n, b = (h + sgn * (j - h) + n) % n;
-      out[j * n + i] = I(a, b);
+    // Bin (a, b) of the camera to pixel (i, j) of the view: the same, or mirrored through the
+    // middle (a = n - i, wrapping), row by row.
+    for (let j = 0; j < n; j++) {
+      const row = ((h + sgn * (j - h) + n) % n) * n, o0 = j * n;
+      if (sgn === 1) for (let i = 0; i < n; i++) { const o = row + i; out[o0 + i] = re[o] * re[o] + im[o] * im[o]; }
+      else for (let i = 0; i < n; i++) { const o = row + (i ? n - i : 0); out[o0 + i] = re[o] * re[o] + im[o] * im[o]; }
     }
     return out;
   }

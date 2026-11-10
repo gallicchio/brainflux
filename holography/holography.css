@@ -84,9 +84,17 @@ details.panel[open] summary { margin-bottom: 6px; }
   #pane-terms { padding-top: 0; }
   .terms { min-height: 0; }
 }
-/* A phone: one column, in the order of the story. */
+/* A phone: one column, in the order of the story, with each step's controls by the views they
+   act on (the Record controls after the object, the Relight controls after the three beams). */
 @media (max-width: 760px) {
-  .stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rec" "front" "holo" "play" "terms" "recon" "spec"; }
+  .stage, .controls { display: contents; }
+  #pane-rec, #pane-front, #pane-play, #pane-terms, #pane-holo, #pane-spec, #pane-recon { grid-area: auto; }
+  #pane-rec { order: 1; } #pane-front { order: 2; }
+  .controls > :nth-child(-n+4) { order: 3; }
+  #pane-holo { order: 4; } #pane-play { order: 5; } #pane-terms { order: 6; }
+  .controls > :nth-child(n+5) { order: 7; }
+  #pane-recon { order: 8; } #pane-spec { order: 9; }
+  .step-head { margin: 4px 0 -6px; }
   .front-wrap { width: 100%; max-width: 300px; height: 160px; margin: 0 auto; }
   .side-wrap { height: 160px; }
   .pane-head .note { white-space: normal; }

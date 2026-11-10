@@ -42,6 +42,35 @@ const DEFAULTS = () => ({
 });
 let state = DEFAULTS();
 
+// What the state may hold, whatever an address or a number typed past a slider's end says: a
+// wavelength, a pixel and a beam ratio above zero, a reference no steeper than the pixels can
+// record, distances within reason, a brush no bigger than the plate, and choices among these.
+const CHOICES = { object: ['points', 'picture'], ref: ['plane', 'point'], relight: ['ref', 'conj'], tool: ['window', 'erase', 'piece'] };
+/** Bring the state within its limits; true if anything changed. */
+function sanitize() {
+  const s = state, before = JSON.stringify(s), d0 = DEFAULTS();
+  const clamp = (v, lo, hi, d) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+  for (const [k, list] of Object.entries(CHOICES)) if (!list.includes(s[k])) s[k] = d0[k];
+  if (!Object.hasOwn(PICTURES, s.picture)) s.picture = d0.picture;
+  s.lambda = clamp(s.lambda, 0.2, 2, d0.lambda); s.lambda2 = clamp(s.lambda2, 0.2, 2, s.lambda);
+  s.pitch = clamp(s.pitch, 1, 50, d0.pitch); s.ratio = clamp(s.ratio, 0.01, 10, d0.ratio);
+  s.bits = Math.round(clamp(s.bits, 0, 16, 0));
+  s.theta = clamp(s.theta, 0, thetaMax(), d0.theta);
+  s.focus = clamp(s.focus, -1e6, 1e6, d0.focus);
+  if (Math.abs(s.focus) < 1000) s.focus = s.focus < 0 ? -1000 : 1000;
+  for (const q of [...s.points, s.refSrc]) {
+    q.x = clamp(q.x, -20000, 20000, 0); q.y = clamp(q.y, -20000, 20000, 0); q.z = clamp(q.z, 1000, 1e6, 60000);
+  }
+  for (const q of s.points) q.b = clamp(q.b, 0, 1, 1);
+  s.picZ = clamp(s.picZ, 1000, 1e6, d0.picZ); s.picSize = clamp(s.picSize, 10, 50000, d0.picSize);
+  const half = plateL() / 2;
+  s.win.r = clamp(s.win.r, s.pitch / 2, 2 * half, 200);
+  s.win.x = clamp(s.win.x, -half, half, 0); s.win.y = clamp(s.win.y, -half, half, 0);
+  s.brush = Math.round(clamp(s.brush, 1, N, 16));
+  s.brightS = clamp(s.brightS, -6, 6, 0); s.brightR = clamp(s.brightR, -6, 6, 0);
+  return JSON.stringify(s) !== before;
+}
+
 const plateL = () => N * state.pitch;
 const sinMax = () => state.lambda / (2 * state.pitch);
 const dU = () => state.lambda / (N * state.pitch);             // one display pixel, radians
@@ -306,13 +335,29 @@ function advance(t) {
 }
 /** Recompute what has changed, and redraw the panes that need it. */
 function render() {
+  if (sanitize()) syncControls();   // (a number typed past what makes sense)
   compute();
   fitScene();
   if (stale.holo) drawHolo();
   if (stale.spec) drawSpec();
   if (stale.recon) drawRecon();
   stale.holo = stale.spec = stale.recon = false;
-  drawRecord(); drawPlay(); drawFront(); updateNotes();
+  // The Record view and the front view don't change as the focus or the window sweeps, or as
+  // the camera's focus is dragged: draw them only when what they show has.
+  const s = state, look = [s.object, s.points, s.sel, s.picture, s.picZ, s.picSize, s.diffuser, s.ref, s.theta, s.refSrc,
+    s.lambda, s.pitch, s.window, s.win];
+  drawIfChanged($('#rec'), JSON.stringify([look, scene.back, scene.front, scene.rec]), drawRecord);
+  drawPlay();
+  drawIfChanged($('#front'), JSON.stringify([look, picVersion]), drawFront);
+  updateNotes();
+}
+const drawnKeys = new Map(), darkQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+/** Draw a canvas only if key (what it shows), its size or the theme has changed since it was last drawn. */
+function drawIfChanged(cv, key, draw) {
+  const r = cv.getBoundingClientRect(), k = `${key}|${r.width}x${r.height}@${window.devicePixelRatio}|${darkQuery?.matches}`;
+  if (drawnKeys.get(cv) === k) return;
+  draw();
+  drawnKeys.set(cv, k);
 }
 
 /** An approximate colour for a wavelength in micrometres (after Dan Bruton), as in diffraction/. */
@@ -330,16 +375,15 @@ const cssRGB = (rgb, a = 1) => `rgba(${rgb.map((c) => Math.round(255 * Math.min(
 const off = document.createElement('canvas'); off.width = off.height = N;
 const offCtx = off.getContext('2d');
 const offImg = offCtx.createImageData(N, N);
-const offPixels = new Uint32Array(offImg.data.buffer);   // little-endian: 0xAABBGGRR
 
-/** Draw the N x N image in offImg into a canvas, magnified about the middle. */
-function blit(cv, zoom, smooth) {
+/** Draw the N x N image in offImg (or the canvas src) into a canvas, magnified about the middle. */
+function blit(cv, zoom, smooth, src = null) {
   const { ctx, width, height } = fitCanvas(cv);
-  offCtx.putImageData(offImg, 0, 0);
+  if (!src) { offCtx.putImageData(offImg, 0, 0); src = off; }
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = smooth;
   const v = N / zoom, o = (N - v) / 2;
-  ctx.drawImage(off, o, o, v, v, 0, 0, width, height);
+  ctx.drawImage(src, o, o, v, v, 0, 0, width, height);
   return { ctx, width, height };
 }
 /** Canvas position (CSS pixels) of the plate pixel coordinate (fi, fj), under a zoom. */
@@ -359,18 +403,27 @@ function scaleBar(ctx, w, h, pxPerUnit, unit, maxFrac = 0.28, extra = 0) {
   return len;
 }
 
+// The hologram's picture, kept: a window moving over it, or a piece being cut, changes only what
+// is drawn on top.
+const holoOff = document.createElement('canvas'); holoOff.width = holoOff.height = N;
+const holoOffCtx = holoOff.getContext('2d'), holoImg = holoOffCtx.createImageData(N, N), holoPixels = new Uint32Array(holoImg.data.buffer);
+let holoKey = '';
 function drawHolo() {
-  const H = W.H, m = W.mask, px = offPixels;
-  let min = Infinity, max = -Infinity;
-  for (let o = 0; o < N * N; o++) if (m[o] > 0) { const v = H[o]; if (v < min) min = v; if (v > max) max = v; }
-  const k = 255 / (max - min || 1);
-  // Covered parts of the plate: dark brown stripes.  (One 32-bit write per pixel: ABGR.)
-  const tape = [0xff1e2646, 0xff1a1e34];
-  for (let j = 0, o = 0; j < N; j++) for (let i = 0; i < N; i++, o++) {
-    if (m[o] > 0) { const g = (k * (H[o] - min)) & 255; px[o] = 0xff000000 | (g << 16) | (g << 8) | g; }
-    else px[o] = tape[((i + j) & 7) < 4 ? 0 : 1];
+  if (holoKey !== keys.H) {
+    const H = W.H, m = W.mask, px = holoPixels;
+    let min = Infinity, max = -Infinity;
+    for (let o = 0; o < N * N; o++) if (m[o] > 0) { const v = H[o]; if (v < min) min = v; if (v > max) max = v; }
+    const k = 255 / (max - min || 1);
+    // Covered parts of the plate: dark brown stripes.  (One 32-bit write per pixel: ABGR.)
+    const tape = [0xff1e2646, 0xff1a1e34];
+    for (let j = 0, o = 0; j < N; j++) for (let i = 0; i < N; i++, o++) {
+      if (m[o] > 0) { const g = (k * (H[o] - min)) & 255; px[o] = 0xff000000 | (g << 16) | (g << 8) | g; }
+      else px[o] = tape[((i + j) & 7) < 4 ? 0 : 1];
+    }
+    holoOffCtx.putImageData(holoImg, 0, 0);
+    holoKey = keys.H;
   }
-  const z = state.zoomH, { ctx, width, height } = blit($('#holo'), z, false);
+  const z = state.zoomH, { ctx, width, height } = blit($('#holo'), z, false, holoOff);
   if (state.window) {
     const fi = HN + state.win.x / state.pitch, fj = HN - state.win.y / state.pitch;
     const [cx, cy] = toCanvas(fi, fj, z, width), r = (state.win.r / state.pitch) * (z / N) * width;
@@ -388,12 +441,23 @@ function drawHolo() {
   scaleBar(ctx, width, height, (z * width) / (N * state.pitch), 'µm');
 }
 
-/** The q-quantile of every stride-th value. */
+/** The q-quantile of every stride-th value (found by selection, Hoare's quickselect: no sort). */
 function percentile(arr, q, stride = 5) {
   const s = new Float32Array(Math.ceil(arr.length / stride));
   for (let o = 0, k = 0; o < arr.length; o += stride, k++) s[k] = arr[o];
-  s.sort();
-  return s[Math.min(s.length - 1, Math.floor(q * (s.length - 1)))];
+  const want = Math.min(s.length - 1, Math.floor(q * (s.length - 1)));
+  let lo = 0, hi = s.length - 1;
+  while (lo < hi) {
+    const pivot = s[(lo + hi) >> 1];
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (s[i] < pivot) i++;
+      while (s[j] > pivot) j--;
+      if (i <= j) { const t = s[i]; s[i] = s[j]; s[j] = t; i++; j--; }
+    }
+    if (want <= j) hi = j; else if (want >= i) lo = i; else break;
+  }
+  return s[want];
 }
 
 /** Canvas position of a direction (sines, x right and y up) on a view of N bins, magnified. */
@@ -857,7 +921,7 @@ function updateNotes() {
   // The verdict on the islands.
   const v = $('#verdict');
   const I = islands;
-  if (!I.image) { v.textContent = ''; return; }
+  if (!I.image) { v.textContent = ''; v.dataset.said = ''; return; }
   const out = (b) => Math.max(Math.abs(b[0]), Math.abs(b[1]), Math.abs(b[2]), Math.abs(b[3])) > sMax * 1.001;
   let text, cls;
   if (out(I.image)) { text = 'Some of the image island runs past the edge: those fringes are finer than two pixels, and alias.'; cls = 'bad'; }
@@ -868,7 +932,8 @@ function updateNotes() {
     cls = state.ratio >= 0.5 ? 'bad' : '';
   }
   else { text = 'Three separate islands: the image comes out clean.'; cls = 'good'; }
-  v.replaceChildren(el('span', { class: cls }, text));
+  // (Only when it changes: a sweep would otherwise rebuild it, and lay out the page again, every frame.)
+  if (v.dataset.said !== cls + '|' + text) { v.replaceChildren(el('span', { class: cls }, text)); v.dataset.said = cls + '|' + text; }
 }
 
 /** The three terms of the relit light, beside the Relight view: what each is and where it goes. */
@@ -1177,7 +1242,7 @@ const pitchSlider = slider({ label: 'pixel (µm)', min: 2, max: 20, step: 0.1, v
 const ratioSlider = slider({ label: 'object/ref.', min: 0.03, max: 3, log: true, value: 0.3, title: 'The amplitude of the object light at the plate (r.m.s.) relative to the reference beam',
   onInput: (v) => { state.ratio = v; changed(); } });
 const bitsToggle = toggle('Round the grey levels', state.bits > 0, (on) => { state.bits = on ? bitsSlider.value : 0; bitsSlider.hidden = !on; changed(); }, 'Record only a few grey levels, as a cheap camera (or a printer) would');
-const bitsSlider = slider({ label: 'bits', min: 1, max: 8, step: 1, value: 1, title: '2^bits grey levels; 1 bit: black or white', onInput: (v) => { state.bits = Math.round(v); changed(); } });
+const bitsSlider = slider({ label: 'bits', min: 1, max: 8, step: 1, value: 1, title: '2^bits grey levels; 1 bit: black or white', onInput: (v) => { state.bits = Math.min(16, Math.max(1, Math.round(v) || 1)); changed(); } });
 $('#camera-box').append(lambdaSlider, pitchSlider, ratioSlider, el('div', { class: 'row' }, bitsToggle), bitsSlider);
 function syncCamera() {
   lambdaSlider.value = Math.round(state.lambda * 1000); pitchSlider.value = state.pitch; ratioSlider.value = state.ratio;
@@ -1201,7 +1266,7 @@ const winX = slider({ label: 'across (mm)', min: -0.64, max: 0.64, step: 0.001, 
 const winY = slider({ label: 'height (mm)', min: -0.64, max: 0.64, step: 0.001, value: 0, title: 'Where the window is on the plate, up and down',
   onInput: (v) => { state.win.y = v * MM; state.window = true; windowToggle.on = true; state.sweepWindow = false; sweepWindowToggle.on = false; stale.holo = true; changed(); } });
 const sweepWindowToggle = toggle('Sweep', false, (on) => { state.sweepWindow = on; if (on) { state.window = true; windowToggle.on = true; t0 = performance.now(); } changed(); }, 'Move the window up and down the plate');
-const brushSlider = slider({ label: 'brush (px)', min: 2, max: 80, step: 1, value: 16, onInput: (v) => { state.brush = Math.round(v); } });
+const brushSlider = slider({ label: 'brush (px)', min: 2, max: 80, step: 1, value: 16, onInput: (v) => { state.brush = Math.min(N, Math.max(1, Math.round(v) || 1)); } });
 const uncoverButton = () => el('button', { type: 'button', title: 'Take every cover off the plate', onclick: uncover }, 'Uncover all');
 const toolOptions = {
   window: el('div', { class: 'stack' }, el('div', { class: 'small muted' }, 'Drag on the hologram to move the window.'), el('div', { class: 'row' }, windowToggle, sweepWindowToggle), windowSlider, winX, winY),
@@ -1265,7 +1330,10 @@ function syncControls() {
   if (state.object === 'picture') loadPicture(state.picture);
 }
 
-new ResizeObserver(() => { stale.holo = stale.spec = stale.recon = true; schedule(); }).observe($('.stage'));
+// Redraw when a picture changes size.  (The canvases themselves are watched: on a phone the
+// stage has no box of its own, its panes being laid out among the controls.)
+const resized = new ResizeObserver(() => { stale.holo = stale.spec = stale.recon = true; schedule(); });
+for (const id of ['#rec', '#front', '#play', '#holo', '#spec', '#recon']) resized.observe($(id));
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', schedule);
 
 // ------------------------------------------------------------------------- the URL hash
@@ -1301,7 +1369,7 @@ function readState(h) {
       .map(([x, y, z, b = 1]) => ({ x: x * MM, y: y * MM, z: z * MM, b }));
     if (pts.length) { s.points = pts.slice(0, 6); s.sel = 0; }
   }
-  if (PICTURES[h.pic]) s.picture = h.pic;
+  if (Object.hasOwn(PICTURES, h.pic ?? '')) s.picture = h.pic;
   s.picZ = num(h.pz, s.picZ / MM) * MM; s.picSize = num(h.ps, s.picSize / MM) * MM;
   if (h.dif !== undefined) s.diffuser = h.dif !== '0';
   if (h.ref === 'plane' || h.ref === 'point') s.ref = h.ref;
@@ -1352,8 +1420,8 @@ renderMath($('.stage'));
 // ------------------------------------------------------------------------------- start
 
 function fromHash() {
-  const hash = readHash(), name = aliases[hash.setup] || hash.setup;
-  if (setups[name]) setups[name]();
+  const hash = readHash(), name = Object.hasOwn(aliases, hash.setup ?? '') ? aliases[hash.setup] : hash.setup;
+  if (Object.hasOwn(setups, name ?? '')) setups[name]();
   else if (Object.keys(hash).length) apply(readState(hash));
   else setups.tilt();   // the opening view: one point, the reference tilted, the camera on the image
 }
@@ -1379,8 +1447,8 @@ window.__app = {
   terms: () => terms(focusPoint()).map((t) => ({ name: t.name, ...focusOf(t.wave) })),
   /** Move the sweeps to t seconds and draw that frame (for the tests: no waiting on the clock). */
   advance(t) { advance(t); render(); },
-  /** Recompute and redraw what has changed, now, as a frame does; returns the time it took (ms). */
-  redraw() { const t = performance.now(); render(); return performance.now() - t; },
+  /** Recompute and redraw what has changed, now, as a frame does (all: every view, changed or not); returns the time it took (ms). */
+  redraw(all = false) { if (all) drawnKeys.clear(); const t = performance.now(); render(); return performance.now() - t; },
   verdict: () => $('#verdict').textContent,
   ready: true,
 };

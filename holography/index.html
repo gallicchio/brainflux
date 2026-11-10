@@ -127,8 +127,9 @@
     a distance $r$ from its middle after travelling $\sqrt{z^2+r^2}\approx z+r^2/2z$, farther
     than at the middle by $r^2/2z$, and each half wavelength farther turns bright into dark.  So
     the rings are brightest and darkest at $r_n=\sqrt{n\lambda z}$, bright for even $n$ and dark
-    for odd: 10 of them out to the edge of the plate, ever closer together, round a bright
-    middle.  This is a Fresnel zone plate.</p>
+    for odd.  Out to the middle of an edge of the plate, $L/2$ = 0.64 mm, $n$ reaches 10: five
+    dark rings and five bright ones round a bright middle, ever closer together.  This is a
+    Fresnel zone plate.</p>
     <p>Lit again, a zone plate is a lens with two focal lengths, $+z$ and $-z$.  It spreads part
     of the light as if from a point 60 mm behind (the image), it gathers part to a point 60 mm
     in front (the twin), and the rest goes straight on (the zero order).  The camera, focused at
@@ -284,8 +285,13 @@
     reference.  The image island reaches the edge of the transform and comes back on the other
     side, and the twin, which leaves at twice the angle, comes back right on top of the image.
     With two pixels per fringe, the camera cannot tell a fringe tilted one way from one tilted
-    the other.  Lower the angle until the islands come clear of the edges.  The best angle
-    depends on the object, but it is always well short of the limit.</p>
+    the other.  Lower the angle until the islands come clear of the edges.</p>
+    <p>How steep, then?  For an object much bigger than the plate, whose light arrives from
+    directions within $\pm B$, the image island must clear the middle one, $\sin\theta\ge3B$
+    (experiment 3), and stay inside the transform, $\sin\theta+B\le\lambda/2p$.  Both hold only
+    if $B\le\lambda/8p$ = 16 mrad, with $\sin\theta=3\lambda/8p$ = 47 mrad (2.7°): along the
+    tilt, the image gets a quarter of the directions the camera can record, and the zero order
+    and the twin the rest.  Smaller pixels (under <em>Laser and camera</em>) widen them all.</p>
     <p>The same limit holds for the object's own light.  A point $z$ behind the plate makes rings
     $\lambda z/r$ apart at radius $r$, so at the plate's edge they are finer than two pixels if
     the point is nearer than $Np^2/\lambda$ = 10 mm.  Bring the point of experiment 1 closer
