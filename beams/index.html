@@ -161,13 +161,13 @@
   <article class="exp" data-setup="waist" data-frame="720x315">
     <h3>2. The beam alone: its width and its curved wavefronts</h3>
     <p>The same beam without the lens, with its wavefronts drawn: arcs of radius $R(z)$, as
-    measured on the $z$ axis.  Type $w_0=100$ µm in the panel.  The Rayleigh range falls four
-    times, to 49.6 mm, and $\theta$ doubles, to 2.01 mrad: a narrower beam spreads faster,
-    $\theta=\lambda/\pi w_0$, just as light through a narrower slit diffracts more.</p>
-    <p>Look at the wavefronts: flat at the waist, most curved at $z=\pm z_R$, where $R=2z_R=397$
-    mm, and flatter again far away, where $R\approx z$: a spherical wave coming from the waist.
-    Then press <em>Crests</em> to see the wave itself: its crests have the wavefronts'
+    measured on the $z$ axis.  Look at them: flat at the waist, most curved at $z=\pm z_R$, where
+    $R=2z_R=397$ mm, and flatter again far away, where $R\approx z$: a spherical wave coming from
+    the waist.  Press <em>Crests</em> to see the wave itself: its crests have the wavefronts'
     shape.</p>
+    <p>Now type $w_0=100$ µm in the panel.  The Rayleigh range falls four times, to 49.6 mm, and
+    $\theta$ doubles, to 2.01 mrad: a narrower beam spreads faster, $\theta=\lambda/\pi w_0$, just
+    as light through a narrower slit diffracts more.</p>
   </article>
 
   <article class="exp" data-setup="focus" data-frame="720x315">
@@ -176,12 +176,13 @@
     to a waist of 20.1 µm, $f$ beyond the lens, as the estimate for a parallel beam of radius $w$
     says:
     $$w_0'\approx\frac{\lambda f}{\pi w}.$$
-    The light there is 2500 times as intense as in the beam before the lens (the picture
-    overexposes it: lower the brightness, under <em>More</em>, to see its shape).  Type
-    $w_0=2000$ µm: the spot halves, to 10.1 µm.  A wider beam converges at a steeper angle, and
-    the angle sets the spot, $w_0'\theta'=\lambda/\pi$.  The focus is short, too: its length
-    $2z_R'=4.0$ mm is the <em>depth of focus</em>.  (Spots near a micrometre need more than
-    paraxial optics: $\theta$ is no longer small.)</p>
+    The light there is about 2500 times as intense as in the beam before the lens, $(w/w_0')^2$
+    (the picture overexposes it: lower the brightness, under <em>More</em>, to see its shape).
+    The focus is short, too: its length $2z_R'=4.0$ mm is the <em>depth of focus</em>.  Now type
+    $w_0=2000$ µm: the spot halves, to 10.1 µm, and the depth of focus falls four times, to
+    1.0 mm.  A wider beam converges at a steeper angle, and the angle sets the spot,
+    $w_0'\theta'=\lambda/\pi$.  (Spots near a micrometre need more than paraxial optics: $\theta$
+    is no longer small.)</p>
   </article>
 
   <article class="exp" data-setup="gouy" data-frame="720x445">
@@ -193,7 +194,10 @@
     to far after it the beam gains half a wavelength, a phase of $\pi$: the <em>Gouy phase</em>,
     the extra phase a beam picks up through a focus compared with a plane wave,
     $$\psi(z)=\arctan\frac{z}{z_R},$$
-    drawn in the strip under the bench (on the axis the field is $e^{i(kz-\psi)}$).  It changes
+    with $z$ measured from the focus (on the axis the field is $e^{i(kz-\psi)}$).  The strip under
+    the bench adds the Gouy phase up along the bench, from 0 at the input waist (here at the
+    lens), so at this focus it reads $0.45\pi$, and across the view it climbs by
+    $2\arctan4=0.84\pi$.  It changes
     fastest at the waist, $d\psi/dz=2/kw^2$: squeezing light into a width $w$ costs it some of
     its wavenumber along the axis, so near a focus the crests travel faster than $c$.  (In
     <em>Phase</em> the colour is the phase compared with a plane wave: on the axis it turns from
@@ -378,13 +382,16 @@
     <p><b>How it is drawn.</b>  A beam a millimetre wide and a metre long would be a line, so the
     picture is stretched sideways, by the factor in its corner: the bench is in mm, the width in
     µm.  The white lines are the edges $\pm w(z)$, the dashed ones mark $z_R$ either side of each
-    waist, and the dotted ones the cone $\pm\theta$.  In <em>Intensity</em> the brightness grows
-    as $\sqrt I$, so that a focus doesn't hide the rest.  In <em>Crests</em> the crests are drawn
+    waist, and the dotted ones the cone $\pm\theta$.  In <em>Intensity</em> each cross-section is
+    the true profile $e^{-2x^2/w^2}$, but its peak is drawn as $w_0/w$, the square root of the
+    true $(w_0/w)^2$, so that a focus doesn't hide the rest of the beam.  In <em>Crests</em> the crests are drawn
     $\lambda E^2$ apart for a stretch $E$, centimetres rather than 633 nm: a paraxial beam
     stretched $E$ times sideways is a beam of wavelength $\lambda E^2$, with the same $z_R$, $R(z)$
     and Gouy phase, so the crests drawn this way have their true shape.</p>
     <p><b>The cavity.</b>  Between two mirrors $L$ apart, of radii $R_1$ and $R_2$, the mode is the
-    beam whose wavefronts fit both mirrors; it exists when $0\le g_1g_2\le1$ with $g=1-L/R$.  The
+    beam whose wavefronts fit both mirrors; with $g=1-L/R$ it exists when $0<g_1g_2<1$ (on the
+    edges, $g_1g_2=0$ or 1, it is infinitely wide or narrow somewhere, except in the symmetric
+    confocal cavity).  The
     stability diagram is the $(g_1,g_2)$ plane.  The spectrum shows the frequencies the cavity
     resonates at (experiment 9), and the bottom-right plot where three rays hit mirror 1,
     position against angle, round trip after round trip: in a stable cavity each round trip is a

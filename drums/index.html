@@ -138,7 +138,7 @@
   <section class="start">
     <h3>Start here</h3>
     <p>A drum.  Strike it and it rings in its <b>modes</b>, each a fixed pattern swinging at its own
-    frequency; the picture is the membrane (red up, cyan down), slowed down a few hundred times.
+    frequency; the picture is the membrane (red up, cyan down), slowed down about 170 times.
     The <b>spectrum</b> beside it is built from the motion as it goes on, and grows a peak at every
     mode.</p>
     <p><b>Click the drum</b> to strike it somewhere else (you hear it too).  <b>Click a peak</b> of
@@ -167,8 +167,14 @@
     <p>The same drum struck dead centre.  It rings only in its modes with $m=0$, the ones that are
     round (every other mode has a nodal line through the centre, so a mallet there cannot move it):
     few peaks, a hollow sound.  Now click near the edge: many more modes, a brighter, more rattling
-    sound.  Click on a nodal line of a mode (see the Mode panel) and that mode drops out of the
-    spectrum.</p>
+    sound.</p>
+    <p>Then click mode 6 in the list, $(0,2)$: round, with one nodal circle inside the rim, at
+    0.44 of the radius.  Strike the drum on that circle and its peak, near 611 Hz, drops out of
+    the spectrum: a mallet on a node cannot move that mode.  A nodal <em>diameter</em> does not do
+    the same.  Click mode 2, $(\pm1,1)$, and strike on its nodal line: the peak near 424 Hz stays.
+    Every mode with $m\ge1$ has a twin of the same frequency ($\sin m\theta$ beside
+    $\cos m\theta$, mode 3 beside mode 2) whose crest lies on that line, and the twin rings
+    instead.</p>
   </article>
 
   <article class="exp" data-setup="square" data-frame="400x508">

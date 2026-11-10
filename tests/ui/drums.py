@@ -8,7 +8,7 @@ change.
 
 The machine running this may be heavily loaded: every wait polls with a generous cap, and a step
 that times out or meets a page that is not ready fails with a message rather than a traceback."""
-import os, re, sys, time, traceback
+import math, os, re, sys, time, traceback
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from cdp import Browser
 
@@ -254,6 +254,27 @@ with Browser('drums/index.html', size=(1400, 900)) as b:
           return { n: strong.length, worst: Math.max(...off) }; })()""")
         check(r['n'] >= 2 and r['worst'] < 0.01, f"struck in the middle, the circle's strong peaks are all m = 0 modes (j₀ₖ): {r['n']} peaks, worst {100 * r['worst']:.2f}% off")
         b.screenshot('build/drums-exp-strike.png')
+        # The help: struck on the nodal circle of mode 6, (0, 2), its peak near 611 Hz drops out;
+        # struck on the nodal line of mode 2, (1, 1), the peak near 424 Hz stays (its twin, mode 3, rings).
+        GRIDMODE = """((k) => { const a = __app, m = a.modes, N = m.N, f = new Float64Array(a.grid.n * a.grid.n);
+            for (let p = 0; p < N; p++) f[m.pts[p]] = m.vectors[k * N + p]; return f; })"""
+        PEAK = """((f) => { const s = __app.computeSpectrum(); let best = 0, top = 0;
+            for (let j = 0; j < s.x.length; j++) { top = Math.max(top, s.amp[j]); if (Math.abs(s.x[j] - f) < 6) best = Math.max(best, s.amp[j]); } return best / top; })"""
+        geo = b.eval(f"""(() => {{ const a = __app, n = a.grid.n, h = a.grid.h, f6 = {GRIDMODE}(5), f2 = {GRIDMODE}(1), j = Math.round(0.5 / h);
+            let r0 = null, prev = null;
+            for (let i = j; i < n && r0 === null; i++) {{ const v = f6[j * n + i]; if (prev !== null && prev * v < 0) r0 = -0.5 + (i - 1 + prev / (prev - v)) * h; prev = v; }}
+            let sx = 0, sy = 0; for (const g of a.grid.inner) {{ const i = g % n, jj = (g - i) / n; sx += f2[g] * (-0.5 + i * h); sy += f2[g] * (-0.5 + jj * h); }}
+            return {{ r0, line: Math.atan2(sy, sx) + Math.PI / 2, f6: a.xOf(a.modes.values[5]), f2: a.xOf(a.modes.values[1]) }}; }})()""")
+        b.eval('__app.state.fast = true')
+        res = []
+        for x, y, f in ((geo['r0'], 0, geo['f6']), (0.25 * math.cos(geo['line']), 0.25 * math.sin(geo['line']), geo['f2'])):
+            b.eval(f'__app.state.strike = {{ x: {x}, y: {y} }}; __app.state.start = "strike"; __app.restart()')
+            check(wait_for(b, '__app.signal && __app.signal.T > 60', 600), 'strike: the run reaches t = 60')
+            res.append(b.eval(f'{PEAK}({f})'))
+        b.eval('__app.state.fast = false')
+        check(abs(geo['r0'] / 0.48 - 0.4356) < 0.01 and abs(geo['f6'] - 611) < 2 and res[0] < 0.01 and res[1] > 0.5,
+              f"struck on mode 6's nodal circle (r = {geo['r0'] / 0.48:.3f} R; help: 0.44) its peak at {geo['f6']:.1f} Hz falls to {100 * res[0]:.2f}% of the tallest; "
+              f"struck on mode 2's nodal line, the peak at {geo['f2']:.1f} Hz is still {100 * res[1]:.0f}% of the tallest (help: near 611 and 424 Hz)")
 
     # 9, 11, 12. Counting: Weyl's law, Poisson, Wigner.
     for name, shape in (('weyl', 'sinai8'), ('poisson', 'rectangle'), ('wigner', 'qstadium')):

@@ -1,7 +1,7 @@
 // The modes: Hermite-Gauss and Laguerre-Gauss beams, their cross-sections, their side view and
 // their Gouy phase; and a check that the angular spectrum method agrees.
 
-import { fillMode, modeAt, order, overlap, spectrum, fromSpectrum } from './modes.js';
+import { fillMode, modeAt, modeColumn, order, overlap, spectrum, fromSpectrum } from './modes.js';
 import { colorize, drawWheel } from '../lib/complexcolor.js';
 import { texToMathML } from '../lib/mathml.js';
 import { el, $, slider, segmented, toggle, setSlots } from '../lib/ui.js';
@@ -140,18 +140,17 @@ export function createModes(app) {
     // Stretched sideways as drawn, the beam is one with a longer wavelength: crests pi (px/pz)^2 zR apart.
     const pz = pw / (2 * ZMAX), px = ph / (2 * X), kd = 2 / (px / pz) ** 2;
     const y0 = md.family === 'hg' && md.n % 2 === 1 ? 0.7 : 0;
-    let peak = 0;
+    // Crests closer than a few pixels can't be drawn: faded (by a constant here, as the drawn
+    // wavelength is the same everywhere).
+    const gz = state.side === 'real' ? kd / pz : 0, att = Math.exp(-(gz * gz) / 5);
     for (let i = 0; i < pw; i++) {
       const zeta = -ZMAX + ((i + 0.5) / pw) * 2 * ZMAX, car = state.side === 'real' ? kd * zeta : 0;
-      const c = Math.cos(car), s = Math.sin(car);
-      const gz = state.side === 'real' ? kd / pz : 0;
-      for (let j = 0; j < ph; j++) {
-        const x = X - ((j + 0.5) / ph) * 2 * X, [a, b] = modeAt(md, x, y0, zeta), o = j * pw + i;
-        const att = Math.exp(-(gz * gz) / 5);
-        re[o] = (a * c - b * s) * att; im[o] = (a * s + b * c) * att;
-        peak = Math.max(peak, Math.hypot(a, b));
-      }
+      // Row j at x = X - (j + 1/2) 2X/ph, times the carrier exp(i kd zeta) and the fading.
+      modeColumn(md, X - X / ph, (2 * X) / ph, ph, y0, zeta, re, im, i, pw, att * Math.cos(car), att * Math.sin(car));
     }
+    let peak = 0;
+    for (let o = 0; o < pw * ph; o++) { const a = re[o] * re[o] + im[o] * im[o]; if (a > peak) peak = a; }
+    peak = Math.sqrt(peak) / att;
     const off = document.createElement('canvas'); off.width = pw; off.height = ph;
     // The phase of the beam just off the axis at the left edge, for the plane wave's ticks.
     const [a0, b0] = modeAt(md, 0.25, y0, -ZMAX);
@@ -255,30 +254,43 @@ export function createModes(app) {
 
   // ------------------------------------------------------------------- the gallery
 
+  // Each family's thumbnails are drawn once and kept; a change of mode only moves the highlight.
+  const galleries = {};
   function buildGallery() {
     const g = $('#gallery');
+    if (!galleries[state.family]) galleries[state.family] = galleryButtons();
+    const buttons = galleries[state.family];
+    if (g.dataset.family !== state.family) {
+      g.dataset.family = state.family;
+      $('#gallery-head').textContent = state.family === 'hg' ? 'Hermite–Gauss HG_mn at the waist (m across, n down): click one'
+        : state.family === 'lg' ? 'Laguerre–Gauss LG_pl at the waist (l across from −3 to 3, p down): click one'
+          : 'HG₁₀ + e^{iφ} HG₀₁ for several φ: click one';
+      g.className = `gallery g-${state.family}`;
+      g.replaceChildren(...buttons);
+    }
+    const now = JSON.stringify(mode());
+    for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.mode === now));
+  }
+  function galleryButtons() {
     const items = [];
     if (state.family === 'hg') for (let n = 0; n <= 3; n++) for (let m = 0; m <= 3; m++) items.push({ md: { family: 'hg', m, n }, label: `${m},${n}`, set: { m, n } });
     else if (state.family === 'lg') for (let p = 0; p <= 2; p++) for (let l = -3; l <= 3; l++) items.push({ md: { family: 'lg', p, l }, label: `${p},${l}`, set: { p, l } });
     else for (const k of [0, 1, 2, 3, 4, 6]) {
-      const phi = (k * Math.PI) / 4;
-      items.push({ md: { family: 'mix', alpha: Math.PI / 4, phi }, label: `φ = ${['0', 'π/4', 'π/2', '3π/4', 'π', '', '−π/2'][k]}`, set: { alpha: Math.PI / 4, phi: phi > Math.PI ? phi - 2 * Math.PI : phi } });
+      const phi = k > 4 ? ((k - 8) * Math.PI) / 4 : (k * Math.PI) / 4;   // (the φ slider runs from −π to π)
+      items.push({ md: { family: 'mix', alpha: Math.PI / 4, phi }, label: `φ = ${['0', 'π/4', 'π/2', '3π/4', 'π', '', '−π/2'][k]}`, set: { alpha: Math.PI / 4, phi } });
     }
-    $('#gallery-head').textContent = state.family === 'hg' ? 'Hermite–Gauss HG_mn at the waist (m across, n down): click one'
-      : state.family === 'lg' ? 'Laguerre–Gauss LG_pl at the waist (l across from −3 to 3, p down): click one'
-        : 'HG₁₀ + e^{iφ} HG₀₁ for several φ: click one';
-    g.className = `gallery g-${state.family}`;
-    g.replaceChildren(...items.map((it) => {
+    return items.map((it) => {
       const n = 56, c = el('canvas', { width: n, height: n });
       const re = new Float64Array(n * n), im = new Float64Array(n * n);
       const peak = fillMode(re, im, n, n, Math.sqrt(order(it.md) + 0.5) + 1.6, it.md, 0);
       const img = new ImageData(n, n);
       colorize(re, im, img.data, 0.5 * peak, 'complex');
       c.getContext('2d').putImageData(img, 0, 0);
-      const pressed = JSON.stringify(it.md) === JSON.stringify(mode());
-      return el('button', { type: 'button', class: 'thumb', 'aria-pressed': String(pressed), title: it.label, 'aria-label': it.label,
+      const b = el('button', { type: 'button', class: 'thumb', 'aria-pressed': 'false', title: it.label, 'aria-label': it.label,
         onclick: () => { Object.assign(state, it.set); syncControls(); changed(); buildGallery(); } }, c, el('span', {}, it.label));
-    }));
+      b.dataset.mode = JSON.stringify(it.md);
+      return b;
+    });
   }
 
   // ------------------------------------------------------------------- controls

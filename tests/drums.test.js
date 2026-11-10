@@ -9,6 +9,7 @@ import { hearShape, spacings, weyl, gridCorrected } from '../drums/counting.js';
 import { synthesize } from '../drums/sound.js';
 import { Ray } from '../drums/ray.js';
 import { fft } from '../lib/fft.js';
+import { besselJ } from '../lib/bessel.js';
 
 const shape = (id, n, params = {}) => {
   const p = PRESETS[id], vals = Object.fromEntries(Object.entries(p.params).map(([k, v]) => [k, params[k] ?? v.value]));
@@ -83,6 +84,52 @@ test('drums: the circle converges to (j_mk/R)² (staircase edge: about first ord
   assert(errs[2] < errs[0] / 2.5, 'the error falls as the grid is refined');
   assert(errs[2] < 0.004, `finest grid within 0.4% (${errs[2]})`);
   return 'worst of the first 10: ' + notes.join(', ');
+});
+
+test('drums: the list\'s exact labels follow the grid\'s order (rectangle, discs), not the exact order', () => {
+  // The 1 × 0.614 rectangle at n = 128: the grid puts (11, 1) below (9, 4), though exactly
+  // (9, 4) is lower; the labels must follow the grid's own (m, n).
+  const n = 128, h = 1 / (n - 1), { geo } = shape('rectangle', n);
+  const lab = geo.exactInGridOrder(80), sorted = geo.exact(2500).slice(0, 80);
+  assert(lab[49].label === '(11, 1)' && lab[50].label === '(9, 4)' && sorted[49].label === '(9, 4)', `modes 50, 51: ${lab[49].label}, ${lab[50].label} (sorted exactly: ${sorted[49].label})`);
+  const disc = geo.discrete(80);
+  lab.forEach((e, k) => {
+    const [m, kk] = e.label.slice(1, -1).split(', ').map(Number);
+    const g = (4 / (h * h)) * (Math.sin((m * Math.PI * h) / 2) ** 2 + Math.sin((kk * Math.PI * h) / (2 * geo.sides[1])) ** 2);
+    close(g, disc[k], 1e-9 * g, `label ${e.label} is grid mode ${k + 1}'s own`);
+  });
+  // The discs: each mode's m is read from the mode itself, and k by counting.  On the n = 128
+  // grid the half disc's (16, 2) and (20, 1) swap places (modes 69 and 70): here the exact modes
+  // J_m(j_mk r/R) sin mθ are handed over in that order.  The full disc's pairs come as
+  // cos(mθ + φ) and sin(mθ + φ), φ odd (as the solver returns them), one pair split by another
+  // level; and the labels must be the same.
+  const exactMode = (m, j, R, y0, half, phase) => (x, y) => {
+    const Y = y - y0, r = Math.hypot(x, Y), th = Math.atan2(Y, x);
+    return r >= R || (half && Y < 0) ? 0 : besselJ(m, (j * r) / R)[m] * (half ? Math.sin(m * th) : Math.cos(m * th + phase));
+  };
+  const parse = (label) => label.replace('±', '').slice(1, -1).split(', ').map(Number);
+  {
+    const R = 0.49, hd = PRESETS.halfdisc.make({ R }, h), y0 = -0.5 + Math.round((0.5 - R / 2) / h) * h;
+    const list = hd.exact(3200).slice(0, 72);
+    const a = list.findIndex((e) => e.label === '(16, 2)'), b = list.findIndex((e) => e.label === '(20, 1)');
+    assert(b === a + 1, `exactly, (16, 2) is just below (20, 1): modes ${a + 1}, ${b + 1}`);
+    [list[a], list[b]] = [list[b], list[a]];
+    const fields = list.map((e) => { const [m] = parse(e.label); return exactMode(m, e.j, R, y0, true, 0); });
+    const got = hd.exactInGridOrder(list.length, (q) => fields[q], list.map((e) => e.lambda));
+    got.forEach((e, q) => assert(e.label === list[q].label && Math.abs(e.lambda / list[q].lambda - 1) < 1e-12, `half disc, mode ${q + 1}: ${e.label} for ${list[q].label}`));
+  }
+  {
+    const R = 0.48, c = PRESETS.circle.make({ R }, h), list = c.exact(1000).slice(0, 40);
+    // The pair (±2, 1) split by (0, 2)? Exactly, (0, 2) is above both: move one of them past it.
+    const i = list.findIndex((e) => e.label === '(±2, 1)'), z = list.findIndex((e) => e.label === '(0, 2)');
+    assert(z === i + 2, 'exactly, (0, 2) comes after the (±2, 1) pair');
+    [list[i + 1], list[z]] = [list[z], list[i + 1]];
+    const seen = new Map();
+    const fields = list.map((e) => { const [m] = parse(e.label), n = seen.get(e.label) || 0; seen.set(e.label, n + 1); return exactMode(m, e.j, R, 0, false, 0.37 + (n % 2 ? Math.PI / 2 : 0)); });
+    const got = c.exactInGridOrder(list.length, (q) => fields[q], list.map((e) => e.lambda));
+    got.forEach((e, q) => assert(e.label === list[q].label && Math.abs(e.lambda / list[q].lambda - 1) < 1e-12, `circle, mode ${q + 1}: ${e.label} for ${list[q].label}`));
+  }
+  return 'the rectangle\'s 80 by its own grid eigenvalues; 72 half-disc and 40 disc modes by their m';
 });
 
 test('drums: the equilateral triangle converges to (16π²/9s²)(m² + mn + n²)', () => {
