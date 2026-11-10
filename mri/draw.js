@@ -95,6 +95,41 @@ export function handle(ctx, x, y, r, fill, ring) {
   ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
 }
 
+/**
+ * The value at the fraction q of the way up a list of numbers (the one a sort would put at
+ * floor(q (n − 1))), found by quickselect in place, in linear time: the brightness scales of the
+ * pictures and of k-space, made again at every change, without sorting 16 384 numbers each time.
+ * a is a Float64Array that is reordered.
+ */
+export function quantile(a, q) {
+  const n = a.length;
+  if (!n) return 0;
+  const k = Math.floor(q * (n - 1));
+  let lo = 0, hi = n - 1;
+  while (hi > lo) {
+    // (The median of three as the pivot; Hoare's partition.)
+    const mid = (lo + hi) >> 1;
+    let x = a[lo], y = a[mid], z = a[hi];
+    const p = x < y ? (y < z ? y : x < z ? z : x) : (x < z ? x : y < z ? z : y);
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (a[i] < p) i++;
+      while (a[j] > p) j--;
+      if (i <= j) { x = a[i]; a[i] = a[j]; a[j] = x; i++; j--; }
+    }
+    if (k <= j) hi = j; else if (k >= i) lo = i; else return a[k];
+  }
+  return a[k];
+}
+
+/** A brightness for k-space: the magnitude that 3% of its pixels exceed (so the centre's
+ *  bright few do not drown the rest), as the FFT demo's transforms are drawn. */
+export function kspaceBrightness(re, im) {
+  const n = re.length, mags = new Float64Array(n);
+  for (let i = 0; i < n; i++) mags[i] = Math.hypot(re[i], im[i]);
+  return quantile(mags, 0.97) || 1;
+}
+
 /** A seeded uniform random generator (xorshift32), for spins' offsets that stay put. */
 export function seeded(seed = 1) {
   let s = (seed >>> 0) || 1;

@@ -219,7 +219,13 @@ export class SliceView {
   drawPulseSpectrum(ctx, c) {
     const b = this.lay.spec, s = this.s, n = 240;
     const fs = Float64Array.from({ length: n + 1 }, (_, i) => -FMAX + (2 * FMAX * i) / n);
-    const sp = pulseSpectrum(this.movie.pulse, Float64Array.from(fs, (f) => f - s.fc));
+    // (The pulse's spectrum and its close-up are made once per pulse: every setting makes a new
+    // movie and pulse, and nothing else changes them.)
+    if (this.pulseSpec?.pulse !== this.movie.pulse) {
+      const span = 1.6 * s.bw, cf = Float64Array.from({ length: 81 }, (_, i) => -span + (2 * span * i) / 80);
+      this.pulseSpec = { pulse: this.movie.pulse, sp: pulseSpectrum(this.movie.pulse, Float64Array.from(fs, (f) => f - s.fc)), cf, csp: pulseSpectrum(this.movie.pulse, cf) };
+    }
+    const sp = this.pulseSpec.sp;
     let top = 0;
     for (const v of sp) top = Math.max(top, v);
     ctx.save();
@@ -247,7 +253,7 @@ export class SliceView {
     const CX = (f) => cx0 + ((f - s.fc + span) / (2 * span)) * cw, CY = (v) => cy1 - 4 - (v / top) * (cy1 - cy0 - 22);
     ctx.fillStyle = c.panel; ctx.strokeStyle = c.line; ctx.lineWidth = 1;
     ctx.fillRect(cx0, cy0, cw, cy1 - cy0); ctx.strokeRect(cx0 + 0.5, cy0 + 0.5, cw - 1, cy1 - cy0 - 1);
-    const m = 80, cf = Float64Array.from({ length: m + 1 }, (_, i) => -span + (2 * span * i) / m), csp = pulseSpectrum(this.movie.pulse, cf);
+    const m = 80, { cf, csp } = this.pulseSpec;
     ctx.setLineDash([3, 3]); ctx.strokeStyle = c.ink3; ctx.beginPath();
     ctx.moveTo(CX(s.fc - s.bw / 2), CY(0)); ctx.lineTo(CX(s.fc - s.bw / 2), CY(top)); ctx.lineTo(CX(s.fc + s.bw / 2), CY(top)); ctx.lineTo(CX(s.fc + s.bw / 2), CY(0)); ctx.stroke(); ctx.setLineDash([]);
     ctx.strokeStyle = c.accent; ctx.lineWidth = 1.6; ctx.beginPath();

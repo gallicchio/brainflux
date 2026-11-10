@@ -412,6 +412,15 @@ test('slice movie: seen from the slab\'s frame it ends along x\', in step with t
   // The pulse's spectrum is a box of width bw: half height at the edges.
   const sp = pulseSpectrum(sincPulse(1.5, 3), Float64Array.of(0, 0.75, 1.5));
   assert(Math.abs(sp[1] / sp[0] - 0.5) < 0.05 && sp[2] / sp[0] < 0.05, `the band's edge ${sp[1] / sp[0]}, beyond ${sp[2] / sp[0]}`);
+  // (Its phasor turned on from sample to sample is the sum computed afresh at each, to rounding.)
+  const p = sincPulse(1.5, 3), fs = Float64Array.from({ length: 41 }, (_, i) => -4 + 0.2 * i), fast = pulseSpectrum(p, fs);
+  let worst = 0;
+  fs.forEach((f, q) => {
+    let re = 0, im = 0;
+    for (let i = 0; i < p.b1.length; i++) { const a = TWO_PI * f * (p.t[i] - p.T / 2); re += p.b1[i] * Math.cos(a) * p.dt; im += p.b1[i] * Math.sin(a) * p.dt; }
+    worst = Math.max(worst, Math.abs(fast[q] - Math.hypot(re, im)));
+  });
+  assert(worst < 1e-12 * fast[20], `the turned phasor differs by ${worst}`);
   return notes.join('; ');
 });
 
@@ -567,4 +576,25 @@ test('decay during the readout: a point smears along x into a Lorentzian Tro/(pi
   const D = readoutDecay(sequence({ type: 'gre', TE: 20, TR: 2000, N, fov, Gx, T2prime: Infinity }), 50);
   assert(D[0] > 1 && D[N - 1] < 1 && Math.abs(D[N / 2] - 1) < 1e-12, 'monotonic');
   return `T2' = ${T.toFixed(3)} ms over a ${Tro.toFixed(2)} ms readout: the point is ${wx.toFixed(2)} pixels wide along x (Tro/πT2' = 4), a single pixel along y`;
+});
+
+test('an acquisition re-weights each tissue\'s kept k-space: the same as transforming the weighted picture, with the fat shift and the decay', () => {
+  const N = 64, fov = 256, shapes = headPhantom(0), out = [];
+  for (const [TR, TE, fat, decay, Gx] of [[500, 15, false, false, 4], [3000, 100, true, false, 0.5], [800, 30, true, true, 0.3], [500, 15, false, false, 4]]) {
+    const seq = sequence({ type: 'se', TE, TR, N, fov, Gx, Trf: 2, Tpe: 1, T2prime: 4 });
+    const a = new Acquisition().set({ shapes, seq, B0: 1.5, chemicalShift: fat, decay });
+    const pic = pictureOf(shapes, seq, 1.5, N, fov, 4, true), shift = fat ? -(3.4e-6 * 42.577e3 * 1.5) / (GB * Gx) : 0;
+    const k = decay ? kspaceOfParts(pic.parts, N, seq.dk, shift, (part) => readoutDecay(seq, part.T2)) : kspaceOf(pic.total, pic.fat, N, seq.dk, shift);
+    let d = 0, m = 0;
+    for (let i = 0; i < N * N; i++) { d = Math.max(d, Math.abs(a.kre[i] - k.re[i]), Math.abs(a.kim[i] - k.im[i])); m = Math.max(m, Math.hypot(k.re[i], k.im[i])); }
+    assert(d < 1e-12 * m, `TR ${TR}, TE ${TE}: differs by ${d} of ${m}`);
+    out.push(d / m);
+  }
+  // The noise is the same as drawing it afresh at that size.
+  const seq = sequence({ type: 'se', TE: 15, TR: 500, N: 32, fov: 256, Gx: 4 }), shapes2 = disksPhantom();
+  const a = new Acquisition().set({ shapes: shapes2, seq, sigma: 0.1, seed: 9 }), nf = noiseField(32, a.noise, 9);
+  let dn = 0;
+  for (let i = 0; i < 32 * 32; i++) dn = Math.max(dn, Math.abs(a.nre[i] - a.kre[i] - nf.re[i]), Math.abs(a.nim[i] - a.kim[i] - nf.im[i]));
+  assert(dn < 1e-15, `noise differs by ${dn}`);
+  return `largest difference ${Math.max(...out).toExponential(1)} of the largest sample, over four settings (T1- and T2-weighted, fat shifted, decaying)`;
 });
